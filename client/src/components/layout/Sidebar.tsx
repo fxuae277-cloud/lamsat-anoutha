@@ -36,7 +36,7 @@ export function Sidebar() {
       <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
         <h1 className="text-xl font-bold text-primary flex items-center gap-2">
           <span className="bg-primary/10 text-primary p-2 rounded-lg">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinelinejoin="round">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2a8 8 0 0 0-8 8c0 5.4 8 12 8 12s8-6.6 8-12a8 8 0 0 0-8-8z"/>
               <circle cx="12" cy="10" r="3"/>
             </svg>
@@ -51,8 +51,7 @@ export function Sidebar() {
           const Icon = item.icon;
           
           return (
-            <Link key={item.href} href={item.href}>
-              <a className={cn(
+            <Link key={item.href} href={item.href} className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors text-sm font-medium",
                 isActive 
                   ? "bg-primary text-primary-foreground shadow-sm" 
@@ -60,7 +59,6 @@ export function Sidebar() {
               )}>
                 <Icon className="w-5 h-5" />
                 {item.label}
-              </a>
             </Link>
           );
         })}

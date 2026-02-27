@@ -1,142 +1,256 @@
-import { useState } from "react";
-import { Search, Plus, Minus, Trash2, Printer, CheckCircle2, Image as ImageIcon } from "lucide-react";
+import { useState, useRef } from "react";
+import { Search, Plus, Minus, Trash2, CheckCircle2, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-
-const DUMMY_PRODUCTS = [
-  { id: 1, name: "عقد ذهبي وردي", price: 12.000, category: "عقود", image: "🌸" },
-  { id: 2, name: "إسورة لؤلؤ", price: 8.500, category: "أساور", image: "✨" },
-  { id: 3, name: "حلق ألماس صناعي", price: 5.000, category: "حلقان", image: "💎" },
-  { id: 4, name: "طقم زفاف ناعم", price: 45.000, category: "أطقم", image: "👑" },
-  { id: 5, name: "خاتم فضة 925", price: 15.000, category: "خواتم", image: "💍" },
-  { id: 6, name: "سلسال فراشة", price: 6.500, category: "عقود", image: "🦋" },
-];
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { Product, Branch, User } from "@shared/schema";
 
 export default function POS() {
-  const [cart, setCart] = useState<{product: any, qty: number}[]>([
-    { product: DUMMY_PRODUCTS[0], qty: 1 }
-  ]);
+  const { toast } = useToast();
+  const [cart, setCart] = useState<{product: Product, qty: number}[]>([]);
   const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [bankTxnId, setBankTxnId] = useState("");
+  const [selectedBranch, setSelectedBranch] = useState<string>("");
+  const [selectedCashier, setSelectedCashier] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [discountValue, setDiscountValue] = useState(0);
+  const [discountType, setDiscountType] = useState<"percentage" | "value">("value");
+  const [payDialogOpen, setPayDialogOpen] = useState(false);
+  const [filterCategory, setFilterCategory] = useState("all");
+  const barcodeRef = useRef<HTMLInputElement>(null);
 
-  const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.qty), 0);
-  const vat = subtotal * 0.05;
-  const total = subtotal + vat;
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+  const { data: branchesList = [] } = useQuery<Branch[]>({
+    queryKey: ["/api/branches"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+  const { data: usersList = [] } = useQuery<User[]>({
+    queryKey: ["/api/users"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+  const { data: categoriesList = [] } = useQuery<any[]>({
+    queryKey: ["/api/categories"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const cashiers = usersList.filter(u => u.role === "cashier" || u.role === "owner");
+
+  const activeProducts = products.filter(p => p.active !== false);
+  const filteredProducts = activeProducts.filter(p => {
+    const matchSearch = !searchQuery || 
+      p.name.includes(searchQuery) || 
+      (p.barcode && p.barcode.includes(searchQuery));
+    const matchCategory = filterCategory === "all" || p.categoryId === parseInt(filterCategory);
+    return matchSearch && matchCategory;
+  });
+
+  const addToCart = (product: Product) => {
+    const existing = cart.find(i => i.product.id === product.id);
+    if (existing) {
+      setCart(cart.map(i => i.product.id === product.id ? {...i, qty: i.qty + 1} : i));
+    } else {
+      setCart([...cart, {product, qty: 1}]);
+    }
+  };
+
+  const updateQty = (productId: number, delta: number) => {
+    setCart(prev => prev.map(i => {
+      if (i.product.id === productId) {
+        const newQty = i.qty + delta;
+        return newQty <= 0 ? i : {...i, qty: newQty};
+      }
+      return i;
+    }));
+  };
+
+  const removeFromCart = (productId: number) => {
+    setCart(prev => prev.filter(i => i.product.id !== productId));
+  };
+
+  const subtotal = cart.reduce((sum, item) => sum + (parseFloat(item.product.price) * item.qty), 0);
+  const discountAmount = discountType === "percentage" ? subtotal * (discountValue / 100) : discountValue;
+  const afterDiscount = subtotal - discountAmount;
+  const vat = afterDiscount * 0.05;
+  const total = afterDiscount + vat;
+
+  const handleBarcodeSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      const barcode = (e.target as HTMLInputElement).value.trim();
+      const product = products.find(p => p.barcode === barcode);
+      if (product) {
+        addToCart(product);
+        (e.target as HTMLInputElement).value = "";
+        setSearchQuery("");
+      } else {
+        toast({ title: "المنتج غير موجود", description: `لا يوجد منتج بالباركود: ${barcode}`, variant: "destructive" });
+      }
+    }
+  };
+
+  const saleMutation = useMutation({
+    mutationFn: async () => {
+      const branchId = parseInt(selectedBranch);
+      const cashierId = selectedCashier ? parseInt(selectedCashier) : undefined;
+      if (!branchId) throw new Error("يجب اختيار الفرع");
+      
+      const invoiceNumber = `INV-${Date.now()}`;
+      const saleData = {
+        invoiceNumber,
+        branchId,
+        cashierId: cashierId || null,
+        customerId: null,
+        subtotal: subtotal.toFixed(3),
+        discount: discountAmount.toFixed(3),
+        discountType,
+        vat: vat.toFixed(3),
+        total: total.toFixed(3),
+        paymentMethod,
+        bankTxnId: paymentMethod === "bank" ? bankTxnId : null,
+        bankReceiptImage: null,
+        items: cart.map(item => ({
+          productId: item.product.id,
+          quantity: item.qty,
+          unitPrice: item.product.price,
+          total: (parseFloat(item.product.price) * item.qty).toFixed(3),
+        })),
+      };
+      await apiRequest("POST", "/api/sales", saleData);
+    },
+    onSuccess: () => {
+      toast({ title: "تمت العملية بنجاح", description: "تم حفظ الفاتورة." });
+      setCart([]);
+      setDiscountValue(0);
+      setPayDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+    },
+  });
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col gap-4">
-      {/* Top Bar Settings */}
       <div className="bg-card p-4 rounded-xl shadow-sm border border-border flex items-center justify-between shrink-0">
         <div className="flex gap-4 items-center">
           <div className="w-48">
-            <Select defaultValue="branch1">
-              <SelectTrigger>
+            <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+              <SelectTrigger data-testid="select-branch">
                 <SelectValue placeholder="اختر الفرع" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="branch1">لمسة أنوثة - لوى</SelectItem>
-                <SelectItem value="branch2">لمسة أنوثة - شناص</SelectItem>
-                <SelectItem value="branch3">الفرع الثالث</SelectItem>
+                {branchesList.map(b => (
+                  <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           <div className="w-48">
-            <Select defaultValue="cashier1">
-              <SelectTrigger>
+            <Select value={selectedCashier} onValueChange={setSelectedCashier}>
+              <SelectTrigger data-testid="select-cashier">
                 <SelectValue placeholder="الكاشير" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="cashier1">مريم</SelectItem>
-                <SelectItem value="cashier2">فاطمة</SelectItem>
+                {cashiers.map(u => (
+                  <SelectItem key={u.id} value={u.id.toString()}>{u.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
         </div>
-        <div>
-          <Button variant="outline" className="gap-2">
-            إغلاق الوردية
-          </Button>
-        </div>
       </div>
 
-      {/* POS Main Area */}
       <div className="flex gap-6 h-full min-h-0">
-        {/* Products Section */}
         <div className="flex-1 flex flex-col gap-4 min-h-0">
           <div className="relative shrink-0">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <Input 
+              ref={barcodeRef}
               placeholder="امسح الباركود واضغط Enter أو ابحث بالاسم..." 
               className="pr-10 h-12 text-lg bg-card shadow-sm border-transparent focus-visible:ring-primary"
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleBarcodeSearch}
+              data-testid="input-barcode-search"
             />
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-2 shrink-0 hide-scrollbar">
-            {["الكل", "عقود", "أساور", "خواتم", "حلقان", "أطقم"].map(cat => (
-              <Button key={cat} variant={cat === "الكل" ? "default" : "secondary"} className="rounded-full">
-                {cat}
+          <div className="flex gap-2 overflow-x-auto pb-2 shrink-0">
+            <Button 
+              variant={filterCategory === "all" ? "default" : "secondary"} 
+              className="rounded-full" 
+              onClick={() => setFilterCategory("all")}
+              data-testid="button-category-all"
+            >
+              الكل
+            </Button>
+            {categoriesList.map((cat: any) => (
+              <Button 
+                key={cat.id} 
+                variant={filterCategory === cat.id.toString() ? "default" : "secondary"} 
+                className="rounded-full"
+                onClick={() => setFilterCategory(cat.id.toString())}
+              >
+                {cat.name}
               </Button>
             ))}
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto pb-4 content-start">
-            {DUMMY_PRODUCTS.map(p => (
+            {filteredProducts.map(p => (
               <button 
                 key={p.id} 
-                onClick={() => {
-                  const existing = cart.find(i => i.product.id === p.id);
-                  if (existing) {
-                    setCart(cart.map(i => i.product.id === p.id ? {...i, qty: i.qty + 1} : i));
-                  } else {
-                    setCart([...cart, {product: p, qty: 1}]);
-                  }
-                }}
+                onClick={() => addToCart(p)}
                 className="bg-card hover:bg-accent hover:border-primary/50 transition-all border border-transparent p-4 rounded-xl shadow-sm flex flex-col items-center gap-3 text-center active:scale-95"
+                data-testid={`button-product-${p.id}`}
               >
-                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center text-3xl">
-                  {p.image}
+                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                  <ImageIcon className="w-6 h-6" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-sm line-clamp-1">{p.name}</h3>
-                  <p className="text-primary font-bold mt-1">{p.price.toFixed(3)} OMR</p>
+                  <p className="text-primary font-bold mt-1">{parseFloat(p.price).toFixed(3)} OMR</p>
                 </div>
               </button>
             ))}
           </div>
         </div>
 
-        {/* Cart Section */}
         <div className="w-96 bg-card border border-border shadow-sm rounded-xl flex flex-col shrink-0 overflow-hidden">
           <div className="p-4 border-b border-border bg-muted/30">
-            <h2 className="font-bold text-lg">سلة المشتريات</h2>
+            <h2 className="font-bold text-lg" data-testid="text-cart-title">سلة المشتريات</h2>
           </div>
           
           <div className="flex-1 overflow-y-auto p-2">
             {cart.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-2">
-                <ShoppingCart className="w-12 h-12 opacity-20" />
                 <p>السلة فارغة</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {cart.map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-3 p-2 bg-background border rounded-lg">
-                    <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-xl">
-                      {item.product.image}
-                    </div>
+                {cart.map((item) => (
+                  <div key={item.product.id} className="flex items-center gap-3 p-2 bg-background border rounded-lg">
                     <div className="flex-1 min-w-0">
                       <h4 className="text-sm font-bold truncate">{item.product.name}</h4>
-                      <div className="text-xs text-muted-foreground">{item.product.price.toFixed(3)} OMR</div>
+                      <div className="text-xs text-muted-foreground">{parseFloat(item.product.price).toFixed(3)} OMR</div>
                     </div>
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="flex items-center gap-1 bg-muted rounded-md p-0.5">
-                        <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-background"><Plus className="w-3 h-3"/></button>
-                        <span className="w-6 text-center text-sm font-medium">{item.qty}</span>
-                        <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-background"><Minus className="w-3 h-3"/></button>
-                      </div>
+                    <div className="flex items-center gap-1 bg-muted rounded-md p-0.5">
+                      <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-background" onClick={() => updateQty(item.product.id, 1)}>
+                        <Plus className="w-3 h-3"/>
+                      </button>
+                      <span className="w-6 text-center text-sm font-medium">{item.qty}</span>
+                      <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-background" onClick={() => updateQty(item.product.id, -1)}>
+                        <Minus className="w-3 h-3"/>
+                      </button>
                     </div>
-                    <button className="text-red-500 p-2 hover:bg-red-50 rounded-md">
+                    <button className="text-red-500 p-2 hover:bg-red-50 rounded-md" onClick={() => removeFromCart(item.product.id)} data-testid={`button-remove-${item.product.id}`}>
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -146,15 +260,35 @@ export default function POS() {
           </div>
 
           <div className="p-4 bg-muted/10 border-t border-border space-y-3">
+            <div className="flex items-center gap-2 pb-2">
+              <Input 
+                type="number" 
+                placeholder="خصم" 
+                className="w-24 text-center" 
+                value={discountValue || ""}
+                onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                data-testid="input-discount"
+              />
+              <Select value={discountType} onValueChange={(v: any) => setDiscountType(v)}>
+                <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="value">OMR</SelectItem>
+                  <SelectItem value="percentage">%</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">المجموع الفرعي:</span>
                 <span className="font-medium">{subtotal.toFixed(3)} OMR</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">الخصم:</span>
-                <span className="text-green-600">0.000 OMR</span>
-              </div>
+              {discountAmount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">الخصم:</span>
+                  <span className="text-green-600">-{discountAmount.toFixed(3)} OMR</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">ضريبة القيمة المضافة (5%):</span>
                 <span>{vat.toFixed(3)} OMR</span>
@@ -163,12 +297,12 @@ export default function POS() {
             
             <div className="pt-3 border-t border-border flex justify-between items-center">
               <span className="font-bold text-lg">الإجمالي:</span>
-              <span className="font-bold text-2xl text-primary">{total.toFixed(3)} OMR</span>
+              <span className="font-bold text-2xl text-primary" data-testid="text-cart-total">{total.toFixed(3)} OMR</span>
             </div>
 
-            <Dialog>
+            <Dialog open={payDialogOpen} onOpenChange={setPayDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="w-full h-12 text-lg font-bold mt-2" disabled={cart.length === 0}>
+                <Button className="w-full h-12 text-lg font-bold mt-2" disabled={cart.length === 0 || !selectedBranch} data-testid="button-checkout">
                   دفع وإنهاء
                 </Button>
               </DialogTrigger>
@@ -185,20 +319,8 @@ export default function POS() {
                   <div className="space-y-3">
                     <label className="text-sm font-medium">طريقة الدفع</label>
                     <div className="grid grid-cols-2 gap-3">
-                      <Button 
-                        variant={paymentMethod === "cash" ? "default" : "outline"} 
-                        onClick={() => setPaymentMethod("cash")}
-                        className="h-12"
-                      >
-                        نقداً
-                      </Button>
-                      <Button 
-                        variant={paymentMethod === "bank" ? "default" : "outline"} 
-                        onClick={() => setPaymentMethod("bank")}
-                        className="h-12"
-                      >
-                        تحويل بنكي
-                      </Button>
+                      <Button variant={paymentMethod === "cash" ? "default" : "outline"} onClick={() => setPaymentMethod("cash")} className="h-12" data-testid="button-pay-cash">نقداً</Button>
+                      <Button variant={paymentMethod === "bank" ? "default" : "outline"} onClick={() => setPaymentMethod("bank")} className="h-12" data-testid="button-pay-bank">تحويل بنكي</Button>
                     </div>
                   </div>
 
@@ -206,22 +328,15 @@ export default function POS() {
                     <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
                       <div className="space-y-2">
                         <label className="text-sm font-medium">رقم العملية (Txn ID)</label>
-                        <Input placeholder="أدخل رقم التحويل..." />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">صورة الإيصال</label>
-                        <div className="border-2 border-dashed border-border rounded-xl p-6 flex flex-col items-center justify-center text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer">
-                          <ImageIcon className="w-8 h-8 mb-2 opacity-50" />
-                          <span className="text-sm">اضغط لرفع صورة الإيصال</span>
-                        </div>
+                        <Input placeholder="أدخل رقم التحويل..." value={bankTxnId} onChange={(e) => setBankTxnId(e.target.value)} data-testid="input-txn-id" />
                       </div>
                     </div>
                   )}
                 </div>
                 <DialogFooter>
-                  <Button className="w-full h-12 gap-2 text-lg">
+                  <Button className="w-full h-12 gap-2 text-lg" onClick={() => saleMutation.mutate()} disabled={saleMutation.isPending} data-testid="button-confirm-pay">
                     <CheckCircle2 className="w-5 h-5" />
-                    تأكيد الدفع وطباعة
+                    {saleMutation.isPending ? "جارِ الحفظ..." : "تأكيد الدفع"}
                   </Button>
                 </DialogFooter>
               </DialogContent>

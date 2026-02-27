@@ -1,29 +1,82 @@
+import { useState } from "react";
 import { Plus, Search, Edit, Trash, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-
-const products = [
-  { id: "1001", barcode: "893456789012", name: "عقد ذهبي وردي", category: "عقود", price: 12.000, status: "نشط" },
-  { id: "1002", barcode: "893456789013", name: "إسورة لؤلؤ زراعي", category: "أساور", price: 8.500, status: "نشط" },
-  { id: "1003", barcode: "893456789014", name: "طقم زفاف ناعم", category: "أطقم", price: 45.000, status: "غير نشط" },
-];
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { Product, Category } from "@shared/schema";
 
 export default function Products() {
+  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+  const [filterCat, setFilterCat] = useState("all");
+  const [newProduct, setNewProduct] = useState({ barcode: "", name: "", categoryId: "", price: "", active: true });
+  const [addOpen, setAddOpen] = useState(false);
+
+  const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"], queryFn: getQueryFn({ on401: "throw" }) });
+  const { data: categories = [] } = useQuery<Category[]>({ queryKey: ["/api/categories"], queryFn: getQueryFn({ on401: "throw" }) });
+
+  const filteredProducts = products.filter(p => {
+    const matchSearch = !search || p.name.includes(search) || (p.barcode && p.barcode.includes(search));
+    const matchCat = filterCat === "all" || p.categoryId === parseInt(filterCat);
+    return matchSearch && matchCat;
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/products", {
+        ...newProduct,
+        categoryId: newProduct.categoryId ? parseInt(newProduct.categoryId) : null,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "تمت الإضافة", description: "تم إضافة المنتج بنجاح." });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      setAddOpen(false);
+      setNewProduct({ barcode: "", name: "", categoryId: "", price: "", active: true });
+    },
+    onError: (err: Error) => {
+      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/products/${id}`);
+    },
+    onSuccess: () => {
+      toast({ title: "تم الحذف" });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    },
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ id, active }: { id: number; active: boolean }) => {
+      await apiRequest("PATCH", `/api/products/${id}`, { active });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    },
+  });
+
+  const getCategoryName = (catId: number | null) => categories.find(c => c.id === catId)?.name || "-";
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">المنتجات والأسعار</h1>
+          <h1 className="text-2xl font-bold" data-testid="text-products-title">المنتجات والأسعار</h1>
           <p className="text-muted-foreground mt-1">إدارة قائمة المنتجات وتوحيد الأسعار لجميع الفروع.</p>
         </div>
         
-        <Dialog>
+        <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button className="gap-2" data-testid="button-add-product">
               <Plus className="w-4 h-4" />
               إضافة منتج جديد
             </Button>
@@ -33,42 +86,34 @@ export default function Products() {
               <DialogTitle>إضافة منتج</DialogTitle>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-4 py-4">
-              <div className="col-span-2 flex justify-center mb-4">
-                <div className="w-32 h-32 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center bg-muted/30 text-muted-foreground cursor-pointer hover:bg-muted transition">
-                  <div className="flex flex-col items-center gap-2">
-                    <ImageIcon className="w-6 h-6" />
-                    <span className="text-xs">رفع صورة</span>
-                  </div>
-                </div>
-              </div>
-              
               <div className="space-y-2">
                 <label className="text-sm font-medium">الباركود</label>
-                <Input placeholder="امسح أو اكتب الباركود..." />
+                <Input placeholder="امسح أو اكتب الباركود..." value={newProduct.barcode} onChange={e => setNewProduct({...newProduct, barcode: e.target.value})} data-testid="input-product-barcode" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">اسم المنتج</label>
-                <Input placeholder="مثال: خاتم فضة 925" />
+                <Input placeholder="مثال: خاتم فضة 925" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} data-testid="input-product-name" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">الفئة</label>
-                <Select>
+                <Select value={newProduct.categoryId} onValueChange={v => setNewProduct({...newProduct, categoryId: v})}>
                   <SelectTrigger><SelectValue placeholder="اختر الفئة" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="c1">عقود</SelectItem>
-                    <SelectItem value="c2">أساور</SelectItem>
-                    <SelectItem value="c3">خواتم</SelectItem>
-                    <SelectItem value="c4">أطقم</SelectItem>
+                    {categories.map(c => (
+                      <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">السعر (الريال العماني)</label>
-                <Input type="number" placeholder="0.000" />
+                <Input type="number" step="0.001" placeholder="0.000" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} data-testid="input-product-price" />
               </div>
             </div>
             <DialogFooter>
-              <Button type="submit">حفظ المنتج</Button>
+              <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !newProduct.name || !newProduct.price} data-testid="button-save-product">
+                {createMutation.isPending ? "جارِ الحفظ..." : "حفظ المنتج"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -78,14 +123,15 @@ export default function Products() {
         <div className="p-4 border-b flex items-center gap-4">
           <div className="relative w-72">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="بحث بالاسم أو الباركود..." className="pr-9" />
+            <Input placeholder="بحث بالاسم أو الباركود..." className="pr-9" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-products" />
           </div>
-          <Select defaultValue="all">
+          <Select value={filterCat} onValueChange={setFilterCat}>
             <SelectTrigger className="w-40"><SelectValue placeholder="الفئة" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">كل الفئات</SelectItem>
-              <SelectItem value="c1">عقود</SelectItem>
-              <SelectItem value="c2">أساور</SelectItem>
+              {categories.map(c => (
+                <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -93,7 +139,6 @@ export default function Products() {
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead className="w-16">الصورة</TableHead>
               <TableHead>الباركود</TableHead>
               <TableHead>اسم المنتج</TableHead>
               <TableHead>الفئة</TableHead>
@@ -103,28 +148,26 @@ export default function Products() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {products.map((p) => (
+            {filteredProducts.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">لا توجد منتجات</TableCell>
+              </TableRow>
+            ) : filteredProducts.map((p) => (
               <TableRow key={p.id}>
-                <TableCell>
-                  <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center text-muted-foreground">
-                    <ImageIcon className="w-5 h-5 opacity-50" />
-                  </div>
-                </TableCell>
-                <TableCell className="font-mono text-muted-foreground">{p.barcode}</TableCell>
+                <TableCell className="font-mono text-muted-foreground">{p.barcode || "-"}</TableCell>
                 <TableCell className="font-bold">{p.name}</TableCell>
-                <TableCell>{p.category}</TableCell>
-                <TableCell className="font-bold text-primary">{p.price.toFixed(3)}</TableCell>
+                <TableCell>{getCategoryName(p.categoryId)}</TableCell>
+                <TableCell className="font-bold text-primary">{parseFloat(p.price).toFixed(3)}</TableCell>
                 <TableCell>
-                  <Badge variant={p.status === "نشط" ? "default" : "secondary"} className={p.status === "نشط" ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100" : ""}>
-                    {p.status}
-                  </Badge>
+                  <button onClick={() => toggleActiveMutation.mutate({ id: p.id, active: !p.active })}>
+                    <Badge variant={p.active ? "default" : "secondary"} className={p.active ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 cursor-pointer" : "cursor-pointer"}>
+                      {p.active ? "نشط" : "غير نشط"}
+                    </Badge>
+                  </button>
                 </TableCell>
                 <TableCell className="text-left">
                   <div className="flex items-center justify-end gap-2">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50">
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => deleteMutation.mutate(p.id)} data-testid={`button-delete-product-${p.id}`}>
                       <Trash className="w-4 h-4" />
                     </Button>
                   </div>
