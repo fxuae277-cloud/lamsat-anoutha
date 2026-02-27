@@ -45,11 +45,21 @@ export type Category = typeof categories.$inferSelect;
 
 export const products = pgTable("products", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+
   barcode: text("barcode").unique(),
+
   name: text("name").notNull(),
-  categoryId: integer("category_id").references(() => categories.id),
+
+  categoryId: integer("category_id")
+    .references(() => categories.id),
+
+  branchId: integer("branch_id")
+    .references(() => branches.id),
+
   price: decimal("price", { precision: 10, scale: 3 }).notNull(),
+
   image: text("image"),
+
   active: boolean("active").default(true),
 });
 export const insertProductSchema = createInsertSchema(products).omit({ id: true });
