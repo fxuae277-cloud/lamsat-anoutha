@@ -16,6 +16,7 @@ import Orders from "@/pages/Orders";
 import Expenses from "@/pages/Expenses";
 import Settings from "@/pages/Settings";
 import Reports from "@/pages/Reports";
+import Purchases from "@/pages/Purchases";
 
 function AuthenticatedRouter() {
   const { user, isLoading } = useAuth();
@@ -48,9 +49,8 @@ function AuthenticatedRouter() {
         <Route path="/customers">
           <div className="p-8 text-center text-muted-foreground">صفحة العملاء (قيد التطوير)</div>
         </Route>
-        <Route path="/suppliers">
-          <div className="p-8 text-center text-muted-foreground">صفحة الموردون (قيد التطوير)</div>
-        </Route>
+        <Route path="/suppliers" component={Purchases}/>
+        <Route path="/purchases" component={Purchases}/>
         <Route path="/hr">
           <div className="p-8 text-center text-muted-foreground">صفحة الرواتب والموظفين (قيد التطوير)</div>
         </Route>

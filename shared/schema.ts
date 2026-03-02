@@ -56,6 +56,8 @@ export const products = pgTable("products", {
   price: decimal("price", { precision: 10, scale: 3 }).notNull(),
   image: text("image"),
   active: boolean("active").default(true),
+  avgCost: decimal("avg_cost", { precision: 10, scale: 3 }).default("0"),
+  stockQty: integer("stock_qty").default(0),
 });
 export const insertProductSchema = createInsertSchema(products).omit({ id: true });
 export type InsertProduct = z.infer<typeof insertProductSchema>;
@@ -266,3 +268,39 @@ export const employees = pgTable("employees", {
 export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true });
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
 export type Employee = typeof employees.$inferSelect;
+
+export const purchaseInvoices = pgTable("purchase_invoices", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  invoiceNumber: text("invoice_number").notNull(),
+  supplierId: integer("supplier_id").references(() => suppliers.id),
+  branchId: integer("branch_id").references(() => branches.id).notNull(),
+  invoiceDate: date("invoice_date").notNull(),
+  shippingCost: decimal("shipping_cost", { precision: 10, scale: 3 }).default("0"),
+  customsCost: decimal("customs_cost", { precision: 10, scale: 3 }).default("0"),
+  clearanceCost: decimal("clearance_cost", { precision: 10, scale: 3 }).default("0"),
+  otherCost: decimal("other_cost", { precision: 10, scale: 3 }).default("0"),
+  subtotal: decimal("subtotal", { precision: 10, scale: 3 }).default("0"),
+  totalExtraCost: decimal("total_extra_cost", { precision: 10, scale: 3 }).default("0"),
+  grandTotal: decimal("grand_total", { precision: 10, scale: 3 }).default("0"),
+  status: text("status").notNull().default("draft"),
+  notes: text("notes"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertPurchaseInvoiceSchema = createInsertSchema(purchaseInvoices).omit({ id: true, createdAt: true });
+export type InsertPurchaseInvoice = z.infer<typeof insertPurchaseInvoiceSchema>;
+export type PurchaseInvoice = typeof purchaseInvoices.$inferSelect;
+
+export const purchaseItems = pgTable("purchase_items", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  purchaseId: integer("purchase_id").references(() => purchaseInvoices.id).notNull(),
+  productId: integer("product_id").references(() => products.id).notNull(),
+  qty: integer("qty").notNull(),
+  unitCostBase: decimal("unit_cost_base", { precision: 10, scale: 3 }).notNull(),
+  lineSubtotal: decimal("line_subtotal", { precision: 10, scale: 3 }).notNull(),
+  allocatedExtraCost: decimal("allocated_extra_cost", { precision: 10, scale: 3 }).default("0"),
+  unitCostFinal: decimal("unit_cost_final", { precision: 10, scale: 3 }).default("0"),
+});
+export const insertPurchaseItemSchema = createInsertSchema(purchaseItems).omit({ id: true });
+export type InsertPurchaseItem = z.infer<typeof insertPurchaseItemSchema>;
+export type PurchaseItem = typeof purchaseItems.$inferSelect;

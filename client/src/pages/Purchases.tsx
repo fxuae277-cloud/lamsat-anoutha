@@ -1,0 +1,490 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getQueryFn, apiRequest } from "@/lib/queryClient";
+import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import type { Branch, Supplier, Product, PurchaseInvoice } from "@shared/schema";
+
+function omr(val: string | number | null) {
+  if (val === null || val === undefined) return "0.000";
+  return parseFloat(String(val)).toFixed(3);
+}
+
+export default function Purchases() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<number | null>(null);
+  const [showPostConfirm, setShowPostConfirm] = useState(false);
+
+  const [newSupplierId, setNewSupplierId] = useState("");
+  const [newBranchId, setNewBranchId] = useState("");
+  const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
+  const [newShipping, setNewShipping] = useState("0");
+  const [newCustoms, setNewCustoms] = useState("0");
+  const [newClearance, setNewClearance] = useState("0");
+  const [newOther, setNewOther] = useState("0");
+  const [newNotes, setNewNotes] = useState("");
+
+  const [addProductId, setAddProductId] = useState("");
+  const [addQty, setAddQty] = useState("");
+  const [addUnitCost, setAddUnitCost] = useState("");
+
+  const { data: invoices = [] } = useQuery<PurchaseInvoice[]>({
+    queryKey: ["/api/purchases"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const { data: branches = [] } = useQuery<Branch[]>({
+    queryKey: ["/api/branches"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const { data: suppliers = [] } = useQuery<Supplier[]>({
+    queryKey: ["/api/suppliers"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const { data: allProducts = [] } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const { data: invoiceDetail } = useQuery<any>({
+    queryKey: ["/api/purchases", selectedInvoice],
+    queryFn: async () => {
+      const res = await fetch(`/api/purchases/${selectedInvoice}`, { credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    enabled: !!selectedInvoice,
+  });
+
+  const branchMap = Object.fromEntries(branches.map(b => [b.id, b.name]));
+  const supplierMap = Object.fromEntries(suppliers.map(s => [s.id, s.name]));
+  const productMap = Object.fromEntries(allProducts.map(p => [p.id, p.name]));
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/purchases", {
+        supplierId: newSupplierId ? Number(newSupplierId) : null,
+        branchId: Number(newBranchId),
+        invoiceDate: newDate,
+        shippingCost: Number(newShipping) || 0,
+        customsCost: Number(newCustoms) || 0,
+        clearanceCost: Number(newClearance) || 0,
+        otherCost: Number(newOther) || 0,
+        notes: newNotes || null,
+      });
+      return res.json();
+    },
+    onSuccess: (inv) => {
+      qc.invalidateQueries({ queryKey: ["/api/purchases"] });
+      setShowCreate(false);
+      setSelectedInvoice(inv.id);
+      toast({ title: "تم إنشاء فاتورة المشتريات" });
+      setNewSupplierId(""); setNewBranchId(""); setNewNotes("");
+      setNewShipping("0"); setNewCustoms("0"); setNewClearance("0"); setNewOther("0");
+    },
+    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+  });
+
+  const addItemMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/purchases/${selectedInvoice}/items`, {
+        productId: Number(addProductId),
+        qty: Number(addQty),
+        unitCostBase: Number(addUnitCost),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
+      setAddProductId(""); setAddQty(""); setAddUnitCost("");
+      toast({ title: "تمت إضافة الصنف" });
+    },
+    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteItemMutation = useMutation({
+    mutationFn: async (itemId: number) => {
+      await apiRequest("DELETE", `/api/purchases/${selectedInvoice}/items/${itemId}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
+      toast({ title: "تم حذف الصنف" });
+    },
+  });
+
+  const updateCostsMutation = useMutation({
+    mutationFn: async (costs: any) => {
+      const res = await apiRequest("PATCH", `/api/purchases/${selectedInvoice}`, costs);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
+      qc.invalidateQueries({ queryKey: ["/api/purchases"] });
+    },
+  });
+
+  const postMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/purchases/${selectedInvoice}/post`);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/purchases"] });
+      qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
+      qc.invalidateQueries({ queryKey: ["/api/products"] });
+      setShowPostConfirm(false);
+      toast({ title: "تم ترحيل الفاتورة بنجاح", description: "تم تحديث تكلفة المنتجات والمخزون" });
+    },
+    onError: (e: Error) => {
+      setShowPostConfirm(false);
+      toast({ title: "فشل الترحيل", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const items = invoiceDetail?.items || [];
+  const isDraft = invoiceDetail?.status === "draft";
+  const itemsSubtotal = items.reduce((s: number, it: any) => s + parseFloat(it.lineSubtotal || "0"), 0);
+  const extraTotal = invoiceDetail
+    ? parseFloat(invoiceDetail.shippingCost || "0") + parseFloat(invoiceDetail.customsCost || "0") +
+      parseFloat(invoiceDetail.clearanceCost || "0") + parseFloat(invoiceDetail.otherCost || "0")
+    : 0;
+
+  if (selectedInvoice && invoiceDetail) {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold" data-testid="text-purchase-detail-title">
+              فاتورة مشتريات #{invoiceDetail.invoiceNumber}
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              {supplierMap[invoiceDetail.supplierId] || "بدون مورد"} | {branchMap[invoiceDetail.branchId] || ""} | {invoiceDetail.invoiceDate}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant={isDraft ? "outline" : "default"} className={isDraft ? "border-amber-400 text-amber-600" : "bg-green-600"}>
+              {isDraft ? "مسودة" : "مرحّلة"}
+            </Badge>
+            <Button variant="outline" onClick={() => setSelectedInvoice(null)} data-testid="button-back-to-list">رجوع</Button>
+          </div>
+        </div>
+
+        {isDraft && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2"><Plus className="w-4 h-4" /> إضافة صنف</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1 min-w-[200px] flex-1">
+                  <label className="text-sm font-medium">المنتج</label>
+                  <Select value={addProductId} onValueChange={setAddProductId}>
+                    <SelectTrigger data-testid="select-add-product"><SelectValue placeholder="اختر منتج..." /></SelectTrigger>
+                    <SelectContent>
+                      {allProducts.map(p => (
+                        <SelectItem key={p.id} value={String(p.id)}>{p.name} ({omr(p.price)} OMR)</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1 w-28">
+                  <label className="text-sm font-medium">الكمية</label>
+                  <Input type="number" min="1" value={addQty} onChange={e => setAddQty(e.target.value)} placeholder="0" data-testid="input-add-qty" />
+                </div>
+                <div className="space-y-1 w-36">
+                  <label className="text-sm font-medium">سعر التكلفة</label>
+                  <Input type="number" step="0.001" min="0" value={addUnitCost} onChange={e => setAddUnitCost(e.target.value)} placeholder="0.000" data-testid="input-add-unit-cost" />
+                </div>
+                <Button onClick={() => addItemMutation.mutate()} disabled={!addProductId || !addQty || !addUnitCost || addItemMutation.isPending} data-testid="button-add-item">
+                  <Plus className="w-4 h-4 ml-1" /> إضافة
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2"><Package className="w-4 h-4" /> الأصناف ({items.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead>المنتج</TableHead>
+                  <TableHead>الكمية</TableHead>
+                  <TableHead>سعر الوحدة</TableHead>
+                  <TableHead>الإجمالي</TableHead>
+                  {!isDraft && <TableHead>التكلفة الإضافية</TableHead>}
+                  {!isDraft && <TableHead>التكلفة النهائية/وحدة</TableHead>}
+                  {isDraft && <TableHead></TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={isDraft ? 5 : 6} className="text-center text-muted-foreground py-8">
+                      لا توجد أصناف
+                    </TableCell>
+                  </TableRow>
+                )}
+                {items.map((it: any) => (
+                  <TableRow key={it.id} data-testid={`row-purchase-item-${it.id}`}>
+                    <TableCell>{it.productName || productMap[it.productId] || it.productId}</TableCell>
+                    <TableCell className="font-mono">{it.qty}</TableCell>
+                    <TableCell className="font-mono">{omr(it.unitCostBase)}</TableCell>
+                    <TableCell className="font-mono">{omr(it.lineSubtotal)}</TableCell>
+                    {!isDraft && <TableCell className="font-mono text-amber-600">{omr(it.allocatedExtraCost)}</TableCell>}
+                    {!isDraft && <TableCell className="font-mono font-bold text-emerald-600">{omr(it.unitCostFinal)}</TableCell>}
+                    {isDraft && (
+                      <TableCell>
+                        <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700" onClick={() => deleteItemMutation.mutate(it.id)} data-testid={`button-delete-item-${it.id}`}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+                <TableRow className="border-t-2 font-bold bg-muted/30">
+                  <TableCell>المجموع</TableCell>
+                  <TableCell className="font-mono">{items.reduce((s: number, it: any) => s + it.qty, 0)}</TableCell>
+                  <TableCell></TableCell>
+                  <TableCell className="font-mono">{omr(itemsSubtotal)}</TableCell>
+                  {!isDraft && <TableCell className="font-mono text-amber-600">{omr(extraTotal)}</TableCell>}
+                  {!isDraft && <TableCell></TableCell>}
+                  {isDraft && <TableCell></TableCell>}
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2"><Ship className="w-4 h-4" /> التكاليف الإضافية</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium flex items-center gap-1"><Truck className="w-3 h-3" /> شحن</label>
+                <Input type="number" step="0.001" value={invoiceDetail.shippingCost || "0"} disabled={!isDraft}
+                  onChange={e => updateCostsMutation.mutate({ shippingCost: Number(e.target.value) })}
+                  data-testid="input-shipping-cost" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">جمارك</label>
+                <Input type="number" step="0.001" value={invoiceDetail.customsCost || "0"} disabled={!isDraft}
+                  onChange={e => updateCostsMutation.mutate({ customsCost: Number(e.target.value) })}
+                  data-testid="input-customs-cost" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">تخليص</label>
+                <Input type="number" step="0.001" value={invoiceDetail.clearanceCost || "0"} disabled={!isDraft}
+                  onChange={e => updateCostsMutation.mutate({ clearanceCost: Number(e.target.value) })}
+                  data-testid="input-clearance-cost" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">أخرى</label>
+                <Input type="number" step="0.001" value={invoiceDetail.otherCost || "0"} disabled={!isDraft}
+                  onChange={e => updateCostsMutation.mutate({ otherCost: Number(e.target.value) })}
+                  data-testid="input-other-cost" />
+              </div>
+            </div>
+            <div className="mt-4 p-3 bg-muted/50 rounded-lg border flex flex-wrap gap-6">
+              <div>
+                <span className="text-xs text-muted-foreground">إجمالي الأصناف</span>
+                <p className="font-bold font-mono">{omr(itemsSubtotal)} OMR</p>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground">إجمالي التكاليف الإضافية</span>
+                <p className="font-bold font-mono text-amber-600">{omr(extraTotal)} OMR</p>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground">الإجمالي الكلي</span>
+                <p className="font-bold font-mono text-lg text-emerald-700">{omr(itemsSubtotal + extraTotal)} OMR</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {isDraft && items.length > 0 && (
+          <div className="flex justify-end">
+            <Button size="lg" className="gap-2 bg-green-600 hover:bg-green-700" onClick={() => setShowPostConfirm(true)} data-testid="button-post-invoice">
+              <FileCheck className="w-5 h-5" /> ترحيل الفاتورة
+            </Button>
+          </div>
+        )}
+
+        <Dialog open={showPostConfirm} onOpenChange={setShowPostConfirm}>
+          <DialogContent dir="rtl" className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-500" /> تأكيد الترحيل
+              </DialogTitle>
+              <DialogDescription>
+                سيتم توزيع التكاليف الإضافية على الأصناف وتحديث متوسط التكلفة والمخزون.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 text-sm">
+              <div className="p-3 bg-muted/50 rounded-lg border space-y-2">
+                <p><strong>عدد الأصناف:</strong> {items.length}</p>
+                <p><strong>إجمالي الأصناف:</strong> {omr(itemsSubtotal)} OMR</p>
+                <p><strong>تكاليف إضافية:</strong> {omr(extraTotal)} OMR</p>
+                <p className="border-t pt-2"><strong>الإجمالي الكلي:</strong> <span className="text-lg font-bold text-emerald-700">{omr(itemsSubtotal + extraTotal)} OMR</span></p>
+              </div>
+              <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-amber-800">
+                <p className="font-medium">التوزيع المتوقع:</p>
+                {items.map((it: any) => {
+                  const lineVal = parseFloat(it.lineSubtotal || "0");
+                  const ratio = itemsSubtotal > 0 ? lineVal / itemsSubtotal : 0;
+                  const allocated = extraTotal * ratio;
+                  const finalUnit = it.qty > 0 ? (lineVal + allocated) / it.qty : 0;
+                  return (
+                    <div key={it.id} className="flex justify-between text-xs mt-1">
+                      <span>{it.productName || productMap[it.productId]}: {it.qty} x {omr(finalUnit)}</span>
+                      <span className="text-amber-600">+{omr(allocated)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setShowPostConfirm(false)}>إلغاء</Button>
+              <Button className="bg-green-600 hover:bg-green-700 gap-2" onClick={() => postMutation.mutate()} disabled={postMutation.isPending} data-testid="button-confirm-post">
+                <FileCheck className="w-4 h-4" /> تأكيد الترحيل
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold" data-testid="text-purchases-title">المشتريات</h1>
+          <p className="text-muted-foreground mt-1">إدارة فواتير المشتريات ومتوسط التكلفة (Average Cost)</p>
+        </div>
+        <Button className="gap-2" onClick={() => setShowCreate(true)} data-testid="button-new-purchase">
+          <Plus className="w-4 h-4" /> فاتورة مشتريات جديدة
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader className="bg-muted/50">
+              <TableRow>
+                <TableHead>#</TableHead>
+                <TableHead>المورد</TableHead>
+                <TableHead>الفرع</TableHead>
+                <TableHead>التاريخ</TableHead>
+                <TableHead>الإجمالي</TableHead>
+                <TableHead>الحالة</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {invoices.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">لا توجد فواتير مشتريات</TableCell>
+                </TableRow>
+              )}
+              {invoices.map((inv) => (
+                <TableRow key={inv.id} className="cursor-pointer hover:bg-muted/30" onClick={() => setSelectedInvoice(inv.id)} data-testid={`row-purchase-${inv.id}`}>
+                  <TableCell className="font-mono">{inv.invoiceNumber}</TableCell>
+                  <TableCell>{supplierMap[inv.supplierId!] || "—"}</TableCell>
+                  <TableCell>{branchMap[inv.branchId] || "—"}</TableCell>
+                  <TableCell>{inv.invoiceDate}</TableCell>
+                  <TableCell className="font-mono">{omr(inv.grandTotal)} OMR</TableCell>
+                  <TableCell>
+                    <Badge variant={inv.status === "draft" ? "outline" : "default"} className={inv.status === "draft" ? "border-amber-400 text-amber-600" : "bg-green-600"}>
+                      {inv.status === "draft" ? "مسودة" : "مرحّلة"}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent dir="rtl" className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> فاتورة مشتريات جديدة</DialogTitle>
+            <DialogDescription>أدخل بيانات الفاتورة ثم أضف الأصناف بعد الإنشاء</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">المورد</label>
+                <Select value={newSupplierId} onValueChange={setNewSupplierId}>
+                  <SelectTrigger data-testid="select-new-supplier"><SelectValue placeholder="اختر مورد..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">بدون مورد</SelectItem>
+                    {suppliers.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">الفرع *</label>
+                <Select value={newBranchId} onValueChange={setNewBranchId}>
+                  <SelectTrigger data-testid="select-new-branch"><SelectValue placeholder="اختر فرع..." /></SelectTrigger>
+                  <SelectContent>
+                    {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">تاريخ الفاتورة *</label>
+              <Input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} data-testid="input-new-date" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">شحن</label>
+                <Input type="number" step="0.001" value={newShipping} onChange={e => setNewShipping(e.target.value)} data-testid="input-new-shipping" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">جمارك</label>
+                <Input type="number" step="0.001" value={newCustoms} onChange={e => setNewCustoms(e.target.value)} data-testid="input-new-customs" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">تخليص</label>
+                <Input type="number" step="0.001" value={newClearance} onChange={e => setNewClearance(e.target.value)} data-testid="input-new-clearance" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">أخرى</label>
+                <Input type="number" step="0.001" value={newOther} onChange={e => setNewOther(e.target.value)} data-testid="input-new-other" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">ملاحظات</label>
+              <Input value={newNotes} onChange={e => setNewNotes(e.target.value)} placeholder="ملاحظات اختيارية..." data-testid="input-new-notes" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>إلغاء</Button>
+            <Button onClick={() => createMutation.mutate()} disabled={!newBranchId || !newDate || createMutation.isPending} data-testid="button-create-purchase">
+              إنشاء الفاتورة
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

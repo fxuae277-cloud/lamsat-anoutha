@@ -9,7 +9,8 @@ import {
   insertCustomerSchema, insertSupplierSchema, insertExpenseSchema,
   insertEmployeeSchema, insertOrderSchema, insertSaleSchema,
   insertInventoryTransferSchema, insertCitySchema, insertUserSchema,
-  insertWarehouseSchema, insertShiftSchema, shifts,
+  insertWarehouseSchema, insertShiftSchema, insertPurchaseInvoiceSchema,
+  shifts,
   PAYMENT_METHODS, type PaymentMethod,
 } from "@shared/schema";
 
@@ -263,6 +264,11 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     res.status(201).json(await storage.createSupplier(parsed.data));
   });
+  app.patch("/api/suppliers/:id", async (req, res) => {
+    const row = await storage.updateSupplier(Number(req.params.id), req.body);
+    if (!row) return res.status(404).json({ message: "المورد غير موجود" });
+    res.json(row);
+  });
 
   app.get("/api/sales", requireAuth, async (_req, res) => {
     res.json(await storage.getSales());
@@ -509,6 +515,113 @@ export async function registerRoutes(
     }
     const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
     res.json(await storage.getShiftsByDate(dateStr, branchId));
+  });
+
+  app.get("/api/purchases", requireAuth, async (_req, res) => {
+    const invoices = await storage.getPurchaseInvoices();
+    res.json(invoices);
+  });
+
+  app.get("/api/purchases/:id", requireAuth, async (req, res) => {
+    const invoice = await storage.getPurchaseInvoice(Number(req.params.id));
+    if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
+    const items = await storage.getPurchaseItems(invoice.id);
+    res.json({ ...invoice, items });
+  });
+
+  app.post("/api/purchases", requireAuth, async (req, res) => {
+    try {
+      const { supplierId, branchId, invoiceDate, shippingCost, customsCost, clearanceCost, otherCost, notes } = req.body;
+      if (!branchId || !invoiceDate) {
+        return res.status(400).json({ message: "الفرع وتاريخ الفاتورة مطلوبان" });
+      }
+      const invoiceNumber = `PUR-${Date.now()}`;
+      const data = {
+        invoiceNumber,
+        supplierId: supplierId || null,
+        branchId: Number(branchId),
+        invoiceDate,
+        shippingCost: String(shippingCost || 0),
+        customsCost: String(customsCost || 0),
+        clearanceCost: String(clearanceCost || 0),
+        otherCost: String(otherCost || 0),
+        status: "draft" as const,
+        notes: notes || null,
+        createdBy: req.session.userId!,
+      };
+      const parsed = insertPurchaseInvoiceSchema.safeParse(data);
+      if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+      res.status(201).json(await storage.createPurchaseInvoice(parsed.data));
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.patch("/api/purchases/:id", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    const invoice = await storage.getPurchaseInvoice(id);
+    if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
+    if (invoice.status !== "draft") {
+      return res.status(400).json({ message: "لا يمكن تعديل فاتورة مرحّلة" });
+    }
+    const updateData: any = {};
+    const { shippingCost, customsCost, clearanceCost, otherCost, notes, supplierId } = req.body;
+    if (shippingCost !== undefined) updateData.shippingCost = String(shippingCost);
+    if (customsCost !== undefined) updateData.customsCost = String(customsCost);
+    if (clearanceCost !== undefined) updateData.clearanceCost = String(clearanceCost);
+    if (otherCost !== undefined) updateData.otherCost = String(otherCost);
+    if (notes !== undefined) updateData.notes = notes;
+    if (supplierId !== undefined) updateData.supplierId = supplierId;
+    const row = await storage.updatePurchaseInvoice(id, updateData);
+    res.json(row);
+  });
+
+  app.post("/api/purchases/:id/items", requireAuth, async (req, res) => {
+    try {
+      const purchaseId = Number(req.params.id);
+      const invoice = await storage.getPurchaseInvoice(purchaseId);
+      if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
+      if (invoice.status !== "draft") {
+        return res.status(400).json({ message: "لا يمكن إضافة أصناف لفاتورة مرحّلة" });
+      }
+      const { productId, qty, unitCostBase } = req.body;
+      if (!productId || !qty || !unitCostBase) {
+        return res.status(400).json({ message: "المنتج والكمية وسعر التكلفة مطلوبة" });
+      }
+      const lineSubtotal = Number(qty) * Number(unitCostBase);
+      const item = await storage.addPurchaseItem({
+        purchaseId,
+        productId: Number(productId),
+        qty: Number(qty),
+        unitCostBase: String(unitCostBase),
+        lineSubtotal: lineSubtotal.toFixed(3),
+        allocatedExtraCost: "0",
+        unitCostFinal: "0",
+      });
+      res.status(201).json(item);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.delete("/api/purchases/:purchaseId/items/:itemId", requireAuth, async (req, res) => {
+    const purchaseId = Number(req.params.purchaseId);
+    const invoice = await storage.getPurchaseInvoice(purchaseId);
+    if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
+    if (invoice.status !== "draft") {
+      return res.status(400).json({ message: "لا يمكن حذف أصناف من فاتورة مرحّلة" });
+    }
+    await storage.deletePurchaseItem(Number(req.params.itemId));
+    res.json({ message: "تم الحذف" });
+  });
+
+  app.post("/api/purchases/:id/post", requireAuth, async (req, res) => {
+    try {
+      const result = await storage.postPurchaseInvoice(Number(req.params.id));
+      res.json(result);
+    } catch (err: any) {
+      res.status(400).json({ message: err?.message ?? "فشل الترحيل" });
+    }
   });
 
   return httpServer;

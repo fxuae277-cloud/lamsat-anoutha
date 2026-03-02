@@ -2,7 +2,7 @@
 
 ## Overview
 Arabic RTL ERP and POS system for "لمسة أنوثة إكسسوارات لوى" accessories shop in Oman.
-Manages 3 branches + main warehouse + branch warehouses + cashier + WhatsApp/Instagram orders + expenses + salaries + financial reports.
+Manages 3 branches + main warehouse + branch warehouses + cashier + WhatsApp/Instagram orders + expenses + salaries + financial reports + purchases with Average Cost.
 
 Currency: Omani Rial (OMR) | VAT: 5% | Unified pricing across branches.
 
@@ -13,13 +13,14 @@ Currency: Omani Rial (OMR) | VAT: 5% | Unified pricing across branches.
 - **Routing**: wouter (frontend) + Express routes (backend)
 - **State Management**: TanStack Query
 - **Auth**: express-session + connect-pg-simple (HttpOnly cookie)
+- **Export**: xlsx (Excel export)
 
 ## Project Structure
 ```
 client/src/
   components/layout/    → Sidebar, AppLayout
   components/ui/        → shadcn/ui components
-  pages/                → Login, Dashboard, POS, Products, Inventory, Orders, Expenses, Settings
+  pages/                → Login, Dashboard, POS, Products, Inventory, Orders, Expenses, Settings, Reports, Purchases
   hooks/                → use-toast, use-mobile
   lib/                  → queryClient, auth (AuthProvider/useAuth), utils
 server/
@@ -38,7 +39,7 @@ shared/
 - GET /api/auth/me returns current user (without password)
 - POST /api/auth/logout destroys session
 - POST /api/auth/change-password (oldPassword, newPassword) - any logged-in user
-- `requireAuth` middleware protects: /api/orders, /api/shifts, /api/expenses, /api/reports, /api/sales, /api/ledger
+- `requireAuth` middleware protects: /api/orders, /api/shifts, /api/expenses, /api/reports, /api/sales, /api/ledger, /api/purchases
 - `requireOwnerOrAdmin` middleware protects: /api/users (GET/POST/PATCH)
 - Frontend shows Login page when no session exists
 - Users table has: username (unique), password (bcrypt), name, role, branchId, terminalName, isActive
@@ -54,7 +55,7 @@ shared/
 ## Database Schema (PostgreSQL)
 - branches, cities
 - users (roles: owner/cashier/employee, with terminalName + branchId)
-- categories, products
+- categories, products (with avg_cost + stock_qty for Average Cost tracking)
 - warehouses, inventory, inventory_transfers
 - customers, suppliers
 - sales, sale_items (sales have shift_id + payment_method)
@@ -63,7 +64,22 @@ shared/
 - employees, shifts (with expectedCash, actualCash, difference, terminalName)
 - **cash_ledger** (date, branch_id, shift_id, type, amount_in, amount_out, category, note, created_by)
 - **bank_ledger** (date, branch_id, shift_id, method[card/bank_transfer], amount_in, amount_out, ref_id, category, note, created_by)
+- **purchase_invoices** (invoice_number, supplier_id, branch_id, invoice_date, shipping/customs/clearance/other costs, subtotal, total_extra_cost, grand_total, status[draft/posted])
+- **purchase_items** (purchase_id, product_id, qty, unit_cost_base, line_subtotal, allocated_extra_cost, unit_cost_final)
 - **session** (auto-created by connect-pg-simple)
+
+## Purchases & Average Cost System
+- Create draft purchase invoice with optional supplier, branch, date, extra costs
+- Add items with product, qty, base unit cost → auto-calculate line_subtotal
+- Extra costs: shipping, customs, clearance, other
+- **Posting** (POST /api/purchases/:id/post):
+  1. Calculate subtotal_items = sum of all line_subtotals
+  2. Calculate total_extra_cost = shipping + customs + clearance + other
+  3. Allocate extra costs to items proportionally: allocated = total_extra * (line_subtotal / subtotal_items)
+  4. Calculate unit_cost_final = (line_subtotal + allocated_extra) / qty
+  5. Update products.avg_cost using Weighted Average: new_avg = (old_avg * old_qty + unit_cost_final * new_qty) / (old_qty + new_qty)
+  6. Update products.stock_qty += qty
+- Guards: Cannot post if status != draft or items empty; cannot modify posted invoices
 
 ## Ledger System
 - **cash_ledger types**: sale, expense, order_payment, shift_difference
@@ -92,12 +108,14 @@ shared/
 1. **Login**: Username/password authentication, session-based
 2. **Dashboard**: Daily sales, VAT, order count, low-stock alerts, weekly chart
 3. **POS**: Session-based branch/cashier (read-only), barcode scan, cart, discount, VAT 5%, cash/card/bank payment, shift open/check
-4. **Products**: CRUD with barcode, category, unified price, active toggle
+4. **Products**: CRUD with barcode, category, unified price, active toggle, avg_cost + stock_qty display
 5. **Inventory**: Main + branch warehouses, receive stock, transfer between warehouses, low-stock alerts
 6. **Orders**: WhatsApp/Instagram orders, auto-branch assignment by city, status tracking, payment recording
 7. **Expenses**: Categorized expenses per branch with source tracking + ledger integration (tabbed: expenses / cash ledger / bank ledger)
 8. **Shift Reports**: GET /api/reports/shift?shiftId=... → cash/card/bank sales, expenses, expected vs actual cash
 9. **Settings**: Tabbed interface - account (change password), users (owner/admin), general settings, branches & cities
+10. **Reports**: Shift report + Daily report with CSV export + branch filter
+11. **Purchases**: Full purchase invoice system with Average Cost calculation, extra cost allocation, posting workflow
 
 ## API Routes
 All prefixed with `/api/`:
@@ -108,10 +126,12 @@ All prefixed with `/api/`:
 - GET/POST `/sales` (requireAuth), `/orders` (requireAuth), `/expenses` (requireAuth), `/employees`, `/shifts` (requireAuth)
 - POST `/orders/:id/pay` (requireAuth)
 - PATCH `/orders/:id/status` (requireAuth), `/shifts/:id/close` (requireAuth)
-- GET `/reports/shift?shiftId=...` (requireAuth)
+- GET `/reports/shift?shiftId=...`, `/reports/daily?date=...&branchId=...`, `/reports/shifts-by-date?date=...` (requireAuth)
 - GET `/shifts/current` (requireAuth, uses session user)
 - GET `/ledger/cash`, `/ledger/bank` (requireAuth, optional ?branchId)
 - GET/POST/PATCH `/users`, `/users/:id/reset-password` (requireOwnerOrAdmin)
+- GET/POST `/purchases`, GET `/purchases/:id`, PATCH `/purchases/:id`, POST `/purchases/:id/items`, DELETE `/purchases/:purchaseId/items/:itemId`, POST `/purchases/:id/post` (requireAuth)
+- GET/POST/PATCH `/suppliers`
 - GET `/dashboard`
 
 ## Design
@@ -130,3 +150,6 @@ All prefixed with `/api/`:
 - DB has trigger on sales table (auto-set invoice_number via trg_sales_set_invoice_number) - do not drop
 - DB has unique constraint `uniq_open_shift_per_terminal` preventing duplicate open shifts per terminal
 - Old DB triggers on sales (validate_shift, require_open_shift, cash_movements) were dropped - logic handled in app code
+- **CRITICAL**: schema.ts - always use write tool for schema changes (edit tool corrupts it)
+- products.avg_cost and products.stock_qty added via ALTER TABLE (not in Drizzle migration)
+- purchase_invoices and purchase_items tables created via psql ALTER/CREATE

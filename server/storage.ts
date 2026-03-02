@@ -20,6 +20,8 @@ import {
   shifts, type InsertShift, type Shift,
   cashLedger, type InsertCashLedger, type CashLedger,
   bankLedger, type InsertBankLedger, type BankLedger,
+  purchaseInvoices, type InsertPurchaseInvoice, type PurchaseInvoice,
+  purchaseItems, type InsertPurchaseItem, type PurchaseItem,
   type PaymentMethod, PAYMENT_METHODS,
 } from "@shared/schema";
 
@@ -86,6 +88,15 @@ export interface IStorage {
   getDailyReport(dateStr: string, branchId?: number): Promise<any>;
   getShiftsByDate(dateStr: string, branchId?: number): Promise<any[]>;
   getDashboardStats(branchId?: number): Promise<any>;
+  getPurchaseInvoices(): Promise<PurchaseInvoice[]>;
+  getPurchaseInvoice(id: number): Promise<PurchaseInvoice | undefined>;
+  createPurchaseInvoice(data: InsertPurchaseInvoice): Promise<PurchaseInvoice>;
+  updatePurchaseInvoice(id: number, data: Partial<InsertPurchaseInvoice>): Promise<PurchaseInvoice | undefined>;
+  getPurchaseItems(purchaseId: number): Promise<PurchaseItem[]>;
+  addPurchaseItem(data: InsertPurchaseItem): Promise<PurchaseItem>;
+  deletePurchaseItem(id: number): Promise<void>;
+  postPurchaseInvoice(id: number): Promise<PurchaseInvoice>;
+  updateSupplier(id: number, data: Partial<InsertSupplier>): Promise<Supplier | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -729,6 +740,108 @@ export class DatabaseStorage implements IStorage {
       weeklySales,
       recentOrders,
     };
+  }
+
+  async getPurchaseInvoices() {
+    return db.select().from(purchaseInvoices).orderBy(desc(purchaseInvoices.createdAt));
+  }
+
+  async getPurchaseInvoice(id: number) {
+    const [row] = await db.select().from(purchaseInvoices).where(eq(purchaseInvoices.id, id));
+    return row;
+  }
+
+  async createPurchaseInvoice(data: InsertPurchaseInvoice) {
+    const [row] = await db.insert(purchaseInvoices).values(data).returning();
+    return row;
+  }
+
+  async updatePurchaseInvoice(id: number, data: Partial<InsertPurchaseInvoice>) {
+    const [row] = await db.update(purchaseInvoices).set(data).where(eq(purchaseInvoices.id, id)).returning();
+    return row;
+  }
+
+  async getPurchaseItems(purchaseId: number) {
+    return db.select({
+      id: purchaseItems.id,
+      purchaseId: purchaseItems.purchaseId,
+      productId: purchaseItems.productId,
+      productName: products.name,
+      qty: purchaseItems.qty,
+      unitCostBase: purchaseItems.unitCostBase,
+      lineSubtotal: purchaseItems.lineSubtotal,
+      allocatedExtraCost: purchaseItems.allocatedExtraCost,
+      unitCostFinal: purchaseItems.unitCostFinal,
+    }).from(purchaseItems)
+      .leftJoin(products, eq(purchaseItems.productId, products.id))
+      .where(eq(purchaseItems.purchaseId, purchaseId));
+  }
+
+  async addPurchaseItem(data: InsertPurchaseItem) {
+    const [row] = await db.insert(purchaseItems).values(data).returning();
+    return row;
+  }
+
+  async deletePurchaseItem(id: number) {
+    await db.delete(purchaseItems).where(eq(purchaseItems.id, id));
+  }
+
+  async updateSupplier(id: number, data: Partial<InsertSupplier>) {
+    const [row] = await db.update(suppliers).set(data).where(eq(suppliers.id, id)).returning();
+    return row;
+  }
+
+  async postPurchaseInvoice(id: number): Promise<PurchaseInvoice> {
+    const invoice = await this.getPurchaseInvoice(id);
+    if (!invoice) throw new Error("الفاتورة غير موجودة");
+    if (invoice.status !== "draft") throw new Error("لا يمكن ترحيل فاتورة مرحّلة مسبقاً");
+
+    const items = await db.select().from(purchaseItems).where(eq(purchaseItems.purchaseId, id));
+    if (items.length === 0) throw new Error("لا يمكن ترحيل فاتورة بدون أصناف");
+
+    const subtotalItems = items.reduce((s, it) => s + parseFloat(it.lineSubtotal), 0);
+    const totalExtraCost =
+      parseFloat(invoice.shippingCost || "0") +
+      parseFloat(invoice.customsCost || "0") +
+      parseFloat(invoice.clearanceCost || "0") +
+      parseFloat(invoice.otherCost || "0");
+    const grandTotal = subtotalItems + totalExtraCost;
+
+    for (const item of items) {
+      const lineSubVal = parseFloat(item.lineSubtotal);
+      const ratio = subtotalItems > 0 ? lineSubVal / subtotalItems : 0;
+      const allocatedExtra = totalExtraCost * ratio;
+      const unitCostFinal = item.qty > 0 ? (lineSubVal + allocatedExtra) / item.qty : 0;
+
+      await db.update(purchaseItems).set({
+        allocatedExtraCost: allocatedExtra.toFixed(3),
+        unitCostFinal: unitCostFinal.toFixed(3),
+      }).where(eq(purchaseItems.id, item.id));
+
+      const [product] = await db.select().from(products).where(eq(products.id, item.productId));
+      if (product) {
+        const oldQty = product.stockQty || 0;
+        const oldAvgCost = parseFloat(product.avgCost || "0");
+        const newQty = oldQty + item.qty;
+        const newAvgCost = newQty > 0
+          ? ((oldAvgCost * oldQty) + (unitCostFinal * item.qty)) / newQty
+          : unitCostFinal;
+
+        await db.update(products).set({
+          stockQty: newQty,
+          avgCost: newAvgCost.toFixed(3),
+        }).where(eq(products.id, item.productId));
+      }
+    }
+
+    const [updated] = await db.update(purchaseInvoices).set({
+      subtotal: subtotalItems.toFixed(3),
+      totalExtraCost: totalExtraCost.toFixed(3),
+      grandTotal: grandTotal.toFixed(3),
+      status: "posted",
+    }).where(eq(purchaseInvoices.id, id)).returning();
+
+    return updated;
   }
 }
 
