@@ -17,6 +17,8 @@ import type { Product, Branch } from "@shared/schema";
 const TX_TYPE_LABELS: Record<string, string> = {
   PURCHASE: "مشتريات",
   purchase_receipt: "استلام مشتريات",
+  TRANSFER_OUT: "صادر تحويل",
+  TRANSFER_IN: "وارد تحويل",
   sale: "بيع",
   sale_return: "مرتجع",
   internal_transfer: "نقل داخلي",
@@ -141,24 +143,34 @@ function BranchInventoryTab() {
   );
 }
 
+const LOC_TYPE_LABELS: Record<string, string> = {
+  MAIN_WAREHOUSE: "مخزن رئيسي",
+  SUB_WAREHOUSE: "مخزن فرعي",
+  SHOWROOM: "صالة عرض",
+};
+
 function InternalTransferTab() {
   const { toast } = useToast();
   const { user } = useAuth();
   const isOwner = user?.role === "owner" || user?.role === "admin";
   const [selectedBranch, setSelectedBranch] = useState<string>(String(user?.branchId));
-  const [transferData, setTransferData] = useState({ productId: "", quantity: "", note: "" });
+  const [fromLocationId, setFromLocationId] = useState("");
+  const [toLocationId, setToLocationId] = useState("");
+  const [items, setItems] = useState<{ productId: string; qty: string }[]>([]);
+  const [addProduct, setAddProduct] = useState("");
+  const [addQty, setAddQty] = useState("");
 
   const { data: branches = [] } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const { data: products = [] } = useQuery<Product[]>({
+  const { data: allProducts = [] } = useQuery<Product[]>({
     queryKey: ["/api/products"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const { data: allLocations = [] } = useQuery<any[]>({
+  const { data: branchLocations = [] } = useQuery<any[]>({
     queryKey: ["/api/locations", selectedBranch],
     queryFn: async () => {
       const res = await fetch(`/api/locations?branchId=${selectedBranch}`, { credentials: "include" });
@@ -168,42 +180,72 @@ function InternalTransferTab() {
     enabled: !!selectedBranch,
   });
 
-  const backstoreId = allLocations.find((l: any) => l.code === "backstore")?.id;
-  const showroomId = allLocations.find((l: any) => l.code === "showroom")?.id;
-
-  const backstoreParams = new URLSearchParams();
-  backstoreParams.set("branchId", selectedBranch);
-  backstoreParams.set("locationCode", "backstore");
-  const { data: backstoreInv = [] } = useQuery<any[]>({
-    queryKey: ["/api/location-inventory", selectedBranch, "backstore"],
+  const fromInvParams = new URLSearchParams();
+  if (fromLocationId) {
+    fromInvParams.set("branchId", selectedBranch);
+  }
+  const { data: fromInv = [] } = useQuery<any[]>({
+    queryKey: ["/api/location-inventory", selectedBranch, fromLocationId],
     queryFn: async () => {
-      const res = await fetch(`/api/location-inventory?${backstoreParams.toString()}`, { credentials: "include" });
+      const res = await fetch(`/api/location-inventory?branchId=${selectedBranch}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      const all = await res.json();
+      return all.filter((r: any) => String(r.locationId) === fromLocationId);
+    },
+    enabled: !!selectedBranch && !!fromLocationId,
+  });
+
+  const productMap = Object.fromEntries(allProducts.map(p => [p.id, p.name]));
+  const fromInvMap = Object.fromEntries(fromInv.map((r: any) => [String(r.productId), r.qtyOnHand]));
+
+  const { data: transfers = [] } = useQuery<any[]>({
+    queryKey: ["/api/inventory-transfers", selectedBranch],
+    queryFn: async () => {
+      const p = new URLSearchParams();
+      if (selectedBranch !== "all") p.set("branchId", selectedBranch);
+      const qs = p.toString() ? `?${p.toString()}` : "";
+      const res = await fetch(`/api/inventory-transfers${qs}`, { credentials: "include" });
       if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },
-    enabled: !!selectedBranch,
   });
-
-  const selectedProduct = backstoreInv.find((r: any) => String(r.productId) === transferData.productId);
 
   const transferMutation = useMutation({
     mutationFn: async () => {
-      if (!backstoreId || !showroomId) throw new Error("لم يتم العثور على المواقع");
-      await apiRequest("POST", "/api/location-inventory/transfer", {
-        fromLocationId: backstoreId,
-        toLocationId: showroomId,
-        productId: parseInt(transferData.productId),
-        quantity: parseInt(transferData.quantity),
-        note: transferData.note || "نقل من المخزن إلى صالة العرض",
+      await apiRequest("POST", "/api/inventory-transfers", {
+        branchId: Number(selectedBranch),
+        fromLocationId: Number(fromLocationId),
+        toLocationId: Number(toLocationId),
+        items: items.map(i => ({ productId: Number(i.productId), qty: Number(i.qty) })),
       });
     },
     onSuccess: () => {
-      toast({ title: "تم النقل بنجاح" });
+      toast({ title: "تم التحويل بنجاح" });
       queryClient.invalidateQueries({ queryKey: ["/api/location-inventory"] });
-      setTransferData({ productId: "", quantity: "", note: "" });
+      queryClient.invalidateQueries({ queryKey: ["/api/branch-inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory-transfers"] });
+      setItems([]);
+      setAddProduct(""); setAddQty("");
     },
     onError: (err: Error) => toast({ title: "خطأ", description: err.message, variant: "destructive" }),
   });
+
+  function addItem() {
+    if (!addProduct || !addQty || Number(addQty) <= 0) return;
+    if (items.find(i => i.productId === addProduct)) {
+      toast({ title: "الصنف مضاف مسبقاً", variant: "destructive" });
+      return;
+    }
+    setItems([...items, { productId: addProduct, qty: addQty }]);
+    setAddProduct(""); setAddQty("");
+  }
+
+  function removeItem(idx: number) {
+    setItems(items.filter((_, i) => i !== idx));
+  }
+
+  const mainLoc = branchLocations.find((l: any) => l.isMain);
+  const otherLocs = branchLocations.filter((l: any) => !l.isMain);
 
   return (
     <div className="space-y-6">
@@ -211,13 +253,13 @@ function InternalTransferTab() {
         <CardContent className="p-6">
           <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
             <ArrowLeftRight className="w-5 h-5 text-primary" />
-            نقل من المخزن إلى صالة العرض
+            تحويل مخزون بين المواقع
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             {isOwner && (
               <div className="space-y-2">
                 <label className="text-sm font-medium">الفرع</label>
-                <Select value={selectedBranch} onValueChange={v => { setSelectedBranch(v); setTransferData({ productId: "", quantity: "", note: "" }); }}>
+                <Select value={selectedBranch} onValueChange={v => { setSelectedBranch(v); setFromLocationId(""); setToLocationId(""); setItems([]); }}>
                   <SelectTrigger data-testid="select-transfer-branch"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
@@ -226,81 +268,137 @@ function InternalTransferTab() {
               </div>
             )}
             <div className="space-y-2">
-              <label className="text-sm font-medium">المنتج (من المخزن)</label>
-              <Select value={transferData.productId} onValueChange={v => setTransferData({ ...transferData, productId: v })}>
-                <SelectTrigger data-testid="select-transfer-product"><SelectValue placeholder="اختر المنتج" /></SelectTrigger>
+              <label className="text-sm font-medium">من موقع</label>
+              <Select value={fromLocationId} onValueChange={v => { setFromLocationId(v); setItems([]); }}>
+                <SelectTrigger data-testid="select-from-location"><SelectValue placeholder="اختر الموقع المصدر" /></SelectTrigger>
                 <SelectContent>
-                  {backstoreInv.filter((r: any) => r.qtyOnHand > 0).map((r: any) => (
-                    <SelectItem key={r.productId} value={String(r.productId)}>
-                      {r.productName} (متوفر: {r.qtyOnHand})
+                  {branchLocations.map((l: any) => (
+                    <SelectItem key={l.id} value={String(l.id)}>
+                      {l.name} ({LOC_TYPE_LABELS[l.type] || l.type}){l.isMain ? " ★" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">الكمية</label>
-              <Input
-                type="number"
-                min="1"
-                max={selectedProduct?.qtyOnHand || 999}
-                value={transferData.quantity}
-                onChange={e => setTransferData({ ...transferData, quantity: e.target.value })}
-                data-testid="input-transfer-qty"
-              />
-              {selectedProduct && (
-                <p className="text-xs text-muted-foreground">المتوفر في المخزن: {selectedProduct.qtyOnHand}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">ملاحظة (اختياري)</label>
-              <Input value={transferData.note} onChange={e => setTransferData({ ...transferData, note: e.target.value })} data-testid="input-transfer-note" />
+              <label className="text-sm font-medium">إلى موقع</label>
+              <Select value={toLocationId} onValueChange={setToLocationId}>
+                <SelectTrigger data-testid="select-to-location"><SelectValue placeholder="اختر الوجهة" /></SelectTrigger>
+                <SelectContent>
+                  {branchLocations.filter((l: any) => String(l.id) !== fromLocationId).map((l: any) => (
+                    <SelectItem key={l.id} value={String(l.id)}>
+                      {l.name} ({LOC_TYPE_LABELS[l.type] || l.type}){l.isMain ? " ★" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
-          <Button
-            className="mt-4 gap-2"
-            onClick={() => transferMutation.mutate()}
-            disabled={transferMutation.isPending || !transferData.productId || !transferData.quantity}
-            data-testid="button-confirm-transfer"
-          >
-            <ArrowLeftRight className="w-4 h-4" />
-            تنفيذ النقل
-          </Button>
+
+          {fromLocationId && toLocationId && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-end gap-3 p-3 bg-muted/30 rounded-lg border">
+                <div className="space-y-1 min-w-[200px] flex-1">
+                  <label className="text-sm font-medium">الصنف</label>
+                  <Select value={addProduct} onValueChange={setAddProduct}>
+                    <SelectTrigger data-testid="select-transfer-product"><SelectValue placeholder="اختر صنف..." /></SelectTrigger>
+                    <SelectContent>
+                      {fromInv.filter((r: any) => r.qtyOnHand > 0).map((r: any) => (
+                        <SelectItem key={r.productId} value={String(r.productId)}>
+                          {r.productName} (متوفر: {r.qtyOnHand})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1 w-28">
+                  <label className="text-sm font-medium">الكمية</label>
+                  <Input type="number" min="1" max={fromInvMap[addProduct] || 999} value={addQty} onChange={e => setAddQty(e.target.value)} data-testid="input-transfer-qty" />
+                </div>
+                <Button onClick={addItem} disabled={!addProduct || !addQty} data-testid="button-add-transfer-item">
+                  <PackagePlus className="w-4 h-4 ml-1" /> إضافة
+                </Button>
+              </div>
+
+              {items.length > 0 && (
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead>الصنف</TableHead>
+                      <TableHead className="text-center">الكمية</TableHead>
+                      <TableHead className="text-center">المتوفر</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((it, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell>{productMap[Number(it.productId)] || it.productId}</TableCell>
+                        <TableCell className="text-center font-bold">{it.qty}</TableCell>
+                        <TableCell className="text-center text-muted-foreground">{fromInvMap[it.productId] || 0}</TableCell>
+                        <TableCell className="text-center">
+                          <Button size="sm" variant="ghost" className="text-red-500" onClick={() => removeItem(idx)}>حذف</Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+
+              {items.length > 0 && (
+                <div className="flex justify-end">
+                  <Button
+                    className="gap-2"
+                    onClick={() => transferMutation.mutate()}
+                    disabled={transferMutation.isPending}
+                    data-testid="button-confirm-transfer"
+                  >
+                    <ArrowLeftRight className="w-4 h-4" />
+                    تنفيذ التحويل ({items.length} صنف)
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      <div className="bg-card border shadow-sm rounded-xl overflow-hidden">
-        <div className="p-4 border-b bg-muted/30">
-          <h4 className="font-bold flex items-center gap-2">
-            <Package className="w-4 h-4" />
-            محتوى المخزن الخلفي — {branches.find(b => String(b.id) === selectedBranch)?.name || ""}
-          </h4>
-        </div>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader className="bg-muted/50">
-              <TableRow>
-                <TableHead>المنتج</TableHead>
-                <TableHead className="text-center">الكمية في المخزن</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {backstoreInv.length === 0 ? (
-                <TableRow><TableCell colSpan={2} className="text-center py-6 text-muted-foreground">المخزن فارغ</TableCell></TableRow>
-              ) : backstoreInv.map((r: any) => (
-                <TableRow key={r.id} data-testid={`row-backstore-${r.id}`}>
-                  <TableCell className="font-medium">{r.productName}</TableCell>
-                  <TableCell className="text-center">
-                    <span className={`font-bold text-lg ${r.qtyOnHand > 0 ? "text-emerald-600" : "text-red-600"}`}>
-                      {r.qtyOnHand}
-                    </span>
-                  </TableCell>
+      {transfers.length > 0 && (
+        <div className="bg-card border shadow-sm rounded-xl overflow-hidden">
+          <div className="p-4 border-b bg-muted/30">
+            <h4 className="font-bold flex items-center gap-2">
+              <History className="w-4 h-4" />
+              سجل التحويلات
+            </h4>
+          </div>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>التاريخ</TableHead>
+                  <TableHead>الفرع</TableHead>
+                  <TableHead>من</TableHead>
+                  <TableHead>إلى</TableHead>
+                  <TableHead>ملاحظة</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {transfers.map((tx: any) => (
+                  <TableRow key={tx.id} data-testid={`row-transfer-${tx.id}`}>
+                    <TableCell className="font-mono text-xs">{tx.id}</TableCell>
+                    <TableCell className="text-sm">{tx.createdAt ? new Date(tx.createdAt).toLocaleDateString("ar-OM") : "—"}</TableCell>
+                    <TableCell className="text-sm">{tx.branchName}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-xs">{tx.fromLocationName}</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className="text-xs">{tx.toLocationName}</Badge></TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{tx.note || "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

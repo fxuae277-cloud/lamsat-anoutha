@@ -25,6 +25,8 @@ import {
   locations, type InsertLocation, type Location,
   locationInventory, type InsertLocationInventory, type LocationInventory,
   inventoryTransactions, type InsertInventoryTransaction, type InventoryTransaction,
+  locationTransfers, type InsertLocationTransfer, type LocationTransfer,
+  locationTransferItems, type InsertLocationTransferItem, type LocationTransferItem,
   type PaymentMethod, PAYMENT_METHODS,
 } from "@shared/schema";
 
@@ -970,32 +972,13 @@ export class DatabaseStorage implements IStorage {
       parseFloat(invoice.otherCost || "0");
     const grandTotal = subtotalItems + totalExtraCost;
 
-    let mainLocationId: number;
-    const warehouseLoc = await db.select({ id: locations.id })
+    const [mainLoc] = await db.select({ id: locations.id })
       .from(locations)
-      .where(and(eq(locations.branchId, invoice.branchId), eq(locations.name, "المخزن")))
+      .where(and(eq(locations.branchId, invoice.branchId), eq(locations.isMain, true)))
       .orderBy(locations.id)
       .limit(1);
-    if (warehouseLoc.length > 0) {
-      mainLocationId = warehouseLoc[0].id;
-    } else {
-      const anyLoc = await db.select({ id: locations.id })
-        .from(locations)
-        .where(eq(locations.branchId, invoice.branchId))
-        .orderBy(locations.id)
-        .limit(1);
-      if (anyLoc.length > 0) {
-        mainLocationId = anyLoc[0].id;
-      } else {
-        const [newLoc] = await db.insert(locations).values({
-          name: "المخزن",
-          branchId: invoice.branchId,
-          code: "backstore",
-          active: true,
-        }).returning();
-        mainLocationId = newLoc.id;
-      }
-    }
+    if (!mainLoc) throw new Error("لا يوجد مخزن رئيسي للفرع");
+    const mainLocationId = mainLoc.id;
 
     const client = await pool.connect();
     try {
@@ -1543,6 +1526,116 @@ export class DatabaseStorage implements IStorage {
     }
 
     return { date: dateStr, branches: results };
+  }
+
+  async createLocationTransfer(
+    branchId: number,
+    fromLocationId: number,
+    toLocationId: number,
+    items: { productId: number; qty: number }[],
+    createdBy: number
+  ) {
+    if (items.length === 0) throw new Error("يجب إضافة صنف واحد على الأقل");
+
+    const [fromLoc] = await db.select().from(locations).where(eq(locations.id, fromLocationId));
+    const [toLoc] = await db.select().from(locations).where(eq(locations.id, toLocationId));
+    if (!fromLoc) throw new Error("موقع المصدر غير موجود");
+    if (!toLoc) throw new Error("موقع الوجهة غير موجود");
+    if (fromLoc.branchId !== branchId || toLoc.branchId !== branchId)
+      throw new Error("المواقع يجب أن تنتمي لنفس الفرع");
+    if (fromLocationId === toLocationId) throw new Error("لا يمكن التحويل لنفس الموقع");
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const transferRes = await client.query(
+        `INSERT INTO location_transfers (branch_id, from_location_id, to_location_id, note, created_by, created_at)
+         VALUES ($1, $2, $3, $4, $5, now()) RETURNING id`,
+        [branchId, fromLocationId, toLocationId, `تحويل من ${fromLoc.name} إلى ${toLoc.name}`, createdBy]
+      );
+      const transferId = transferRes.rows[0].id;
+
+      for (const item of items) {
+        if (item.qty <= 0) throw new Error("الكمية يجب أن تكون أكبر من صفر");
+
+        const invRes = await client.query(
+          `SELECT qty_on_hand FROM location_inventory WHERE location_id = $1 AND product_id = $2`,
+          [fromLocationId, item.productId]
+        );
+        const available = invRes.rows.length > 0 ? invRes.rows[0].qty_on_hand : 0;
+        if (available < item.qty) {
+          const [prod] = await db.select({ name: products.name }).from(products).where(eq(products.id, item.productId));
+          throw new Error(`الكمية المتاحة من "${prod?.name || item.productId}" هي ${available} فقط`);
+        }
+
+        await client.query(
+          `INSERT INTO location_transfer_items (transfer_id, product_id, qty) VALUES ($1, $2, $3)`,
+          [transferId, item.productId, item.qty]
+        );
+
+        await client.query(
+          `UPDATE location_inventory SET qty_on_hand = qty_on_hand - $1, updated_at = now()
+           WHERE location_id = $2 AND product_id = $3`,
+          [item.qty, fromLocationId, item.productId]
+        );
+
+        await client.query(
+          `INSERT INTO location_inventory (location_id, product_id, qty_on_hand, updated_at)
+           VALUES ($1, $2, $3, now())
+           ON CONFLICT (location_id, product_id)
+           DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand + EXCLUDED.qty_on_hand, updated_at = now()`,
+          [toLocationId, item.productId, item.qty]
+        );
+
+        await client.query(
+          `INSERT INTO inventory_transactions
+           (date, branch_id, from_location_id, to_location_id, product_id, type, qty, ref_table, ref_id, note, created_by, created_at)
+           VALUES (now(), $1, $2, NULL, $3, 'TRANSFER_OUT', $4, 'location_transfers', $5, $6, $7, now())`,
+          [branchId, fromLocationId, item.productId, item.qty, transferId, `صادر إلى ${toLoc.name}`, createdBy]
+        );
+
+        await client.query(
+          `INSERT INTO inventory_transactions
+           (date, branch_id, from_location_id, to_location_id, product_id, type, qty, ref_table, ref_id, note, created_by, created_at)
+           VALUES (now(), $1, NULL, $2, $3, 'TRANSFER_IN', $4, 'location_transfers', $5, $6, $7, now())`,
+          [branchId, toLocationId, item.productId, item.qty, transferId, `وارد من ${fromLoc.name}`, createdBy]
+        );
+      }
+
+      await client.query("COMMIT");
+      return { transferId, itemCount: items.length };
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getLocationTransfersList(branchId?: number) {
+    const conditions: any[] = [];
+    if (branchId) conditions.push(eq(locationTransfers.branchId, branchId));
+    const cond = conditions.length > 0 ? and(...conditions) : undefined;
+
+    return db.select({
+      id: locationTransfers.id,
+      branchId: locationTransfers.branchId,
+      branchName: branches.name,
+      fromLocationId: locationTransfers.fromLocationId,
+      fromLocationName: sql<string>`fl.name`.as("fromLocationName"),
+      toLocationId: locationTransfers.toLocationId,
+      toLocationName: sql<string>`tl.name`.as("toLocationName"),
+      note: locationTransfers.note,
+      createdBy: locationTransfers.createdBy,
+      createdAt: locationTransfers.createdAt,
+    }).from(locationTransfers)
+      .innerJoin(branches, eq(locationTransfers.branchId, branches.id))
+      .innerJoin(sql`locations fl`, sql`fl.id = ${locationTransfers.fromLocationId}`)
+      .innerJoin(sql`locations tl`, sql`tl.id = ${locationTransfers.toLocationId}`)
+      .where(cond)
+      .orderBy(desc(locationTransfers.createdAt))
+      .limit(200);
   }
 }
 

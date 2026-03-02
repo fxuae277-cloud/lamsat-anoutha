@@ -324,6 +324,28 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/inventory-transfers", requireAuth, requireManager, async (req, res) => {
+    try {
+      const { branchId, fromLocationId, toLocationId, items } = req.body;
+      if (!branchId || !fromLocationId || !toLocationId || !items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: "البيانات ناقصة أو غير صحيحة" });
+      }
+      const result = await storage.createLocationTransfer(branchId, fromLocationId, toLocationId, items, req.session.userId!);
+      res.json(result);
+    } catch (e: any) {
+      res.status(400).json({ message: e.message || "فشل التحويل" });
+    }
+  });
+
+  app.get("/api/inventory-transfers", requireAuth, async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    const branchId = req.query.branchId
+      ? Number(req.query.branchId)
+      : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId);
+    res.json(await storage.getLocationTransfersList(branchId));
+  });
+
   app.post("/api/location-inventory/add-stock", requireAuth, requireManager, async (req, res) => {
     try {
       const { branchId, productId, quantity, note } = req.body;

@@ -325,6 +325,8 @@ export const locations = pgTable("locations", {
   branchId: integer("branch_id").references(() => branches.id).notNull(),
   code: text("code").notNull(),
   name: text("name").notNull(),
+  type: text("type").notNull().default("MAIN_WAREHOUSE"),
+  isMain: boolean("is_main").notNull().default(false),
   active: boolean("active").notNull().default(true),
 });
 export const insertLocationSchema = createInsertSchema(locations).omit({ id: true });
@@ -361,3 +363,26 @@ export const inventoryTransactions = pgTable("inventory_transactions", {
 export const insertInventoryTransactionSchema = createInsertSchema(inventoryTransactions).omit({ id: true, createdAt: true });
 export type InsertInventoryTransaction = z.infer<typeof insertInventoryTransactionSchema>;
 export type InventoryTransaction = typeof inventoryTransactions.$inferSelect;
+
+export const locationTransfers = pgTable("location_transfers", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  branchId: integer("branch_id").references(() => branches.id).notNull(),
+  fromLocationId: integer("from_location_id").references(() => locations.id).notNull(),
+  toLocationId: integer("to_location_id").references(() => locations.id).notNull(),
+  note: text("note"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertLocationTransferSchema = createInsertSchema(locationTransfers).omit({ id: true, createdAt: true });
+export type InsertLocationTransfer = z.infer<typeof insertLocationTransferSchema>;
+export type LocationTransfer = typeof locationTransfers.$inferSelect;
+
+export const locationTransferItems = pgTable("location_transfer_items", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  transferId: integer("transfer_id").references(() => locationTransfers.id).notNull(),
+  productId: integer("product_id").references(() => products.id).notNull(),
+  qty: integer("qty").notNull(),
+});
+export const insertLocationTransferItemSchema = createInsertSchema(locationTransferItems).omit({ id: true });
+export type InsertLocationTransferItem = z.infer<typeof insertLocationTransferItemSchema>;
+export type LocationTransferItem = typeof locationTransferItems.$inferSelect;
