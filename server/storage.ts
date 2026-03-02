@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, desc, sql, and, lte } from "drizzle-orm";
+import { eq, desc, sql, and, lte, gte } from "drizzle-orm";
 import {
   branches, type InsertBranch, type Branch,
   cities, type InsertCity, type City,
@@ -63,7 +63,9 @@ export interface IStorage {
   getSuppliers(): Promise<Supplier[]>;
   createSupplier(data: InsertSupplier): Promise<Supplier>;
   getSales(): Promise<Sale[]>;
+  getSalesFiltered(filters: { from?: string; to?: string; paymentMethod?: string; employeeId?: number; branchId?: number }): Promise<any[]>;
   getSale(id: number): Promise<Sale | undefined>;
+  getSaleWithDetails(id: number): Promise<any>;
   createSale(data: InsertSale, items: InsertSaleItem[]): Promise<Sale>;
   getSaleItems(saleId: number): Promise<SaleItem[]>;
   getDailySalesTotal(branchId?: number): Promise<{ total: string; vatTotal: string; count: number }>;
@@ -249,9 +251,94 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSales() { return db.select().from(sales).orderBy(desc(sales.createdAt)); }
+
+  async getSalesFiltered(filters: { from?: string; to?: string; paymentMethod?: string; employeeId?: number; branchId?: number }) {
+    const conditions: any[] = [];
+    if (filters.from) conditions.push(gte(sales.createdAt, new Date(filters.from + "T00:00:00")));
+    if (filters.to) conditions.push(lte(sales.createdAt, new Date(filters.to + "T23:59:59.999")));
+    if (filters.paymentMethod) conditions.push(eq(sales.paymentMethod, filters.paymentMethod));
+    if (filters.employeeId) conditions.push(eq(sales.cashierId, filters.employeeId));
+    if (filters.branchId) conditions.push(eq(sales.branchId, filters.branchId));
+
+    const rows = await db
+      .select({
+        id: sales.id,
+        invoiceNumber: sales.invoiceNumber,
+        branchId: sales.branchId,
+        branchName: branches.name,
+        shiftId: sales.shiftId,
+        cashierId: sales.cashierId,
+        cashierName: users.name,
+        customerId: sales.customerId,
+        subtotal: sales.subtotal,
+        discount: sales.discount,
+        discountType: sales.discountType,
+        vat: sales.vat,
+        total: sales.total,
+        paymentMethod: sales.paymentMethod,
+        cogsTotal: sales.cogsTotal,
+        grossProfit: sales.grossProfit,
+        createdAt: sales.createdAt,
+      })
+      .from(sales)
+      .leftJoin(branches, eq(sales.branchId, branches.id))
+      .leftJoin(users, eq(sales.cashierId, users.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(sales.createdAt));
+
+    return rows;
+  }
+
   async getSale(id: number) {
     const [row] = await db.select().from(sales).where(eq(sales.id, id));
     return row;
+  }
+
+  async getSaleWithDetails(id: number) {
+    const [row] = await db
+      .select({
+        id: sales.id,
+        invoiceNumber: sales.invoiceNumber,
+        branchId: sales.branchId,
+        branchName: branches.name,
+        shiftId: sales.shiftId,
+        cashierId: sales.cashierId,
+        cashierName: users.name,
+        customerId: sales.customerId,
+        subtotal: sales.subtotal,
+        discount: sales.discount,
+        discountType: sales.discountType,
+        vat: sales.vat,
+        total: sales.total,
+        paymentMethod: sales.paymentMethod,
+        cogsTotal: sales.cogsTotal,
+        grossProfit: sales.grossProfit,
+        createdAt: sales.createdAt,
+      })
+      .from(sales)
+      .leftJoin(branches, eq(sales.branchId, branches.id))
+      .leftJoin(users, eq(sales.cashierId, users.id))
+      .where(eq(sales.id, id));
+
+    if (!row) return null;
+
+    const items = await db
+      .select({
+        id: saleItems.id,
+        saleId: saleItems.saleId,
+        productId: saleItems.productId,
+        productName: products.name,
+        quantity: saleItems.quantity,
+        unitPrice: saleItems.unitPrice,
+        total: saleItems.total,
+        unitCostAtSale: saleItems.unitCostAtSale,
+        lineCogs: saleItems.lineCogs,
+      })
+      .from(saleItems)
+      .leftJoin(products, eq(saleItems.productId, products.id))
+      .where(eq(saleItems.saleId, id));
+
+    return { ...row, items };
   }
   async createSale(data: InsertSale, items: InsertSaleItem[]) {
     const [sale] = await db.insert(sales).values(data).returning();

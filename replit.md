@@ -137,10 +137,11 @@ shared/
 7. **Expenses**: Categorized expenses per branch with source tracking + ledger integration (tabbed: expenses / cash ledger / bank ledger)
 8. **Shift Reports**: GET /api/reports/shift?shiftId=... → cash/card/bank sales, expenses, expected vs actual cash
 9. **Settings**: Tabbed interface - account (change password), users (owner/admin), general settings, branches & cities
-10. **Reports**: Shift report + Daily report (with COGS/Profit analysis) + Branch comparison report + CSV export
+10. **Reports**: Shift report + Daily report (with COGS/Profit analysis) + Branch comparison report + Profit reports (by branch/employee/product)
 11. **Purchases**: Full purchase invoice system with Average Cost calculation, extra cost allocation, posting workflow
 12. **COGS/Profit**: Automatic cost tracking on sales and order payments with profit analysis
-13. **Export**: Daily report Excel/PDF export, multi-branch profit Excel export (date range)
+13. **Export**: Daily report Excel/PDF export, multi-branch profit Excel export (date range), sales invoices Excel export
+14. **Invoices (فواتير نقطة البيع)**: POS sales invoice browser with filters (date, payment method, employee, branch), detail modal with print, Excel export
 
 ## API Routes
 All prefixed with `/api/`:
@@ -158,7 +159,8 @@ All prefixed with `/api/`:
 - GET/POST `/purchases`, GET `/purchases/:id`, PATCH `/purchases/:id`, POST `/purchases/:id/items`, DELETE `/purchases/:purchaseId/items/:itemId`, POST `/purchases/:id/post` (requireAuth)
 - GET/POST/PATCH `/suppliers`
 - GET `/reports/profit/branches?from=...&to=...`, `/reports/profit/employees?from=...&to=...&branchId=...`, `/reports/profit/products?from=...&to=...&branchId=...` (requireAuth, cashier sees own branch only)
-- GET `/exports/daily.xlsx?date=...&branchId=...`, GET `/exports/daily.pdf?date=...&branchId=...`, GET `/exports/profit_all_branches.xlsx?from=...&to=...`, GET `/exports/profit_by_employee.xlsx?from=...&to=...&branchId=...`, GET `/exports/profit_by_product.xlsx?from=...&to=...&branchId=...` (requireAuth)
+- GET `/sales` with filters: from, to, paymentMethod, employeeId, branchId (cashier sees own branch only); GET `/sales/:id` returns enriched detail with items + product/branch/cashier names
+- GET `/exports/daily.xlsx?date=...&branchId=...`, GET `/exports/daily.pdf?date=...&branchId=...`, GET `/exports/profit_all_branches.xlsx?from=...&to=...`, GET `/exports/profit_by_employee.xlsx?from=...&to=...&branchId=...`, GET `/exports/profit_by_product.xlsx?from=...&to=...&branchId=...`, GET `/exports/sales.xlsx?from=...&to=...&branchId=...&paymentMethod=...&employeeId=...` (requireAuth)
 - GET `/dashboard`
 
 ## Design

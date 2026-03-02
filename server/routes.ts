@@ -351,14 +351,30 @@ export async function registerRoutes(
     res.json(row);
   });
 
-  app.get("/api/sales", requireAuth, async (_req, res) => {
-    res.json(await storage.getSales());
+  app.get("/api/sales", requireAuth, async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    const isCashier = user?.role === "cashier" || user?.role === "employee";
+    const filters: any = {};
+    if (req.query.from) filters.from = req.query.from as string;
+    if (req.query.to) filters.to = req.query.to as string;
+    if (req.query.paymentMethod) filters.paymentMethod = req.query.paymentMethod as string;
+    if (req.query.employeeId) filters.employeeId = Number(req.query.employeeId);
+    if (isCashier) {
+      filters.branchId = user!.branchId;
+    } else if (req.query.branchId) {
+      filters.branchId = Number(req.query.branchId);
+    }
+    res.json(await storage.getSalesFiltered(filters));
   });
   app.get("/api/sales/:id", requireAuth, async (req, res) => {
-    const sale = await storage.getSale(Number(req.params.id));
-    if (!sale) return res.status(404).json({ message: "الفاتورة غير موجودة" });
-    const items = await storage.getSaleItems(sale.id);
-    res.json({ ...sale, items });
+    const detail = await storage.getSaleWithDetails(Number(req.params.id));
+    if (!detail) return res.status(404).json({ message: "الفاتورة غير موجودة" });
+    const user = await storage.getUser(req.session.userId!);
+    const isCashier = user?.role === "cashier" || user?.role === "employee";
+    if (isCashier && detail.branchId !== user!.branchId) {
+      return res.status(403).json({ message: "غير مصرح" });
+    }
+    res.json(detail);
   });
   app.post("/api/sales", requireAuth, async (req, res) => {
     const { items, ...saleData } = req.body;

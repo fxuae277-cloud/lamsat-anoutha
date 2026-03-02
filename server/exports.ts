@@ -375,4 +375,85 @@ export function registerExportRoutes(app: Express) {
       }
     }
   });
+
+  app.get("/api/exports/sales.xlsx", requireAuth, async (req, res) => {
+    try {
+      const from = req.query.from as string;
+      const to = req.query.to as string;
+      if (!from || !to) {
+        return res.status(400).json({ message: "التاريخ مطلوب (from & to)" });
+      }
+
+      const user = await storage.getUser(req.session.userId!);
+      const isCashier = user?.role === "cashier" || user?.role === "employee";
+      const filters: any = { from, to };
+      if (req.query.paymentMethod) filters.paymentMethod = req.query.paymentMethod as string;
+      if (req.query.employeeId) filters.employeeId = Number(req.query.employeeId);
+      if (isCashier) {
+        filters.branchId = user!.branchId;
+      } else if (req.query.branchId) {
+        filters.branchId = Number(req.query.branchId);
+      }
+
+      const data = await storage.getSalesFiltered(filters);
+      const wb = XLSX.utils.book_new();
+
+      const pmLabel: Record<string, string> = { cash: "نقدي", card: "بطاقة", bank_transfer: "تحويل بنكي" };
+
+      const rows: any[][] = [
+        ["فواتير نقطة البيع - لمسة أنوثة"],
+        ["الفترة", `من ${from} إلى ${to}`],
+        [],
+        ["رقم الفاتورة", "التاريخ", "الفرع", "الكاشير", "طريقة الدفع", "المجموع الفرعي", "الخصم", "الضريبة", "الإجمالي", "التكلفة", "الربح"],
+      ];
+
+      let totals = { subtotal: 0, discount: 0, vat: 0, total: 0, cogs: 0, profit: 0 };
+
+      for (const s of data) {
+        const sub = parseFloat(s.subtotal || "0");
+        const disc = parseFloat(s.discount || "0");
+        const vat = parseFloat(s.vat || "0");
+        const tot = parseFloat(s.total || "0");
+        const cogs = parseFloat(s.cogsTotal || "0");
+        const profit = parseFloat(s.grossProfit || "0");
+
+        rows.push([
+          s.invoiceNumber || `#${s.id}`,
+          s.createdAt ? new Date(s.createdAt).toLocaleDateString("ar-OM") + " " + new Date(s.createdAt).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" }) : "",
+          s.branchName || "",
+          s.cashierName || "",
+          pmLabel[s.paymentMethod] || s.paymentMethod || "",
+          omr(sub), omr(disc), omr(vat), omr(tot), omr(cogs), omr(profit),
+        ]);
+
+        totals.subtotal += sub;
+        totals.discount += disc;
+        totals.vat += vat;
+        totals.total += tot;
+        totals.cogs += cogs;
+        totals.profit += profit;
+      }
+
+      rows.push([]);
+      rows.push([
+        "المجموع", "", "", "", "",
+        omr(totals.subtotal), omr(totals.discount), omr(totals.vat), omr(totals.total), omr(totals.cogs), omr(totals.profit),
+      ]);
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws["!cols"] = [
+        { wch: 16 }, { wch: 20 }, { wch: 25 }, { wch: 16 }, { wch: 14 },
+        { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+      ];
+      ws["!dir"] = "rtl";
+      XLSX.utils.book_append_sheet(wb, ws, "فواتير البيع");
+
+      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="sales-invoices-${from}-to-${to}.xlsx"`);
+      res.send(buf);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+    }
+  });
 }

@@ -17,6 +17,7 @@ import Expenses from "@/pages/Expenses";
 import Settings from "@/pages/Settings";
 import Reports from "@/pages/Reports";
 import Purchases from "@/pages/Purchases";
+import Invoices from "@/pages/Invoices";
 
 function AuthenticatedRouter() {
   const { user, isLoading } = useAuth();
@@ -43,6 +44,7 @@ function AuthenticatedRouter() {
         <Route path="/pos" component={POS}/>
         <Route path="/products" component={Products}/>
         <Route path="/inventory" component={Inventory}/>
+        <Route path="/invoices" component={Invoices}/>
         <Route path="/orders" component={Orders}/>
         <Route path="/expenses" component={Expenses}/>
         <Route path="/settings" component={Settings}/>
