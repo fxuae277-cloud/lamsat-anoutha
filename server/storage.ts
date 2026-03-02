@@ -87,6 +87,7 @@ export interface IStorage {
   createOrder(data: InsertOrder, items: InsertOrderItem[]): Promise<Order>;
   updateOrderStatus(id: number, status: string): Promise<Order | undefined>;
   getOrderItems(orderId: number): Promise<OrderItem[]>;
+  getPendingOrdersByShift(shiftId: number): Promise<Order[]>;
 
   // Expenses
   getExpenses(): Promise<Expense[]>;
@@ -344,6 +345,14 @@ export class DatabaseStorage implements IStorage {
   }
   async getOrderItems(orderId: number) {
     return db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+  }
+  async getPendingOrdersByShift(shiftId: number) {
+    return db.select().from(orders).where(
+      and(
+        eq(orders.shiftId, shiftId),
+        sql`${orders.status} IN ('new', 'processing', 'pending')`
+      )
+    );
   }
 
   // Expenses

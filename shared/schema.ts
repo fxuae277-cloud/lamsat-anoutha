@@ -153,6 +153,7 @@ export const orders = pgTable("orders", {
   city: text("city"),
   address: text("address"),
   branchId: integer("branch_id").references(() => branches.id),
+  shiftId: integer("shift_id").references(() => shifts.id),
   deliveryType: text("delivery_type").default("pickup"),
   status: text("status").default("new"),
   total: decimal("total", { precision: 10, scale: 3 }),

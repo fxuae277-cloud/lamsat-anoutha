@@ -1,12 +1,14 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { and, eq, desc } from "drizzle-orm";
 import { 
   insertBranchSchema, insertCategorySchema, insertProductSchema,
   insertCustomerSchema, insertSupplierSchema, insertExpenseSchema,
   insertEmployeeSchema, insertOrderSchema, insertSaleSchema,
   insertInventoryTransferSchema, insertCitySchema, insertUserSchema,
-  insertWarehouseSchema,
+  insertWarehouseSchema, insertShiftSchema, shifts,
 } from "@shared/schema";
 
 export async function registerRoutes(
@@ -188,14 +190,32 @@ export async function registerRoutes(
     res.json({ ...order, items });
   });
   app.post("/api/orders", async (req, res) => {
-    const { items, ...orderData } = req.body;
-    const parsed = insertOrderSchema.safeParse(orderData);
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    if (!items || !Array.isArray(items)) {
-      return res.status(400).json({ message: "لا توجد منتجات في الطلب" });
+    try {
+      const { items, ...orderData } = req.body;
+      const parsed = insertOrderSchema.safeParse(orderData);
+      if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+      if (!items || !Array.isArray(items)) {
+        return res.status(400).json({ message: "لا توجد منتجات في الطلب" });
+      }
+      const branchId = parsed.data.branchId;
+      let shiftId = parsed.data.shiftId ?? null;
+      if (!shiftId && branchId) {
+        const [openShift] = await db
+          .select({ id: shifts.id })
+          .from(shifts)
+          .where(and(eq(shifts.status, "open"), eq(shifts.branchId, branchId)))
+          .orderBy(desc(shifts.id))
+          .limit(1);
+        if (openShift) {
+          shiftId = openShift.id;
+        }
+      }
+      const order = await storage.createOrder({ ...parsed.data, shiftId }, items);
+      res.status(201).json(order);
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
     }
-    const order = await storage.createOrder(parsed.data, items);
-    res.status(201).json(order);
   });
   app.patch("/api/orders/:id/status", async (req, res) => {
     const { status } = req.body;
@@ -235,8 +255,16 @@ export async function registerRoutes(
     res.status(201).json(await storage.createShift(parsed.data));
   });
   app.patch("/api/shifts/:id/close", async (req, res) => {
+    const shiftId = Number(req.params.id);
+    const pendingOrders = await storage.getPendingOrdersByShift(shiftId);
+    if (pendingOrders.length > 0) {
+      return res.status(400).json({
+        message: `لا يمكن إغلاق الشفت - يوجد ${pendingOrders.length} طلب/طلبات معلقة. أكمل أو ألغِ الطلبات أولاً.`,
+        pendingOrders: pendingOrders.map(o => ({ id: o.id, orderNumber: o.orderNumber, status: o.status })),
+      });
+    }
     const { totalSales, totalCash, totalBank } = req.body;
-    const row = await storage.closeShift(Number(req.params.id), totalSales, totalCash, totalBank);
+    const row = await storage.closeShift(shiftId, totalSales, totalCash, totalBank);
     if (!row) return res.status(404).json({ message: "الوردية غير موجودة" });
     res.json(row);
   });
