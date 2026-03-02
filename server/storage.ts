@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db, pool } from "./db";
 import { eq, desc, sql, and, lte, gte } from "drizzle-orm";
 import {
   branches, type InsertBranch, type Branch,
@@ -960,7 +960,7 @@ export class DatabaseStorage implements IStorage {
     if (invoice.status !== "pending") throw new Error("لا يمكن اعتماد فاتورة بحالة: " + invoice.status);
 
     const items = await db.select().from(purchaseItems).where(eq(purchaseItems.purchaseId, id));
-    if (items.length === 0) throw new Error("لا يمكن ترحيل فاتورة بدون أصناف");
+    if (items.length === 0) throw new Error("لا يمكن اعتماد فاتورة بدون أصناف");
 
     const subtotalItems = items.reduce((s, it) => s + parseFloat(it.lineSubtotal), 0);
     const totalExtraCost =
@@ -970,43 +970,102 @@ export class DatabaseStorage implements IStorage {
       parseFloat(invoice.otherCost || "0");
     const grandTotal = subtotalItems + totalExtraCost;
 
-    for (const item of items) {
-      const lineSubVal = parseFloat(item.lineSubtotal);
-      const ratio = subtotalItems > 0 ? lineSubVal / subtotalItems : 0;
-      const allocatedExtra = totalExtraCost * ratio;
-      const unitCostFinal = item.qty > 0 ? (lineSubVal + allocatedExtra) / item.qty : 0;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
 
-      await db.update(purchaseItems).set({
-        allocatedExtraCost: allocatedExtra.toFixed(3),
-        unitCostFinal: unitCostFinal.toFixed(3),
-      }).where(eq(purchaseItems.id, item.id));
+      for (const item of items) {
+        const lineSubVal = parseFloat(item.lineSubtotal);
+        let allocatedExtra: number;
+        let unitCostFinal: number;
 
-      const [product] = await db.select().from(products).where(eq(products.id, item.productId));
-      if (product) {
-        const oldQty = product.stockQty || 0;
-        const oldAvgCost = parseFloat(product.avgCost || "0");
-        const newQty = oldQty + item.qty;
-        const newAvgCost = newQty > 0
-          ? ((oldAvgCost * oldQty) + (unitCostFinal * item.qty)) / newQty
-          : unitCostFinal;
+        if (subtotalItems > 0) {
+          allocatedExtra = (lineSubVal / subtotalItems) * totalExtraCost;
+          unitCostFinal = item.qty > 0 ? (lineSubVal + allocatedExtra) / item.qty : 0;
+        } else {
+          allocatedExtra = 0;
+          unitCostFinal = parseFloat(item.unitCostBase);
+        }
 
-        await db.update(products).set({
-          stockQty: newQty,
-          avgCost: newAvgCost.toFixed(3),
-        }).where(eq(products.id, item.productId));
+        await client.query(
+          `UPDATE purchase_items
+           SET allocated_extra_cost = $1, unit_cost_final = $2
+           WHERE id = $3`,
+          [allocatedExtra.toFixed(3), unitCostFinal.toFixed(3), item.id]
+        );
+
+        const prodRes = await client.query(
+          `SELECT stock_qty, avg_cost FROM products WHERE id = $1`,
+          [item.productId]
+        );
+        if (prodRes.rows.length > 0) {
+          const oldQty = prodRes.rows[0].stock_qty || 0;
+          const oldAvgCost = parseFloat(prodRes.rows[0].avg_cost || "0");
+          const newQty = oldQty + item.qty;
+          const newAvgCost = newQty > 0
+            ? ((oldAvgCost * oldQty) + (unitCostFinal * item.qty)) / newQty
+            : unitCostFinal;
+
+          await client.query(
+            `UPDATE products SET stock_qty = $1, avg_cost = $2 WHERE id = $3`,
+            [newQty, newAvgCost.toFixed(3), item.productId]
+          );
+        }
+
+        const backstoreRes = await client.query(
+          `SELECT id FROM locations WHERE branch_id = $1 AND code = 'backstore' LIMIT 1`,
+          [invoice.branchId]
+        );
+        const locationId = backstoreRes.rows.length > 0
+          ? backstoreRes.rows[0].id
+          : invoice.branchId;
+
+        await client.query(
+          `INSERT INTO location_inventory (location_id, product_id, qty_on_hand, reorder_level, updated_at)
+           VALUES ($1, $2, $3, 5, now())
+           ON CONFLICT (location_id, product_id)
+           DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand + EXCLUDED.qty_on_hand,
+                         updated_at = now()`,
+          [locationId, item.productId, item.qty]
+        );
+
+        await client.query(
+          `INSERT INTO inventory_transactions
+           (date, branch_id, from_location_id, to_location_id,
+            product_id, type, qty,
+            ref_table, ref_id,
+            note, created_by, created_at)
+           VALUES
+           (now(), $1, NULL, $2,
+            $3, 'PURCHASE', $4,
+            'purchase_invoices', $5,
+            'Purchase Invoice Approved', $6, now())`,
+          [invoice.branchId, locationId, item.productId, item.qty, id, invoice.createdBy]
+        );
       }
 
-      await this.addStock(invoice.branchId, item.productId, item.qty, "purchase_receipt", "purchase_invoices", id, `استلام مشتريات فاتورة ${invoice.invoiceNumber}`, invoice.createdBy ?? undefined);
+      const result = await client.query(
+        `UPDATE purchase_invoices
+         SET subtotal = $1, total_extra_cost = $2, grand_total = $3, status = 'approved'
+         WHERE id = $4 AND status = 'pending'
+         RETURNING *`,
+        [subtotalItems.toFixed(3), totalExtraCost.toFixed(3), grandTotal.toFixed(3), id]
+      );
+
+      if (result.rows.length === 0) {
+        throw new Error("فشل تحديث حالة الفاتورة — ربما تم اعتمادها من مستخدم آخر");
+      }
+
+      await client.query("COMMIT");
+
+      const [updated] = await db.select().from(purchaseInvoices).where(eq(purchaseInvoices.id, id));
+      return updated;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
     }
-
-    const [updated] = await db.update(purchaseInvoices).set({
-      subtotal: subtotalItems.toFixed(3),
-      totalExtraCost: totalExtraCost.toFixed(3),
-      grandTotal: grandTotal.toFixed(3),
-      status: "approved",
-    }).where(eq(purchaseInvoices.id, id)).returning();
-
-    return updated;
   }
 
   async getLocations(branchId?: number) {

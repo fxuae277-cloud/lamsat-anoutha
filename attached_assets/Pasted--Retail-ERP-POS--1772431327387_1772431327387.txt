@@ -1,0 +1,113 @@
+نفّذ نظام "اعتماد رسمي لفاتورة الشراء" في مشروع Retail ERP POS باستخدام الجداول التالية:
+
+الجداول الفعلية:
+
+purchase_invoices:
+id, invoice_number, supplier_id, branch_id, invoice_date,
+shipping_cost, customs_cost, clearance_cost, other_cost,
+subtotal, total_extra_cost, grand_total,
+status, notes, created_by, created_at
+
+purchase_items:
+id, purchase_id, product_id, qty,
+unit_cost_base, line_subtotal,
+allocated_extra_cost, unit_cost_final
+
+location_inventory:
+id, location_id, product_id,
+qty_on_hand, reorder_level, updated_at
+
+inventory_transactions:
+id, date, branch_id,
+from_location_id, to_location_id,
+product_id, type, qty,
+ref_table, ref_id,
+note, created_by, created_at
+
+
+=============================
+المطلوب تنفيذ ما يلي بالكامل:
+=============================
+
+1) إنشاء Endpoint:
+
+POST /api/purchase-invoices/:id/approve
+
+2) تنفيذ العملية داخل DB transaction واحدة.
+
+3) منطق الاعتماد:
+
+A) تحقق:
+- الفاتورة موجودة
+- status = 'pending'
+- يوجد purchase_items لها
+
+B) توزيع total_extra_cost على الأصناف:
+
+allocated_extra_cost =
+(line_subtotal / subtotal) * total_extra_cost
+
+ثم حساب:
+
+unit_cost_final =
+(line_subtotal + allocated_extra_cost) / qty
+
+إذا subtotal = 0 اجعل allocated_extra_cost = 0
+و unit_cost_final = unit_cost_base
+
+C) تحديث purchase_items بالقيم الجديدة.
+
+4) إدخال المخزون فعلياً:
+
+- استخدم branch_id من purchase_invoices
+- اعتبر branch_id هو نفسه location_id
+- لكل purchase_item:
+
+قم بعمل UPSERT على location_inventory:
+
+INSERT INTO location_inventory
+(location_id, product_id, qty_on_hand, updated_at)
+VALUES (branch_id, product_id, qty, now())
+ON CONFLICT (location_id, product_id)
+DO UPDATE SET
+qty_on_hand = location_inventory.qty_on_hand + EXCLUDED.qty_on_hand,
+updated_at = now();
+
+5) تسجيل حركة مخزون:
+
+INSERT INTO inventory_transactions
+(date, branch_id, from_location_id, to_location_id,
+ product_id, type, qty,
+ ref_table, ref_id,
+ note, created_by, created_at)
+
+VALUES
+(now(), branch_id, NULL, branch_id,
+ product_id, 'PURCHASE', qty,
+ 'purchase_invoices', purchase_id,
+ 'Purchase Invoice Approved', created_by, now());
+
+6) بعد نجاح كل العمليات:
+
+UPDATE purchase_invoices
+SET status = 'approved'
+WHERE id = :id AND status = 'pending';
+
+7) حماية النظام:
+
+- إذا كانت الفاتورة approved → أرجع 400
+- لا تسمح بالاعتماد مرتين
+- لا تسمح باعتماد بدون items
+- إذا فشل أي جزء → Rollback كامل
+
+8) الواجهة:
+
+- أضف زر "اعتماد الفاتورة"
+- يظهر فقط إذا status = pending
+- بعد الاعتماد يعيد تحميل البيانات
+- اعرض الحالة بالعربي:
+  pending = مسودة
+  approved = معتمدة
+  cancelled = ملغاة
+
+أرسل الكود كامل (Route + Service + SQL + Frontend Update).
