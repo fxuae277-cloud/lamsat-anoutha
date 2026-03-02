@@ -10,9 +10,11 @@ import {
   Receipt, 
   UserCircle, 
   PieChart, 
-  Settings 
+  Settings,
+  LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 
 const NAV_ITEMS = [
   { href: "/", label: "لوحة التحكم", icon: LayoutDashboard },
@@ -28,8 +30,19 @@ const NAV_ITEMS = [
   { href: "/settings", label: "الإعدادات", icon: Settings },
 ];
 
+const ROLE_LABELS: Record<string, string> = {
+  owner: "مالك",
+  cashier: "كاشير",
+  employee: "موظف",
+  admin: "مدير",
+};
+
 export function Sidebar() {
   const [location] = useLocation();
+  const { user, logout } = useAuth();
+
+  const initial = user?.name?.charAt(0) || "؟";
+  const roleLabel = ROLE_LABELS[user?.role || ""] || user?.role || "";
 
   return (
     <aside className="w-64 bg-sidebar border-e border-sidebar-border h-full flex flex-col shadow-sm">
@@ -67,12 +80,20 @@ export function Sidebar() {
       <div className="p-4 border-t border-sidebar-border">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
-            م
+            {initial}
           </div>
-          <div>
-            <p className="text-sm font-medium">مريم (المالك)</p>
-            <p className="text-xs text-muted-foreground">فرع لوى الرئيسي</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate" data-testid="text-sidebar-user">{user?.name} ({roleLabel})</p>
+            <p className="text-xs text-muted-foreground truncate" data-testid="text-sidebar-branch">{user?.terminalName}</p>
           </div>
+          <button
+            onClick={logout}
+            className="p-1.5 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+            title="تسجيل الخروج"
+            data-testid="button-sidebar-logout"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </aside>

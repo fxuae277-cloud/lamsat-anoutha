@@ -12,18 +12,19 @@ Currency: Omani Rial (OMR) | VAT: 5% | Unified pricing across branches.
 - **Database**: PostgreSQL with Drizzle ORM
 - **Routing**: wouter (frontend) + Express routes (backend)
 - **State Management**: TanStack Query
+- **Auth**: express-session + connect-pg-simple (HttpOnly cookie)
 
 ## Project Structure
 ```
 client/src/
   components/layout/    → Sidebar, AppLayout
   components/ui/        → shadcn/ui components
-  pages/                → Dashboard, POS, Products, Inventory, Orders, Expenses, Settings
+  pages/                → Login, Dashboard, POS, Products, Inventory, Orders, Expenses, Settings
   hooks/                → use-toast, use-mobile
-  lib/                  → queryClient, utils
+  lib/                  → queryClient, auth (AuthProvider/useAuth), utils
 server/
-  index.ts              → Express server entry
-  routes.ts             → API routes (/api/*)
+  index.ts              → Express server entry + session setup
+  routes.ts             → API routes (/api/*) + requireAuth middleware
   storage.ts            → DatabaseStorage class (Drizzle queries)
   db.ts                 → Database connection
   seed.ts               → Initial data seeding
@@ -31,18 +32,31 @@ shared/
   schema.ts             → Drizzle schema + Zod validation
 ```
 
+## Authentication & Authorization
+- Login via POST /api/auth/login (username + password)
+- Session stored in PostgreSQL via connect-pg-simple
+- GET /api/auth/me returns current user (without password)
+- POST /api/auth/logout destroys session
+- `requireAuth` middleware protects: /api/orders, /api/shifts, /api/expenses, /api/reports, /api/sales
+- Frontend shows Login page when no session exists
+- Users table has: username, password, name, role, branchId, terminalName, isActive
+- POST /api/shifts takes only `openingCash`; branchId, cashierId, terminalName come from session user
+- GET /api/shifts/current uses session user's branchId + terminalName
+- Default users: mariam/owner123 (owner), ahmed/owner123 (owner), fatma/cashier123, noura/cashier123, huda/cashier123
+
 ## Database Schema (PostgreSQL)
 - branches, cities
-- users (roles: owner/cashier/employee)
+- users (roles: owner/cashier/employee, with terminalName + branchId)
 - categories, products
 - warehouses, inventory, inventory_transfers
 - customers, suppliers
 - sales, sale_items
 - orders, order_items (orders have shift_id + payment_method + paid_at)
 - expenses (with shift_id + source: cash/card/bank_transfer)
-- employees, shifts (with expectedCash, actualCash, difference)
+- employees, shifts (with expectedCash, actualCash, difference, terminalName)
 - **cash_ledger** (date, branch_id, shift_id, type, amount_in, amount_out, note, created_by)
 - **bank_ledger** (date, branch_id, shift_id, method[card/bank_transfer], amount_in, amount_out, ref_id, note, created_by)
+- **session** (auto-created by connect-pg-simple)
 
 ## Payment Flow
 - Payment methods: `cash`, `card`, `bank_transfer` (PAYMENT_METHODS constant)
@@ -57,24 +71,27 @@ shared/
 - difference = actual - expected, recorded in cash_ledger as type=shift_difference
 
 ## Key Features
-1. **Dashboard**: Daily sales, VAT, order count, low-stock alerts, weekly chart
-2. **POS**: Branch/cashier selection, barcode scan, cart, discount, VAT 5%, cash/card/bank payment
-3. **Products**: CRUD with barcode, category, unified price, active toggle
-4. **Inventory**: Main + branch warehouses, receive stock, transfer between warehouses, low-stock alerts
-5. **Orders**: WhatsApp/Instagram orders, auto-branch assignment by city, status tracking, payment recording
-6. **Expenses**: Categorized expenses per branch with source tracking + ledger integration
-7. **Shift Reports**: GET /api/reports/shift?shiftId=... → cash/card/bank sales, expenses, expected vs actual cash
-8. **Settings**: Branches, users/roles, cities mapping, VAT config
+1. **Login**: Username/password authentication, session-based
+2. **Dashboard**: Daily sales, VAT, order count, low-stock alerts, weekly chart
+3. **POS**: Session-based branch/cashier (read-only), barcode scan, cart, discount, VAT 5%, cash/card/bank payment, shift open/check
+4. **Products**: CRUD with barcode, category, unified price, active toggle
+5. **Inventory**: Main + branch warehouses, receive stock, transfer between warehouses, low-stock alerts
+6. **Orders**: WhatsApp/Instagram orders, auto-branch assignment by city, status tracking, payment recording
+7. **Expenses**: Categorized expenses per branch with source tracking + ledger integration
+8. **Shift Reports**: GET /api/reports/shift?shiftId=... → cash/card/bank sales, expenses, expected vs actual cash
+9. **Settings**: Branches, users/roles, cities mapping, VAT config
 
 ## API Routes
 All prefixed with `/api/`:
+- POST `/auth/login`, POST `/auth/logout`, GET `/auth/me`
 - GET/POST `/branches`, `/categories`, `/products`, `/warehouses`
 - GET/POST/PATCH/DELETE `/products/:id`
 - GET/POST `/inventory`, `/inventory/receive`, `/inventory/transfer`
-- GET/POST `/sales`, `/orders`, `/expenses`, `/employees`, `/shifts`
-- POST `/orders/:id/pay` (paymentMethod: cash/card/bank_transfer)
-- PATCH `/orders/:id/status`, `/shifts/:id/close` (requires actualCash)
-- GET `/reports/shift?shiftId=...`
+- GET/POST `/sales` (requireAuth), `/orders` (requireAuth), `/expenses` (requireAuth), `/employees`, `/shifts` (requireAuth)
+- POST `/orders/:id/pay` (requireAuth)
+- PATCH `/orders/:id/status` (requireAuth), `/shifts/:id/close` (requireAuth)
+- GET `/reports/shift?shiftId=...` (requireAuth)
+- GET `/shifts/current` (requireAuth, uses session user)
 - GET `/dashboard`
 
 ## Design
@@ -90,3 +107,4 @@ All prefixed with `/api/`:
 - Seed runs only if no branches exist (idempotent)
 - Orders auto-link to open shift for the branch when created
 - DB has triggers on orders table (auto-set order_number) - do not interfere
+- DB has unique constraint `uniq_open_shift_per_terminal` preventing duplicate open shifts per terminal

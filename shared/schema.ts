@@ -32,6 +32,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   role: text("role").notNull().default("employee"),
   branchId: integer("branch_id").references(() => branches.id),
+  terminalName: text("terminal_name").default("T1"),
   isActive: boolean("is_active").notNull().default(true),
 });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });

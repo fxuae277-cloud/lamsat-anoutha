@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Plus, Minus, Trash2, CheckCircle2, Image as ImageIcon, Store, Monitor, Banknote, LogIn } from "lucide-react";
+import { Search, Plus, Minus, Trash2, CheckCircle2, Image as ImageIcon, Store, Monitor, Banknote, LogOut, User as UserIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,62 +7,43 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Product, Branch, User, Shift } from "@shared/schema";
+import { useAuth } from "@/lib/auth";
+import type { Product, Branch, Shift } from "@shared/schema";
 
-function StartPOS({ branches, cashiers, onShiftOpened }: {
-  branches: Branch[];
-  cashiers: User[];
-  onShiftOpened: (shift: Shift, branchId: number, terminalName: string, cashierId: number) => void;
+function StartPOS({ branchName, terminalName, userName, onShiftOpened }: {
+  branchName: string;
+  terminalName: string;
+  userName: string;
+  onShiftOpened: (shift: Shift) => void;
 }) {
   const { toast } = useToast();
-  const savedBranch = localStorage.getItem("pos_branchId") || "";
-  const savedTerminal = localStorage.getItem("pos_terminalName") || "";
-
-  const [branchId, setBranchId] = useState(savedBranch);
-  const [terminalName, setTerminalName] = useState(savedTerminal);
   const [openingCash, setOpeningCash] = useState("");
-  const [cashierId, setCashierId] = useState("");
-  const [checking, setChecking] = useState(false);
-
-  const checkExistingShift = async (bId: string, tName: string) => {
-    if (!bId || !tName) return;
-    setChecking(true);
-    try {
-      const res = await fetch(`/api/shifts/current?branchId=${bId}&terminalName=${encodeURIComponent(tName)}`);
-      const data = await res.json();
-      if (data.shift) {
-        localStorage.setItem("pos_branchId", bId);
-        localStorage.setItem("pos_terminalName", tName);
-        onShiftOpened(data.shift, Number(bId), tName, data.shift.cashierId);
-      }
-    } catch {}
-    setChecking(false);
-  };
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    if (savedBranch && savedTerminal) {
-      checkExistingShift(savedBranch, savedTerminal);
-    }
+    (async () => {
+      try {
+        const res = await fetch("/api/shifts/current", { credentials: "include" });
+        const data = await res.json();
+        if (data.shift) {
+          onShiftOpened(data.shift);
+          return;
+        }
+      } catch {}
+      setChecking(false);
+    })();
   }, []);
 
   const openShiftMutation = useMutation({
     mutationFn: async () => {
-      if (!branchId) throw new Error("يجب اختيار الفرع");
-      if (!terminalName.trim()) throw new Error("يجب إدخال اسم الجهاز");
-      if (!cashierId) throw new Error("يجب اختيار الكاشير");
       const res = await apiRequest("POST", "/api/shifts", {
-        branchId: Number(branchId),
-        cashierId: Number(cashierId),
-        terminalName: terminalName.trim(),
         openingCash: openingCash ? String(openingCash) : "0",
       });
       return await res.json();
     },
     onSuccess: (shift: Shift) => {
-      localStorage.setItem("pos_branchId", branchId);
-      localStorage.setItem("pos_terminalName", terminalName.trim());
       toast({ title: "تم فتح الشفت بنجاح" });
-      onShiftOpened(shift, Number(branchId), terminalName.trim(), Number(cashierId));
+      onShiftOpened(shift);
     },
     onError: (err: Error) => {
       toast({ title: "خطأ", description: err.message, variant: "destructive" });
@@ -88,56 +69,23 @@ function StartPOS({ branches, cashiers, onShiftOpened }: {
             <Store className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-xl font-bold" data-testid="text-start-pos-title">تشغيل نقطة البيع</h1>
-          <p className="text-sm text-muted-foreground mt-1">أدخل بيانات الجهاز لفتح شفت جديد</p>
+          <p className="text-sm text-muted-foreground mt-1">أدخل رصيد الصندوق لفتح شفت جديد</p>
         </div>
 
         <div className="p-6 space-y-5">
-          <div className="space-y-2">
-            <label className="text-sm font-medium flex items-center gap-2">
-              <Store className="w-4 h-4 text-muted-foreground" />
-              الفرع
-            </label>
-            <Select value={branchId} onValueChange={(v) => { setBranchId(v); checkExistingShift(v, terminalName); }}>
-              <SelectTrigger data-testid="select-start-branch">
-                <SelectValue placeholder="اختر الفرع" />
-              </SelectTrigger>
-              <SelectContent>
-                {branches.map(b => (
-                  <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium flex items-center gap-2">
-              <Monitor className="w-4 h-4 text-muted-foreground" />
-              اسم الجهاز / الكاشير
-            </label>
-            <Input
-              placeholder="مثال: T1, POS-1, كاشير-1"
-              value={terminalName}
-              onChange={(e) => setTerminalName(e.target.value)}
-              onBlur={() => checkExistingShift(branchId, terminalName)}
-              data-testid="input-terminal-name"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium flex items-center gap-2">
-              <LogIn className="w-4 h-4 text-muted-foreground" />
-              الكاشير
-            </label>
-            <Select value={cashierId} onValueChange={setCashierId}>
-              <SelectTrigger data-testid="select-start-cashier">
-                <SelectValue placeholder="اختر الكاشير" />
-              </SelectTrigger>
-              <SelectContent>
-                {cashiers.map(u => (
-                  <SelectItem key={u.id} value={u.id.toString()}>{u.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="bg-muted/50 rounded-xl p-4 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground flex items-center gap-1.5"><UserIcon className="w-3.5 h-3.5" /> الكاشير:</span>
+              <span className="font-medium" data-testid="text-pos-user">{userName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground flex items-center gap-1.5"><Store className="w-3.5 h-3.5" /> الفرع:</span>
+              <span className="font-medium" data-testid="text-pos-branch">{branchName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground flex items-center gap-1.5"><Monitor className="w-3.5 h-3.5" /> الجهاز:</span>
+              <span className="font-medium" data-testid="text-pos-terminal">{terminalName}</span>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -151,6 +99,7 @@ function StartPOS({ branches, cashiers, onShiftOpened }: {
               placeholder="0.000"
               value={openingCash}
               onChange={(e) => setOpeningCash(e.target.value)}
+              autoFocus
               data-testid="input-opening-cash"
             />
           </div>
@@ -158,7 +107,7 @@ function StartPOS({ branches, cashiers, onShiftOpened }: {
           <Button
             className="w-full h-12 text-lg font-bold gap-2"
             onClick={() => openShiftMutation.mutate()}
-            disabled={openShiftMutation.isPending || !branchId || !terminalName.trim() || !cashierId}
+            disabled={openShiftMutation.isPending}
             data-testid="button-open-shift"
           >
             {openShiftMutation.isPending ? (
@@ -181,10 +130,8 @@ function StartPOS({ branches, cashiers, onShiftOpened }: {
 
 export default function POS() {
   const { toast } = useToast();
+  const { user, logout } = useAuth();
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
-  const [activeBranchId, setActiveBranchId] = useState<number>(0);
-  const [activeTerminalName, setActiveTerminalName] = useState("");
-  const [activeCashierId, setActiveCashierId] = useState<number>(0);
 
   const [cart, setCart] = useState<{product: Product, qty: number}[]>([]);
   const [paymentMethod, setPaymentMethod] = useState("cash");
@@ -204,26 +151,23 @@ export default function POS() {
     queryKey: ["/api/branches"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
-  const { data: usersList = [] } = useQuery<User[]>({
-    queryKey: ["/api/users"],
-    queryFn: getQueryFn({ on401: "throw" }),
-  });
   const { data: categoriesList = [] } = useQuery<any[]>({
     queryKey: ["/api/categories"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const cashiers = usersList.filter(u => u.role === "cashier" || u.role === "owner");
-
-  const handleShiftOpened = (shift: Shift, branchId: number, terminalName: string, cashierId: number) => {
-    setCurrentShift(shift);
-    setActiveBranchId(branchId);
-    setActiveTerminalName(terminalName);
-    setActiveCashierId(cashierId);
-  };
+  const branchName = branchesList.find(b => b.id === user?.branchId)?.name || "";
+  const terminalName = user?.terminalName || "T1";
 
   if (!currentShift) {
-    return <StartPOS branches={branchesList} cashiers={cashiers} onShiftOpened={handleShiftOpened} />;
+    return (
+      <StartPOS
+        branchName={branchName}
+        terminalName={terminalName}
+        userName={user?.name || ""}
+        onShiftOpened={(shift) => setCurrentShift(shift)}
+      />
+    );
   }
 
   const activeProducts = products.filter(p => p.active !== false);
@@ -283,8 +227,8 @@ export default function POS() {
       const invoiceNumber = `INV-${Date.now()}`;
       const saleData = {
         invoiceNumber,
-        branchId: activeBranchId,
-        cashierId: activeCashierId || null,
+        branchId: user!.branchId,
+        cashierId: user!.id,
         customerId: null,
         subtotal: subtotal.toFixed(3),
         discount: discountAmount.toFixed(3),
@@ -319,9 +263,6 @@ export default function POS() {
     },
   });
 
-  const branchName = branchesList.find(b => b.id === activeBranchId)?.name || "";
-  const cashierName = usersList.find(u => u.id === activeCashierId)?.name || "";
-
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col gap-4">
       <div className="bg-card p-4 rounded-xl shadow-sm border border-border flex items-center justify-between shrink-0">
@@ -332,17 +273,21 @@ export default function POS() {
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg">
             <Monitor className="w-4 h-4 text-muted-foreground" />
-            <span data-testid="text-active-terminal">{activeTerminalName}</span>
+            <span data-testid="text-active-terminal">{terminalName}</span>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg">
-            <LogIn className="w-4 h-4 text-muted-foreground" />
-            <span data-testid="text-active-cashier">{cashierName}</span>
+            <UserIcon className="w-4 h-4 text-muted-foreground" />
+            <span data-testid="text-active-cashier">{user?.name}</span>
           </div>
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
             شفت #{currentShift.id}
           </div>
         </div>
+        <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5" onClick={logout} data-testid="button-logout-pos">
+          <LogOut className="w-4 h-4" />
+          خروج
+        </Button>
       </div>
 
       <div className="flex gap-6 h-full min-h-0">

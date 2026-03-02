@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
@@ -12,10 +12,54 @@ import {
   PAYMENT_METHODS, type PaymentMethod,
 } from "@shared/schema";
 
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: "غير مصرح - يجب تسجيل الدخول" });
+  }
+  next();
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  app.post("/api/auth/login", async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ message: "اسم المستخدم وكلمة المرور مطلوبان" });
+    }
+    const user = await storage.getUserByUsername(username);
+    if (!user || user.password !== password) {
+      return res.status(401).json({ message: "اسم المستخدم أو كلمة المرور غير صحيحة" });
+    }
+    if (!user.isActive) {
+      return res.status(403).json({ message: "الحساب معطّل" });
+    }
+    req.session.userId = user.id;
+    const { password: _, ...safeUser } = user;
+    res.json({ user: safeUser });
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy(() => {
+      res.clearCookie("connect.sid");
+      res.json({ message: "تم تسجيل الخروج" });
+    });
+  });
+
+  app.get("/api/auth/me", async (req, res) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "غير مصرح" });
+    }
+    const user = await storage.getUser(req.session.userId);
+    if (!user || !user.isActive) {
+      req.session.destroy(() => {});
+      return res.status(401).json({ message: "غير مصرح" });
+    }
+    const { password: _, ...safeUser } = user;
+    res.json({ user: safeUser });
+  });
 
   app.get("/api/dashboard", async (_req, res) => {
     const stats = await storage.getDashboardStats();
@@ -141,16 +185,16 @@ export async function registerRoutes(
     res.status(201).json(await storage.createSupplier(parsed.data));
   });
 
-  app.get("/api/sales", async (_req, res) => {
+  app.get("/api/sales", requireAuth, async (_req, res) => {
     res.json(await storage.getSales());
   });
-  app.get("/api/sales/:id", async (req, res) => {
+  app.get("/api/sales/:id", requireAuth, async (req, res) => {
     const sale = await storage.getSale(Number(req.params.id));
     if (!sale) return res.status(404).json({ message: "الفاتورة غير موجودة" });
     const items = await storage.getSaleItems(sale.id);
     res.json({ ...sale, items });
   });
-  app.post("/api/sales", async (req, res) => {
+  app.post("/api/sales", requireAuth, async (req, res) => {
     const { items, ...saleData } = req.body;
     const parsed = insertSaleSchema.safeParse(saleData);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
@@ -163,16 +207,16 @@ export async function registerRoutes(
     res.json(await storage.getDailySalesTotal());
   });
 
-  app.get("/api/orders", async (_req, res) => {
+  app.get("/api/orders", requireAuth, async (_req, res) => {
     res.json(await storage.getOrders());
   });
-  app.get("/api/orders/:id", async (req, res) => {
+  app.get("/api/orders/:id", requireAuth, async (req, res) => {
     const order = await storage.getOrder(Number(req.params.id));
     if (!order) return res.status(404).json({ message: "الطلب غير موجود" });
     const items = await storage.getOrderItems(order.id);
     res.json({ ...order, items });
   });
-  app.post("/api/orders", async (req, res) => {
+  app.post("/api/orders", requireAuth, async (req, res) => {
     try {
       const { items, ...orderData } = req.body;
       const parsed = insertOrderSchema.safeParse(orderData);
@@ -198,14 +242,14 @@ export async function registerRoutes(
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
     }
   });
-  app.patch("/api/orders/:id/status", async (req, res) => {
+  app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
     const { status } = req.body;
     if (!status) return res.status(400).json({ message: "الحالة مطلوبة" });
     const row = await storage.updateOrderStatus(Number(req.params.id), status);
     if (!row) return res.status(404).json({ message: "الطلب غير موجود" });
     res.json(row);
   });
-  app.post("/api/orders/:id/pay", async (req, res) => {
+  app.post("/api/orders/:id/pay", requireAuth, async (req, res) => {
     const { paymentMethod, bankTxnId } = req.body;
     if (!paymentMethod || !PAYMENT_METHODS.includes(paymentMethod)) {
       return res.status(400).json({ message: "طريقة الدفع غير صالحة. الخيارات: cash, card, bank_transfer" });
@@ -215,10 +259,10 @@ export async function registerRoutes(
     res.json(row);
   });
 
-  app.get("/api/expenses", async (_req, res) => {
+  app.get("/api/expenses", requireAuth, async (_req, res) => {
     res.json(await storage.getExpenses());
   });
-  app.post("/api/expenses", async (req, res) => {
+  app.post("/api/expenses", requireAuth, async (req, res) => {
     try {
       const { amount, notes, source, branchId, shiftId, category } = req.body;
       if (!amount || !branchId) {
@@ -277,26 +321,36 @@ export async function registerRoutes(
     res.status(201).json(await storage.createEmployee(parsed.data));
   });
 
-  app.get("/api/shifts/current", async (req, res) => {
-    const branchId = Number(req.query.branchId);
-    const terminalName = String(req.query.terminalName || "");
-    if (!branchId || !terminalName) {
-      return res.status(400).json({ message: "branchId و terminalName مطلوبان" });
+  app.get("/api/shifts/current", requireAuth, async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user || !user.branchId || !user.terminalName) {
+      return res.status(400).json({ message: "بيانات المستخدم ناقصة (الفرع أو الجهاز)" });
     }
-    const shift = await storage.getCurrentShift(branchId, terminalName);
+    const shift = await storage.getCurrentShift(user.branchId, user.terminalName);
     if (!shift) return res.json({ shift: null });
     res.json({ shift });
   });
 
-  app.get("/api/shifts", async (_req, res) => {
+  app.get("/api/shifts", requireAuth, async (_req, res) => {
     res.json(await storage.getShifts());
   });
-  app.post("/api/shifts", async (req, res) => {
-    const parsed = insertShiftSchema.safeParse(req.body);
+  app.post("/api/shifts", requireAuth, async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user || !user.branchId || !user.terminalName) {
+      return res.status(400).json({ message: "بيانات المستخدم ناقصة (الفرع أو الجهاز)" });
+    }
+    const { openingCash } = req.body;
+    const shiftData = {
+      branchId: user.branchId,
+      cashierId: user.id,
+      terminalName: user.terminalName,
+      openingCash: openingCash ? String(openingCash) : "0",
+    };
+    const parsed = insertShiftSchema.safeParse(shiftData);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     res.status(201).json(await storage.createShift(parsed.data));
   });
-  app.patch("/api/shifts/:id/close", async (req, res) => {
+  app.patch("/api/shifts/:id/close", requireAuth, async (req, res) => {
     const shiftId = Number(req.params.id);
     const pendingOrders = await storage.getPendingOrdersByShift(shiftId);
     if (pendingOrders.length > 0) {
@@ -314,7 +368,7 @@ export async function registerRoutes(
     res.json(row);
   });
 
-  app.get("/api/reports/shift", async (req, res) => {
+  app.get("/api/reports/shift", requireAuth, async (req, res) => {
     const shiftId = Number(req.query.shiftId);
     if (!shiftId) return res.status(400).json({ message: "shiftId مطلوب" });
     const report = await storage.getShiftReport(shiftId);
