@@ -326,15 +326,19 @@ export async function registerRoutes(
 
   app.post("/api/inventory-transfers", requireAuth, requireManager, async (req, res) => {
     try {
-      const { branchId, fromLocationId, toLocationId, items } = req.body;
-      if (!branchId || !fromLocationId || !toLocationId || !items || !Array.isArray(items) || items.length === 0) {
+      const { branchId, items } = req.body;
+      if (!branchId || !items || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ message: "البيانات ناقصة أو غير صحيحة" });
       }
-      const result = await storage.createLocationTransfer(branchId, fromLocationId, toLocationId, items, req.session.userId!);
+      const result = await storage.createLocationTransfer(branchId, items, req.session.userId!);
       res.json(result);
     } catch (e: any) {
       res.status(400).json({ message: e.message || "فشل التحويل" });
     }
+  });
+
+  app.get("/api/central-inventory", requireAuth, async (req, res) => {
+    res.json(await storage.getCentralInventory());
   });
 
   app.get("/api/inventory-transfers", requireAuth, async (req, res) => {

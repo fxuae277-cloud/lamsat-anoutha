@@ -92,16 +92,17 @@ shared/
 - **Daily Report** (/api/reports/daily): includes cogsTotal, grossProfit, netProfit (= grossProfit - expenses)
 - **Branch Comparison** (/api/reports/branch-comparison): sales, cogs, gross, expenses, net per branch with margin %
 
-## Multi-Location Inventory System
-- Each branch auto-gets 2 locations: showroom (صالة العرض) + backstore (المخزن)
-- **addStock(branchId, ...)**: adds to backstore + logs transaction (used by purchase posting)
-- **removeStock(branchId, ...)**: deducts from showroom, throws error if insufficient qty (used by POS sales)
-- **transferStock(fromLocId, toLocId, ...)**: internal transfer between locations within same branch
-- Purchase posting → stock enters backstore
-- POS sale → stock deducted from showroom (blocks sale if insufficient)
-- Sale return → stock enters showroom
-- Frontend tabs: مخزون المواقع (filter by branch/location), نقل داخلي (backstore→showroom), حركات المخزون (filterable transaction log)
-- Transaction types: purchase_receipt, sale, sale_return, internal_transfer, manual_receipt, adjustment
+## Multi-Location Inventory System (Central Warehouse Model)
+- **Central Warehouse** (المخزن المركزي): One company-wide location, `is_central=true`, `branch_id=NULL`
+- **Branch Default Store** (مخزن الفرع): One per branch, `is_branch_default=true` — receives stock from central
+- Each branch may also have showroom/backstore locations (legacy)
+- **Purchase Approval** → stock enters Central Warehouse automatically (no location selection needed)
+- **Transfer** (POST /api/inventory-transfers): central → branch default store; body = `{branchId, items:[{productId,qty}]}`
+- **addStock(branchId, ...)**: adds to branch default store + logs transaction
+- **removeStock(branchId, ...)**: deducts from branch default store, throws error if insufficient qty (used by POS sales)
+- **GET /api/central-inventory**: returns all items in central warehouse with qty_on_hand
+- Transaction types: PURCHASE, TRANSFER_OUT, TRANSFER_IN, sale, sale_return, internal_transfer, manual_receipt, adjustment
+- Frontend tabs: مخزون الفروع, تحويل من المركزي, حركات المخزون
 - Permissions: cashier sees own branch only; owner/admin can select any branch
 
 ## Ledger System

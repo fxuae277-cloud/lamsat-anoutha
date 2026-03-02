@@ -143,19 +143,11 @@ function BranchInventoryTab() {
   );
 }
 
-const LOC_TYPE_LABELS: Record<string, string> = {
-  MAIN_WAREHOUSE: "مخزن رئيسي",
-  SUB_WAREHOUSE: "مخزن فرعي",
-  SHOWROOM: "صالة عرض",
-};
-
 function InternalTransferTab() {
   const { toast } = useToast();
   const { user } = useAuth();
   const isOwner = user?.role === "owner" || user?.role === "admin";
   const [selectedBranch, setSelectedBranch] = useState<string>(String(user?.branchId));
-  const [fromLocationId, setFromLocationId] = useState("");
-  const [toLocationId, setToLocationId] = useState("");
   const [items, setItems] = useState<{ productId: string; qty: string }[]>([]);
   const [addProduct, setAddProduct] = useState("");
   const [addQty, setAddQty] = useState("");
@@ -165,38 +157,16 @@ function InternalTransferTab() {
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const { data: allProducts = [] } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
-    queryFn: getQueryFn({ on401: "throw" }),
-  });
-
-  const { data: branchLocations = [] } = useQuery<any[]>({
-    queryKey: ["/api/locations", selectedBranch],
+  const { data: centralInv = [] } = useQuery<any[]>({
+    queryKey: ["/api/central-inventory"],
     queryFn: async () => {
-      const res = await fetch(`/api/locations?branchId=${selectedBranch}`, { credentials: "include" });
+      const res = await fetch("/api/central-inventory", { credentials: "include" });
       if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },
-    enabled: !!selectedBranch,
   });
 
-  const fromInvParams = new URLSearchParams();
-  if (fromLocationId) {
-    fromInvParams.set("branchId", selectedBranch);
-  }
-  const { data: fromInv = [] } = useQuery<any[]>({
-    queryKey: ["/api/location-inventory", selectedBranch, fromLocationId],
-    queryFn: async () => {
-      const res = await fetch(`/api/location-inventory?branchId=${selectedBranch}`, { credentials: "include" });
-      if (!res.ok) throw new Error(`${res.status}`);
-      const all = await res.json();
-      return all.filter((r: any) => String(r.locationId) === fromLocationId);
-    },
-    enabled: !!selectedBranch && !!fromLocationId,
-  });
-
-  const productMap = Object.fromEntries(allProducts.map(p => [p.id, p.name]));
-  const fromInvMap = Object.fromEntries(fromInv.map((r: any) => [String(r.productId), r.qtyOnHand]));
+  const centralInvMap = Object.fromEntries(centralInv.map((r: any) => [String(r.productId), r.qtyOnHand]));
 
   const { data: transfers = [] } = useQuery<any[]>({
     queryKey: ["/api/inventory-transfers", selectedBranch],
@@ -214,13 +184,12 @@ function InternalTransferTab() {
     mutationFn: async () => {
       await apiRequest("POST", "/api/inventory-transfers", {
         branchId: Number(selectedBranch),
-        fromLocationId: Number(fromLocationId),
-        toLocationId: Number(toLocationId),
         items: items.map(i => ({ productId: Number(i.productId), qty: Number(i.qty) })),
       });
     },
     onSuccess: () => {
-      toast({ title: "تم التحويل بنجاح" });
+      toast({ title: "تم التحويل بنجاح من المخزن المركزي إلى الفرع" });
+      queryClient.invalidateQueries({ queryKey: ["/api/central-inventory"] });
       queryClient.invalidateQueries({ queryKey: ["/api/location-inventory"] });
       queryClient.invalidateQueries({ queryKey: ["/api/branch-inventory"] });
       queryClient.invalidateQueries({ queryKey: ["/api/inventory-transfers"] });
@@ -244,124 +213,129 @@ function InternalTransferTab() {
     setItems(items.filter((_, i) => i !== idx));
   }
 
-  const mainLoc = branchLocations.find((l: any) => l.isMain);
-  const otherLocs = branchLocations.filter((l: any) => !l.isMain);
-
   return (
     <div className="space-y-6">
       <Card className="border-primary/20">
         <CardContent className="p-6">
           <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
             <ArrowLeftRight className="w-5 h-5 text-primary" />
-            تحويل مخزون بين المواقع
+            تحويل من المخزن المركزي إلى الفرع
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            {isOwner && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">الفرع</label>
-                <Select value={selectedBranch} onValueChange={v => { setSelectedBranch(v); setFromLocationId(""); setToLocationId(""); setItems([]); }}>
-                  <SelectTrigger data-testid="select-transfer-branch"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+          <p className="text-sm text-muted-foreground mb-4">اختر الفرع والأصناف المطلوبة، سيتم خصمها من المخزن المركزي وإضافتها لمخزن الفرع تلقائياً</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">من موقع</label>
-              <Select value={fromLocationId} onValueChange={v => { setFromLocationId(v); setItems([]); }}>
-                <SelectTrigger data-testid="select-from-location"><SelectValue placeholder="اختر الموقع المصدر" /></SelectTrigger>
+              <label className="text-sm font-medium">الفرع المستلم</label>
+              <Select value={selectedBranch} onValueChange={v => { setSelectedBranch(v); setItems([]); }}>
+                <SelectTrigger data-testid="select-transfer-branch"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {branchLocations.map((l: any) => (
-                    <SelectItem key={l.id} value={String(l.id)}>
-                      {l.name} ({LOC_TYPE_LABELS[l.type] || l.type}){l.isMain ? " ★" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">إلى موقع</label>
-              <Select value={toLocationId} onValueChange={setToLocationId}>
-                <SelectTrigger data-testid="select-to-location"><SelectValue placeholder="اختر الوجهة" /></SelectTrigger>
-                <SelectContent>
-                  {branchLocations.filter((l: any) => String(l.id) !== fromLocationId).map((l: any) => (
-                    <SelectItem key={l.id} value={String(l.id)}>
-                      {l.name} ({LOC_TYPE_LABELS[l.type] || l.type}){l.isMain ? " ★" : ""}
-                    </SelectItem>
-                  ))}
+                  {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          {fromLocationId && toLocationId && (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-end gap-3 p-3 bg-muted/30 rounded-lg border">
-                <div className="space-y-1 min-w-[200px] flex-1">
-                  <label className="text-sm font-medium">الصنف</label>
-                  <Select value={addProduct} onValueChange={setAddProduct}>
-                    <SelectTrigger data-testid="select-transfer-product"><SelectValue placeholder="اختر صنف..." /></SelectTrigger>
-                    <SelectContent>
-                      {fromInv.filter((r: any) => r.qtyOnHand > 0).map((r: any) => (
-                        <SelectItem key={r.productId} value={String(r.productId)}>
-                          {r.productName} (متوفر: {r.qtyOnHand})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1 w-28">
-                  <label className="text-sm font-medium">الكمية</label>
-                  <Input type="number" min="1" max={fromInvMap[addProduct] || 999} value={addQty} onChange={e => setAddQty(e.target.value)} data-testid="input-transfer-qty" />
-                </div>
-                <Button onClick={addItem} disabled={!addProduct || !addQty} data-testid="button-add-transfer-item">
-                  <PackagePlus className="w-4 h-4 ml-1" /> إضافة
-                </Button>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-end gap-3 p-3 bg-muted/30 rounded-lg border">
+              <div className="space-y-1 min-w-[200px] flex-1">
+                <label className="text-sm font-medium">الصنف (من المخزن المركزي)</label>
+                <Select value={addProduct} onValueChange={setAddProduct}>
+                  <SelectTrigger data-testid="select-transfer-product"><SelectValue placeholder="اختر صنف..." /></SelectTrigger>
+                  <SelectContent>
+                    {centralInv.filter((r: any) => r.qtyOnHand > 0).map((r: any) => (
+                      <SelectItem key={r.productId} value={String(r.productId)}>
+                        {r.productName} (متوفر: {r.qtyOnHand})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+              <div className="space-y-1 w-28">
+                <label className="text-sm font-medium">الكمية</label>
+                <Input type="number" min="1" max={centralInvMap[addProduct] || 999} value={addQty} onChange={e => setAddQty(e.target.value)} data-testid="input-transfer-qty" />
+              </div>
+              <Button onClick={addItem} disabled={!addProduct || !addQty} data-testid="button-add-transfer-item">
+                <PackagePlus className="w-4 h-4 ml-1" /> إضافة
+              </Button>
+            </div>
 
-              {items.length > 0 && (
-                <Table>
-                  <TableHeader className="bg-muted/50">
-                    <TableRow>
-                      <TableHead>الصنف</TableHead>
-                      <TableHead className="text-center">الكمية</TableHead>
-                      <TableHead className="text-center">المتوفر</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {items.map((it, idx) => (
+            {items.length > 0 && (
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead>الصنف</TableHead>
+                    <TableHead className="text-center">الكمية المطلوبة</TableHead>
+                    <TableHead className="text-center">المتوفر في المركزي</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((it, idx) => {
+                    const inv = centralInv.find((r: any) => String(r.productId) === it.productId);
+                    return (
                       <TableRow key={idx}>
-                        <TableCell>{productMap[Number(it.productId)] || it.productId}</TableCell>
+                        <TableCell>{inv?.productName || it.productId}</TableCell>
                         <TableCell className="text-center font-bold">{it.qty}</TableCell>
-                        <TableCell className="text-center text-muted-foreground">{fromInvMap[it.productId] || 0}</TableCell>
+                        <TableCell className="text-center text-muted-foreground">{centralInvMap[it.productId] || 0}</TableCell>
                         <TableCell className="text-center">
                           <Button size="sm" variant="ghost" className="text-red-500" onClick={() => removeItem(idx)}>حذف</Button>
                         </TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
 
-              {items.length > 0 && (
-                <div className="flex justify-end">
-                  <Button
-                    className="gap-2"
-                    onClick={() => transferMutation.mutate()}
-                    disabled={transferMutation.isPending}
-                    data-testid="button-confirm-transfer"
-                  >
-                    <ArrowLeftRight className="w-4 h-4" />
-                    تنفيذ التحويل ({items.length} صنف)
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
+            {items.length > 0 && (
+              <div className="flex justify-end">
+                <Button
+                  className="gap-2"
+                  onClick={() => transferMutation.mutate()}
+                  disabled={transferMutation.isPending}
+                  data-testid="button-confirm-transfer"
+                >
+                  <ArrowLeftRight className="w-4 h-4" />
+                  تحويل من المركزي للفرع ({items.length} صنف)
+                </Button>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
+
+      {centralInv.length > 0 && (
+        <div className="bg-card border shadow-sm rounded-xl overflow-hidden">
+          <div className="p-4 border-b bg-muted/30">
+            <h4 className="font-bold flex items-center gap-2">
+              <Package className="w-4 h-4" />
+              مخزون المخزن المركزي
+            </h4>
+          </div>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead>الصنف</TableHead>
+                  <TableHead className="text-center">الكمية المتاحة</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {centralInv.map((r: any) => (
+                  <TableRow key={r.id} data-testid={`row-central-${r.id}`}>
+                    <TableCell className="font-medium">{r.productName}</TableCell>
+                    <TableCell className="text-center">
+                      <span className={`font-bold text-lg ${r.qtyOnHand > 0 ? "text-emerald-600" : "text-red-600"}`}>
+                        {r.qtyOnHand}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
 
       {transfers.length > 0 && (
         <div className="bg-card border shadow-sm rounded-xl overflow-hidden">
@@ -380,7 +354,7 @@ function InternalTransferTab() {
                   <TableHead>الفرع</TableHead>
                   <TableHead>من</TableHead>
                   <TableHead>إلى</TableHead>
-                  <TableHead>ملاحظة</TableHead>
+                  <TableHead>الأصناف</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -388,10 +362,16 @@ function InternalTransferTab() {
                   <TableRow key={tx.id} data-testid={`row-transfer-${tx.id}`}>
                     <TableCell className="font-mono text-xs">{tx.id}</TableCell>
                     <TableCell className="text-sm">{tx.createdAt ? new Date(tx.createdAt).toLocaleDateString("ar-OM") : "—"}</TableCell>
-                    <TableCell className="text-sm">{tx.branchName}</TableCell>
+                    <TableCell className="text-sm font-medium">{tx.branchName}</TableCell>
                     <TableCell><Badge variant="outline" className="text-xs">{tx.fromLocationName}</Badge></TableCell>
                     <TableCell><Badge variant="outline" className="text-xs">{tx.toLocationName}</Badge></TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{tx.note || "—"}</TableCell>
+                    <TableCell className="text-xs">
+                      {tx.items && Array.isArray(tx.items) ? tx.items.map((it: any, i: number) => (
+                        <span key={i} className="inline-block bg-muted rounded px-2 py-0.5 ml-1 mb-1">
+                          {it.productName} × {it.qty}
+                        </span>
+                      )) : "—"}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

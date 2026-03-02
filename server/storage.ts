@@ -972,13 +972,13 @@ export class DatabaseStorage implements IStorage {
       parseFloat(invoice.otherCost || "0");
     const grandTotal = subtotalItems + totalExtraCost;
 
-    const [mainLoc] = await db.select({ id: locations.id })
+    const [centralLoc] = await db.select({ id: locations.id })
       .from(locations)
-      .where(and(eq(locations.branchId, invoice.branchId), eq(locations.isMain, true)))
+      .where(eq(locations.isCentral, true))
       .orderBy(locations.id)
       .limit(1);
-    if (!mainLoc) throw new Error("لا يوجد مخزن رئيسي للفرع");
-    const mainLocationId = mainLoc.id;
+    if (!centralLoc) throw new Error("لا يوجد مخزن مركزي — يرجى إنشاؤه أولاً");
+    const centralLocationId = centralLoc.id;
 
     const client = await pool.connect();
     try {
@@ -1028,7 +1028,7 @@ export class DatabaseStorage implements IStorage {
            ON CONFLICT (location_id, product_id)
            DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand + EXCLUDED.qty_on_hand,
                          updated_at = now()`,
-          [mainLocationId, item.productId, item.qty]
+          [centralLocationId, item.productId, item.qty]
         );
 
         await client.query(
@@ -1042,7 +1042,7 @@ export class DatabaseStorage implements IStorage {
             $3, 'PURCHASE', $4,
             'purchase_invoices', $5,
             'Purchase Invoice Approved', $6, now())`,
-          [invoice.branchId, mainLocationId, item.productId, item.qty, id, invoice.createdBy]
+          [invoice.branchId, centralLocationId, item.productId, item.qty, id, invoice.createdBy]
         );
       }
 
@@ -1530,20 +1530,20 @@ export class DatabaseStorage implements IStorage {
 
   async createLocationTransfer(
     branchId: number,
-    fromLocationId: number,
-    toLocationId: number,
     items: { productId: number; qty: number }[],
     createdBy: number
   ) {
     if (items.length === 0) throw new Error("يجب إضافة صنف واحد على الأقل");
 
-    const [fromLoc] = await db.select().from(locations).where(eq(locations.id, fromLocationId));
-    const [toLoc] = await db.select().from(locations).where(eq(locations.id, toLocationId));
-    if (!fromLoc) throw new Error("موقع المصدر غير موجود");
-    if (!toLoc) throw new Error("موقع الوجهة غير موجود");
-    if (fromLoc.branchId !== branchId || toLoc.branchId !== branchId)
-      throw new Error("المواقع يجب أن تنتمي لنفس الفرع");
-    if (fromLocationId === toLocationId) throw new Error("لا يمكن التحويل لنفس الموقع");
+    const [centralLoc] = await db.select().from(locations).where(eq(locations.isCentral, true)).orderBy(locations.id).limit(1);
+    if (!centralLoc) throw new Error("لا يوجد مخزن مركزي");
+    const fromLocationId = centralLoc.id;
+
+    const [branchLoc] = await db.select().from(locations)
+      .where(and(eq(locations.branchId, branchId), eq(locations.isBranchDefault, true)))
+      .orderBy(locations.id).limit(1);
+    if (!branchLoc) throw new Error("لا يوجد مخزن افتراضي لهذا الفرع");
+    const toLocationId = branchLoc.id;
 
     const client = await pool.connect();
     try {
@@ -1552,7 +1552,7 @@ export class DatabaseStorage implements IStorage {
       const transferRes = await client.query(
         `INSERT INTO location_transfers (branch_id, from_location_id, to_location_id, note, created_by, created_at)
          VALUES ($1, $2, $3, $4, $5, now()) RETURNING id`,
-        [branchId, fromLocationId, toLocationId, `تحويل من ${fromLoc.name} إلى ${toLoc.name}`, createdBy]
+        [branchId, fromLocationId, toLocationId, `تحويل من ${centralLoc.name} إلى ${branchLoc.name}`, createdBy]
       );
       const transferId = transferRes.rows[0].id;
 
@@ -1566,7 +1566,7 @@ export class DatabaseStorage implements IStorage {
         const available = invRes.rows.length > 0 ? invRes.rows[0].qty_on_hand : 0;
         if (available < item.qty) {
           const [prod] = await db.select({ name: products.name }).from(products).where(eq(products.id, item.productId));
-          throw new Error(`الكمية المتاحة من "${prod?.name || item.productId}" هي ${available} فقط`);
+          throw new Error(`الكمية المتاحة من "${prod?.name || item.productId}" في المخزن المركزي هي ${available} فقط`);
         }
 
         await client.query(
@@ -1592,14 +1592,14 @@ export class DatabaseStorage implements IStorage {
           `INSERT INTO inventory_transactions
            (date, branch_id, from_location_id, to_location_id, product_id, type, qty, ref_table, ref_id, note, created_by, created_at)
            VALUES (now(), $1, $2, NULL, $3, 'TRANSFER_OUT', $4, 'location_transfers', $5, $6, $7, now())`,
-          [branchId, fromLocationId, item.productId, item.qty, transferId, `صادر إلى ${toLoc.name}`, createdBy]
+          [branchId, fromLocationId, item.productId, item.qty, transferId, `صادر من المركزي إلى ${branchLoc.name}`, createdBy]
         );
 
         await client.query(
           `INSERT INTO inventory_transactions
            (date, branch_id, from_location_id, to_location_id, product_id, type, qty, ref_table, ref_id, note, created_by, created_at)
            VALUES (now(), $1, NULL, $2, $3, 'TRANSFER_IN', $4, 'location_transfers', $5, $6, $7, now())`,
-          [branchId, toLocationId, item.productId, item.qty, transferId, `وارد من ${fromLoc.name}`, createdBy]
+          [branchId, toLocationId, item.productId, item.qty, transferId, `وارد من المركزي`, createdBy]
         );
       }
 
@@ -1613,29 +1613,47 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getLocationTransfersList(branchId?: number) {
-    const conditions: any[] = [];
-    if (branchId) conditions.push(eq(locationTransfers.branchId, branchId));
-    const cond = conditions.length > 0 ? and(...conditions) : undefined;
-
+  async getCentralInventory() {
+    const [centralLoc] = await db.select().from(locations).where(eq(locations.isCentral, true)).orderBy(locations.id).limit(1);
+    if (!centralLoc) return [];
     return db.select({
-      id: locationTransfers.id,
-      branchId: locationTransfers.branchId,
-      branchName: branches.name,
-      fromLocationId: locationTransfers.fromLocationId,
-      fromLocationName: sql<string>`fl.name`.as("fromLocationName"),
-      toLocationId: locationTransfers.toLocationId,
-      toLocationName: sql<string>`tl.name`.as("toLocationName"),
-      note: locationTransfers.note,
-      createdBy: locationTransfers.createdBy,
-      createdAt: locationTransfers.createdAt,
-    }).from(locationTransfers)
-      .innerJoin(branches, eq(locationTransfers.branchId, branches.id))
-      .innerJoin(sql`locations fl`, sql`fl.id = ${locationTransfers.fromLocationId}`)
-      .innerJoin(sql`locations tl`, sql`tl.id = ${locationTransfers.toLocationId}`)
-      .where(cond)
-      .orderBy(desc(locationTransfers.createdAt))
-      .limit(200);
+      id: locationInventory.id,
+      locationId: locationInventory.locationId,
+      productId: locationInventory.productId,
+      productName: products.name,
+      qtyOnHand: locationInventory.qtyOnHand,
+    }).from(locationInventory)
+      .innerJoin(products, eq(locationInventory.productId, products.id))
+      .where(eq(locationInventory.locationId, centralLoc.id))
+      .orderBy(products.name);
+  }
+
+  async getLocationTransfersList(branchId?: number) {
+    let query = `
+      SELECT lt.id, lt.branch_id as "branchId", b.name as "branchName",
+             lt.from_location_id as "fromLocationId", fl.name as "fromLocationName",
+             lt.to_location_id as "toLocationId", tl.name as "toLocationName",
+             lt.note, lt.created_by as "createdBy", lt.created_at as "createdAt",
+             (SELECT json_agg(json_build_object(
+                'productId', lti.product_id,
+                'productName', p.name,
+                'qty', lti.qty
+             )) FROM location_transfer_items lti
+             JOIN products p ON p.id = lti.product_id
+             WHERE lti.transfer_id = lt.id) as items
+      FROM location_transfers lt
+      JOIN branches b ON b.id = lt.branch_id
+      JOIN locations fl ON fl.id = lt.from_location_id
+      JOIN locations tl ON tl.id = lt.to_location_id
+    `;
+    const params: any[] = [];
+    if (branchId) {
+      query += ` WHERE lt.branch_id = $1`;
+      params.push(branchId);
+    }
+    query += ` ORDER BY lt.created_at DESC LIMIT 200`;
+    const result = await pool.query(query, params);
+    return result.rows;
   }
 }
 

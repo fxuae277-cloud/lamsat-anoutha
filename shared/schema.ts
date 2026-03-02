@@ -322,11 +322,14 @@ export type PurchaseItem = typeof purchaseItems.$inferSelect;
 
 export const locations = pgTable("locations", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  branchId: integer("branch_id").references(() => branches.id).notNull(),
+  branchId: integer("branch_id").references(() => branches.id),
   code: text("code").notNull(),
   name: text("name").notNull(),
   type: text("type").notNull().default("MAIN_WAREHOUSE"),
   isMain: boolean("is_main").notNull().default(false),
+  kind: text("kind").default("BRANCH_STORE"),
+  isCentral: boolean("is_central").notNull().default(false),
+  isBranchDefault: boolean("is_branch_default").notNull().default(false),
   active: boolean("active").notNull().default(true),
 });
 export const insertLocationSchema = createInsertSchema(locations).omit({ id: true });

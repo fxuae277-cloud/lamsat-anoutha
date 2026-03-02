@@ -1,0 +1,56 @@
+نريد: الشراء يكون "للشركة" بدون فرع + مخزن مركزي واحد.
+
+DB:
+1) اجعل purchase_invoices.branch_id قابل لـ NULL:
+   ALTER TABLE purchase_invoices ALTER COLUMN branch_id DROP NOT NULL;
+
+2) (مستحسن) اجعل inventory_transactions.branch_id قابل لـ NULL:
+   ALTER TABLE inventory_transactions ALTER COLUMN branch_id DROP NOT NULL;
+
+3) في locations أضف أعمدة (إذا غير موجودة):
+   kind TEXT,
+   is_central BOOLEAN DEFAULT false,
+   is_branch_default BOOLEAN DEFAULT false
+
+4) أنشئ/تأكد من وجود المخزن المركزي:
+   INSERT INTO locations (name, branch_id, kind, is_central)
+   VALUES ('المخزن المركزي', NULL, 'CENTRAL', true)
+   (إذا branch_id لا يقبل NULL استخدم 0)
+
+5) أنشئ مخزن افتراضي لكل فرع:
+   INSERT INTO locations (name, branch_id, kind, is_branch_default)
+   SELECT 'مخزن الفرع', id, 'BRANCH_STORE', true FROM branches;
+
+Purchases Approval:
+6) عدّل POST /api/purchase-invoices/:id/approve:
+   - تحقق الفاتورة pending وبها items.
+   - وزع total_extra_cost على purchase_items وحدّث allocated_extra_cost و unit_cost_final.
+   - اجلب central_location_id:
+     SELECT id FROM locations WHERE is_central=true ORDER BY id LIMIT 1;
+     إذا غير موجود -> 400.
+   - أدخل المخزون في location_inventory على central_location_id (UPSERT).
+   - سجّل inventory_transactions:
+     branch_id = NULL
+     from_location_id = NULL
+     to_location_id = central_location_id
+     type='PURCHASE'
+     ref_table='purchase_invoices', ref_id=invoice.id
+   - حدّث status إلى approved في النهاية.
+   - Transaction واحدة.
+
+Transfers (توزيع للفروع):
+7) أنشئ Endpoint: POST /api/inventory-transfers
+   body: {branch_id, items:[{product_id, qty}]}
+   - from_location_id = central_location_id
+   - to_location_id = مخزن الفرع الافتراضي:
+     SELECT id FROM locations WHERE branch_id=:branch_id AND is_branch_default=true ORDER BY id LIMIT 1;
+   - تحقق توفر الكمية في المركزي.
+   - Transaction:
+     خصم من المركزي + إضافة للفرع (UPSERT location_inventory)
+     وسجّل inventory_transactions بسطرين لكل صنف:
+     TRANSFER_OUT (branch_id=:branch_id, from_location_id=central, to_location_id=NULL)
+     TRANSFER_IN  (branch_id=:branch_id, from_location_id=NULL, to_location_id=branch_store)
+
+Frontend:
+8) في إنشاء فاتورة الشراء احذف اختيار الفرع (Company Purchase).
+9) أضف صفحة "تحويل من المركزي للفرع" لاختيار الفرع + أصناف + كميات + تنفيذ.
