@@ -1,0 +1,167 @@
+ابنِ Executive Dashboard API + صفحة UI.
+
+A) API Endpoint:
+GET /api/dashboard/executive?branch_id=optional
+
+- إذا branch_id موجود: فلتر على هذا الفرع.
+- إذا غير موجود: اجلب إجمالي الشركة.
+
+يرجع JSON بالشكل:
+
+{
+  "today": {
+    "revenue": number,
+    "cogs": number,
+    "profit": number,
+    "margin_percent": number,
+    "avg_invoice": number
+  },
+  "todayVsYesterday": {
+    "today_sales": number,
+    "yesterday_sales": number,
+    "change_percent": number|null
+  },
+  "month": {
+    "revenue": number,
+    "profit": number
+  },
+  "paymentSplit": [
+    { "payment_method": "cash|card|bank_transfer|...", "amount": number }
+  ],
+  "topProducts": [
+    { "product_id": number, "name": string, "qty_sold": number, "revenue": number, "cogs": number, "profit": number }
+  ],
+  "cashiers": [
+    { "cashier_id": number, "cashier_name": string, "invoices_count": number, "revenue": number, "cogs": number, "profit": number }
+  ],
+  "lowStock": [
+    { "product_id": number, "name": string, "total_qty": number, "reorder_level": number }
+  ],
+  "inventoryValue": {
+    "value": number
+  }
+}
+
+B) SQL Queries (Postgres):
+
+1) Today KPIs:
+SELECT
+  COALESCE(SUM(total),0) AS revenue,
+  COALESCE(SUM(cogs_total),0) AS cogs,
+  COALESCE(SUM(total - cogs_total),0) AS profit,
+  ROUND(CASE WHEN COALESCE(SUM(total),0)=0 THEN 0
+       ELSE (COALESCE(SUM(total - cogs_total),0)/SUM(total))*100 END, 2) AS margin_percent
+FROM sales
+WHERE DATE(created_at)=CURRENT_DATE
+AND (:branch_id::int IS NULL OR branch_id=:branch_id);
+
+2) Avg invoice today:
+SELECT ROUND(COALESCE(AVG(total),0),2) AS avg_invoice
+FROM sales
+WHERE DATE(created_at)=CURRENT_DATE
+AND (:branch_id::int IS NULL OR branch_id=:branch_id);
+
+3) Today vs Yesterday:
+SELECT
+  COALESCE(SUM(CASE WHEN DATE(created_at)=CURRENT_DATE THEN total ELSE 0 END),0) AS today_sales,
+  COALESCE(SUM(CASE WHEN DATE(created_at)=CURRENT_DATE-1 THEN total ELSE 0 END),0) AS yesterday_sales
+FROM sales
+WHERE (:branch_id::int IS NULL OR branch_id=:branch_id);
+
+في السيرفر احسب change_percent:
+if yesterday_sales == 0 => null else ((today-yesterday)/yesterday)*100
+
+4) Month summary:
+SELECT
+  COALESCE(SUM(total),0) AS revenue,
+  COALESCE(SUM(total - cogs_total),0) AS profit
+FROM sales
+WHERE DATE_TRUNC('month', created_at)=DATE_TRUNC('month', CURRENT_DATE)
+AND (:branch_id::int IS NULL OR branch_id=:branch_id);
+
+5) Payment split:
+SELECT payment_method, COALESCE(SUM(total),0) AS amount
+FROM sales
+WHERE DATE(created_at)=CURRENT_DATE
+AND (:branch_id::int IS NULL OR branch_id=:branch_id)
+GROUP BY payment_method
+ORDER BY amount DESC;
+
+6) Top products (Top 5):
+SELECT
+  si.product_id,
+  p.name,
+  COALESCE(SUM(si.quantity),0) AS qty_sold,
+  COALESCE(SUM(si.total),0) AS revenue,
+  COALESCE(SUM(si.line_cogs),0) AS cogs,
+  COALESCE(SUM(si.total - si.line_cogs),0) AS profit
+FROM sale_items si
+JOIN sales s ON s.id=si.sale_id
+JOIN products p ON p.id=si.product_id
+WHERE DATE(s.created_at)=CURRENT_DATE
+AND (:branch_id::int IS NULL OR s.branch_id=:branch_id)
+GROUP BY si.product_id, p.name
+ORDER BY revenue DESC
+LIMIT 5;
+
+7) Cashier performance:
+SELECT
+  s.cashier_id,
+  u.name AS cashier_name,
+  COUNT(DISTINCT s.id) AS invoices_count,
+  COALESCE(SUM(s.total),0) AS revenue,
+  COALESCE(SUM(s.cogs_total),0) AS cogs,
+  COALESCE(SUM(s.total - s.cogs_total),0) AS profit
+FROM sales s
+LEFT JOIN users u ON u.id=s.cashier_id
+WHERE DATE(s.created_at)=CURRENT_DATE
+AND (:branch_id::int IS NULL OR s.branch_id=:branch_id)
+GROUP BY s.cashier_id, u.name
+ORDER BY revenue DESC;
+
+8) Low stock (على مستوى الفرع إذا branch_id محدد، أو إجمالي الشركة إذا NULL):
+SELECT
+  li.product_id,
+  p.name,
+  SUM(li.qty_on_hand) AS total_qty,
+  MAX(li.reorder_level) AS reorder_level
+FROM location_inventory li
+JOIN products p ON p.id=li.product_id
+JOIN locations l ON l.id=li.location_id
+WHERE (:branch_id::int IS NULL OR l.branch_id=:branch_id)
+GROUP BY li.product_id, p.name
+HAVING SUM(li.qty_on_hand) <= MAX(li.reorder_level)
+ORDER BY total_qty ASC
+LIMIT 50;
+
+9) Inventory value (بدون products.cost):
+احسب قيمة المخزون عبر آخر تكلفة شراء معتمدة لكل منتج:
+
+WITH last_cost AS (
+  SELECT DISTINCT ON (pi.product_id)
+    pi.product_id,
+    pi.unit_cost_final AS unit_cost
+  FROM purchase_items pi
+  JOIN purchase_invoices pv ON pv.id=pi.purchase_id
+  WHERE pv.status='approved'
+  ORDER BY pi.product_id, pv.invoice_date DESC, pv.id DESC, pi.id DESC
+),
+qty AS (
+  SELECT li.product_id, SUM(li.qty_on_hand) AS qty_on_hand
+  FROM location_inventory li
+  JOIN locations l ON l.id=li.location_id
+  WHERE (:branch_id::int IS NULL OR l.branch_id=:branch_id)
+  GROUP BY li.product_id
+)
+SELECT COALESCE(SUM(qty.qty_on_hand * COALESCE(last_cost.unit_cost,0)),0) AS value
+FROM qty
+LEFT JOIN last_cost ON last_cost.product_id=qty.product_id;
+
+C) UI Page:
+- أضف صفحة /dashboard (أو /executive)
+- Cards أعلى الصفحة: Revenue Today, Profit Today, Margin %, Avg Invoice, Inventory Value, Low Stock Count
+- جداول: Top Products, Cashiers, Low Stock, Payment Split
+- دعم اختيار فرع (dropdown) يمرر branch_id للـ API
+
+D) Authorization:
+- اجعل الصفحة و الـ API للـ Admin/Owner فقط.

@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { 
-  LayoutDashboard, 
+  LayoutDashboard,
+  Gauge,
   Calculator, 
   Tags, 
   Package, 
@@ -19,6 +20,7 @@ import { useAuth } from "@/lib/auth";
 
 const NAV_ITEMS = [
   { href: "/", label: "لوحة التحكم", icon: LayoutDashboard },
+  { href: "/executive", label: "لوحة الإدارة التنفيذية", icon: Gauge, adminOnly: true },
   { href: "/pos", label: "نقطة البيع (POS)", icon: Calculator },
   { href: "/products", label: "المنتجات والأسعار", icon: Tags },
   { href: "/inventory", label: "المخزون", icon: Package },
@@ -62,6 +64,7 @@ export function Sidebar() {
       
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
         {NAV_ITEMS.filter((item: any) => {
+          if (item.adminOnly && user?.role !== "owner" && user?.role !== "admin") return false;
           if (item.managerOnly && (user?.role === "cashier" || user?.role === "employee")) return false;
           return true;
         }).map((item) => {
