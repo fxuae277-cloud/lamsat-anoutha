@@ -25,6 +25,7 @@ import HR from "@/pages/HR";
 import Returns from "@/pages/Returns";
 import AuditLog from "@/pages/AuditLog";
 import Operations from "@/pages/Operations";
+import StockControl from "@/pages/StockControl";
 
 function AuthenticatedRouter() {
   const { user, isLoading } = useAuth();
@@ -68,6 +69,7 @@ function AuthenticatedRouter() {
         <Route path="/returns" component={Returns}/>
         <Route path="/reports" component={Reports}/>
         <Route path="/finance" component={Finance}/>
+        <Route path="/stock-control" component={StockControl}/>
         <Route path="/operations" component={Operations}/>
         <Route path="/audit-log" component={AuditLog}/>
         <Route component={NotFound} />

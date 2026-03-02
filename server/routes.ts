@@ -1705,6 +1705,121 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/stocktakes", requireAuth, requireManager, async (req, res) => {
+    try {
+      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      const list = await storage.getStocktakes(branchId);
+      res.json(list);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.post("/api/stocktakes", requireAuth, requireManager, async (req, res) => {
+    try {
+      const { branchId, locationId, note } = req.body;
+      if (!branchId || !locationId) return res.status(400).json({ message: "الفرع والموقع مطلوبان" });
+      const st = await storage.createStocktake({
+        branchId: Number(branchId),
+        locationId: Number(locationId),
+        status: "draft",
+        note: note || null,
+        createdBy: req.session.userId!,
+      });
+      res.status(201).json(st);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/stocktakes/:id/items", requireAuth, requireManager, async (req, res) => {
+    try {
+      const items = await storage.getStocktakeItems(Number(req.params.id));
+      res.json(items);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.patch("/api/stocktake-items/:id", requireAuth, requireManager, async (req, res) => {
+    try {
+      const { countedQty, note } = req.body;
+      if (countedQty === undefined || countedQty === null) return res.status(400).json({ message: "الكمية المعدودة مطلوبة" });
+      const updated = await storage.updateStocktakeItem(Number(req.params.id), Number(countedQty), note);
+      if (!updated) return res.status(404).json({ message: "العنصر غير موجود" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.post("/api/stocktakes/:id/approve", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const updated = await storage.approveStocktake(Number(req.params.id), req.session.userId!);
+      if (!updated) return res.status(400).json({ message: "لا يمكن اعتماد هذا الجرد" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/inventory-adjustments", requireAuth, requireManager, async (req, res) => {
+    try {
+      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      const locationId = req.query.locationId ? Number(req.query.locationId) : undefined;
+      const list = await storage.getInventoryAdjustments(branchId, locationId);
+      res.json(list);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.post("/api/inventory-adjustments", requireAuth, requireManager, async (req, res) => {
+    try {
+      const { branchId, locationId, productId, qtyChange, reason } = req.body;
+      if (!branchId || !locationId || !productId || qtyChange === undefined || !reason) {
+        return res.status(400).json({ message: "جميع الحقول مطلوبة" });
+      }
+      const invRow = await pool.query(
+        `SELECT qty_on_hand FROM location_inventory WHERE location_id = $1 AND product_id = $2`,
+        [locationId, productId]
+      );
+      const qtyBefore = invRow.rows[0]?.qty_on_hand || 0;
+      const qtyAfter = qtyBefore + Number(qtyChange);
+      if (qtyAfter < 0) return res.status(400).json({ message: "الكمية الناتجة لا يمكن أن تكون سالبة" });
+
+      await pool.query(
+        `INSERT INTO location_inventory (location_id, product_id, qty_on_hand)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (location_id, product_id) DO UPDATE SET qty_on_hand = $3, updated_at = now()`,
+        [locationId, productId, qtyAfter]
+      );
+
+      const adj = await storage.createInventoryAdjustment({
+        branchId: Number(branchId),
+        locationId: Number(locationId),
+        productId: Number(productId),
+        type: Number(qtyChange) > 0 ? "increase" : "decrease",
+        qtyBefore,
+        qtyChange: Number(qtyChange),
+        qtyAfter,
+        reason,
+        createdBy: req.session.userId!,
+      });
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+      await pool.query(
+        `INSERT INTO inventory_transactions (date, branch_id, ${Number(qtyChange) > 0 ? 'to_location_id' : 'from_location_id'}, product_id, type, qty, note, created_by)
+         VALUES ($1, $2, $3, $4, 'manual_adjustment', $5, $6, $7)`,
+        [todayStr, branchId, locationId, productId, Math.abs(Number(qtyChange)), reason, req.session.userId]
+      );
+
+      res.status(201).json(adj);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
   app.get("/api/payroll-runs", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const runs = await storage.getPayrollRuns();

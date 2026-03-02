@@ -515,3 +515,53 @@ export const employeeDeductions = pgTable("employee_deductions", {
 export const insertEmployeeDeductionSchema = createInsertSchema(employeeDeductions).omit({ id: true, createdAt: true });
 export type InsertEmployeeDeduction = z.infer<typeof insertEmployeeDeductionSchema>;
 export type EmployeeDeduction = typeof employeeDeductions.$inferSelect;
+
+export const stocktakes = pgTable("stocktakes", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  branchId: integer("branch_id").references(() => branches.id).notNull(),
+  locationId: integer("location_id").references(() => locations.id).notNull(),
+  status: text("status").notNull().default("draft"),
+  note: text("note"),
+  totalItems: integer("total_items").default(0),
+  matchedItems: integer("matched_items").default(0),
+  surplusItems: integer("surplus_items").default(0),
+  shortageItems: integer("shortage_items").default(0),
+  createdBy: integer("created_by").references(() => users.id),
+  approvedBy: integer("approved_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+export const insertStocktakeSchema = createInsertSchema(stocktakes).omit({ id: true, createdAt: true, completedAt: true });
+export type InsertStocktake = z.infer<typeof insertStocktakeSchema>;
+export type Stocktake = typeof stocktakes.$inferSelect;
+
+export const stocktakeItems = pgTable("stocktake_items", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  stocktakeId: integer("stocktake_id").references(() => stocktakes.id).notNull(),
+  productId: integer("product_id").references(() => products.id).notNull(),
+  systemQty: integer("system_qty").notNull().default(0),
+  countedQty: integer("counted_qty"),
+  difference: integer("difference").default(0),
+  note: text("note"),
+});
+export const insertStocktakeItemSchema = createInsertSchema(stocktakeItems).omit({ id: true });
+export type InsertStocktakeItem = z.infer<typeof insertStocktakeItemSchema>;
+export type StocktakeItem = typeof stocktakeItems.$inferSelect;
+
+export const inventoryAdjustments = pgTable("inventory_adjustments", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  branchId: integer("branch_id").references(() => branches.id).notNull(),
+  locationId: integer("location_id").references(() => locations.id).notNull(),
+  productId: integer("product_id").references(() => products.id).notNull(),
+  type: text("type").notNull(),
+  qtyBefore: integer("qty_before").notNull(),
+  qtyChange: integer("qty_change").notNull(),
+  qtyAfter: integer("qty_after").notNull(),
+  reason: text("reason").notNull(),
+  stocktakeId: integer("stocktake_id").references(() => stocktakes.id),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertInventoryAdjustmentSchema = createInsertSchema(inventoryAdjustments).omit({ id: true, createdAt: true });
+export type InsertInventoryAdjustment = z.infer<typeof insertInventoryAdjustmentSchema>;
+export type InventoryAdjustment = typeof inventoryAdjustments.$inferSelect;

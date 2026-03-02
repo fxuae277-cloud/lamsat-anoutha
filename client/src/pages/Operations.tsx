@@ -44,8 +44,8 @@ function formatDateTime(dt: string | null) {
 export default function Operations() {
   const [from, setFrom] = useState(weekAgoStr());
   const [to, setTo] = useState(todayStr());
-  const [branchId, setBranchId] = useState("");
-  const [opType, setOpType] = useState("");
+  const [branchId, setBranchId] = useState("__all__");
+  const [opType, setOpType] = useState("__all__");
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
 
@@ -57,8 +57,8 @@ export default function Operations() {
   const queryParams = new URLSearchParams();
   if (from) queryParams.set("from", from);
   if (to) queryParams.set("to", to);
-  if (branchId) queryParams.set("branchId", branchId);
-  if (opType) queryParams.set("type", opType);
+  if (branchId && branchId !== "__all__") queryParams.set("branchId", branchId);
+  if (opType && opType !== "__all__") queryParams.set("type", opType);
   if (search) queryParams.set("search", search);
 
   const url = `/api/recent-operations?${queryParams.toString()}`;
@@ -88,7 +88,7 @@ export default function Operations() {
             <Card
               key={key}
               className={`cursor-pointer transition-all hover:shadow-md ${opType === key ? "ring-2 ring-primary" : ""}`}
-              onClick={() => setOpType(opType === key ? "" : key)}
+              onClick={() => setOpType(opType === key ? "__all__" : key)}
               data-testid={`card-type-${key}`}
             >
               <CardContent className="p-3 text-center">
@@ -119,7 +119,7 @@ export default function Operations() {
           <Select value={branchId} onValueChange={setBranchId}>
             <SelectTrigger className="w-52" data-testid="select-ops-branch"><SelectValue placeholder="كل الفروع" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">كل الفروع</SelectItem>
+              <SelectItem value="__all__">كل الفروع</SelectItem>
               {branchesList.map(b => (
                 <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
               ))}
@@ -133,7 +133,7 @@ export default function Operations() {
           <Select value={opType} onValueChange={setOpType}>
             <SelectTrigger className="w-44" data-testid="select-ops-type"><SelectValue placeholder="كل العمليات" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">كل العمليات</SelectItem>
+              <SelectItem value="__all__">كل العمليات</SelectItem>
               {Object.entries(OP_TYPE_LABELS).map(([k, v]) => (
                 <SelectItem key={k} value={k}>{v.label}</SelectItem>
               ))}

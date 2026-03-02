@@ -840,9 +840,9 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayStr());
   const [note, setNote] = useState("");
-  const [filterEmp, setFilterEmp] = useState("");
+  const [filterEmp, setFilterEmp] = useState("__all__");
 
-  const url = filterEmp ? `/api/employee-advances?employeeId=${filterEmp}` : "/api/employee-advances";
+  const url = filterEmp && filterEmp !== "__all__" ? `/api/employee-advances?employeeId=${filterEmp}` : "/api/employee-advances";
   const { data: advances = [] } = useQuery<any[]>({
     queryKey: [url],
     queryFn: getQueryFn({ on401: "throw" }),
@@ -879,7 +879,7 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
           <Select value={filterEmp} onValueChange={setFilterEmp}>
             <SelectTrigger className="w-48" data-testid="select-filter-advance-emp"><SelectValue placeholder="كل الموظفين" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">كل الموظفين</SelectItem>
+              <SelectItem value="__all__">كل الموظفين</SelectItem>
               {usersList.filter(u => u.role !== "owner").map(u => (
                 <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
               ))}
@@ -979,9 +979,9 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const [date, setDate] = useState(todayStr());
-  const [filterEmp, setFilterEmp] = useState("");
+  const [filterEmp, setFilterEmp] = useState("__all__");
 
-  const url = filterEmp ? `/api/employee-deductions?employeeId=${filterEmp}` : "/api/employee-deductions";
+  const url = filterEmp && filterEmp !== "__all__" ? `/api/employee-deductions?employeeId=${filterEmp}` : "/api/employee-deductions";
   const { data: deductions = [] } = useQuery<any[]>({
     queryKey: [url],
     queryFn: getQueryFn({ on401: "throw" }),
@@ -1013,7 +1013,7 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
           <Select value={filterEmp} onValueChange={setFilterEmp}>
             <SelectTrigger className="w-48" data-testid="select-filter-deduction-emp"><SelectValue placeholder="كل الموظفين" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">كل الموظفين</SelectItem>
+              <SelectItem value="__all__">كل الموظفين</SelectItem>
               {usersList.filter(u => u.role !== "owner").map(u => (
                 <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
               ))}
@@ -1107,12 +1107,12 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
 }
 
 function PerformanceTab({ usersList, branchMap, branchesList }: any) {
-  const [selectedBranch, setSelectedBranch] = useState("");
+  const [selectedBranch, setSelectedBranch] = useState("__all__");
   const [from, setFrom] = useState(monthAgoStr());
   const [to, setTo] = useState(todayStr());
 
   const { data: empReport = [] } = useQuery<any[]>({
-    queryKey: [`/api/reports/profit/employees?from=${from}&to=${to}${selectedBranch ? `&branchId=${selectedBranch}` : ""}`],
+    queryKey: [`/api/reports/profit/employees?from=${from}&to=${to}${selectedBranch && selectedBranch !== "__all__" ? `&branchId=${selectedBranch}` : ""}`],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
@@ -1132,7 +1132,7 @@ function PerformanceTab({ usersList, branchMap, branchesList }: any) {
           <Select value={selectedBranch} onValueChange={setSelectedBranch}>
             <SelectTrigger className="w-48"><SelectValue placeholder="كل الفروع" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">كل الفروع</SelectItem>
+              <SelectItem value="__all__">كل الفروع</SelectItem>
               {branchesList.map((b: any) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
             </SelectContent>
           </Select>

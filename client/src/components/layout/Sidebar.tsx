@@ -18,7 +18,8 @@ import {
   Banknote,
   RotateCcw,
   Shield,
-  Activity
+  Activity,
+  ClipboardCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
@@ -36,6 +37,7 @@ const NAV_ITEMS = [
   { href: "/suppliers", label: "الموردون والمشتريات", icon: Truck, managerOnly: true },
   { href: "/expenses", label: "المصروفات", icon: Receipt },
   { href: "/returns", label: "المرتجعات", icon: RotateCcw },
+  { href: "/stock-control", label: "الجرد والتسويات", icon: ClipboardCheck, managerOnly: true },
   { href: "/finance", label: "المحاسبة اليومية", icon: Banknote },
   { href: "/hr", label: "الرواتب والموظفين", icon: UserCircle },
   { href: "/reports", label: "التقارير المالية", icon: PieChart },

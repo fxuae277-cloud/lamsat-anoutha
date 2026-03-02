@@ -34,6 +34,9 @@ import {
   payrollDetails, type InsertPayrollDetail, type PayrollDetail,
   employeeAdvances, type InsertEmployeeAdvance, type EmployeeAdvance,
   employeeDeductions, type InsertEmployeeDeduction, type EmployeeDeduction,
+  stocktakes, type InsertStocktake, type Stocktake,
+  stocktakeItems, type InsertStocktakeItem, type StocktakeItem,
+  inventoryAdjustments, type InsertInventoryAdjustment, type InventoryAdjustment,
   type PaymentMethod, PAYMENT_METHODS,
 } from "@shared/schema";
 
@@ -146,6 +149,14 @@ export interface IStorage {
   getUnappliedDeductions(employeeId: number): Promise<EmployeeDeduction[]>;
   generatePayrollRun(payrollId: number, month: string, year: number): Promise<void>;
   approvePayrollRun(id: number, userId: number): Promise<PayrollRun | undefined>;
+  getStocktakes(branchId?: number): Promise<any[]>;
+  getStocktake(id: number): Promise<Stocktake | undefined>;
+  createStocktake(data: InsertStocktake): Promise<Stocktake>;
+  getStocktakeItems(stocktakeId: number): Promise<any[]>;
+  updateStocktakeItem(id: number, countedQty: number, note?: string): Promise<StocktakeItem | undefined>;
+  approveStocktake(id: number, userId: number): Promise<Stocktake | undefined>;
+  createInventoryAdjustment(data: InsertInventoryAdjustment): Promise<InventoryAdjustment>;
+  getInventoryAdjustments(branchId?: number, locationId?: number): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2548,6 +2559,187 @@ export class DatabaseStorage implements IStorage {
       .where(eq(payrollRuns.id, id))
       .returning();
     return updated;
+  }
+
+  async getStocktakes(branchId?: number) {
+    let query = `
+      SELECT st.*, b.name as branch_name, l.name as location_name,
+             u1.name as creator_name, u2.name as approver_name
+      FROM stocktakes st
+      LEFT JOIN branches b ON b.id = st.branch_id
+      LEFT JOIN locations l ON l.id = st.location_id
+      LEFT JOIN users u1 ON u1.id = st.created_by
+      LEFT JOIN users u2 ON u2.id = st.approved_by
+    `;
+    const params: any[] = [];
+    if (branchId) {
+      query += ` WHERE st.branch_id = $1`;
+      params.push(branchId);
+    }
+    query += ` ORDER BY st.created_at DESC`;
+    const result = await pool.query(query, params);
+    return result.rows;
+  }
+
+  async getStocktake(id: number) {
+    const [row] = await db.select().from(stocktakes).where(eq(stocktakes.id, id));
+    return row;
+  }
+
+  async createStocktake(data: InsertStocktake) {
+    const [st] = await db.insert(stocktakes).values(data).returning();
+
+    const invRows = await pool.query(
+      `SELECT li.product_id, li.qty_on_hand, p.name as product_name, p.barcode
+       FROM location_inventory li
+       JOIN products p ON p.id = li.product_id
+       WHERE li.location_id = $1
+       ORDER BY p.name`,
+      [data.locationId]
+    );
+
+    for (const row of invRows.rows) {
+      await db.insert(stocktakeItems).values({
+        stocktakeId: st.id,
+        productId: row.product_id,
+        systemQty: row.qty_on_hand,
+        countedQty: null,
+        difference: 0,
+      });
+    }
+
+    await db.update(stocktakes)
+      .set({ totalItems: invRows.rows.length })
+      .where(eq(stocktakes.id, st.id));
+
+    return { ...st, totalItems: invRows.rows.length };
+  }
+
+  async getStocktakeItems(stocktakeId: number) {
+    const result = await pool.query(
+      `SELECT si.*, p.name as product_name, p.barcode
+       FROM stocktake_items si
+       JOIN products p ON p.id = si.product_id
+       WHERE si.stocktake_id = $1
+       ORDER BY p.name`,
+      [stocktakeId]
+    );
+    return result.rows;
+  }
+
+  async updateStocktakeItem(id: number, countedQty: number, note?: string) {
+    const item = await pool.query(`SELECT * FROM stocktake_items WHERE id = $1`, [id]);
+    if (!item.rows[0]) return undefined;
+    const systemQty = item.rows[0].system_qty;
+    const difference = countedQty - systemQty;
+
+    const [updated] = await db.update(stocktakeItems)
+      .set({ countedQty, difference, note: note || null })
+      .where(eq(stocktakeItems.id, id))
+      .returning();
+
+    const stId = item.rows[0].stocktake_id;
+    const allItems = await pool.query(
+      `SELECT * FROM stocktake_items WHERE stocktake_id = $1`, [stId]
+    );
+    let matched = 0, surplus = 0, shortage = 0;
+    for (const it of allItems.rows) {
+      if (it.counted_qty === null) continue;
+      const diff = it.counted_qty - it.system_qty;
+      if (diff === 0) matched++;
+      else if (diff > 0) surplus++;
+      else shortage++;
+    }
+    await db.update(stocktakes)
+      .set({ matchedItems: matched, surplusItems: surplus, shortageItems: shortage })
+      .where(eq(stocktakes.id, stId));
+
+    return updated;
+  }
+
+  async approveStocktake(id: number, userId: number) {
+    const st = await this.getStocktake(id);
+    if (!st || st.status !== "draft") return undefined;
+
+    const items = await this.getStocktakeItems(id);
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    for (const item of items) {
+      if (item.counted_qty === null) continue;
+      const diff = item.counted_qty - item.system_qty;
+      if (diff === 0) continue;
+
+      await pool.query(
+        `UPDATE location_inventory SET qty_on_hand = $1, updated_at = now()
+         WHERE location_id = $2 AND product_id = $3`,
+        [item.counted_qty, st.locationId, item.product_id]
+      );
+
+      await this.createInventoryAdjustment({
+        branchId: st.branchId,
+        locationId: st.locationId,
+        productId: item.product_id,
+        type: diff > 0 ? "surplus" : "shortage",
+        qtyBefore: item.system_qty,
+        qtyChange: diff,
+        qtyAfter: item.counted_qty,
+        reason: `جرد #${id}` + (item.note ? ` - ${item.note}` : ""),
+        stocktakeId: id,
+        createdBy: userId,
+      });
+
+      await db.insert(inventoryTransactions).values({
+        date: todayStr,
+        branchId: st.branchId,
+        toLocationId: diff > 0 ? st.locationId : null,
+        fromLocationId: diff < 0 ? st.locationId : null,
+        productId: item.product_id,
+        type: "stocktake_adjustment",
+        qty: Math.abs(diff),
+        refTable: "stocktakes",
+        refId: id,
+        note: `تسوية جرد: ${diff > 0 ? "+" : ""}${diff}`,
+        createdBy: userId,
+      });
+    }
+
+    const [updated] = await db.update(stocktakes)
+      .set({ status: "completed", approvedBy: userId, completedAt: new Date() })
+      .where(eq(stocktakes.id, id))
+      .returning();
+    return updated;
+  }
+
+  async createInventoryAdjustment(data: InsertInventoryAdjustment) {
+    const [row] = await db.insert(inventoryAdjustments).values(data).returning();
+    return row;
+  }
+
+  async getInventoryAdjustments(branchId?: number, locationId?: number) {
+    let query = `
+      SELECT ia.*, p.name as product_name, p.barcode,
+             b.name as branch_name, l.name as location_name,
+             u.name as creator_name
+      FROM inventory_adjustments ia
+      JOIN products p ON p.id = ia.product_id
+      LEFT JOIN branches b ON b.id = ia.branch_id
+      LEFT JOIN locations l ON l.id = ia.location_id
+      LEFT JOIN users u ON u.id = ia.created_by
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    let idx = 1;
+    if (branchId) {
+      query += ` AND ia.branch_id = $${idx++}`;
+      params.push(branchId);
+    }
+    if (locationId) {
+      query += ` AND ia.location_id = $${idx++}`;
+      params.push(locationId);
+    }
+    query += ` ORDER BY ia.created_at DESC LIMIT 500`;
+    const result = await pool.query(query, params);
+    return result.rows;
   }
 }
 
