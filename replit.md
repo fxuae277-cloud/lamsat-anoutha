@@ -123,6 +123,7 @@ shared/
 10. **Reports**: Shift report + Daily report (with COGS/Profit analysis) + Branch comparison report + CSV export
 11. **Purchases**: Full purchase invoice system with Average Cost calculation, extra cost allocation, posting workflow
 12. **COGS/Profit**: Automatic cost tracking on sales and order payments with profit analysis
+13. **Export**: Daily report Excel/PDF export, multi-branch profit Excel export (date range)
 
 ## API Routes
 All prefixed with `/api/`:
@@ -139,6 +140,7 @@ All prefixed with `/api/`:
 - GET/POST/PATCH `/users`, `/users/:id/reset-password` (requireOwnerOrAdmin)
 - GET/POST `/purchases`, GET `/purchases/:id`, PATCH `/purchases/:id`, POST `/purchases/:id/items`, DELETE `/purchases/:purchaseId/items/:itemId`, POST `/purchases/:id/post` (requireAuth)
 - GET/POST/PATCH `/suppliers`
+- GET `/exports/daily.xlsx?date=...&branchId=...`, GET `/exports/daily.pdf?date=...&branchId=...`, GET `/exports/profit_all_branches.xlsx?from=...&to=...` (requireAuth)
 - GET `/dashboard`
 
 ## Design

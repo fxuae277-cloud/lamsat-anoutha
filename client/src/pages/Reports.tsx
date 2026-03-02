@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, Clock, Download, Banknote, CreditCard, Building2, TrendingUp, TrendingDown, DollarSign, ArrowLeftRight, BarChart3, Package } from "lucide-react";
+import { Calendar, Clock, Download, Banknote, CreditCard, Building2, TrendingUp, TrendingDown, DollarSign, ArrowLeftRight, BarChart3, Package, FileSpreadsheet, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -274,10 +274,22 @@ function DailyReport() {
           </Select>
         </div>
         {report && (
-          <Button variant="outline" className="gap-2" onClick={exportCSV} data-testid="button-export-csv">
-            <Download className="w-4 h-4" />
-            تصدير CSV
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" className="gap-2" onClick={exportCSV} data-testid="button-export-csv">
+              <Download className="w-4 h-4" />
+              CSV
+            </Button>
+            <Button variant="outline" className="gap-2" data-testid="button-export-xlsx"
+              onClick={() => window.open(`/api/exports/daily.xlsx?date=${selectedDate}${branchParam}`, "_blank")}>
+              <FileSpreadsheet className="w-4 h-4" />
+              Excel
+            </Button>
+            <Button variant="outline" className="gap-2" data-testid="button-export-pdf"
+              onClick={() => window.open(`/api/exports/daily.pdf?date=${selectedDate}${branchParam}`, "_blank")}>
+              <FileText className="w-4 h-4" />
+              PDF
+            </Button>
+          </div>
         )}
       </div>
 
@@ -415,6 +427,8 @@ function DailyReport() {
 
 function BranchComparison() {
   const [selectedDate, setSelectedDate] = useState(todayStr());
+  const [fromDate, setFromDate] = useState(todayStr());
+  const [toDate, setToDate] = useState(todayStr());
 
   const { data: report } = useQuery<any>({
     queryKey: ["/api/reports/branch-comparison", selectedDate],
@@ -468,12 +482,40 @@ function BranchComparison() {
           <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-44" data-testid="input-branch-comparison-date" />
         </div>
         {report && (
-          <Button variant="outline" className="gap-2" onClick={exportCSV} data-testid="button-export-branch-csv">
-            <Download className="w-4 h-4" />
-            تصدير CSV
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" className="gap-2" onClick={exportCSV} data-testid="button-export-branch-csv">
+              <Download className="w-4 h-4" />
+              CSV
+            </Button>
+          </div>
         )}
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileSpreadsheet className="w-5 h-5" />
+            تصدير أرباح الفروع (فترة زمنية)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">من</label>
+              <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-44" data-testid="input-profit-from" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">إلى</label>
+              <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-44" data-testid="input-profit-to" />
+            </div>
+            <Button className="gap-2" data-testid="button-export-profit-xlsx"
+              onClick={() => window.open(`/api/exports/profit_all_branches.xlsx?from=${fromDate}&to=${toDate}`, "_blank")}>
+              <FileSpreadsheet className="w-4 h-4" />
+              تصدير Excel - أرباح جميع الفروع
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {report && report.branches && (
         <div className="space-y-4 animate-in fade-in duration-300">

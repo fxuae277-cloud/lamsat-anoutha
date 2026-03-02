@@ -13,6 +13,7 @@ import {
   shifts,
   PAYMENT_METHODS, type PaymentMethod,
 } from "@shared/schema";
+import { registerExportRoutes } from "./exports";
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
@@ -631,6 +632,8 @@ export async function registerRoutes(
       res.status(400).json({ message: err?.message ?? "فشل الترحيل" });
     }
   });
+
+  registerExportRoutes(app);
 
   return httpServer;
 }
