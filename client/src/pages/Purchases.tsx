@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import type { Branch, Supplier, Product, PurchaseInvoice } from "@shared/schema";
 
 function omr(val: string | number | null) {
@@ -20,6 +21,8 @@ function omr(val: string | number | null) {
 export default function Purchases() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const canManage = user?.role === "owner" || user?.role === "admin" || user?.role === "manager";
 
   const [showCreate, setShowCreate] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<number | null>(null);
@@ -319,7 +322,7 @@ export default function Purchases() {
           </CardContent>
         </Card>
 
-        {isDraft && items.length > 0 && (
+        {isDraft && items.length > 0 && canManage && (
           <div className="flex justify-end">
             <Button size="lg" className="gap-2 bg-green-600 hover:bg-green-700" onClick={() => setShowPostConfirm(true)} data-testid="button-post-invoice">
               <FileCheck className="w-5 h-5" /> ترحيل الفاتورة

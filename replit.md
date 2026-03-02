@@ -41,6 +41,8 @@ shared/
 - POST /api/auth/change-password (oldPassword, newPassword) - any logged-in user
 - `requireAuth` middleware protects: /api/orders, /api/shifts, /api/expenses, /api/reports, /api/sales, /api/ledger, /api/purchases
 - `requireOwnerOrAdmin` middleware protects: /api/users (GET/POST/PATCH)
+- `requireManager` (owner/admin/manager only) middleware protects: inventory transfer, add-stock, purchase posting
+- Cashier UI: inventory page shows showroom-only read-only view; transfer & transactions tabs hidden; purchase post button hidden
 - Frontend shows Login page when no session exists
 - Users table has: username (unique), password (bcrypt), name, role, branchId, terminalName, isActive
 - POST /api/shifts takes only `openingCash`; branchId, cashierId, terminalName come from session user

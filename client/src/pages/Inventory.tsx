@@ -31,9 +31,10 @@ const LOC_LABELS: Record<string, string> = {
 function LocationInventoryTab() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const canManage = user?.role === "owner" || user?.role === "admin" || user?.role === "manager";
   const isOwner = user?.role === "owner" || user?.role === "admin";
   const [selectedBranch, setSelectedBranch] = useState<string>(isOwner ? "all" : String(user?.branchId));
-  const [selectedLocation, setSelectedLocation] = useState<string>("all");
+  const [selectedLocation, setSelectedLocation] = useState<string>(canManage ? "all" : "showroom");
   const [search, setSearch] = useState("");
 
   const { data: branches = [] } = useQuery<Branch[]>({
@@ -78,17 +79,24 @@ function LocationInventoryTab() {
             </Select>
           </div>
         )}
-        <div className="space-y-1 min-w-[180px]">
-          <label className="text-sm font-medium">الموقع</label>
-          <Select value={selectedLocation} onValueChange={setSelectedLocation}>
-            <SelectTrigger data-testid="select-inv-location"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">الكل</SelectItem>
-              <SelectItem value="showroom">صالة العرض</SelectItem>
-              <SelectItem value="backstore">المخزن</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {canManage ? (
+          <div className="space-y-1 min-w-[180px]">
+            <label className="text-sm font-medium">الموقع</label>
+            <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+              <SelectTrigger data-testid="select-inv-location"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">الكل</SelectItem>
+                <SelectItem value="showroom">صالة العرض</SelectItem>
+                <SelectItem value="backstore">المخزن</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <label className="text-sm font-medium">الموقع</label>
+            <Badge variant="outline" className="text-sm px-3 py-2">صالة العرض</Badge>
+          </div>
+        )}
         <div className="relative min-w-[250px]">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="بحث بالاسم أو الباركود..." className="pr-9" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-loc-inv" />
@@ -443,6 +451,10 @@ function TransactionsTab() {
 }
 
 export default function Inventory() {
+  const { user } = useAuth();
+  const canManage = user?.role === "owner" || user?.role === "admin" || user?.role === "manager";
+  const tabCount = canManage ? 3 : 1;
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div>
@@ -451,30 +463,38 @@ export default function Inventory() {
       </div>
 
       <Tabs defaultValue="stock" dir="rtl">
-        <TabsList className="grid w-full grid-cols-3 max-w-lg">
+        <TabsList className={`grid w-full max-w-lg ${canManage ? "grid-cols-3" : "grid-cols-1"}`}>
           <TabsTrigger value="stock" className="gap-1" data-testid="tab-location-stock">
             <MapPin className="w-4 h-4" />
             مخزون المواقع
           </TabsTrigger>
-          <TabsTrigger value="transfer" className="gap-1" data-testid="tab-internal-transfer">
-            <ArrowLeftRight className="w-4 h-4" />
-            نقل داخلي
-          </TabsTrigger>
-          <TabsTrigger value="transactions" className="gap-1" data-testid="tab-transactions">
-            <History className="w-4 h-4" />
-            حركات المخزون
-          </TabsTrigger>
+          {canManage && (
+            <TabsTrigger value="transfer" className="gap-1" data-testid="tab-internal-transfer">
+              <ArrowLeftRight className="w-4 h-4" />
+              نقل داخلي
+            </TabsTrigger>
+          )}
+          {canManage && (
+            <TabsTrigger value="transactions" className="gap-1" data-testid="tab-transactions">
+              <History className="w-4 h-4" />
+              حركات المخزون
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="stock">
           <LocationInventoryTab />
         </TabsContent>
-        <TabsContent value="transfer">
-          <InternalTransferTab />
-        </TabsContent>
-        <TabsContent value="transactions">
-          <TransactionsTab />
-        </TabsContent>
+        {canManage && (
+          <TabsContent value="transfer">
+            <InternalTransferTab />
+          </TabsContent>
+        )}
+        {canManage && (
+          <TabsContent value="transactions">
+            <TransactionsTab />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

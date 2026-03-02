@@ -33,6 +33,21 @@ async function requireOwnerOrAdmin(req: Request, res: Response, next: NextFuncti
   next();
 }
 
+function requireRole(allowedRoles: string[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "غير مصرح - يجب تسجيل الدخول" });
+    }
+    const user = await storage.getUser(req.session.userId);
+    if (!user || !allowedRoles.includes(user.role)) {
+      return res.status(403).json({ message: "غير مصرح لك. هذه العملية للمدير فقط." });
+    }
+    next();
+  };
+}
+
+const requireManager = requireRole(["owner", "admin", "manager"]);
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -238,7 +253,7 @@ export async function registerRoutes(
     }
     res.json(await storage.adjustInventory(productId, warehouseId, quantity));
   });
-  app.post("/api/inventory/transfer", async (req, res) => {
+  app.post("/api/inventory/transfer", requireAuth, requireManager, async (req, res) => {
     const parsed = insertInventoryTransferSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     try {
@@ -287,7 +302,7 @@ export async function registerRoutes(
     res.json(await storage.getLocationLowStock(branchId, locationCode));
   });
 
-  app.post("/api/location-inventory/transfer", requireAuth, async (req, res) => {
+  app.post("/api/location-inventory/transfer", requireAuth, requireManager, async (req, res) => {
     try {
       const { fromLocationId, toLocationId, productId, quantity, note } = req.body;
       if (!fromLocationId || !toLocationId || !productId || !quantity || quantity <= 0) {
@@ -300,7 +315,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/location-inventory/add-stock", requireAuth, async (req, res) => {
+  app.post("/api/location-inventory/add-stock", requireAuth, requireManager, async (req, res) => {
     try {
       const { branchId, productId, quantity, note } = req.body;
       if (!branchId || !productId || !quantity || quantity <= 0) {
@@ -693,7 +708,7 @@ export async function registerRoutes(
     res.json({ message: "تم الحذف" });
   });
 
-  app.post("/api/purchases/:id/post", requireAuth, async (req, res) => {
+  app.post("/api/purchases/:id/post", requireAuth, requireManager, async (req, res) => {
     try {
       const result = await storage.postPurchaseInvoice(Number(req.params.id));
       res.json(result);
