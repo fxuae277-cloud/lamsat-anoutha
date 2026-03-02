@@ -74,7 +74,21 @@ shared/
 - **bank_ledger** (date, branch_id, shift_id, method[card/bank_transfer], amount_in, amount_out, ref_id, category, note, created_by)
 - **purchase_invoices** (invoice_number, supplier_id, branch_id, invoice_date, shipping/customs/clearance/other costs, subtotal, total_extra_cost, grand_total, status[draft/posted])
 - **purchase_items** (purchase_id, product_id, qty, unit_cost_base, line_subtotal, allocated_extra_cost, unit_cost_final)
+- **payroll_runs** (month, year, status[draft/approved], total_basic, total_commission, total_deductions, total_advances, total_net, created_by, approved_by, approved_at)
+- **payroll_details** (payroll_id, employee_id, basic_salary, commission, deductions, advances, bonus, net_salary, note)
+- **employee_advances** (employee_id, amount, date, note, settled, settled_in_payroll_id, created_by)
+- **employee_deductions** (employee_id, amount, reason, date, applied_in_payroll_id, created_by)
+- users table extended: salary_type (monthly/daily/commission), commission_rate (decimal 5,2)
 - **session** (auto-created by connect-pg-simple)
+
+## Payroll System
+- Users have salary_type (monthly/daily/commission) and commission_rate
+- Create payroll run for a month/year → auto-generates details for all active non-owner employees
+- Each detail row: basic_salary + commission (auto-calculated from sales if commission type) - deductions - advances = net_salary
+- Advances: unsettled advances are deducted in payroll; settled when payroll is approved
+- Deductions: unapplied deductions are deducted in payroll; marked as applied when approved
+- Draft payroll can be regenerated (recalculated); approved payroll is final
+- HR page has 5 tabs: Employees, Payroll Runs, Advances, Deductions, Performance
 
 ## Purchases & Average Cost System
 - Create draft purchase invoice with optional supplier, branch, date, extra costs

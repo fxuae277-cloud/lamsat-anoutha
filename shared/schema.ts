@@ -6,6 +6,9 @@ import { z } from "zod";
 export const PAYMENT_METHODS = ["cash", "card", "bank_transfer"] as const;
 export type PaymentMethod = typeof PAYMENT_METHODS[number];
 
+export const SALARY_TYPES = ["monthly", "daily", "commission"] as const;
+export type SalaryType = typeof SALARY_TYPES[number];
+
 export const branches = pgTable("branches", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
@@ -37,6 +40,8 @@ export const users = pgTable("users", {
   pin: text("pin"),
   phone: text("phone"),
   salary: decimal("salary", { precision: 10, scale: 3 }).default("0"),
+  salaryType: text("salary_type").default("monthly"),
+  commissionRate: decimal("commission_rate", { precision: 5, scale: 2 }).default("0"),
 });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -445,3 +450,68 @@ export const auditLog = pgTable("audit_log", {
 export const insertAuditLogSchema = createInsertSchema(auditLog).omit({ id: true, createdAt: true });
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLog.$inferSelect;
+
+export const payrollRuns = pgTable("payroll_runs", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  month: text("month").notNull(),
+  year: integer("year").notNull(),
+  status: text("status").notNull().default("draft"),
+  totalBasic: decimal("total_basic", { precision: 12, scale: 3 }).default("0"),
+  totalCommission: decimal("total_commission", { precision: 12, scale: 3 }).default("0"),
+  totalDeductions: decimal("total_deductions", { precision: 12, scale: 3 }).default("0"),
+  totalAdvances: decimal("total_advances", { precision: 12, scale: 3 }).default("0"),
+  totalNet: decimal("total_net", { precision: 12, scale: 3 }).default("0"),
+  note: text("note"),
+  createdBy: integer("created_by").references(() => users.id),
+  approvedBy: integer("approved_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  approvedAt: timestamp("approved_at"),
+});
+export const insertPayrollRunSchema = createInsertSchema(payrollRuns).omit({ id: true, createdAt: true, approvedAt: true });
+export type InsertPayrollRun = z.infer<typeof insertPayrollRunSchema>;
+export type PayrollRun = typeof payrollRuns.$inferSelect;
+
+export const payrollDetails = pgTable("payroll_details", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  payrollId: integer("payroll_id").references(() => payrollRuns.id).notNull(),
+  employeeId: integer("employee_id").references(() => users.id).notNull(),
+  basicSalary: decimal("basic_salary", { precision: 10, scale: 3 }).notNull(),
+  commission: decimal("commission", { precision: 10, scale: 3 }).default("0"),
+  deductions: decimal("deductions", { precision: 10, scale: 3 }).default("0"),
+  advances: decimal("advances", { precision: 10, scale: 3 }).default("0"),
+  bonus: decimal("bonus", { precision: 10, scale: 3 }).default("0"),
+  netSalary: decimal("net_salary", { precision: 10, scale: 3 }).notNull(),
+  note: text("note"),
+});
+export const insertPayrollDetailSchema = createInsertSchema(payrollDetails).omit({ id: true });
+export type InsertPayrollDetail = z.infer<typeof insertPayrollDetailSchema>;
+export type PayrollDetail = typeof payrollDetails.$inferSelect;
+
+export const employeeAdvances = pgTable("employee_advances", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  employeeId: integer("employee_id").references(() => users.id).notNull(),
+  amount: decimal("amount", { precision: 10, scale: 3 }).notNull(),
+  date: date("date").notNull(),
+  note: text("note"),
+  settled: boolean("settled").notNull().default(false),
+  settledInPayrollId: integer("settled_in_payroll_id").references(() => payrollRuns.id),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertEmployeeAdvanceSchema = createInsertSchema(employeeAdvances).omit({ id: true, createdAt: true });
+export type InsertEmployeeAdvance = z.infer<typeof insertEmployeeAdvanceSchema>;
+export type EmployeeAdvance = typeof employeeAdvances.$inferSelect;
+
+export const employeeDeductions = pgTable("employee_deductions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  employeeId: integer("employee_id").references(() => users.id).notNull(),
+  amount: decimal("amount", { precision: 10, scale: 3 }).notNull(),
+  reason: text("reason").notNull(),
+  date: date("date").notNull(),
+  appliedInPayrollId: integer("applied_in_payroll_id").references(() => payrollRuns.id),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertEmployeeDeductionSchema = createInsertSchema(employeeDeductions).omit({ id: true, createdAt: true });
+export type InsertEmployeeDeduction = z.infer<typeof insertEmployeeDeductionSchema>;
+export type EmployeeDeduction = typeof employeeDeductions.$inferSelect;

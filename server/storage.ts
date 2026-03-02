@@ -30,6 +30,10 @@ import {
   saleReturns, type InsertSaleReturn, type SaleReturn,
   saleReturnItems, type InsertSaleReturnItem, type SaleReturnItem,
   auditLog, type InsertAuditLog, type AuditLog,
+  payrollRuns, type InsertPayrollRun, type PayrollRun,
+  payrollDetails, type InsertPayrollDetail, type PayrollDetail,
+  employeeAdvances, type InsertEmployeeAdvance, type EmployeeAdvance,
+  employeeDeductions, type InsertEmployeeDeduction, type EmployeeDeduction,
   type PaymentMethod, PAYMENT_METHODS,
 } from "@shared/schema";
 
@@ -126,6 +130,22 @@ export interface IStorage {
   cancelOrderFull(orderId: number, userId: number, userName: string, reason: string): Promise<Order | undefined>;
   addAuditLog(data: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(filters?: { entityType?: string; branchId?: number; from?: string; to?: string }): Promise<any[]>;
+  getPayrollRuns(): Promise<PayrollRun[]>;
+  getPayrollRun(id: number): Promise<PayrollRun | undefined>;
+  createPayrollRun(data: InsertPayrollRun): Promise<PayrollRun>;
+  updatePayrollRun(id: number, data: Partial<InsertPayrollRun>): Promise<PayrollRun | undefined>;
+  getPayrollDetails(payrollId: number): Promise<any[]>;
+  createPayrollDetail(data: InsertPayrollDetail): Promise<PayrollDetail>;
+  deletePayrollDetails(payrollId: number): Promise<void>;
+  getEmployeeAdvances(employeeId?: number, settledOnly?: boolean): Promise<EmployeeAdvance[]>;
+  createEmployeeAdvance(data: InsertEmployeeAdvance): Promise<EmployeeAdvance>;
+  settleAdvance(id: number, payrollId: number): Promise<EmployeeAdvance | undefined>;
+  getEmployeeDeductions(employeeId?: number): Promise<EmployeeDeduction[]>;
+  createEmployeeDeduction(data: InsertEmployeeDeduction): Promise<EmployeeDeduction>;
+  getUnsettledAdvances(employeeId: number): Promise<EmployeeAdvance[]>;
+  getUnappliedDeductions(employeeId: number): Promise<EmployeeDeduction[]>;
+  generatePayrollRun(payrollId: number, month: string, year: number): Promise<void>;
+  approvePayrollRun(id: number, userId: number): Promise<PayrollRun | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2314,6 +2334,220 @@ export class DatabaseStorage implements IStorage {
     query += ` ORDER BY al.created_at DESC LIMIT 500`;
     const result = await pool.query(query, params);
     return result.rows;
+  }
+
+  async getPayrollRuns() {
+    const result = await pool.query(`
+      SELECT pr.*, u1.name as creator_name, u2.name as approver_name
+      FROM payroll_runs pr
+      LEFT JOIN users u1 ON u1.id = pr.created_by
+      LEFT JOIN users u2 ON u2.id = pr.approved_by
+      ORDER BY pr.year DESC, pr.month DESC
+    `);
+    return result.rows;
+  }
+
+  async getPayrollRun(id: number) {
+    const [row] = await db.select().from(payrollRuns).where(eq(payrollRuns.id, id));
+    return row;
+  }
+
+  async createPayrollRun(data: InsertPayrollRun) {
+    const [row] = await db.insert(payrollRuns).values(data).returning();
+    return row;
+  }
+
+  async updatePayrollRun(id: number, data: Partial<InsertPayrollRun>) {
+    const [row] = await db.update(payrollRuns).set(data).where(eq(payrollRuns.id, id)).returning();
+    return row;
+  }
+
+  async getPayrollDetails(payrollId: number) {
+    const result = await pool.query(`
+      SELECT pd.*, u.name as employee_name, u.salary_type, u.branch_id,
+             b.name as branch_name
+      FROM payroll_details pd
+      JOIN users u ON u.id = pd.employee_id
+      LEFT JOIN branches b ON b.id = u.branch_id
+      WHERE pd.payroll_id = $1
+      ORDER BY u.name
+    `, [payrollId]);
+    return result.rows;
+  }
+
+  async createPayrollDetail(data: InsertPayrollDetail) {
+    const [row] = await db.insert(payrollDetails).values(data).returning();
+    return row;
+  }
+
+  async deletePayrollDetails(payrollId: number) {
+    await db.delete(payrollDetails).where(eq(payrollDetails.payrollId, payrollId));
+  }
+
+  async getEmployeeAdvances(employeeId?: number, settledOnly?: boolean) {
+    let query = `
+      SELECT ea.*, u.name as employee_name, uc.name as created_by_name
+      FROM employee_advances ea
+      JOIN users u ON u.id = ea.employee_id
+      LEFT JOIN users uc ON uc.id = ea.created_by
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    let idx = 1;
+    if (employeeId) {
+      query += ` AND ea.employee_id = $${idx++}`;
+      params.push(employeeId);
+    }
+    if (settledOnly !== undefined) {
+      query += ` AND ea.settled = $${idx++}`;
+      params.push(settledOnly);
+    }
+    query += ` ORDER BY ea.date DESC`;
+    const result = await pool.query(query, params);
+    return result.rows;
+  }
+
+  async createEmployeeAdvance(data: InsertEmployeeAdvance) {
+    const [row] = await db.insert(employeeAdvances).values(data).returning();
+    return row;
+  }
+
+  async settleAdvance(id: number, payrollId: number) {
+    const [row] = await db.update(employeeAdvances)
+      .set({ settled: true, settledInPayrollId: payrollId })
+      .where(eq(employeeAdvances.id, id))
+      .returning();
+    return row;
+  }
+
+  async getEmployeeDeductions(employeeId?: number) {
+    let query = `
+      SELECT ed.*, u.name as employee_name, uc.name as created_by_name
+      FROM employee_deductions ed
+      JOIN users u ON u.id = ed.employee_id
+      LEFT JOIN users uc ON uc.id = ed.created_by
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    let idx = 1;
+    if (employeeId) {
+      query += ` AND ed.employee_id = $${idx++}`;
+      params.push(employeeId);
+    }
+    query += ` ORDER BY ed.date DESC`;
+    const result = await pool.query(query, params);
+    return result.rows;
+  }
+
+  async createEmployeeDeduction(data: InsertEmployeeDeduction) {
+    const [row] = await db.insert(employeeDeductions).values(data).returning();
+    return row;
+  }
+
+  async getUnsettledAdvances(employeeId: number) {
+    const result = await pool.query(
+      `SELECT * FROM employee_advances WHERE employee_id = $1 AND settled = false ORDER BY date`,
+      [employeeId]
+    );
+    return result.rows;
+  }
+
+  async getUnappliedDeductions(employeeId: number) {
+    const result = await pool.query(
+      `SELECT * FROM employee_deductions WHERE employee_id = $1 AND applied_in_payroll_id IS NULL ORDER BY date`,
+      [employeeId]
+    );
+    return result.rows;
+  }
+
+  async generatePayrollRun(payrollId: number, month: string, year: number) {
+    await this.deletePayrollDetails(payrollId);
+
+    const activeUsers = await pool.query(
+      `SELECT * FROM users WHERE is_active = true AND role != 'owner'`
+    );
+
+    const monthStart = `${year}-${month.padStart(2, '0')}-01`;
+    const monthEnd = new Date(year, parseInt(month), 0).toISOString().slice(0, 10);
+
+    let totalBasic = 0, totalCommission = 0, totalDeductions = 0, totalAdvances = 0, totalNet = 0;
+
+    for (const emp of activeUsers.rows) {
+      const basicSalary = parseFloat(emp.salary || "0");
+
+      let commission = 0;
+      if (emp.salary_type === "commission" && parseFloat(emp.commission_rate || "0") > 0) {
+        const salesResult = await pool.query(
+          `SELECT COALESCE(SUM(s.total::numeric), 0) as total_sales
+           FROM sales s
+           WHERE s.cashier_id = $1
+             AND s.created_at >= $2::timestamp
+             AND s.created_at <= ($3::date + interval '1 day')::timestamp`,
+          [emp.id, monthStart, monthEnd]
+        );
+        const totalSales = parseFloat(salesResult.rows[0]?.total_sales || "0");
+        commission = totalSales * (parseFloat(emp.commission_rate || "0") / 100);
+      }
+
+      const unsettledAdv = await this.getUnsettledAdvances(emp.id);
+      const advTotal = unsettledAdv.reduce((s: number, a: any) => s + parseFloat(a.amount), 0);
+
+      const unappliedDed = await this.getUnappliedDeductions(emp.id);
+      const dedTotal = unappliedDed.reduce((s: number, d: any) => s + parseFloat(d.amount), 0);
+
+      const net = basicSalary + commission - dedTotal - advTotal;
+
+      await this.createPayrollDetail({
+        payrollId,
+        employeeId: emp.id,
+        basicSalary: basicSalary.toFixed(3),
+        commission: commission.toFixed(3),
+        deductions: dedTotal.toFixed(3),
+        advances: advTotal.toFixed(3),
+        bonus: "0",
+        netSalary: net.toFixed(3),
+      });
+
+      totalBasic += basicSalary;
+      totalCommission += commission;
+      totalDeductions += dedTotal;
+      totalAdvances += advTotal;
+      totalNet += net;
+    }
+
+    await this.updatePayrollRun(payrollId, {
+      totalBasic: totalBasic.toFixed(3),
+      totalCommission: totalCommission.toFixed(3),
+      totalDeductions: totalDeductions.toFixed(3),
+      totalAdvances: totalAdvances.toFixed(3),
+      totalNet: totalNet.toFixed(3),
+    });
+  }
+
+  async approvePayrollRun(id: number, userId: number) {
+    const run = await this.getPayrollRun(id);
+    if (!run || run.status !== "draft") return undefined;
+
+    const details = await this.getPayrollDetails(id);
+    for (const d of details) {
+      const unsettled = await this.getUnsettledAdvances(d.employee_id);
+      for (const adv of unsettled) {
+        await this.settleAdvance(adv.id, id);
+      }
+      const unapplied = await this.getUnappliedDeductions(d.employee_id);
+      for (const ded of unapplied) {
+        await pool.query(
+          `UPDATE employee_deductions SET applied_in_payroll_id = $1 WHERE id = $2`,
+          [id, ded.id]
+        );
+      }
+    }
+
+    const [updated] = await db.update(payrollRuns)
+      .set({ status: "approved", approvedBy: userId, approvedAt: new Date() })
+      .where(eq(payrollRuns.id, id))
+      .returning();
+    return updated;
   }
 }
 
