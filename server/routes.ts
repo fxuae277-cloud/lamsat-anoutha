@@ -275,7 +275,13 @@ export async function registerRoutes(
   });
   app.post("/api/sales", requireAuth, async (req, res) => {
     const { items, ...saleData } = req.body;
-    const parsed = insertSaleSchema.safeParse(saleData);
+    const user = await storage.getUser(req.session.userId!);
+    let shiftId: number | null = null;
+    if (user?.branchId && user?.terminalName) {
+      const shift = await storage.getCurrentShift(user.branchId, user.terminalName);
+      if (shift) shiftId = shift.id;
+    }
+    const parsed = insertSaleSchema.safeParse({ ...saleData, shiftId });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "لا توجد منتجات في الفاتورة" });
@@ -343,19 +349,33 @@ export async function registerRoutes(
   });
   app.post("/api/expenses", requireAuth, async (req, res) => {
     try {
-      const { amount, notes, source, branchId, shiftId, category } = req.body;
-      if (!amount || !branchId) {
-        return res.status(400).json({ message: "المبلغ والفرع مطلوبان" });
+      const { amount, notes, source, category } = req.body;
+      if (!amount) {
+        return res.status(400).json({ message: "المبلغ مطلوب" });
       }
       const expenseSource = source || "cash";
       if (!["cash", "card", "bank_transfer"].includes(expenseSource)) {
         return res.status(400).json({ message: "مصدر غير صالح. الخيارات: cash, card, bank_transfer" });
       }
+
+      const user = await storage.getUser(req.session.userId!);
+      if (!user || !user.branchId) {
+        return res.status(400).json({ message: "بيانات المستخدم ناقصة (الفرع)" });
+      }
+      const branchId = user.branchId;
+
+      let shiftId: number | null = null;
+      if (user.terminalName) {
+        const shift = await storage.getCurrentShift(branchId, user.terminalName);
+        if (shift) shiftId = shift.id;
+      }
+
       const todayStr = new Date().toISOString().slice(0, 10);
+      const catLabel = category || "عام";
       const expense = await storage.createExpense({
         branchId,
-        shiftId: shiftId || null,
-        category: category || "عام",
+        shiftId,
+        category: catLabel,
         amount: String(amount),
         source: expenseSource,
         date: todayStr,
@@ -366,21 +386,25 @@ export async function registerRoutes(
         await storage.addCashLedgerEntry({
           date: todayStr,
           branchId,
-          shiftId: shiftId || null,
+          shiftId,
           type: "expense",
           amountIn: "0",
           amountOut: String(amount),
-          note: notes || `مصروف: ${category || "عام"}`,
+          category: catLabel,
+          note: notes || `مصروف: ${catLabel}`,
+          createdBy: user.id,
         });
       } else {
         await storage.addBankLedgerEntry({
           date: todayStr,
           branchId,
-          shiftId: shiftId || null,
+          shiftId,
           method: expenseSource,
           amountIn: "0",
           amountOut: String(amount),
-          note: notes || `مصروف: ${category || "عام"}`,
+          category: catLabel,
+          note: notes || `مصروف: ${catLabel}`,
+          createdBy: user.id,
         });
       }
 
@@ -389,6 +413,15 @@ export async function registerRoutes(
       console.error(err);
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
     }
+  });
+
+  app.get("/api/ledger/cash", requireAuth, async (req, res) => {
+    const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+    res.json(await storage.getCashLedgerEntries(branchId));
+  });
+  app.get("/api/ledger/bank", requireAuth, async (req, res) => {
+    const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+    res.json(await storage.getBankLedgerEntries(branchId));
   });
 
   app.get("/api/employees", async (_req, res) => {

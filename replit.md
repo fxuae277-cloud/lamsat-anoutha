@@ -38,7 +38,7 @@ shared/
 - GET /api/auth/me returns current user (without password)
 - POST /api/auth/logout destroys session
 - POST /api/auth/change-password (oldPassword, newPassword) - any logged-in user
-- `requireAuth` middleware protects: /api/orders, /api/shifts, /api/expenses, /api/reports, /api/sales
+- `requireAuth` middleware protects: /api/orders, /api/shifts, /api/expenses, /api/reports, /api/sales, /api/ledger
 - `requireOwnerOrAdmin` middleware protects: /api/users (GET/POST/PATCH)
 - Frontend shows Login page when no session exists
 - Users table has: username (unique), password (bcrypt), name, role, branchId, terminalName, isActive
@@ -57,25 +57,36 @@ shared/
 - categories, products
 - warehouses, inventory, inventory_transfers
 - customers, suppliers
-- sales, sale_items
+- sales, sale_items (sales have shift_id + payment_method)
 - orders, order_items (orders have shift_id + payment_method + paid_at)
 - expenses (with shift_id + source: cash/card/bank_transfer)
 - employees, shifts (with expectedCash, actualCash, difference, terminalName)
-- **cash_ledger** (date, branch_id, shift_id, type, amount_in, amount_out, note, created_by)
-- **bank_ledger** (date, branch_id, shift_id, method[card/bank_transfer], amount_in, amount_out, ref_id, note, created_by)
+- **cash_ledger** (date, branch_id, shift_id, type, amount_in, amount_out, category, note, created_by)
+- **bank_ledger** (date, branch_id, shift_id, method[card/bank_transfer], amount_in, amount_out, ref_id, category, note, created_by)
 - **session** (auto-created by connect-pg-simple)
+
+## Ledger System
+- **cash_ledger types**: sale, expense, order_payment, shift_difference
+- **bank_ledger methods**: card, bank_transfer
+- POS sale → cash_ledger (if cash) or bank_ledger (if card/bank_transfer) with type='sale'
+- Order payment → cash_ledger (if cash) or bank_ledger (if card/bank_transfer) with type='order_payment'
+- Expense → cash_ledger (if source=cash) or bank_ledger (if source=card/bank_transfer) with type='expense'
+- Shift close difference → cash_ledger with type='shift_difference'
+- API: GET /api/ledger/cash, GET /api/ledger/bank (optional ?branchId filter)
 
 ## Payment Flow
 - Payment methods: `cash`, `card`, `bank_transfer` (PAYMENT_METHODS constant)
+- POS sales auto-assigned shiftId from session user's open shift + auto ledger entries
 - Orders start as status=new, become status=paid only after POST /api/orders/:id/pay
-- On payment: paymentMethod + paidAt stored on order, ledger entry created in cash_ledger or bank_ledger
-- Expenses also record ledger entries based on source (cash → cash_ledger, card/bank → bank_ledger)
+- On payment: paymentMethod + paidAt stored on order, ledger entry created
+- Expenses auto-assigned branchId + shiftId from session user (not from request body)
 
 ## Shift Closing
 - Cannot close shift if pending orders exist (status: new/processing/pending)
-- expected_cash = sum of paid cash orders - sum of cash expenses for that shift
+- expected_cash = (sum cash orders paid + sum cash POS sales) - sum cash expenses for that shift
 - actual_cash entered by user at close time
 - difference = actual - expected, recorded in cash_ledger as type=shift_difference
+- totalSales, totalCash, totalBank all include both orders + POS sales
 
 ## Key Features
 1. **Login**: Username/password authentication, session-based
@@ -84,13 +95,13 @@ shared/
 4. **Products**: CRUD with barcode, category, unified price, active toggle
 5. **Inventory**: Main + branch warehouses, receive stock, transfer between warehouses, low-stock alerts
 6. **Orders**: WhatsApp/Instagram orders, auto-branch assignment by city, status tracking, payment recording
-7. **Expenses**: Categorized expenses per branch with source tracking + ledger integration
+7. **Expenses**: Categorized expenses per branch with source tracking + ledger integration (tabbed: expenses / cash ledger / bank ledger)
 8. **Shift Reports**: GET /api/reports/shift?shiftId=... → cash/card/bank sales, expenses, expected vs actual cash
-9. **Settings**: Branches, users/roles, cities mapping, VAT config
+9. **Settings**: Tabbed interface - account (change password), users (owner/admin), general settings, branches & cities
 
 ## API Routes
 All prefixed with `/api/`:
-- POST `/auth/login`, POST `/auth/logout`, GET `/auth/me`
+- POST `/auth/login`, POST `/auth/logout`, GET `/auth/me`, POST `/auth/change-password`
 - GET/POST `/branches`, `/categories`, `/products`, `/warehouses`
 - GET/POST/PATCH/DELETE `/products/:id`
 - GET/POST `/inventory`, `/inventory/receive`, `/inventory/transfer`
@@ -99,6 +110,8 @@ All prefixed with `/api/`:
 - PATCH `/orders/:id/status` (requireAuth), `/shifts/:id/close` (requireAuth)
 - GET `/reports/shift?shiftId=...` (requireAuth)
 - GET `/shifts/current` (requireAuth, uses session user)
+- GET `/ledger/cash`, `/ledger/bank` (requireAuth, optional ?branchId)
+- GET/POST/PATCH `/users`, `/users/:id/reset-password` (requireOwnerOrAdmin)
 - GET `/dashboard`
 
 ## Design
@@ -109,9 +122,11 @@ All prefixed with `/api/`:
 
 ## Important Notes
 - branchId in products table is nullable (unified pricing across branches)
-- users.branchId is also nullable
+- users.branchId is NOT NULL
 - Schema has isActive field on users table (boolean, default true)
 - Seed runs only if no branches exist (idempotent)
 - Orders auto-link to open shift for the branch when created
-- DB has triggers on orders table (auto-set order_number) - do not interfere
+- DB has trigger on orders table (auto-set order_number via trg_orders_set_number) - do not drop
+- DB has trigger on sales table (auto-set invoice_number via trg_sales_set_invoice_number) - do not drop
 - DB has unique constraint `uniq_open_shift_per_terminal` preventing duplicate open shifts per terminal
+- Old DB triggers on sales (validate_shift, require_open_shift, cash_movements) were dropped - logic handled in app code

@@ -80,6 +80,8 @@ export interface IStorage {
   getCurrentShift(branchId: number, terminalName: string): Promise<Shift | null>;
   addCashLedgerEntry(data: InsertCashLedger): Promise<CashLedger>;
   addBankLedgerEntry(data: InsertBankLedger): Promise<BankLedger>;
+  getCashLedgerEntries(branchId?: number): Promise<CashLedger[]>;
+  getBankLedgerEntries(branchId?: number): Promise<BankLedger[]>;
   getShiftReport(shiftId: number): Promise<any>;
   getDashboardStats(branchId?: number): Promise<any>;
 }
@@ -241,6 +243,38 @@ export class DatabaseStorage implements IStorage {
         await this.adjustInventory(item.productId, whList[0].id, -item.quantity);
       }
     }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const amount = sale.total || "0";
+    const pm = data.paymentMethod || "cash";
+
+    if (pm === "cash") {
+      await this.addCashLedgerEntry({
+        date: todayStr,
+        branchId: data.branchId,
+        shiftId: data.shiftId ?? null,
+        type: "sale",
+        amountIn: amount,
+        amountOut: "0",
+        category: "sale",
+        note: `بيع فاتورة ${sale.invoiceNumber}`,
+        createdBy: data.cashierId ?? null,
+      });
+    } else {
+      await this.addBankLedgerEntry({
+        date: todayStr,
+        branchId: data.branchId,
+        shiftId: data.shiftId ?? null,
+        method: pm,
+        amountIn: amount,
+        amountOut: "0",
+        refId: data.bankTxnId || null,
+        category: "sale",
+        note: `بيع فاتورة ${sale.invoiceNumber}`,
+        createdBy: data.cashierId ?? null,
+      });
+    }
+
     return sale;
   }
   async getSaleItems(saleId: number) {
@@ -363,20 +397,36 @@ export class DatabaseStorage implements IStorage {
   }
 
   async closeShift(id: number, actualCash: string) {
-    const [cashSalesRow] = await db.select({
+    const [cashOrdersRow] = await db.select({
       total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
     }).from(orders).where(
       and(eq(orders.shiftId, id), eq(orders.status, "paid"), eq(orders.paymentMethod, "cash"))
     );
-    const [cardSalesRow] = await db.select({
+    const [cardOrdersRow] = await db.select({
       total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
     }).from(orders).where(
       and(eq(orders.shiftId, id), eq(orders.status, "paid"), eq(orders.paymentMethod, "card"))
     );
-    const [bankSalesRow] = await db.select({
+    const [bankOrdersRow] = await db.select({
       total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
     }).from(orders).where(
       and(eq(orders.shiftId, id), eq(orders.status, "paid"), eq(orders.paymentMethod, "bank_transfer"))
+    );
+
+    const [cashSalesRow] = await db.select({
+      total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
+    }).from(sales).where(
+      and(eq(sales.shiftId, id), eq(sales.paymentMethod, "cash"))
+    );
+    const [cardSalesRow] = await db.select({
+      total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
+    }).from(sales).where(
+      and(eq(sales.shiftId, id), eq(sales.paymentMethod, "card"))
+    );
+    const [bankSalesRow] = await db.select({
+      total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
+    }).from(sales).where(
+      and(eq(sales.shiftId, id), eq(sales.paymentMethod, "bank_transfer"))
     );
 
     const [cashExpenseRow] = await db.select({
@@ -385,12 +435,16 @@ export class DatabaseStorage implements IStorage {
       and(eq(expenses.shiftId, id), eq(expenses.source, "cash"))
     );
 
-    const expectedCash = parseFloat(cashSalesRow.total) - parseFloat(cashExpenseRow.total);
+    const totalCashIn = parseFloat(cashOrdersRow.total) + parseFloat(cashSalesRow.total);
+    const totalCardIn = parseFloat(cardOrdersRow.total) + parseFloat(cardSalesRow.total);
+    const totalBankIn = parseFloat(bankOrdersRow.total) + parseFloat(bankSalesRow.total);
+
+    const expectedCash = totalCashIn - parseFloat(cashExpenseRow.total);
     const actual = parseFloat(actualCash);
     const diff = actual - expectedCash;
 
-    const totalSales = (parseFloat(cashSalesRow.total) + parseFloat(cardSalesRow.total) + parseFloat(bankSalesRow.total)).toFixed(3);
-    const totalBank = (parseFloat(cardSalesRow.total) + parseFloat(bankSalesRow.total)).toFixed(3);
+    const totalSales = (totalCashIn + totalCardIn + totalBankIn).toFixed(3);
+    const totalBank = (totalCardIn + totalBankIn).toFixed(3);
 
     const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -409,7 +463,7 @@ export class DatabaseStorage implements IStorage {
     const [row] = await db.update(shifts).set({
       endedAt: new Date(),
       totalSales,
-      totalCash: cashSalesRow.total,
+      totalCash: totalCashIn.toFixed(3),
       totalBank,
       expectedCash: expectedCash.toFixed(3),
       actualCash,
@@ -427,28 +481,59 @@ export class DatabaseStorage implements IStorage {
     const [row] = await db.insert(bankLedger).values(data).returning();
     return row;
   }
+  async getCashLedgerEntries(branchId?: number) {
+    if (branchId) {
+      return db.select().from(cashLedger).where(eq(cashLedger.branchId, branchId)).orderBy(desc(cashLedger.createdAt));
+    }
+    return db.select().from(cashLedger).orderBy(desc(cashLedger.createdAt));
+  }
+  async getBankLedgerEntries(branchId?: number) {
+    if (branchId) {
+      return db.select().from(bankLedger).where(eq(bankLedger.branchId, branchId)).orderBy(desc(bankLedger.createdAt));
+    }
+    return db.select().from(bankLedger).orderBy(desc(bankLedger.createdAt));
+  }
 
   async getShiftReport(shiftId: number) {
     const [shiftRow] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
     if (!shiftRow) return null;
 
-    const [cashSales] = await db.select({
+    const [cashOrders] = await db.select({
       total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
       count: sql<number>`count(*)::int`,
     }).from(orders).where(
       and(eq(orders.shiftId, shiftId), eq(orders.status, "paid"), eq(orders.paymentMethod, "cash"))
     );
-    const [cardSales] = await db.select({
+    const [cardOrders] = await db.select({
       total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
       count: sql<number>`count(*)::int`,
     }).from(orders).where(
       and(eq(orders.shiftId, shiftId), eq(orders.status, "paid"), eq(orders.paymentMethod, "card"))
     );
-    const [bankTransfers] = await db.select({
+    const [bankOrders] = await db.select({
       total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
       count: sql<number>`count(*)::int`,
     }).from(orders).where(
       and(eq(orders.shiftId, shiftId), eq(orders.status, "paid"), eq(orders.paymentMethod, "bank_transfer"))
+    );
+
+    const [cashPosSales] = await db.select({
+      total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(sales).where(
+      and(eq(sales.shiftId, shiftId), eq(sales.paymentMethod, "cash"))
+    );
+    const [cardPosSales] = await db.select({
+      total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(sales).where(
+      and(eq(sales.shiftId, shiftId), eq(sales.paymentMethod, "card"))
+    );
+    const [bankPosSales] = await db.select({
+      total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(sales).where(
+      and(eq(sales.shiftId, shiftId), eq(sales.paymentMethod, "bank_transfer"))
     );
 
     const [cashExpenses] = await db.select({
@@ -461,13 +546,16 @@ export class DatabaseStorage implements IStorage {
       count: sql<number>`count(*)::int`,
     }).from(expenses).where(and(eq(expenses.shiftId, shiftId), sql`${expenses.source} != 'cash'`));
 
-    const expectedCash = parseFloat(cashSales.total) - parseFloat(cashExpenses.total);
+    const totalCashIn = parseFloat(cashOrders.total) + parseFloat(cashPosSales.total);
+    const totalCardIn = parseFloat(cardOrders.total) + parseFloat(cardPosSales.total);
+    const totalBankIn = parseFloat(bankOrders.total) + parseFloat(bankPosSales.total);
+    const expectedCash = totalCashIn - parseFloat(cashExpenses.total);
 
     return {
       shift: shiftRow,
-      cashSales: { total: cashSales.total, count: cashSales.count },
-      cardSales: { total: cardSales.total, count: cardSales.count },
-      bankTransfers: { total: bankTransfers.total, count: bankTransfers.count },
+      cashSales: { total: totalCashIn.toFixed(3), count: cashOrders.count + cashPosSales.count },
+      cardSales: { total: totalCardIn.toFixed(3), count: cardOrders.count + cardPosSales.count },
+      bankTransfers: { total: totalBankIn.toFixed(3), count: bankOrders.count + bankPosSales.count },
       cashExpenses: { total: cashExpenses.total, count: cashExpenses.count },
       bankExpenses: { total: bankExpenses.total, count: bankExpenses.count },
       expectedCash: expectedCash.toFixed(3),
