@@ -251,10 +251,22 @@ export async function registerRoutes(
     if (!newPassword || newPassword.length < 6) {
       return res.status(400).json({ message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" });
     }
-    const user = await storage.getUser(id);
-    if (!user) return res.status(404).json({ message: "المستخدم غير موجود" });
+    const targetUser = await storage.getUser(id);
+    if (!targetUser) return res.status(404).json({ message: "المستخدم غير موجود" });
     const hashed = await bcrypt.hash(newPassword, 10);
     await storage.updateUser(id, { password: hashed });
+    const actor = req.session?.user;
+    await storage.addAuditLog({
+      action: "password_reset",
+      entityType: "user",
+      entityId: id,
+      branchId: targetUser.branchId,
+      userId: actor?.id ?? null,
+      userName: actor?.name ?? null,
+      details: `إعادة تعيين كلمة مرور الموظف "${targetUser.name}" بواسطة ${actor?.name || "غير معروف"}`,
+      oldValue: null,
+      newValue: null,
+    });
     res.json({ message: "تم إعادة تعيين كلمة المرور بنجاح" });
   });
 
@@ -842,6 +854,7 @@ export async function registerRoutes(
     if (req.query.to) filters.to = req.query.to as string;
     if (req.query.paymentMethod) filters.paymentMethod = req.query.paymentMethod as string;
     if (req.query.employeeId) filters.employeeId = Number(req.query.employeeId);
+    if (req.query.invoiceNumber) filters.invoiceNumber = req.query.invoiceNumber as string;
     if (scope.mode === "branch") {
       filters.branchId = scope.branchId;
     }
@@ -924,8 +937,25 @@ export async function registerRoutes(
   app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
     const { status } = req.body;
     if (!status) return res.status(400).json({ message: "الحالة مطلوبة" });
+    const existing = await storage.getOrder(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "الطلب غير موجود" });
+    const oldStatus = existing.status;
     const row = await storage.updateOrderStatus(Number(req.params.id), status);
     if (!row) return res.status(404).json({ message: "الطلب غير موجود" });
+    const user = req.session?.user;
+    if (status === "cancelled" || oldStatus !== status) {
+      await storage.addAuditLog({
+        action: status === "cancelled" ? "order_cancel" : "order_status_change",
+        entityType: "order",
+        entityId: row.id,
+        branchId: row.branchId ?? null,
+        userId: user?.id ?? null,
+        userName: user?.name ?? null,
+        details: `تغيير حالة الطلب ${row.orderNumber} من ${oldStatus} إلى ${status}`,
+        oldValue: JSON.stringify({ status: oldStatus }),
+        newValue: JSON.stringify({ status }),
+      });
+    }
     res.json(row);
   });
   app.post("/api/orders/:id/pay", requireAuth, async (req, res) => {
@@ -936,6 +966,110 @@ export async function registerRoutes(
     const row = await storage.payOrder(Number(req.params.id), paymentMethod as PaymentMethod, bankTxnId);
     if (!row) return res.status(404).json({ message: "الطلب غير موجود" });
     res.json(row);
+  });
+
+  app.post("/api/orders/:id/cancel", requireAuth, async (req, res) => {
+    try {
+      const orderId = Number(req.params.id);
+      const { reason } = req.body;
+      if (!reason) return res.status(400).json({ message: "سبب الإلغاء مطلوب" });
+      const user = req.session?.user;
+      if (!user) return res.status(401).json({ message: "غير مسجل دخول" });
+      if (!["owner", "admin", "manager"].includes(user.role)) {
+        return res.status(403).json({ message: "ليس لديك صلاحية إلغاء الطلبات" });
+      }
+      const result = await storage.cancelOrderFull(orderId, user.id, user.name, reason);
+      if (!result) return res.status(404).json({ message: "الطلب غير موجود" });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ" });
+    }
+  });
+
+  app.post("/api/sales/:id/return", requireAuth, async (req, res) => {
+    try {
+      const saleId = Number(req.params.id);
+      const user = req.session?.user;
+      if (!user) return res.status(401).json({ message: "غير مسجل دخول" });
+      if (!["owner", "admin", "manager"].includes(user.role)) {
+        return res.status(403).json({ message: "ليس لديك صلاحية إنشاء مرتجعات" });
+      }
+
+      const { items, reason, refundMethod, shiftId } = req.body;
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: "يجب تحديد عناصر المرتجع" });
+      }
+
+      const sale = await storage.getSale(saleId);
+      if (!sale) return res.status(404).json({ message: "الفاتورة غير موجودة" });
+
+      let refundAmount = 0;
+      const returnItems = items.map((item: any) => {
+        const lineTotal = parseFloat(item.unitPrice) * item.quantity;
+        refundAmount += lineTotal;
+        return {
+          returnId: 0,
+          saleItemId: item.saleItemId,
+          productId: item.productId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          unitCost: "0",
+          lineTotal: lineTotal.toFixed(3),
+          lineCogs: "0",
+        };
+      });
+
+      const retNumRes = await pool.query(`SELECT coalesce(max(id), 0) + 1 as next FROM sale_returns`);
+      const returnNumber = `RET-${String(retNumRes.rows[0].next).padStart(5, "0")}`;
+
+      const result = await storage.createSaleReturn({
+        returnNumber,
+        saleId,
+        branchId: sale.branchId,
+        shiftId: shiftId || null,
+        refundAmount: refundAmount.toFixed(3),
+        refundMethod: refundMethod || sale.paymentMethod || "cash",
+        cogsReturned: "0",
+        reason: reason || null,
+        createdBy: user.id,
+      }, returnItems);
+
+      res.status(201).json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في إنشاء المرتجع" });
+    }
+  });
+
+  app.get("/api/sale-returns", requireAuth, enforceBranchScope, async (req, res) => {
+    try {
+      const scope = req.branchScope!;
+      const branchId = scope.mode === "branch" ? scope.branchId! : (req.query.branchId ? Number(req.query.branchId) : undefined);
+      const rows = await storage.getSaleReturns(branchId);
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ" });
+    }
+  });
+
+  app.get("/api/sale-returns/:id", requireAuth, async (req, res) => {
+    const ret = await storage.getSaleReturn(Number(req.params.id));
+    if (!ret) return res.status(404).json({ message: "المرتجع غير موجود" });
+    const items = await storage.getSaleReturnItems(ret.id);
+    res.json({ ...ret, items });
+  });
+
+  app.get("/api/audit-log", requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const filters: any = {};
+      if (req.query.entityType) filters.entityType = req.query.entityType;
+      if (req.query.branchId) filters.branchId = Number(req.query.branchId);
+      if (req.query.from) filters.from = req.query.from;
+      if (req.query.to) filters.to = req.query.to;
+      const rows = await storage.getAuditLogs(filters);
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ" });
+    }
   });
 
   app.get("/api/expenses", requireAuth, enforceBranchScope, async (req, res) => {

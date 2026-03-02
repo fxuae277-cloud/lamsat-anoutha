@@ -395,3 +395,53 @@ export const locationTransferItems = pgTable("location_transfer_items", {
 export const insertLocationTransferItemSchema = createInsertSchema(locationTransferItems).omit({ id: true });
 export type InsertLocationTransferItem = z.infer<typeof insertLocationTransferItemSchema>;
 export type LocationTransferItem = typeof locationTransferItems.$inferSelect;
+
+export const saleReturns = pgTable("sale_returns", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  returnNumber: text("return_number").notNull(),
+  saleId: integer("sale_id").references(() => sales.id).notNull(),
+  branchId: integer("branch_id").references(() => branches.id).notNull(),
+  shiftId: integer("shift_id").references(() => shifts.id),
+  refundAmount: decimal("refund_amount", { precision: 10, scale: 3 }).notNull(),
+  refundMethod: text("refund_method").notNull().default("cash"),
+  cogsReturned: decimal("cogs_returned", { precision: 10, scale: 3 }).default("0"),
+  reason: text("reason"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertSaleReturnSchema = createInsertSchema(saleReturns).omit({ id: true, createdAt: true });
+export type InsertSaleReturn = z.infer<typeof insertSaleReturnSchema>;
+export type SaleReturn = typeof saleReturns.$inferSelect;
+
+export const saleReturnItems = pgTable("sale_return_items", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  returnId: integer("return_id").references(() => saleReturns.id).notNull(),
+  saleItemId: integer("sale_item_id").references(() => saleItems.id).notNull(),
+  productId: integer("product_id").references(() => products.id).notNull(),
+  quantity: integer("quantity").notNull(),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 3 }).notNull(),
+  unitCost: decimal("unit_cost", { precision: 10, scale: 3 }).default("0"),
+  lineTotal: decimal("line_total", { precision: 10, scale: 3 }).notNull(),
+  lineCogs: decimal("line_cogs", { precision: 10, scale: 3 }).default("0"),
+});
+export const insertSaleReturnItemSchema = createInsertSchema(saleReturnItems).omit({ id: true });
+export type InsertSaleReturnItem = z.infer<typeof insertSaleReturnItemSchema>;
+export type SaleReturnItem = typeof saleReturnItems.$inferSelect;
+
+export const auditLog = pgTable("audit_log", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  action: text("action").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: integer("entity_id"),
+  branchId: integer("branch_id").references(() => branches.id),
+  userId: integer("user_id").references(() => users.id),
+  userName: text("user_name"),
+  details: text("details"),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertAuditLogSchema = createInsertSchema(auditLog).omit({ id: true, createdAt: true });
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLog.$inferSelect;

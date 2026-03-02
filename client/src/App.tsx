@@ -22,6 +22,8 @@ import Purchases from "@/pages/Purchases";
 import Invoices from "@/pages/Invoices";
 import Finance from "@/pages/Finance";
 import HR from "@/pages/HR";
+import Returns from "@/pages/Returns";
+import AuditLog from "@/pages/AuditLog";
 
 function AuthenticatedRouter() {
   const { user, isLoading } = useAuth();
@@ -62,8 +64,10 @@ function AuthenticatedRouter() {
         <Route path="/hr">
           <HR />
         </Route>
+        <Route path="/returns" component={Returns}/>
         <Route path="/reports" component={Reports}/>
         <Route path="/finance" component={Finance}/>
+        <Route path="/audit-log" component={AuditLog}/>
         <Route component={NotFound} />
       </Switch>
     </AppLayout>

@@ -27,6 +27,9 @@ import {
   inventoryTransactions, type InsertInventoryTransaction, type InventoryTransaction,
   locationTransfers, type InsertLocationTransfer, type LocationTransfer,
   locationTransferItems, type InsertLocationTransferItem, type LocationTransferItem,
+  saleReturns, type InsertSaleReturn, type SaleReturn,
+  saleReturnItems, type InsertSaleReturnItem, type SaleReturnItem,
+  auditLog, type InsertAuditLog, type AuditLog,
   type PaymentMethod, PAYMENT_METHODS,
 } from "@shared/schema";
 
@@ -116,6 +119,13 @@ export interface IStorage {
   approvePurchaseInvoice(id: number): Promise<PurchaseInvoice>;
   receivePurchaseInvoice(id: number): Promise<PurchaseInvoice>;
   updateSupplier(id: number, data: Partial<InsertSupplier>): Promise<Supplier | undefined>;
+  createSaleReturn(data: InsertSaleReturn, items: InsertSaleReturnItem[]): Promise<SaleReturn>;
+  getSaleReturns(branchId?: number): Promise<any[]>;
+  getSaleReturn(id: number): Promise<SaleReturn | undefined>;
+  getSaleReturnItems(returnId: number): Promise<SaleReturnItem[]>;
+  cancelOrderFull(orderId: number, userId: number, userName: string, reason: string): Promise<Order | undefined>;
+  addAuditLog(data: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogs(filters?: { entityType?: string; branchId?: number; from?: string; to?: string }): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -280,13 +290,14 @@ export class DatabaseStorage implements IStorage {
 
   async getSales() { return db.select().from(sales).orderBy(desc(sales.createdAt)); }
 
-  async getSalesFiltered(filters: { from?: string; to?: string; paymentMethod?: string; employeeId?: number; branchId?: number }) {
+  async getSalesFiltered(filters: { from?: string; to?: string; paymentMethod?: string; employeeId?: number; branchId?: number; invoiceNumber?: string }) {
     const conditions: any[] = [];
     if (filters.from) conditions.push(gte(sales.createdAt, new Date(filters.from + "T00:00:00")));
     if (filters.to) conditions.push(lte(sales.createdAt, new Date(filters.to + "T23:59:59.999")));
     if (filters.paymentMethod) conditions.push(eq(sales.paymentMethod, filters.paymentMethod));
     if (filters.employeeId) conditions.push(eq(sales.cashierId, filters.employeeId));
     if (filters.branchId) conditions.push(eq(sales.branchId, filters.branchId));
+    if (filters.invoiceNumber) conditions.push(eq(sales.invoiceNumber, filters.invoiceNumber));
 
     const rows = await db
       .select({
@@ -2044,6 +2055,263 @@ export class DatabaseStorage implements IStorage {
       params.push(branchId);
     }
     query += ` ORDER BY lt.created_at DESC LIMIT 200`;
+    const result = await pool.query(query, params);
+    return result.rows;
+  }
+
+  async createSaleReturn(data: InsertSaleReturn, items: InsertSaleReturnItem[]) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const sale = await this.getSale(data.saleId);
+      if (!sale) throw new Error("الفاتورة غير موجودة");
+
+      const branchLocRes = await client.query(
+        `SELECT id FROM locations WHERE branch_id = $1 AND is_branch_default = true ORDER BY id LIMIT 1`,
+        [data.branchId]
+      );
+      if (branchLocRes.rows.length === 0) throw new Error("لا يوجد مخزن افتراضي للفرع");
+      const branchLocationId = branchLocRes.rows[0].id;
+
+      const retRes = await client.query(
+        `INSERT INTO sale_returns (return_number, sale_id, branch_id, shift_id, refund_amount, refund_method, cogs_returned, reason, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        [data.returnNumber, data.saleId, data.branchId, data.shiftId || null,
+         data.refundAmount, data.refundMethod || "cash", "0", data.reason || null, data.createdBy || null]
+      );
+      const ret = retRes.rows[0];
+      const returnId = ret.id;
+
+      let totalCogs = 0;
+
+      for (const item of items) {
+        const saleItemRes = await client.query(
+          `SELECT * FROM sale_items WHERE id = $1`,
+          [item.saleItemId]
+        );
+        if (saleItemRes.rows.length === 0) throw new Error(`عنصر البيع غير موجود: ${item.saleItemId}`);
+        const si = saleItemRes.rows[0];
+
+        const unitCost = parseFloat(si.unit_cost_at_sale || "0");
+        const lineCogs = unitCost * item.quantity;
+        totalCogs += lineCogs;
+
+        await client.query(
+          `INSERT INTO sale_return_items (return_id, sale_item_id, product_id, quantity, unit_price, unit_cost, line_total, line_cogs)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [returnId, item.saleItemId, item.productId, item.quantity, item.unitPrice, unitCost.toFixed(3), item.lineTotal, lineCogs.toFixed(3)]
+        );
+
+        await client.query(
+          `UPDATE location_inventory SET qty_on_hand = qty_on_hand + $1, updated_at = now()
+           WHERE location_id = $2 AND product_id = $3`,
+          [item.quantity, branchLocationId, item.productId]
+        );
+
+        const invCheck = await client.query(
+          `SELECT id FROM location_inventory WHERE location_id = $1 AND product_id = $2`,
+          [branchLocationId, item.productId]
+        );
+        if (invCheck.rows.length === 0) {
+          await client.query(
+            `INSERT INTO location_inventory (location_id, product_id, qty_on_hand) VALUES ($1, $2, $3)`,
+            [branchLocationId, item.productId, item.quantity]
+          );
+        }
+
+        await client.query(
+          `INSERT INTO inventory_transactions
+           (date, branch_id, from_location_id, to_location_id, product_id, type, qty, ref_table, ref_id, note, created_by, created_at)
+           VALUES (now(), $1, NULL, $2, $3, 'RETURN', $4, 'sale_returns', $5, $6, $7, now())`,
+          [data.branchId, branchLocationId, item.productId, item.quantity, returnId,
+           `مرتجع فاتورة ${sale.invoiceNumber}`, data.createdBy || null]
+        );
+      }
+
+      await client.query(
+        `UPDATE sale_returns SET cogs_returned = $1 WHERE id = $2`,
+        [totalCogs.toFixed(3), returnId]
+      );
+
+      await client.query("COMMIT");
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const refundAmount = data.refundAmount;
+      const pm = data.refundMethod || "cash";
+
+      if (pm === "cash") {
+        await this.addCashLedgerEntry({
+          date: todayStr,
+          branchId: data.branchId,
+          shiftId: data.shiftId ?? null,
+          type: "sale_return",
+          amountIn: "0",
+          amountOut: refundAmount,
+          category: "return",
+          note: `مرتجع مبيعات - فاتورة ${sale.invoiceNumber} - مرتجع #${ret.return_number}`,
+          createdBy: data.createdBy ?? null,
+        });
+      } else {
+        await this.addBankLedgerEntry({
+          date: todayStr,
+          branchId: data.branchId,
+          shiftId: data.shiftId ?? null,
+          method: pm,
+          amountIn: "0",
+          amountOut: refundAmount,
+          refId: null,
+          category: "return",
+          note: `مرتجع مبيعات - فاتورة ${sale.invoiceNumber} - مرتجع #${ret.return_number}`,
+          createdBy: data.createdBy ?? null,
+        });
+      }
+
+      await this.addAuditLog({
+        action: "sale_return",
+        entityType: "sale_return",
+        entityId: returnId,
+        branchId: data.branchId,
+        userId: data.createdBy ?? null,
+        userName: null,
+        details: `مرتجع مبيعات بقيمة ${refundAmount} - فاتورة #${sale.invoiceNumber} - السبب: ${data.reason || "لم يحدد"}`,
+        oldValue: null,
+        newValue: JSON.stringify({ returnId, saleId: data.saleId, refundAmount, itemsCount: items.length }),
+      });
+
+      const [updated] = await db.select().from(saleReturns).where(eq(saleReturns.id, returnId));
+      return updated;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getSaleReturns(branchId?: number) {
+    let query = `
+      SELECT sr.*, s.invoice_number, u.name as created_by_name, b.name as branch_name,
+             (SELECT json_agg(json_build_object(
+                'id', sri.id, 'productId', sri.product_id, 'productName', p.name,
+                'quantity', sri.quantity, 'unitPrice', sri.unit_price, 'lineTotal', sri.line_total
+             )) FROM sale_return_items sri
+             JOIN products p ON p.id = sri.product_id
+             WHERE sri.return_id = sr.id) as items
+      FROM sale_returns sr
+      JOIN sales s ON s.id = sr.sale_id
+      LEFT JOIN users u ON u.id = sr.created_by
+      JOIN branches b ON b.id = sr.branch_id
+    `;
+    const params: any[] = [];
+    if (branchId) {
+      query += ` WHERE sr.branch_id = $1`;
+      params.push(branchId);
+    }
+    query += ` ORDER BY sr.created_at DESC LIMIT 200`;
+    const result = await pool.query(query, params);
+    return result.rows;
+  }
+
+  async getSaleReturn(id: number) {
+    const [row] = await db.select().from(saleReturns).where(eq(saleReturns.id, id));
+    return row;
+  }
+
+  async getSaleReturnItems(returnId: number) {
+    return db.select().from(saleReturnItems).where(eq(saleReturnItems.returnId, returnId));
+  }
+
+  async cancelOrderFull(orderId: number, userId: number, userName: string, reason: string) {
+    const order = await this.getOrder(orderId);
+    if (!order) return undefined;
+
+    const oldStatus = order.status;
+
+    if (order.status === "paid") {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const amount = order.total || "0";
+      const pm = order.paymentMethod || "cash";
+
+      if (pm === "cash") {
+        await this.addCashLedgerEntry({
+          date: todayStr,
+          branchId: order.branchId!,
+          shiftId: order.shiftId,
+          type: "order_cancel_refund",
+          amountIn: "0",
+          amountOut: amount,
+          category: "cancel",
+          note: `إلغاء طلب مدفوع ${order.orderNumber} - ${reason}`,
+          createdBy: userId,
+        });
+      } else {
+        await this.addBankLedgerEntry({
+          date: todayStr,
+          branchId: order.branchId!,
+          shiftId: order.shiftId,
+          method: pm,
+          amountIn: "0",
+          amountOut: amount,
+          refId: null,
+          category: "cancel",
+          note: `إلغاء طلب مدفوع ${order.orderNumber} - ${reason}`,
+          createdBy: userId,
+        });
+      }
+    }
+
+    const [updated] = await db.update(orders).set({ status: "cancelled" }).where(eq(orders.id, orderId)).returning();
+
+    await this.addAuditLog({
+      action: "order_cancel",
+      entityType: "order",
+      entityId: orderId,
+      branchId: order.branchId ?? null,
+      userId,
+      userName,
+      details: `إلغاء طلب ${order.orderNumber} - السبب: ${reason}`,
+      oldValue: JSON.stringify({ status: oldStatus, total: order.total }),
+      newValue: JSON.stringify({ status: "cancelled" }),
+    });
+
+    return updated;
+  }
+
+  async addAuditLog(data: InsertAuditLog) {
+    const [row] = await db.insert(auditLog).values(data).returning();
+    return row;
+  }
+
+  async getAuditLogs(filters?: { entityType?: string; branchId?: number; from?: string; to?: string }) {
+    let query = `
+      SELECT al.*, u.name as actor_name, b.name as branch_name
+      FROM audit_log al
+      LEFT JOIN users u ON u.id = al.user_id
+      LEFT JOIN branches b ON b.id = al.branch_id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    let paramIdx = 1;
+
+    if (filters?.entityType) {
+      query += ` AND al.entity_type = $${paramIdx++}`;
+      params.push(filters.entityType);
+    }
+    if (filters?.branchId) {
+      query += ` AND al.branch_id = $${paramIdx++}`;
+      params.push(filters.branchId);
+    }
+    if (filters?.from) {
+      query += ` AND al.created_at >= $${paramIdx++}::timestamp`;
+      params.push(filters.from + " 00:00:00");
+    }
+    if (filters?.to) {
+      query += ` AND al.created_at <= $${paramIdx++}::timestamp`;
+      params.push(filters.to + " 23:59:59.999");
+    }
+
+    query += ` ORDER BY al.created_at DESC LIMIT 500`;
     const result = await pool.query(query, params);
     return result.rows;
   }

@@ -65,8 +65,11 @@ shared/
 - customers, suppliers
 - sales, sale_items (sales have shift_id + payment_method)
 - orders, order_items (orders have shift_id + payment_method + paid_at)
-- expenses (with shift_id + source: cash/card/bank_transfer)
+- expenses (with shift_id + source: cash/card/bank_transfer + created_by)
 - employees, shifts (with expectedCash, actualCash, difference, terminalName)
+- **sale_returns** (return_number, sale_id, branch_id, shift_id, refund_amount, refund_method, cogs_returned, reason, created_by)
+- **sale_return_items** (return_id, sale_item_id, product_id, quantity, unit_price, unit_cost, line_total, line_cogs)
+- **audit_log** (action, entity_type, entity_id, branch_id, user_id, user_name, details, old_value, new_value, ip_address)
 - **cash_ledger** (date, branch_id, shift_id, type, amount_in, amount_out, category, note, created_by)
 - **bank_ledger** (date, branch_id, shift_id, method[card/bank_transfer], amount_in, amount_out, ref_id, category, note, created_by)
 - **purchase_invoices** (invoice_number, supplier_id, branch_id, invoice_date, shipping/customs/clearance/other costs, subtotal, total_extra_cost, grand_total, status[draft/posted])
