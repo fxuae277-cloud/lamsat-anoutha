@@ -970,6 +970,14 @@ export class DatabaseStorage implements IStorage {
       parseFloat(invoice.otherCost || "0");
     const grandTotal = subtotalItems + totalExtraCost;
 
+    const locRes = await db.select({ id: locations.id })
+      .from(locations)
+      .where(eq(locations.branchId, invoice.branchId))
+      .orderBy(locations.id)
+      .limit(1);
+    if (locRes.length === 0) throw new Error("لا يوجد موقع مخزون للفرع");
+    const toLocationId = locRes[0].id;
+
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -1012,21 +1020,13 @@ export class DatabaseStorage implements IStorage {
           );
         }
 
-        const backstoreRes = await client.query(
-          `SELECT id FROM locations WHERE branch_id = $1 AND code = 'backstore' LIMIT 1`,
-          [invoice.branchId]
-        );
-        const locationId = backstoreRes.rows.length > 0
-          ? backstoreRes.rows[0].id
-          : invoice.branchId;
-
         await client.query(
-          `INSERT INTO location_inventory (location_id, product_id, qty_on_hand, reorder_level, updated_at)
-           VALUES ($1, $2, $3, 5, now())
+          `INSERT INTO location_inventory (location_id, product_id, qty_on_hand, updated_at)
+           VALUES ($1, $2, $3, now())
            ON CONFLICT (location_id, product_id)
            DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand + EXCLUDED.qty_on_hand,
                          updated_at = now()`,
-          [locationId, item.productId, item.qty]
+          [toLocationId, item.productId, item.qty]
         );
 
         await client.query(
@@ -1040,7 +1040,7 @@ export class DatabaseStorage implements IStorage {
             $3, 'PURCHASE', $4,
             'purchase_invoices', $5,
             'Purchase Invoice Approved', $6, now())`,
-          [invoice.branchId, locationId, item.productId, item.qty, id, invoice.createdBy]
+          [invoice.branchId, toLocationId, item.productId, item.qty, id, invoice.createdBy]
         );
       }
 
