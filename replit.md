@@ -121,12 +121,24 @@ shared/
 - On payment: paymentMethod + paidAt stored on order, ledger entry created
 - Expenses auto-assigned branchId + shiftId from session user (not from request body)
 
-## Shift Closing
+## Shift System (Professional POS)
+- **Open Shift**: POS requires opening a shift with opening cash before any sales
+- **Close Shift** button in POS header with full pre-close summary dialog
 - Cannot close shift if pending orders exist (status: new/processing/pending)
-- expected_cash = (sum cash orders paid + sum cash POS sales) - sum cash expenses for that shift
-- actual_cash entered by user at close time
+- Pre-close dialog shows: live shift report (sales by payment method, expenses, cash reconciliation)
+- expected_cash = openingCash + (sum cash orders paid + sum cash POS sales) - sum cash expenses + deposits - withdrawals
+- actual_cash entered by user at close time with live difference calculation
 - difference = actual - expected, recorded in cash_ledger as type=shift_difference
+- Post-close: receipt-style shift report with full breakdown + print button + new shift button
 - totalSales, totalCash, totalBank all include both orders + POS sales
+
+## Daily Accounting (المحاسبة اليومية)
+- **Cash Ledger** (/finance tab "دفتر النقد"): daily view of all cash movements (sales, expenses, deposits, withdrawals, shift differences)
+- **Bank Ledger** (/finance tab "دفتر البنك"): read-only, auto-populated from card/bank sales and expenses
+- **Cash Difference** (/finance tab "فرق الصندوق"): closed shifts with expected vs actual vs difference per shift
+- Summary cards: opening cash, cash sales, expenses, deposits, withdrawals, net cash
+- Deposit/Withdrawal endpoints (requireManager): POST /api/cash-ledger/deposit, POST /api/cash-ledger/withdrawal
+- API: GET /api/cash-ledger?date=..., GET /api/bank-ledger?date=..., GET /api/cash-ledger/summary?date=..., GET /api/shifts/closed?date=...
 
 ## Key Features
 1. **Login**: Username/password authentication, session-based

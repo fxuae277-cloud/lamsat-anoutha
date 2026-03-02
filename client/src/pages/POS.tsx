@@ -1,14 +1,20 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Plus, Minus, Trash2, CheckCircle2, Image as ImageIcon, Store, Monitor, Banknote, LogOut, User as UserIcon } from "lucide-react";
+import { Search, Plus, Minus, Trash2, CheckCircle2, Image as ImageIcon, Store, Monitor, Banknote, LogOut, User as UserIcon, XCircle, Clock, AlertTriangle, Printer, ArrowLeft, Receipt, TrendingUp, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import type { Product, Branch, Shift } from "@shared/schema";
+
+function fmt(v: string | number | null | undefined) {
+  return parseFloat(String(v || "0")).toFixed(3);
+}
 
 function StartPOS({ branchName, terminalName, userName, onShiftOpened }: {
   branchName: string;
@@ -128,10 +134,132 @@ function StartPOS({ branchName, terminalName, userName, onShiftOpened }: {
   );
 }
 
+function ShiftReceipt({ report, onNewShift }: { report: any; onNewShift: () => void }) {
+  const diff = parseFloat(report.difference || "0");
+  const diffColor = Math.abs(diff) < 0.002 ? "text-green-600" : diff > 0 ? "text-blue-600" : "text-red-600";
+  const diffLabel = Math.abs(diff) < 0.002 ? "مطابق ✓" : diff > 0 ? `زيادة +${fmt(diff)}` : `نقص ${fmt(diff)}`;
+
+  return (
+    <div className="h-[calc(100vh-8rem)] flex items-center justify-center">
+      <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-lg overflow-hidden">
+        <div className="bg-green-50 p-5 text-center border-b border-border">
+          <CheckCircle2 className="w-12 h-12 text-green-600 mx-auto mb-2" />
+          <h2 className="text-xl font-bold text-green-800" data-testid="text-shift-closed-title">تم إغلاق الشفت بنجاح</h2>
+          <p className="text-sm text-green-600 mt-1">شفت #{report.shift?.id}</p>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="bg-muted/50 rounded-lg p-3 text-center">
+              <p className="text-xs text-muted-foreground">الكاشير</p>
+              <p className="font-bold mt-1">{report.cashierName || "-"}</p>
+            </div>
+            <div className="bg-muted/50 rounded-lg p-3 text-center">
+              <p className="text-xs text-muted-foreground">الجهاز</p>
+              <p className="font-bold mt-1">{report.shift?.terminalName || "-"}</p>
+            </div>
+            <div className="bg-muted/50 rounded-lg p-3 text-center">
+              <p className="text-xs text-muted-foreground">وقت الفتح</p>
+              <p className="font-bold mt-1">{report.shift?.startedAt ? new Date(report.shift.startedAt).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" }) : "-"}</p>
+            </div>
+            <div className="bg-muted/50 rounded-lg p-3 text-center">
+              <p className="text-xs text-muted-foreground">وقت الإغلاق</p>
+              <p className="font-bold mt-1">{report.shift?.endedAt ? new Date(report.shift.endedAt).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" }) : "-"}</p>
+            </div>
+          </div>
+
+          <div className="border rounded-lg overflow-hidden text-sm">
+            <div className="bg-muted/30 px-4 py-2 font-bold border-b">ملخص المبيعات</div>
+            <div className="divide-y">
+              <div className="flex justify-between px-4 py-2">
+                <span className="text-muted-foreground">نقدي ({report.salesCash?.count || 0} عملية)</span>
+                <span className="font-medium">{fmt(report.salesCash?.total)} ر.ع</span>
+              </div>
+              <div className="flex justify-between px-4 py-2">
+                <span className="text-muted-foreground">بطاقة ({report.salesCard?.count || 0} عملية)</span>
+                <span className="font-medium">{fmt(report.salesCard?.total)} ر.ع</span>
+              </div>
+              <div className="flex justify-between px-4 py-2">
+                <span className="text-muted-foreground">تحويل بنكي ({report.salesBankTransfer?.count || 0} عملية)</span>
+                <span className="font-medium">{fmt(report.salesBankTransfer?.total)} ر.ع</span>
+              </div>
+              <div className="flex justify-between px-4 py-2 bg-green-50 font-bold">
+                <span>إجمالي المبيعات</span>
+                <span className="text-green-700">{fmt(report.totalSales)} ر.ع</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="border rounded-lg overflow-hidden text-sm">
+            <div className="bg-muted/30 px-4 py-2 font-bold border-b">المصروفات</div>
+            <div className="divide-y">
+              <div className="flex justify-between px-4 py-2">
+                <span className="text-muted-foreground">نقدية ({report.expensesCash?.count || 0})</span>
+                <span className="font-medium text-red-600">{fmt(report.expensesCash?.total)} ر.ع</span>
+              </div>
+              <div className="flex justify-between px-4 py-2">
+                <span className="text-muted-foreground">بنكية ({report.expensesBank?.count || 0})</span>
+                <span className="font-medium text-red-600">{fmt(report.expensesBank?.total)} ر.ع</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-2 border-primary/30 rounded-lg overflow-hidden text-sm">
+            <div className="bg-primary/10 px-4 py-2 font-bold border-b border-primary/20">تسوية الصندوق</div>
+            <div className="divide-y divide-primary/10">
+              <div className="flex justify-between px-4 py-2">
+                <span className="text-muted-foreground">الافتتاحية</span>
+                <span className="font-medium">{fmt(report.openingCash)} ر.ع</span>
+              </div>
+              <div className="flex justify-between px-4 py-2">
+                <span className="text-muted-foreground">+ مبيعات نقدية</span>
+                <span className="font-medium text-green-600">{fmt(report.salesCash?.total)} ر.ع</span>
+              </div>
+              <div className="flex justify-between px-4 py-2">
+                <span className="text-muted-foreground">- مصروفات نقدية</span>
+                <span className="font-medium text-red-600">{fmt(report.expensesCash?.total)} ر.ع</span>
+              </div>
+              <div className="flex justify-between px-4 py-2 bg-blue-50 font-bold">
+                <span>= المتوقع في الصندوق</span>
+                <span>{fmt(report.expectedCash)} ر.ع</span>
+              </div>
+              <div className="flex justify-between px-4 py-2 font-bold">
+                <span>الفعلي في الصندوق</span>
+                <span>{fmt(report.actualCash)} ر.ع</span>
+              </div>
+              <div className={`flex justify-between px-4 py-3 font-bold text-lg ${Math.abs(diff) < 0.002 ? "bg-green-50" : "bg-red-50"}`}>
+                <span>الفرق</span>
+                <span className={diffColor} data-testid="text-shift-difference">{diffLabel}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-between px-4 py-3 bg-primary/5 rounded-lg border border-primary/20 font-bold">
+            <span>صافي الدخل</span>
+            <span className="text-primary text-lg">{fmt(report.netTotal)} ر.ع</span>
+          </div>
+        </div>
+
+        <div className="p-5 border-t border-border flex gap-3">
+          <Button variant="outline" className="flex-1 gap-2" onClick={() => window.print()} data-testid="button-print-receipt">
+            <Printer className="w-4 h-4" />
+            طباعة
+          </Button>
+          <Button className="flex-1 gap-2" onClick={onNewShift} data-testid="button-new-shift">
+            <ArrowLeft className="w-4 h-4" />
+            شفت جديد
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function POS() {
   const { toast } = useToast();
   const { user, logout } = useAuth();
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
+  const [closedReport, setClosedReport] = useState<any>(null);
 
   const [cart, setCart] = useState<{product: Product, qty: number}[]>([]);
   const [paymentMethod, setPaymentMethod] = useState("cash");
@@ -142,6 +270,11 @@ export default function POS() {
   const [payDialogOpen, setPayDialogOpen] = useState(false);
   const [filterCategory, setFilterCategory] = useState("all");
   const barcodeRef = useRef<HTMLInputElement>(null);
+
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [actualCash, setActualCash] = useState("");
+  const [preCloseData, setPreCloseData] = useState<any>(null);
+  const [pendingOrders, setPendingOrders] = useState<any[]>([]);
 
   const { data: products = [] } = useQuery<Product[]>({
     queryKey: ["/api/products"],
@@ -207,6 +340,69 @@ export default function POS() {
     },
   });
 
+  const prepareCloseShift = async () => {
+    if (!currentShift) return;
+    try {
+      const reportRes = await fetch(`/api/reports/shift?shiftId=${currentShift.id}`, { credentials: "include" });
+      const reportData = await reportRes.json();
+      setPreCloseData(reportData);
+      setPendingOrders([]);
+
+      setActualCash("");
+      setCloseDialogOpen(true);
+    } catch (err: any) {
+      toast({ title: "خطأ", description: "فشل تحميل بيانات الشفت", variant: "destructive" });
+    }
+  };
+
+  const closeShiftMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentShift) throw new Error("لا يوجد شفت مفتوح");
+      const res = await apiRequest("PATCH", `/api/shifts/${currentShift.id}/close`, {
+        actualCash: actualCash || "0",
+      });
+      return await res.json();
+    },
+    onSuccess: async (closedShift: Shift) => {
+      setCloseDialogOpen(false);
+      try {
+        const reportRes = await fetch(`/api/reports/shift?shiftId=${closedShift.id}`, { credentials: "include" });
+        const reportData = await reportRes.json();
+        setClosedReport(reportData);
+      } catch {
+        setClosedReport({
+          shift: closedShift,
+          cashierName: user?.name,
+          openingCash: closedShift.openingCash,
+          expectedCash: closedShift.expectedCash,
+          actualCash: closedShift.actualCash,
+          difference: closedShift.difference,
+        });
+      }
+      setCurrentShift(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cash-ledger"] });
+    },
+    onError: (err: Error) => {
+      if (err.message.includes("طلب") || err.message.includes("معلق")) {
+        setPendingOrders([{ message: err.message }]);
+      }
+      toast({ title: "خطأ في إغلاق الشفت", description: err.message, variant: "destructive" });
+    },
+  });
+
+  if (closedReport) {
+    return (
+      <ShiftReceipt
+        report={closedReport}
+        onNewShift={() => {
+          setClosedReport(null);
+          setCurrentShift(null);
+        }}
+      />
+    );
+  }
+
   if (!currentShift) {
     return (
       <StartPOS
@@ -264,10 +460,14 @@ export default function POS() {
     }
   };
 
+  const expectedCashLive = preCloseData ? parseFloat(preCloseData.expectedCash || "0") : 0;
+  const actualCashNum = parseFloat(actualCash || "0");
+  const liveDiff = actualCash ? actualCashNum - expectedCashLive : 0;
+
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col gap-4">
       <div className="bg-card p-4 rounded-xl shadow-sm border border-border flex items-center justify-between shrink-0">
-        <div className="flex gap-4 items-center text-sm">
+        <div className="flex gap-3 items-center text-sm flex-wrap">
           <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 rounded-lg">
             <Store className="w-4 h-4 text-primary" />
             <span className="font-medium" data-testid="text-active-branch">{branchName}</span>
@@ -284,11 +484,26 @@ export default function POS() {
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
             شفت #{currentShift.id}
           </div>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted rounded-lg text-xs">
+            <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+            {currentShift.startedAt ? new Date(currentShift.startedAt).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" }) : ""}
+          </div>
         </div>
-        <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5" onClick={logout} data-testid="button-logout-pos">
-          <LogOut className="w-4 h-4" />
-          خروج
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="destructive"
+            size="sm"
+            className="gap-1.5"
+            onClick={prepareCloseShift}
+            data-testid="button-close-shift"
+          >
+            <XCircle className="w-4 h-4" />
+            إغلاق الشفت
+          </Button>
+          <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5" onClick={logout} data-testid="button-logout-pos">
+            <LogOut className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
       <div className="flex gap-6 h-full min-h-0">
@@ -432,6 +647,7 @@ export default function POS() {
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                   <DialogTitle>إتمام الدفع</DialogTitle>
+                  <DialogDescription>اختر طريقة الدفع وأكمل العملية</DialogDescription>
                 </DialogHeader>
                 <div className="py-4 space-y-6">
                   <div className="text-center p-4 bg-primary/5 rounded-xl border border-primary/20">
@@ -468,6 +684,142 @@ export default function POS() {
           </div>
         </div>
       </div>
+
+      <Dialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="w-5 h-5 text-red-500" />
+              إغلاق الشفت #{currentShift.id}
+            </DialogTitle>
+            <DialogDescription>راجع ملخص الشفت وأدخل المبلغ الفعلي في الصندوق</DialogDescription>
+          </DialogHeader>
+
+          {pendingOrders.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-bold text-red-800 text-sm">لا يمكن إغلاق الشفت</p>
+                <p className="text-red-600 text-sm mt-1">{pendingOrders[0]?.message || "يوجد طلبات معلقة"}</p>
+              </div>
+            </div>
+          )}
+
+          {preCloseData && (
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              <div className="grid grid-cols-3 gap-3">
+                <Card>
+                  <CardContent className="p-3 text-center">
+                    <p className="text-xs text-muted-foreground">إجمالي المبيعات</p>
+                    <p className="text-lg font-bold text-green-600" data-testid="text-close-total-sales">{fmt(preCloseData.totalSales)}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3 text-center">
+                    <p className="text-xs text-muted-foreground">المصروفات</p>
+                    <p className="text-lg font-bold text-red-600">{fmt(preCloseData.totalExpenses)}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3 text-center">
+                    <p className="text-xs text-muted-foreground">الصافي</p>
+                    <p className="text-lg font-bold text-primary">{fmt(preCloseData.netTotal)}</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="border rounded-lg overflow-hidden text-sm">
+                <div className="bg-muted/30 px-3 py-2 font-bold border-b text-xs">تفاصيل المبيعات</div>
+                <div className="divide-y text-xs">
+                  <div className="flex justify-between px-3 py-1.5">
+                    <span>نقدي ({preCloseData.salesCash?.count || 0})</span>
+                    <span className="font-medium">{fmt(preCloseData.salesCash?.total)} ر.ع</span>
+                  </div>
+                  <div className="flex justify-between px-3 py-1.5">
+                    <span>بطاقة ({preCloseData.salesCard?.count || 0})</span>
+                    <span className="font-medium">{fmt(preCloseData.salesCard?.total)} ر.ع</span>
+                  </div>
+                  <div className="flex justify-between px-3 py-1.5">
+                    <span>تحويل بنكي ({preCloseData.salesBankTransfer?.count || 0})</span>
+                    <span className="font-medium">{fmt(preCloseData.salesBankTransfer?.total)} ر.ع</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-2 border-blue-200 rounded-lg overflow-hidden text-sm">
+                <div className="bg-blue-50 px-3 py-2 font-bold border-b border-blue-200 text-blue-800 text-xs">تسوية الصندوق</div>
+                <div className="divide-y divide-blue-100 text-xs">
+                  <div className="flex justify-between px-3 py-1.5">
+                    <span>الافتتاحية</span>
+                    <span className="font-medium">{fmt(preCloseData.openingCash)} ر.ع</span>
+                  </div>
+                  <div className="flex justify-between px-3 py-1.5">
+                    <span>+ مبيعات نقدية</span>
+                    <span className="font-medium text-green-600">{fmt(preCloseData.salesCash?.total)} ر.ع</span>
+                  </div>
+                  <div className="flex justify-between px-3 py-1.5">
+                    <span>- مصروفات نقدية</span>
+                    <span className="font-medium text-red-600">{fmt(preCloseData.expensesCash?.total)} ر.ع</span>
+                  </div>
+                  <div className="flex justify-between px-3 py-2 bg-blue-50 font-bold">
+                    <span>= المتوقع في الصندوق</span>
+                    <span className="text-blue-700" data-testid="text-close-expected">{fmt(preCloseData.expectedCash)} ر.ع</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold flex items-center gap-2">
+                  <Banknote className="w-4 h-4" />
+                  المبلغ الفعلي في الصندوق (ر.ع)
+                </label>
+                <Input
+                  type="number"
+                  step="0.001"
+                  placeholder="0.000"
+                  value={actualCash}
+                  onChange={(e) => setActualCash(e.target.value)}
+                  className="h-14 text-2xl text-center font-bold border-2"
+                  autoFocus
+                  data-testid="input-actual-cash"
+                />
+              </div>
+
+              {actualCash && (
+                <div className={`rounded-lg p-4 text-center border-2 ${Math.abs(liveDiff) < 0.002 ? "bg-green-50 border-green-300" : liveDiff > 0 ? "bg-blue-50 border-blue-300" : "bg-red-50 border-red-300"}`}>
+                  <p className="text-xs text-muted-foreground mb-1">الفرق</p>
+                  <p className={`text-2xl font-bold ${Math.abs(liveDiff) < 0.002 ? "text-green-600" : liveDiff > 0 ? "text-blue-600" : "text-red-600"}`} data-testid="text-close-live-diff">
+                    {Math.abs(liveDiff) < 0.002 ? "مطابق ✓" : liveDiff > 0 ? `+${liveDiff.toFixed(3)} زيادة` : `${liveDiff.toFixed(3)} نقص`}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setCloseDialogOpen(false)}>إلغاء</Button>
+            <Button
+              variant="destructive"
+              onClick={() => closeShiftMutation.mutate()}
+              disabled={closeShiftMutation.isPending || !actualCash}
+              className="gap-2"
+              data-testid="button-confirm-close-shift"
+            >
+              {closeShiftMutation.isPending ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  جارٍ الإغلاق...
+                </>
+              ) : (
+                <>
+                  <XCircle className="w-4 h-4" />
+                  تأكيد إغلاق الشفت
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
