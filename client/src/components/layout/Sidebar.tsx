@@ -23,42 +23,45 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 
-const NAV_ITEMS = [
-  { href: "/", label: "لوحة التحكم", icon: LayoutDashboard },
-  { href: "/executive", label: "لوحة الإدارة التنفيذية", icon: Gauge, adminOnly: true },
-  { href: "/executive-plus", label: "لوحة الاستثمار+", icon: LineChart, adminOnly: true },
-  { href: "/pos", label: "نقطة البيع (POS)", icon: Calculator },
-  { href: "/products", label: "المنتجات والأسعار", icon: Tags },
-  { href: "/inventory", label: "المخزون", icon: Package },
-  { href: "/invoices", label: "فواتير نقطة البيع", icon: FileText },
-  { href: "/orders", label: "الطلبات", icon: ShoppingCart },
-  { href: "/customers", label: "العملاء", icon: Users },
-  { href: "/suppliers", label: "الموردون والمشتريات", icon: Truck, managerOnly: true },
-  { href: "/expenses", label: "المصروفات", icon: Receipt },
-  { href: "/returns", label: "المرتجعات", icon: RotateCcw },
-  { href: "/stock-control", label: "الجرد والتسويات", icon: ClipboardCheck, managerOnly: true },
-  { href: "/finance", label: "المحاسبة اليومية", icon: Banknote },
-  { href: "/hr", label: "الرواتب والموظفين", icon: UserCircle },
-  { href: "/reports", label: "التقارير المالية", icon: PieChart },
-  { href: "/operations", label: "آخر العمليات", icon: Activity },
-  { href: "/audit-log", label: "سجل المراجعة", icon: Shield, adminOnly: true },
-  { href: "/settings", label: "الإعدادات", icon: Settings },
-];
-
-const ROLE_LABELS: Record<string, string> = {
-  owner: "مالك",
-  cashier: "كاشير",
-  employee: "موظف",
-  admin: "مدير",
+type NavItem = {
+  href: string;
+  labelKey: string;
+  icon: any;
+  adminOnly?: boolean;
+  managerOnly?: boolean;
 };
+
+const NAV_ITEMS: NavItem[] = [
+  { href: "/", labelKey: "nav.dashboard", icon: LayoutDashboard },
+  { href: "/executive", labelKey: "nav.executive", icon: Gauge, adminOnly: true },
+  { href: "/executive-plus", labelKey: "nav.executivePlus", icon: LineChart, adminOnly: true },
+  { href: "/pos", labelKey: "nav.pos", icon: Calculator },
+  { href: "/products", labelKey: "nav.products", icon: Tags },
+  { href: "/inventory", labelKey: "nav.inventory", icon: Package },
+  { href: "/invoices", labelKey: "nav.invoices", icon: FileText },
+  { href: "/orders", labelKey: "nav.orders", icon: ShoppingCart },
+  { href: "/customers", labelKey: "nav.customers", icon: Users },
+  { href: "/suppliers", labelKey: "nav.suppliers", icon: Truck, managerOnly: true },
+  { href: "/expenses", labelKey: "nav.expenses", icon: Receipt },
+  { href: "/returns", labelKey: "nav.returns", icon: RotateCcw },
+  { href: "/stock-control", labelKey: "nav.stockControl", icon: ClipboardCheck, managerOnly: true },
+  { href: "/finance", labelKey: "nav.finance", icon: Banknote },
+  { href: "/hr", labelKey: "nav.hr", icon: UserCircle },
+  { href: "/reports", labelKey: "nav.reports", icon: PieChart },
+  { href: "/operations", labelKey: "nav.operations", icon: Activity },
+  { href: "/audit-log", labelKey: "nav.auditLog", icon: Shield, adminOnly: true },
+  { href: "/settings", labelKey: "nav.settings", icon: Settings },
+];
 
 export function Sidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const { t } = useI18n();
 
   const initial = user?.name?.charAt(0) || "؟";
-  const roleLabel = ROLE_LABELS[user?.role || ""] || user?.role || "";
+  const roleLabel = t(`sidebar.role_${user?.role || "employee"}`);
 
   return (
     <aside className="w-64 bg-sidebar border-e border-sidebar-border h-full flex flex-col shadow-sm">
@@ -70,12 +73,12 @@ export function Sidebar() {
               <circle cx="12" cy="10" r="3"/>
             </svg>
           </span>
-          لمسة أنوثة
+          {t("app.name")}
         </h1>
       </div>
       
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-        {NAV_ITEMS.filter((item: any) => {
+        {NAV_ITEMS.filter((item) => {
           if (item.adminOnly && user?.role !== "owner" && user?.role !== "admin") return false;
           if (item.managerOnly && (user?.role === "cashier" || user?.role === "employee")) return false;
           return true;
@@ -91,7 +94,7 @@ export function Sidebar() {
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}>
                 <Icon className="w-5 h-5" />
-                {item.label}
+                {t(item.labelKey)}
             </Link>
           );
         })}
@@ -109,7 +112,7 @@ export function Sidebar() {
           <button
             onClick={logout}
             className="p-1.5 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-            title="تسجيل الخروج"
+            title={t("sidebar.logout")}
             data-testid="button-sidebar-logout"
           >
             <LogOut className="w-4 h-4" />

@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { I18nProvider, useI18n } from "@/lib/i18n";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -29,13 +30,14 @@ import StockControl from "@/pages/StockControl";
 
 function AuthenticatedRouter() {
   const { user, isLoading } = useAuth();
+  const { t } = useI18n();
 
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-3">
           <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-muted-foreground">جارٍ التحميل...</p>
+          <p className="text-muted-foreground">{t("app.loading")}</p>
         </div>
       </div>
     );
@@ -83,9 +85,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <AuthProvider>
-          <AuthenticatedRouter />
-        </AuthProvider>
+        <I18nProvider>
+          <AuthProvider>
+            <AuthenticatedRouter />
+          </AuthProvider>
+        </I18nProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

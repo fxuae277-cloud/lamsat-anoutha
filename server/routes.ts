@@ -124,6 +124,22 @@ export async function registerRoutes(
     res.json({ user: safeUser });
   });
 
+  app.patch("/api/me/settings", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { uiLanguage } = req.body;
+      if (uiLanguage && (uiLanguage === "ar" || uiLanguage === "en")) {
+        await pool.query("UPDATE users SET ui_language = $1 WHERE id = $2", [uiLanguage, userId]);
+      }
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "المستخدم غير موجود" });
+      const { password: _, ...safeUser } = user;
+      res.json({ user: safeUser });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/settings", requireAuth, async (_req, res) => {
     try {
       const result = await pool.query("SELECT key, value FROM settings");

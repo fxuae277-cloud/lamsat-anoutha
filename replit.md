@@ -14,15 +14,17 @@ Currency: Omani Rial (OMR) | VAT: 5% | Unified pricing across branches.
 - **State Management**: TanStack Query
 - **Auth**: express-session + connect-pg-simple (HttpOnly cookie)
 - **Export**: xlsx (Excel export)
+- **i18n**: Custom lightweight i18n system (ar/en) with JSON locale files
 
 ## Project Structure
 ```
 client/src/
+  locales/              → ar.json, en.json (translation files)
   components/layout/    → Sidebar, AppLayout
   components/ui/        → shadcn/ui components
   pages/                → Login, Dashboard, POS, Products, Inventory, Orders, Expenses, Settings, Reports, Purchases
   hooks/                → use-toast, use-mobile
-  lib/                  → queryClient, auth (AuthProvider/useAuth), utils
+  lib/                  → queryClient, auth (AuthProvider/useAuth), i18n (I18nProvider/useI18n), utils
 server/
   index.ts              → Express server entry + session setup
   routes.ts             → API routes (/api/*) + requireAuth middleware
@@ -174,10 +176,11 @@ shared/
 14. **Invoices (فواتير نقطة البيع)**: POS sales invoice browser with filters (date, payment method, employee, branch), detail modal with PDF download + thermal 80mm receipt print + A4 print, Excel export
 15. **Thermal Receipt**: Auto-print 80mm thermal receipt on POS sale completion; reprint from Invoices page
 16. **Stocktake (الجرد والتسويات)**: Create stocktake sessions per branch/location, count items vs system qty, approve to auto-adjust inventory, manual adjustments (+/-), variance report by product
+17. **i18n (Arabic/English)**: Language selector in Settings > General > Preferences; per-user `ui_language` stored in DB; dynamic RTL/LTR switching; sidebar + settings page fully translated
 
 ## API Routes
 All prefixed with `/api/`:
-- POST `/auth/login`, POST `/auth/logout`, GET `/auth/me`, POST `/auth/change-password`
+- POST `/auth/login`, POST `/auth/logout`, GET `/auth/me`, POST `/auth/change-password`, PATCH `/me/settings` (uiLanguage)
 - GET/POST `/branches`, `/categories`, `/products`, `/warehouses`
 - GET/POST/PATCH/DELETE `/products/:id`
 - GET/POST `/inventory`, `/inventory/receive`, `/inventory/transfer`

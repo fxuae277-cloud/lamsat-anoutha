@@ -42,6 +42,7 @@ export const users = pgTable("users", {
   salary: decimal("salary", { precision: 10, scale: 3 }).default("0"),
   salaryType: text("salary_type").default("monthly"),
   commissionRate: decimal("commission_rate", { precision: 5, scale: 2 }).default("0"),
+  uiLanguage: text("ui_language").notNull().default("ar"),
 });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;

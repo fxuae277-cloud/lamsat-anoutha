@@ -1,6 +1,7 @@
-import { createContext, useContext, ReactNode } from "react";
+import { createContext, useContext, useEffect, ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "./queryClient";
+import { useI18n } from "./i18n";
 import type { User } from "@shared/schema";
 
 type SafeUser = Omit<User, "password">;
@@ -15,6 +16,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { setLang } = useI18n();
+
   const { data, isLoading } = useQuery<{ user: SafeUser } | null>({
     queryKey: ["/api/auth/me"],
     queryFn: async () => {
@@ -26,6 +29,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     retry: false,
     staleTime: Infinity,
   });
+
+  useEffect(() => {
+    if (data?.user?.uiLanguage) {
+      setLang(data.user.uiLanguage as "ar" | "en");
+    }
+  }, [data?.user?.uiLanguage, setLang]);
 
   const loginMutation = useMutation({
     mutationFn: async ({ username, password }: { username: string; password: string }) => {

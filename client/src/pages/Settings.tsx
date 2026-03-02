@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -9,11 +9,13 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
+import type { Lang } from "@/lib/i18n";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import type { Branch, City } from "@shared/schema";
-import { UserPlus, Pencil, KeyRound, ShieldCheck, Eye, EyeOff, Lock, UserCircle, Settings2, Building2, MapPin, Save, X, Loader2, AlertTriangle } from "lucide-react";
+import { UserPlus, Pencil, KeyRound, ShieldCheck, Eye, EyeOff, Lock, UserCircle, Settings2, Building2, MapPin, Save, X, Loader2, AlertTriangle, Globe } from "lucide-react";
 
 type SafeUser = {
   id: number;
@@ -31,13 +33,19 @@ type SettingsData = {
   vatRate: string;
 };
 
-const ROLE_LABELS: Record<string, string> = { owner: "مالك", admin: "مدير", cashier: "كاشير", employee: "موظف" };
 const ROLE_OPTIONS = [
-  { value: "owner", label: "مالك" },
-  { value: "admin", label: "مدير" },
-  { value: "cashier", label: "كاشير" },
-  { value: "employee", label: "موظف" },
+  { value: "owner", labelKey: "sidebar.role_owner" },
+  { value: "admin", labelKey: "sidebar.role_admin" },
+  { value: "cashier", labelKey: "sidebar.role_cashier" },
+  { value: "employee", labelKey: "sidebar.role_employee" },
 ];
+
+const ROLE_LABELS_KEYS: Record<string, string> = {
+  owner: "sidebar.role_owner",
+  admin: "sidebar.role_admin",
+  cashier: "sidebar.role_cashier",
+  employee: "sidebar.role_employee",
+};
 
 const DEFAULT_SETTINGS: SettingsData = {
   businessName: "لمسة أنوثة إكسسوارات لوى",
@@ -48,6 +56,7 @@ const DEFAULT_SETTINGS: SettingsData = {
 export default function Settings() {
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
+  const { t, lang, setLang } = useI18n();
   const isOwnerOrAdmin = currentUser?.role === "owner" || currentUser?.role === "admin";
 
   const [addBranchOpen, setAddBranchOpen] = useState(false);
@@ -72,6 +81,8 @@ export default function Settings() {
 
   const [currentSettings, setCurrentSettings] = useState<SettingsData>(DEFAULT_SETTINGS);
   const [savedSettings, setSavedSettings] = useState<SettingsData>(DEFAULT_SETTINGS);
+  const [pendingLang, setPendingLang] = useState<Lang>(lang);
+  const [savedLang, setSavedLang] = useState<Lang>(lang);
   const [activeTab, setActiveTab] = useState("account");
   const [pendingTab, setPendingTab] = useState<string | null>(null);
   const [showLeaveWarning, setShowLeaveWarning] = useState(false);
@@ -97,25 +108,44 @@ export default function Settings() {
     }
   }, [serverSettings]);
 
-  const isDirty = currentSettings.businessName !== savedSettings.businessName ||
+  useEffect(() => {
+    setPendingLang(lang);
+    setSavedLang(lang);
+  }, [lang]);
+
+  const settingsDirty = currentSettings.businessName !== savedSettings.businessName ||
     currentSettings.vatEnabled !== savedSettings.vatEnabled ||
     currentSettings.vatRate !== savedSettings.vatRate;
 
+  const langDirty = pendingLang !== savedLang;
+  const isDirty = settingsDirty || langDirty;
+
   const handleCancel = useCallback(() => {
     setCurrentSettings({ ...savedSettings });
-  }, [savedSettings]);
+    setPendingLang(savedLang);
+  }, [savedSettings, savedLang]);
 
   const saveSettingsMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("PATCH", "/api/settings", currentSettings);
+      if (settingsDirty) {
+        await apiRequest("PATCH", "/api/settings", currentSettings);
+      }
+      if (langDirty) {
+        await apiRequest("PATCH", "/api/me/settings", { uiLanguage: pendingLang });
+      }
     },
     onSuccess: () => {
       setSavedSettings({ ...currentSettings });
-      toast({ title: "تم حفظ الإعدادات بنجاح" });
+      if (langDirty) {
+        setLang(pendingLang);
+        setSavedLang(pendingLang);
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      }
+      toast({ title: t("settings.settings_saved") });
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ في حفظ الإعدادات", description: err.message, variant: "destructive" });
+      toast({ title: t("settings.settings_save_error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -155,7 +185,7 @@ export default function Settings() {
   const createBranchMutation = useMutation({
     mutationFn: async () => { await apiRequest("POST", "/api/branches", newBranch); },
     onSuccess: () => {
-      toast({ title: "تمت الإضافة" });
+      toast({ title: t("settings.added") });
       queryClient.invalidateQueries({ queryKey: ["/api/branches"] });
       setAddBranchOpen(false);
       setNewBranch({ name: "", address: "" });
@@ -174,13 +204,13 @@ export default function Settings() {
       });
     },
     onSuccess: () => {
-      toast({ title: "تم إنشاء المستخدم بنجاح" });
+      toast({ title: t("settings.user_created") });
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setAddUserOpen(false);
       setNewUser({ name: "", username: "", password: "", role: "cashier", branchId: "1", terminalName: "POS-1" });
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("settings.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -196,13 +226,13 @@ export default function Settings() {
       });
     },
     onSuccess: () => {
-      toast({ title: "تم تحديث المستخدم" });
+      toast({ title: t("settings.user_updated") });
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setEditUserOpen(false);
       setEditUser(null);
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("settings.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -212,13 +242,13 @@ export default function Settings() {
       await apiRequest("PATCH", `/api/users/${resetPassUser.id}/reset-password`, { newPassword: resetPassValue });
     },
     onSuccess: () => {
-      toast({ title: "تم إعادة تعيين كلمة المرور" });
+      toast({ title: t("settings.password_reset") });
       setResetPassOpen(false);
       setResetPassUser(null);
       setResetPassValue("");
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("settings.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -227,14 +257,14 @@ export default function Settings() {
       await apiRequest("POST", "/api/auth/change-password", { oldPassword, newPassword });
     },
     onSuccess: () => {
-      toast({ title: "تم تغيير كلمة المرور بنجاح" });
+      toast({ title: t("settings.password_changed") });
       setOldPassword("");
       setNewPassword("");
       setShowOldPass(false);
       setShowChangeNewPass(false);
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("settings.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -250,35 +280,35 @@ export default function Settings() {
     setResetPassOpen(true);
   };
 
-  const roleLabel = ROLE_LABELS[currentUser?.role || ""] || currentUser?.role || "";
+  const roleLabel = t(ROLE_LABELS_KEYS[currentUser?.role || ""] || "sidebar.role_employee");
   const userBranch = branchesList.find(b => b.id === currentUser?.branchId);
 
   return (
     <div className="max-w-5xl mx-auto pb-24 animate-in fade-in duration-300">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold" data-testid="text-settings-title">الإعدادات</h1>
-        <p className="text-muted-foreground mt-1">إدارة حسابك، المستخدمين، والإعدادات العامة</p>
+        <h1 className="text-2xl font-bold" data-testid="text-settings-title">{t("settings.title")}</h1>
+        <p className="text-muted-foreground mt-1">{t("settings.subtitle")}</p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={handleTabChange} dir="rtl" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={handleTabChange} dir={lang === "ar" ? "rtl" : "ltr"} className="space-y-6">
         <TabsList className="w-full justify-start bg-muted/50 p-1 h-auto flex-wrap gap-1">
           <TabsTrigger value="account" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-account">
             <UserCircle className="w-4 h-4" />
-            حسابي
+            {t("settings.tab_account")}
           </TabsTrigger>
           {isOwnerOrAdmin && (
             <TabsTrigger value="users" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-users">
               <ShieldCheck className="w-4 h-4" />
-              المستخدمون
+              {t("settings.tab_users")}
             </TabsTrigger>
           )}
           <TabsTrigger value="general" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-general">
             <Settings2 className="w-4 h-4" />
-            الإعدادات العامة
+            {t("settings.tab_general")}
           </TabsTrigger>
           <TabsTrigger value="branches" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-branches">
             <Building2 className="w-4 h-4" />
-            الفروع والمدن
+            {t("settings.tab_branches")}
           </TabsTrigger>
         </TabsList>
 
@@ -287,7 +317,7 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <UserCircle className="w-5 h-5" />
-                معلومات الحساب
+                {t("settings.account_info")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -300,15 +330,15 @@ export default function Settings() {
                   <p className="text-xs text-muted-foreground">@{currentUser?.username}</p>
                 </div>
                 <div className="p-4 bg-muted/30 rounded-lg border">
-                  <p className="text-xs text-muted-foreground mb-1">الدور</p>
+                  <p className="text-xs text-muted-foreground mb-1">{t("settings.role")}</p>
                   <p className="font-bold text-sm">{roleLabel}</p>
                 </div>
                 <div className="p-4 bg-muted/30 rounded-lg border">
-                  <p className="text-xs text-muted-foreground mb-1">الفرع</p>
+                  <p className="text-xs text-muted-foreground mb-1">{t("settings.branch")}</p>
                   <p className="font-bold text-sm">{userBranch?.name || "-"}</p>
                 </div>
                 <div className="p-4 bg-muted/30 rounded-lg border">
-                  <p className="text-xs text-muted-foreground mb-1">الجهاز</p>
+                  <p className="text-xs text-muted-foreground mb-1">{t("settings.terminal")}</p>
                   <p className="font-bold text-sm" dir="ltr">{currentUser?.terminalName || "-"}</p>
                 </div>
               </div>
@@ -319,19 +349,19 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Lock className="w-5 h-5" />
-                تغيير كلمة المرور
+                {t("settings.change_password")}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="max-w-md space-y-4">
                 <div className="space-y-2">
-                  <Label>كلمة المرور الحالية</Label>
+                  <Label>{t("settings.current_password")}</Label>
                   <div className="relative">
                     <Input
                       type={showOldPass ? "text" : "password"}
                       value={oldPassword}
                       onChange={e => setOldPassword(e.target.value)}
-                      placeholder="أدخل كلمة المرور الحالية"
+                      placeholder={t("settings.current_password_placeholder")}
                       data-testid="input-old-password"
                     />
                     <button type="button" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowOldPass(!showOldPass)}>
@@ -340,13 +370,13 @@ export default function Settings() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>كلمة المرور الجديدة</Label>
+                  <Label>{t("settings.new_password")}</Label>
                   <div className="relative">
                     <Input
                       type={showChangeNewPass ? "text" : "password"}
                       value={newPassword}
                       onChange={e => setNewPassword(e.target.value)}
-                      placeholder="أدخل كلمة المرور الجديدة (6 أحرف على الأقل)"
+                      placeholder={t("settings.new_password_placeholder")}
                       data-testid="input-new-password"
                     />
                     <button type="button" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowChangeNewPass(!showChangeNewPass)}>
@@ -361,7 +391,7 @@ export default function Settings() {
                   data-testid="button-confirm-change-password"
                 >
                   <KeyRound className="w-4 h-4" />
-                  {changePasswordMutation.isPending ? "جارٍ التغيير..." : "تغيير كلمة المرور"}
+                  {changePasswordMutation.isPending ? t("settings.changing_password") : t("settings.change_password_btn")}
                 </Button>
               </div>
             </CardContent>
@@ -374,34 +404,34 @@ export default function Settings() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <ShieldCheck className="w-5 h-5" />
-                  المستخدمون والصلاحيات
+                  {t("settings.users_permissions")}
                 </CardTitle>
                 <Dialog open={addUserOpen} onOpenChange={(open) => { setAddUserOpen(open); if (!open) setShowNewPass(false); }}>
                   <DialogTrigger asChild>
                     <Button size="sm" className="gap-1.5" data-testid="button-add-user">
                       <UserPlus className="w-4 h-4" />
-                      إضافة موظف
+                      {t("settings.add_employee")}
                     </Button>
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
-                      <DialogTitle>إضافة مستخدم جديد</DialogTitle>
-                      <DialogDescription>أدخل بيانات المستخدم الجديد لإضافته إلى النظام</DialogDescription>
+                      <DialogTitle>{t("settings.add_new_user")}</DialogTitle>
+                      <DialogDescription>{t("settings.add_new_user_desc")}</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>الاسم الكامل</Label>
+                          <Label>{t("settings.full_name")}</Label>
                           <Input value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} data-testid="input-new-user-name" />
                         </div>
                         <div className="space-y-2">
-                          <Label>اسم المستخدم (للدخول)</Label>
+                          <Label>{t("settings.username_login")}</Label>
                           <Input value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} dir="ltr" className="text-left" data-testid="input-new-user-username" />
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>كلمة المرور</Label>
+                          <Label>{t("settings.password")}</Label>
                           <div className="relative">
                             <Input
                               type={showNewPass ? "text" : "password"}
@@ -415,18 +445,18 @@ export default function Settings() {
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <Label>الدور</Label>
+                          <Label>{t("settings.role_label")}</Label>
                           <Select value={newUser.role} onValueChange={v => setNewUser({...newUser, role: v})}>
                             <SelectTrigger data-testid="select-new-user-role"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {ROLE_OPTIONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                              {ROLE_OPTIONS.map(r => <SelectItem key={r.value} value={r.value}>{t(r.labelKey)}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>الفرع</Label>
+                          <Label>{t("settings.branch_label")}</Label>
                           <Select value={newUser.branchId} onValueChange={v => setNewUser({...newUser, branchId: v})}>
                             <SelectTrigger data-testid="select-new-user-branch"><SelectValue /></SelectTrigger>
                             <SelectContent>
@@ -435,7 +465,7 @@ export default function Settings() {
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <Label>اسم الجهاز (Terminal)</Label>
+                          <Label>{t("settings.terminal_name")}</Label>
                           <Input value={newUser.terminalName} onChange={e => setNewUser({...newUser, terminalName: e.target.value})} dir="ltr" className="text-left" data-testid="input-new-user-terminal" />
                         </div>
                       </div>
@@ -446,7 +476,7 @@ export default function Settings() {
                         disabled={createUserMutation.isPending || !newUser.name || !newUser.username || newUser.password.length < 6}
                         data-testid="button-confirm-add-user"
                       >
-                        {createUserMutation.isPending ? "جارٍ الإضافة..." : "إضافة المستخدم"}
+                        {createUserMutation.isPending ? t("settings.adding") : t("settings.add_user_btn")}
                       </Button>
                     </DialogFooter>
                   </DialogContent>
@@ -457,12 +487,12 @@ export default function Settings() {
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50">
                       <tr>
-                        <th className="text-right p-3 font-medium">المستخدم</th>
-                        <th className="text-right p-3 font-medium">الدور</th>
-                        <th className="text-right p-3 font-medium">الفرع</th>
-                        <th className="text-right p-3 font-medium">الجهاز</th>
-                        <th className="text-center p-3 font-medium">الحالة</th>
-                        <th className="text-center p-3 font-medium">إجراءات</th>
+                        <th className="text-right p-3 font-medium">{t("settings.user_header")}</th>
+                        <th className="text-right p-3 font-medium">{t("settings.role_header")}</th>
+                        <th className="text-right p-3 font-medium">{t("settings.branch_header")}</th>
+                        <th className="text-right p-3 font-medium">{t("settings.terminal_header")}</th>
+                        <th className="text-center p-3 font-medium">{t("settings.status_header")}</th>
+                        <th className="text-center p-3 font-medium">{t("settings.actions_header")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -483,20 +513,20 @@ export default function Settings() {
                             </td>
                             <td className="p-3">
                               <span className="text-xs px-2 py-1 rounded bg-primary/10 text-primary font-medium">
-                                {ROLE_LABELS[u.role] || u.role}
+                                {t(ROLE_LABELS_KEYS[u.role] || "sidebar.role_employee")}
                               </span>
                             </td>
                             <td className="p-3 text-sm">{branch?.name || "-"}</td>
                             <td className="p-3 text-sm" dir="ltr">{u.terminalName}</td>
                             <td className="p-3 text-center">
-                              <span className={`inline-block w-2.5 h-2.5 rounded-full ${u.isActive ? "bg-green-500" : "bg-red-400"}`} title={u.isActive ? "مفعّل" : "معطّل"} />
+                              <span className={`inline-block w-2.5 h-2.5 rounded-full ${u.isActive ? "bg-green-500" : "bg-red-400"}`} title={u.isActive ? t("settings.active") : t("settings.disabled")} />
                             </td>
                             <td className="p-3">
                               <div className="flex items-center justify-center gap-1">
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditUser(u)} title="تعديل" data-testid={`button-edit-user-${u.id}`}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditUser(u)} title={t("common.edit")} data-testid={`button-edit-user-${u.id}`}>
                                   <Pencil className="w-3.5 h-3.5" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openResetPassword(u)} title="إعادة تعيين كلمة المرور" data-testid={`button-reset-pass-${u.id}`}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openResetPassword(u)} title={t("settings.reset_password")} data-testid={`button-reset-pass-${u.id}`}>
                                   <KeyRound className="w-3.5 h-3.5" />
                                 </Button>
                               </div>
@@ -515,12 +545,12 @@ export default function Settings() {
         <TabsContent value="general" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">إعدادات المنشأة</CardTitle>
+              <CardTitle className="text-lg">{t("settings.business_settings")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>اسم المنشأة التجاري</Label>
+                  <Label>{t("settings.business_name")}</Label>
                   <Input
                     value={currentSettings.businessName}
                     onChange={e => setCurrentSettings({ ...currentSettings, businessName: e.target.value })}
@@ -528,8 +558,8 @@ export default function Settings() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>العملة الافتراضية</Label>
-                  <Input defaultValue="ريال عماني (OMR)" disabled />
+                  <Label>{t("settings.default_currency")}</Label>
+                  <Input defaultValue={t("settings.currency_omr")} disabled />
                 </div>
               </div>
             </CardContent>
@@ -537,13 +567,13 @@ export default function Settings() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">الضرائب</CardTitle>
+              <CardTitle className="text-lg">{t("settings.taxes")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div>
-                  <Label className="text-base">ضريبة القيمة المضافة (VAT)</Label>
-                  <p className="text-sm text-muted-foreground">يتم احتسابها تلقائياً في نقطة البيع.</p>
+                  <Label className="text-base">{t("settings.vat_label")}</Label>
+                  <p className="text-sm text-muted-foreground">{t("settings.vat_description")}</p>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
@@ -567,6 +597,37 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Globe className="w-5 h-5" />
+                {t("settings.preferences")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🌐</span>
+                  <div>
+                    <Label className="text-base">{t("settings.system_language")}</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {lang === "ar" ? "اختر لغة واجهة البرنامج" : "Choose the interface language"}
+                    </p>
+                  </div>
+                </div>
+                <Select value={pendingLang} onValueChange={(v) => setPendingLang(v as Lang)}>
+                  <SelectTrigger className="w-48" data-testid="select-language">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ar">{t("settings.language_ar")}</SelectItem>
+                    <SelectItem value="en">{t("settings.language_en")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="branches" className="space-y-6">
@@ -574,30 +635,30 @@ export default function Settings() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-lg flex items-center gap-2">
                 <Building2 className="w-5 h-5" />
-                الفروع النشطة
+                {t("settings.active_branches")}
               </CardTitle>
               {isOwnerOrAdmin && (
                 <Dialog open={addBranchOpen} onOpenChange={setAddBranchOpen}>
                   <DialogTrigger asChild>
-                    <Button size="sm" data-testid="button-add-branch">إضافة فرع</Button>
+                    <Button size="sm" data-testid="button-add-branch">{t("settings.add_branch")}</Button>
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
-                      <DialogTitle>إضافة فرع جديد</DialogTitle>
-                      <DialogDescription>أدخل بيانات الفرع الجديد</DialogDescription>
+                      <DialogTitle>{t("settings.add_new_branch")}</DialogTitle>
+                      <DialogDescription>{t("settings.add_new_branch_desc")}</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                       <div className="space-y-2">
-                        <Label>اسم الفرع</Label>
+                        <Label>{t("settings.branch_name")}</Label>
                         <Input value={newBranch.name} onChange={e => setNewBranch({...newBranch, name: e.target.value})} />
                       </div>
                       <div className="space-y-2">
-                        <Label>العنوان</Label>
+                        <Label>{t("settings.address")}</Label>
                         <Input value={newBranch.address} onChange={e => setNewBranch({...newBranch, address: e.target.value})} />
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button onClick={() => createBranchMutation.mutate()} disabled={createBranchMutation.isPending || !newBranch.name}>حفظ</Button>
+                      <Button onClick={() => createBranchMutation.mutate()} disabled={createBranchMutation.isPending || !newBranch.name}>{t("settings.save")}</Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
@@ -610,7 +671,7 @@ export default function Settings() {
                     <div className="flex items-center gap-3">
                       <Building2 className="w-5 h-5 text-muted-foreground" />
                       <div>
-                        <p className="font-bold">{branch.name} {branch.isMain && <span className="text-xs text-primary font-normal mr-1">(رئيسي)</span>}</p>
+                        <p className="font-bold">{branch.name} {branch.isMain && <span className="text-xs text-primary font-normal mr-1">({t("settings.main_branch")})</span>}</p>
                         <p className="text-sm text-muted-foreground">{branch.address || "-"}</p>
                       </div>
                     </div>
@@ -624,7 +685,7 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <MapPin className="w-5 h-5" />
-                المدن المرتبطة بالفروع
+                {t("settings.cities_branches")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -652,7 +713,7 @@ export default function Settings() {
           <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-amber-600">
               <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span className="text-sm font-medium">لديك تغييرات غير محفوظة</span>
+              <span className="text-sm font-medium">{t("settings.unsaved_changes")}</span>
             </div>
             <div className="flex items-center gap-3">
               <Button
@@ -663,7 +724,7 @@ export default function Settings() {
                 data-testid="button-cancel-settings"
               >
                 <X className="w-4 h-4" />
-                إلغاء
+                {t("settings.cancel")}
               </Button>
               <Button
                 size="sm"
@@ -675,12 +736,12 @@ export default function Settings() {
                 {saveSettingsMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    جارٍ الحفظ...
+                    {t("settings.saving_settings")}
                   </>
                 ) : (
                   <>
                     <Save className="w-4 h-4" />
-                    حفظ التغييرات
+                    {t("settings.save_settings")}
                   </>
                 )}
               </Button>
@@ -692,15 +753,15 @@ export default function Settings() {
       <AlertDialog open={showLeaveWarning} onOpenChange={setShowLeaveWarning}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>تغييرات غير محفوظة</AlertDialogTitle>
+            <AlertDialogTitle>{t("settings.unsaved_warning_title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              لديك تغييرات لم يتم حفظها. هل تريد المتابعة بدون حفظ؟ سيتم فقدان التعديلات.
+              {t("settings.unsaved_warning_desc")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={cancelLeave} data-testid="button-stay">البقاء</AlertDialogCancel>
+            <AlertDialogCancel onClick={cancelLeave} data-testid="button-stay">{t("settings.stay")}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmLeave} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="button-leave-anyway">
-              المتابعة بدون حفظ
+              {t("settings.leave_without_save")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -709,27 +770,27 @@ export default function Settings() {
       <Dialog open={editUserOpen} onOpenChange={setEditUserOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>تعديل المستخدم: {editUser?.name}</DialogTitle>
-            <DialogDescription>تعديل بيانات المستخدم @{editUser?.username}</DialogDescription>
+            <DialogTitle>{t("settings.edit_user")}: {editUser?.name}</DialogTitle>
+            <DialogDescription>{t("settings.edit_user_data")} @{editUser?.username}</DialogDescription>
           </DialogHeader>
           {editUser && (
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>الاسم الكامل</Label>
+                <Label>{t("settings.full_name")}</Label>
                 <Input value={editUser.name} onChange={e => setEditUser({...editUser, name: e.target.value})} data-testid="input-edit-user-name" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>الدور</Label>
+                  <Label>{t("settings.role_label")}</Label>
                   <Select value={editUser.role} onValueChange={v => setEditUser({...editUser, role: v})}>
                     <SelectTrigger data-testid="select-edit-user-role"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {ROLE_OPTIONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                      {ROLE_OPTIONS.map(r => <SelectItem key={r.value} value={r.value}>{t(r.labelKey)}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>الفرع</Label>
+                  <Label>{t("settings.branch_label")}</Label>
                   <Select value={editUser.branchId.toString()} onValueChange={v => setEditUser({...editUser, branchId: parseInt(v)})}>
                     <SelectTrigger data-testid="select-edit-user-branch"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -739,18 +800,18 @@ export default function Settings() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>اسم الجهاز (Terminal)</Label>
+                <Label>{t("settings.terminal_name")}</Label>
                 <Input value={editUser.terminalName} onChange={e => setEditUser({...editUser, terminalName: e.target.value})} dir="ltr" className="text-left" data-testid="input-edit-user-terminal" />
               </div>
               <div className="flex items-center justify-between p-3 border rounded-lg">
-                <Label>الحساب مفعّل</Label>
+                <Label>{t("settings.account_active")}</Label>
                 <Switch checked={editUser.isActive} onCheckedChange={v => setEditUser({...editUser, isActive: v})} data-testid="switch-edit-user-active" />
               </div>
             </div>
           )}
           <DialogFooter>
             <Button onClick={() => updateUserMutation.mutate()} disabled={updateUserMutation.isPending} data-testid="button-confirm-edit-user">
-              {updateUserMutation.isPending ? "جارٍ الحفظ..." : "حفظ التعديلات"}
+              {updateUserMutation.isPending ? t("settings.saving") : t("settings.save_changes")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -759,18 +820,18 @@ export default function Settings() {
       <Dialog open={resetPassOpen} onOpenChange={setResetPassOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>إعادة تعيين كلمة المرور</DialogTitle>
-            <DialogDescription>إعادة تعيين كلمة مرور المستخدم @{resetPassUser?.username}</DialogDescription>
+            <DialogTitle>{t("settings.reset_password")}</DialogTitle>
+            <DialogDescription>{t("settings.reset_password_desc")} @{resetPassUser?.username}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>كلمة المرور الجديدة</Label>
+              <Label>{t("settings.new_password")}</Label>
               <div className="relative">
                 <Input
                   type={showResetPass ? "text" : "password"}
                   value={resetPassValue}
                   onChange={e => setResetPassValue(e.target.value)}
-                  placeholder="6 أحرف على الأقل"
+                  placeholder={t("settings.min_6_chars")}
                   data-testid="input-reset-password"
                 />
                 <button type="button" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowResetPass(!showResetPass)}>
@@ -785,7 +846,7 @@ export default function Settings() {
               disabled={resetPasswordMutation.isPending || resetPassValue.length < 6}
               data-testid="button-confirm-reset-password"
             >
-              {resetPasswordMutation.isPending ? "جارٍ التعيين..." : "إعادة تعيين"}
+              {resetPasswordMutation.isPending ? t("settings.resetting") : t("settings.reset_btn")}
             </Button>
           </DialogFooter>
         </DialogContent>
