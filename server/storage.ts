@@ -76,6 +76,7 @@ export interface IStorage {
   getShifts(): Promise<Shift[]>;
   createShift(data: InsertShift): Promise<Shift>;
   closeShift(id: number, actualCash: string): Promise<Shift | undefined>;
+  getCurrentShift(branchId: number, terminalName: string): Promise<Shift | null>;
   addCashLedgerEntry(data: InsertCashLedger): Promise<CashLedger>;
   addBankLedgerEntry(data: InsertBankLedger): Promise<BankLedger>;
   getShiftReport(shiftId: number): Promise<any>;
@@ -347,6 +348,13 @@ export class DatabaseStorage implements IStorage {
   async createShift(data: InsertShift) {
     const [row] = await db.insert(shifts).values(data).returning();
     return row;
+  }
+
+  async getCurrentShift(branchId: number, terminalName: string) {
+    const [row] = await db.select().from(shifts).where(
+      and(eq(shifts.status, "open"), eq(shifts.branchId, branchId), eq(shifts.terminalName, terminalName))
+    ).orderBy(desc(shifts.id)).limit(1);
+    return row || null;
   }
 
   async closeShift(id: number, actualCash: string) {

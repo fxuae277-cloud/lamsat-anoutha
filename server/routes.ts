@@ -277,6 +277,17 @@ export async function registerRoutes(
     res.status(201).json(await storage.createEmployee(parsed.data));
   });
 
+  app.get("/api/shifts/current", async (req, res) => {
+    const branchId = Number(req.query.branchId);
+    const terminalName = String(req.query.terminalName || "");
+    if (!branchId || !terminalName) {
+      return res.status(400).json({ message: "branchId و terminalName مطلوبان" });
+    }
+    const shift = await storage.getCurrentShift(branchId, terminalName);
+    if (!shift) return res.json({ shift: null });
+    res.json({ shift });
+  });
+
   app.get("/api/shifts", async (_req, res) => {
     res.json(await storage.getShifts());
   });

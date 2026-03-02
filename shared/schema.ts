@@ -160,6 +160,7 @@ export const shifts = pgTable("shifts", {
   expectedCash: decimal("expected_cash", { precision: 12, scale: 3 }),
   actualCash: decimal("actual_cash", { precision: 12, scale: 3 }),
   difference: decimal("difference", { precision: 12, scale: 3 }),
+  terminalName: text("terminal_name").notNull().default("UNKNOWN"),
   status: text("status").default("open"),
 });
 export const insertShiftSchema = createInsertSchema(shifts).omit({ id: true, startedAt: true });
