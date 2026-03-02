@@ -914,8 +914,27 @@ export async function registerRoutes(
     res.json(row);
   });
 
-  app.get("/api/expenses", requireAuth, async (_req, res) => {
-    res.json(await storage.getExpenses());
+  app.get("/api/expenses", requireAuth, enforceBranchScope, async (req, res) => {
+    try {
+      const scope = req.branchScope!;
+      const branchId = scope.mode === "branch" ? scope.branchId! : (req.query.branchId ? Number(req.query.branchId) : undefined);
+      const dateStr = req.query.date as string | undefined;
+      const rows = await storage.getExpensesEnriched(branchId, dateStr);
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+  app.get("/api/expenses/summary", requireAuth, enforceBranchScope, async (req, res) => {
+    try {
+      const scope = req.branchScope!;
+      const branchId = scope.mode === "branch" ? scope.branchId! : (req.query.branchId ? Number(req.query.branchId) : undefined);
+      const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+      const summary = await storage.getExpensesSummary(branchId, dateStr);
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
   });
   app.post("/api/expenses", requireAuth, async (req, res) => {
     try {
@@ -950,6 +969,7 @@ export async function registerRoutes(
         source: expenseSource,
         date: todayStr,
         notes: notes || null,
+        createdBy: user.id,
       });
 
       if (expenseSource === "cash") {

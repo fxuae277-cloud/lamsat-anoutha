@@ -231,6 +231,7 @@ export const expenses = pgTable("expenses", {
   date: date("date").notNull(),
   notes: text("notes"),
   receiptImage: text("receipt_image"),
+  createdBy: integer("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true, createdAt: true });

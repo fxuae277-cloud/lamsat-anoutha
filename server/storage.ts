@@ -613,6 +613,77 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getExpenses() { return db.select().from(expenses).orderBy(desc(expenses.createdAt)); }
+  async getExpensesEnriched(branchId?: number, dateStr?: string) {
+    const conditions: any[] = [];
+    if (branchId) conditions.push(eq(expenses.branchId, branchId));
+    if (dateStr) conditions.push(sql`${expenses.date} = ${dateStr}`);
+
+    const rows = await db.select({
+      id: expenses.id,
+      branchId: expenses.branchId,
+      branchName: branches.name,
+      shiftId: expenses.shiftId,
+      category: expenses.category,
+      amount: expenses.amount,
+      source: expenses.source,
+      date: expenses.date,
+      notes: expenses.notes,
+      createdBy: expenses.createdBy,
+      createdByName: users.name,
+      createdAt: expenses.createdAt,
+    }).from(expenses)
+      .leftJoin(branches, eq(expenses.branchId, branches.id))
+      .leftJoin(users, eq(expenses.createdBy, users.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(expenses.createdAt));
+    return rows;
+  }
+  async getExpensesSummary(branchId?: number, dateStr?: string) {
+    const conditions: any[] = [];
+    if (branchId) conditions.push(eq(expenses.branchId, branchId));
+    if (dateStr) conditions.push(sql`${expenses.date} = ${dateStr}`);
+
+    const [cashTotal] = await db.select({
+      total: sql<string>`coalesce(sum(${expenses.amount}::numeric), 0)::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(expenses).where(
+      and(eq(expenses.source, "cash"), ...(conditions.length > 0 ? conditions : []))
+    );
+    const [cardTotal] = await db.select({
+      total: sql<string>`coalesce(sum(${expenses.amount}::numeric), 0)::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(expenses).where(
+      and(eq(expenses.source, "card"), ...(conditions.length > 0 ? conditions : []))
+    );
+    const [bankTotal] = await db.select({
+      total: sql<string>`coalesce(sum(${expenses.amount}::numeric), 0)::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(expenses).where(
+      and(eq(expenses.source, "bank_transfer"), ...(conditions.length > 0 ? conditions : []))
+    );
+
+    const cash = parseFloat(cashTotal.total);
+    const card = parseFloat(cardTotal.total);
+    const bank = parseFloat(bankTotal.total);
+
+    const byCategory = await db.select({
+      category: expenses.category,
+      total: sql<string>`sum(${expenses.amount}::numeric)::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(expenses)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .groupBy(expenses.category)
+      .orderBy(sql`sum(${expenses.amount}::numeric) desc`);
+
+    return {
+      cash: { total: cash.toFixed(3), count: cashTotal.count },
+      card: { total: card.toFixed(3), count: cardTotal.count },
+      bank: { total: bank.toFixed(3), count: bankTotal.count },
+      total: (cash + card + bank).toFixed(3),
+      totalCount: cashTotal.count + cardTotal.count + bankTotal.count,
+      byCategory,
+    };
+  }
   async createExpense(data: InsertExpense) {
     const [row] = await db.insert(expenses).values(data).returning();
     return row;
