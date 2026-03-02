@@ -159,6 +159,53 @@ export default function POS() {
   const branchName = branchesList.find(b => b.id === user?.branchId)?.name || "";
   const terminalName = user?.terminalName || "T1";
 
+  const subtotal = cart.reduce((sum, item) => sum + (parseFloat(item.product.price) * item.qty), 0);
+  const discountAmount = discountType === "percentage" ? subtotal * (discountValue / 100) : discountValue;
+  const afterDiscount = subtotal - discountAmount;
+  const vat = afterDiscount * 0.05;
+  const total = afterDiscount + vat;
+
+  const saleMutation = useMutation({
+    mutationFn: async () => {
+      const invoiceNumber = `INV-${Date.now()}`;
+      const saleData = {
+        invoiceNumber,
+        branchId: user!.branchId,
+        cashierId: user!.id,
+        customerId: null,
+        subtotal: subtotal.toFixed(3),
+        discount: discountAmount.toFixed(3),
+        discountType,
+        vat: vat.toFixed(3),
+        total: total.toFixed(3),
+        paymentMethod,
+        bankTxnId: paymentMethod === "bank_transfer" ? bankTxnId : null,
+        bankReceiptImage: null,
+        items: cart.map(item => ({
+          productId: item.product.id,
+          quantity: item.qty,
+          unitPrice: item.product.price,
+          total: (parseFloat(item.product.price) * item.qty).toFixed(3),
+        })),
+      };
+      await apiRequest("POST", "/api/sales", saleData);
+    },
+    onSuccess: () => {
+      toast({ title: "تمت العملية بنجاح", description: "تم حفظ الفاتورة." });
+      setCart([]);
+      setDiscountValue(0);
+      setBankTxnId("");
+      setPaymentMethod("cash");
+      setPayDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+    },
+  });
+
   if (!currentShift) {
     return (
       <StartPOS
@@ -202,12 +249,6 @@ export default function POS() {
     setCart(prev => prev.filter(i => i.product.id !== productId));
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + (parseFloat(item.product.price) * item.qty), 0);
-  const discountAmount = discountType === "percentage" ? subtotal * (discountValue / 100) : discountValue;
-  const afterDiscount = subtotal - discountAmount;
-  const vat = afterDiscount * 0.05;
-  const total = afterDiscount + vat;
-
   const handleBarcodeSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       const barcode = (e.target as HTMLInputElement).value.trim();
@@ -221,47 +262,6 @@ export default function POS() {
       }
     }
   };
-
-  const saleMutation = useMutation({
-    mutationFn: async () => {
-      const invoiceNumber = `INV-${Date.now()}`;
-      const saleData = {
-        invoiceNumber,
-        branchId: user!.branchId,
-        cashierId: user!.id,
-        customerId: null,
-        subtotal: subtotal.toFixed(3),
-        discount: discountAmount.toFixed(3),
-        discountType,
-        vat: vat.toFixed(3),
-        total: total.toFixed(3),
-        paymentMethod,
-        bankTxnId: paymentMethod === "bank_transfer" ? bankTxnId : null,
-        bankReceiptImage: null,
-        items: cart.map(item => ({
-          productId: item.product.id,
-          quantity: item.qty,
-          unitPrice: item.product.price,
-          total: (parseFloat(item.product.price) * item.qty).toFixed(3),
-        })),
-      };
-      await apiRequest("POST", "/api/sales", saleData);
-    },
-    onSuccess: () => {
-      toast({ title: "تمت العملية بنجاح", description: "تم حفظ الفاتورة." });
-      setCart([]);
-      setDiscountValue(0);
-      setBankTxnId("");
-      setPaymentMethod("cash");
-      setPayDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
-    },
-    onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
-    },
-  });
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col gap-4">
