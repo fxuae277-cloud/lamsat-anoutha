@@ -970,13 +970,23 @@ export class DatabaseStorage implements IStorage {
       parseFloat(invoice.otherCost || "0");
     const grandTotal = subtotalItems + totalExtraCost;
 
-    const locRes = await db.select({ id: locations.id })
+    const warehouseLoc = await db.select({ id: locations.id })
       .from(locations)
-      .where(eq(locations.branchId, invoice.branchId))
+      .where(and(eq(locations.branchId, invoice.branchId), eq(locations.name, "المخزن")))
       .orderBy(locations.id)
       .limit(1);
-    if (locRes.length === 0) throw new Error("لا يوجد موقع مخزون للفرع");
-    const toLocationId = locRes[0].id;
+    let toLocationId: number;
+    if (warehouseLoc.length > 0) {
+      toLocationId = warehouseLoc[0].id;
+    } else {
+      const fallbackLoc = await db.select({ id: locations.id })
+        .from(locations)
+        .where(eq(locations.branchId, invoice.branchId))
+        .orderBy(locations.id)
+        .limit(1);
+      if (fallbackLoc.length === 0) throw new Error("لا يوجد موقع مخزون للفرع");
+      toLocationId = fallbackLoc[0].id;
+    }
 
     const client = await pool.connect();
     try {
