@@ -1121,6 +1121,12 @@ export class DatabaseStorage implements IStorage {
             'اعتماد فاتورة شراء', $5, now())`,
           [centralLocationId, item.productId, item.qty, id, invoice.createdBy]
         );
+
+        await client.query(
+          `INSERT INTO stock_movements (product_id, branch_id, quantity, movement_type, reference_id, created_at)
+           VALUES ($1, 0, $2, 'purchase', $3, now())`,
+          [item.productId, item.qty, id]
+        );
       }
 
       const result = await client.query(
@@ -1167,14 +1173,6 @@ export class DatabaseStorage implements IStorage {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-
-      for (const item of items) {
-        await client.query(
-          `INSERT INTO stock_movements (product_id, branch_id, quantity, movement_type, reference_id, created_at)
-           VALUES ($1, 0, $2, 'purchase', $3, now())`,
-          [item.productId, item.qty, id]
-        );
-      }
 
       const result = await client.query(
         `UPDATE purchase_invoices
@@ -1696,16 +1694,6 @@ export class DatabaseStorage implements IStorage {
         if (available < item.qty) {
           const [prod] = await db.select({ name: products.name }).from(products).where(eq(products.id, item.productId));
           throw new Error(`الكمية المتاحة من "${prod?.name || item.productId}" في المخزن المركزي هي ${available} فقط`);
-        }
-
-        const smRes = await client.query(
-          `SELECT COALESCE(SUM(quantity),0)::numeric AS balance FROM stock_movements WHERE branch_id = 0 AND product_id = $1`,
-          [item.productId]
-        );
-        const smBalance = parseFloat(smRes.rows[0].balance);
-        if (smBalance < item.qty) {
-          const [prod] = await db.select({ name: products.name }).from(products).where(eq(products.id, item.productId));
-          throw new Error(`رصيد المخزن المركزي (stock_movements) لـ "${prod?.name || item.productId}" هو ${smBalance} فقط`);
         }
 
         await client.query(
