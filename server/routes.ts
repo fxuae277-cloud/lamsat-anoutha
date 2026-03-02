@@ -1524,6 +1524,187 @@ export async function registerRoutes(
     res.json(closedShifts);
   });
 
+  app.get("/api/recent-operations", requireAuth, async (req, res) => {
+    try {
+      const { from, to, branchId, type, search } = req.query;
+      const params: any[] = [];
+      let idx = 1;
+
+      let dateFilter = "";
+      if (from) {
+        dateFilter += ` AND op_time >= $${idx++}::timestamp`;
+        params.push(from + " 00:00:00");
+      }
+      if (to) {
+        dateFilter += ` AND op_time <= $${idx++}::timestamp`;
+        params.push(to + " 23:59:59.999");
+      }
+      let branchFilter = "";
+      if (branchId) {
+        branchFilter = ` AND branch_id = $${idx++}`;
+        params.push(Number(branchId));
+      }
+      let typeFilter = "";
+      if (type) {
+        typeFilter = ` AND op_type = $${idx++}`;
+        params.push(type);
+      }
+      let searchFilter = "";
+      if (search) {
+        searchFilter = ` AND (ref_number ILIKE $${idx} OR user_name ILIKE $${idx} OR note ILIKE $${idx})`;
+        params.push(`%${search}%`);
+        idx++;
+      }
+
+      const query = `
+        SELECT * FROM (
+          SELECT
+            s.created_at as op_time,
+            s.branch_id,
+            b.name as branch_name,
+            s.cashier_id as user_id,
+            u.name as user_name,
+            'sale' as op_type,
+            s.invoice_number as ref_number,
+            s.total::text as amount,
+            ('بيع - ' || s.payment_method || ' - ' || COALESCE(s.invoice_number,'')) as note
+          FROM sales s
+          LEFT JOIN branches b ON b.id = s.branch_id
+          LEFT JOIN users u ON u.id = s.cashier_id
+
+          UNION ALL
+
+          SELECT
+            sh.started_at as op_time,
+            sh.branch_id,
+            b.name as branch_name,
+            sh.cashier_id as user_id,
+            u.name as user_name,
+            'shift_open' as op_type,
+            ('SH-' || sh.id) as ref_number,
+            sh.opening_cash::text as amount,
+            ('افتتاح شفت - صندوق: ' || COALESCE(sh.opening_cash::text,'0')) as note
+          FROM shifts sh
+          LEFT JOIN branches b ON b.id = sh.branch_id
+          LEFT JOIN users u ON u.id = sh.cashier_id
+          WHERE sh.status = 'open' OR sh.status = 'closed'
+
+          UNION ALL
+
+          SELECT
+            sh.ended_at as op_time,
+            sh.branch_id,
+            b.name as branch_name,
+            sh.cashier_id as user_id,
+            u.name as user_name,
+            'shift_close' as op_type,
+            ('SH-' || sh.id) as ref_number,
+            sh.total_sales::text as amount,
+            ('إغلاق شفت - مبيعات: ' || COALESCE(sh.total_sales::text,'0') || ' - فرق: ' || COALESCE(sh.difference::text,'0')) as note
+          FROM shifts sh
+          LEFT JOIN branches b ON b.id = sh.branch_id
+          LEFT JOIN users u ON u.id = sh.cashier_id
+          WHERE sh.status = 'closed' AND sh.ended_at IS NOT NULL
+
+          UNION ALL
+
+          SELECT
+            e.created_at as op_time,
+            e.branch_id,
+            b.name as branch_name,
+            e.created_by as user_id,
+            u.name as user_name,
+            'expense' as op_type,
+            ('EXP-' || e.id) as ref_number,
+            e.amount::text as amount,
+            ('مصروف: ' || e.category || ' - ' || COALESCE(e.notes,'')) as note
+          FROM expenses e
+          LEFT JOIN branches b ON b.id = e.branch_id
+          LEFT JOIN users u ON u.id = e.created_by
+
+          UNION ALL
+
+          SELECT
+            lt.created_at as op_time,
+            lt.branch_id,
+            b.name as branch_name,
+            lt.created_by as user_id,
+            u.name as user_name,
+            'transfer' as op_type,
+            ('TR-' || lt.id) as ref_number,
+            NULL as amount,
+            ('تحويل مخزون: ' || COALESCE(lf.name,'') || ' → ' || COALESCE(lt2.name,'') || COALESCE(' - ' || lt.note,'')) as note
+          FROM location_transfers lt
+          LEFT JOIN branches b ON b.id = lt.branch_id
+          LEFT JOIN users u ON u.id = lt.created_by
+          LEFT JOIN locations lf ON lf.id = lt.from_location_id
+          LEFT JOIN locations lt2 ON lt2.id = lt.to_location_id
+
+          UNION ALL
+
+          SELECT
+            o.created_at as op_time,
+            o.branch_id,
+            b.name as branch_name,
+            o.employee_id as user_id,
+            u.name as user_name,
+            'order' as op_type,
+            o.order_number as ref_number,
+            o.total::text as amount,
+            ('طلب - ' || o.customer_name || ' - ' || o.status) as note
+          FROM orders o
+          LEFT JOIN branches b ON b.id = o.branch_id
+          LEFT JOIN users u ON u.id = o.employee_id
+
+          UNION ALL
+
+          SELECT
+            sr.created_at as op_time,
+            sr.branch_id,
+            b.name as branch_name,
+            sr.created_by as user_id,
+            u.name as user_name,
+            'return' as op_type,
+            sr.return_number as ref_number,
+            sr.refund_amount::text as amount,
+            ('مرتجع - ' || COALESCE(sr.reason,'')) as note
+          FROM sale_returns sr
+          LEFT JOIN branches b ON b.id = sr.branch_id
+          LEFT JOIN users u ON u.id = sr.created_by
+
+          UNION ALL
+
+          SELECT
+            pi.created_at as op_time,
+            pi.branch_id,
+            b.name as branch_name,
+            pi.created_by as user_id,
+            u.name as user_name,
+            'purchase' as op_type,
+            pi.invoice_number as ref_number,
+            pi.grand_total::text as amount,
+            ('فاتورة مشتريات - ' || COALESCE(sup.name,'') || ' - ' || pi.status) as note
+          FROM purchase_invoices pi
+          LEFT JOIN branches b ON b.id = pi.branch_id
+          LEFT JOIN users u ON u.id = pi.created_by
+          LEFT JOIN suppliers sup ON sup.id = pi.supplier_id
+        ) ops
+        WHERE op_time IS NOT NULL
+        ${dateFilter}
+        ${branchFilter}
+        ${typeFilter}
+        ${searchFilter}
+        ORDER BY op_time DESC
+        LIMIT 500
+      `;
+
+      const result = await pool.query(query, params);
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
   app.get("/api/payroll-runs", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const runs = await storage.getPayrollRuns();

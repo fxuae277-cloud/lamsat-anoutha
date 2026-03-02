@@ -17,7 +17,8 @@ import {
   LogOut,
   Banknote,
   RotateCcw,
-  Shield
+  Shield,
+  Activity
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
@@ -38,6 +39,7 @@ const NAV_ITEMS = [
   { href: "/finance", label: "المحاسبة اليومية", icon: Banknote },
   { href: "/hr", label: "الرواتب والموظفين", icon: UserCircle },
   { href: "/reports", label: "التقارير المالية", icon: PieChart },
+  { href: "/operations", label: "آخر العمليات", icon: Activity },
   { href: "/audit-log", label: "سجل المراجعة", icon: Shield, adminOnly: true },
   { href: "/settings", label: "الإعدادات", icon: Settings },
 ];
