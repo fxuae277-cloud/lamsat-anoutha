@@ -3,6 +3,9 @@ import { pgTable, text, varchar, integer, decimal, boolean, timestamp, date } fr
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const PAYMENT_METHODS = ["cash", "card", "bank_transfer"] as const;
+export type PaymentMethod = typeof PAYMENT_METHODS[number];
+
 export const branches = pgTable("branches", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
@@ -145,6 +148,24 @@ export const insertSaleItemSchema = createInsertSchema(saleItems).omit({ id: tru
 export type InsertSaleItem = z.infer<typeof insertSaleItemSchema>;
 export type SaleItem = typeof saleItems.$inferSelect;
 
+export const shifts = pgTable("shifts", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  branchId: integer("branch_id").references(() => branches.id).notNull(),
+  cashierId: integer("cashier_id").references(() => users.id).notNull(),
+  startedAt: timestamp("started_at").defaultNow(),
+  endedAt: timestamp("ended_at"),
+  totalSales: decimal("total_sales", { precision: 10, scale: 3 }).default("0"),
+  totalCash: decimal("total_cash", { precision: 10, scale: 3 }).default("0"),
+  totalBank: decimal("total_bank", { precision: 10, scale: 3 }).default("0"),
+  expectedCash: decimal("expected_cash", { precision: 12, scale: 3 }),
+  actualCash: decimal("actual_cash", { precision: 12, scale: 3 }),
+  difference: decimal("difference", { precision: 12, scale: 3 }),
+  status: text("status").default("open"),
+});
+export const insertShiftSchema = createInsertSchema(shifts).omit({ id: true, startedAt: true });
+export type InsertShift = z.infer<typeof insertShiftSchema>;
+export type Shift = typeof shifts.$inferSelect;
+
 export const orders = pgTable("orders", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   orderNumber: text("order_number").notNull(),
@@ -156,11 +177,14 @@ export const orders = pgTable("orders", {
   shiftId: integer("shift_id").references(() => shifts.id),
   deliveryType: text("delivery_type").default("pickup"),
   status: text("status").default("new"),
+  paymentMethod: text("payment_method").default("cash"),
+  bankTxnId: text("bank_txn_id"),
   total: decimal("total", { precision: 10, scale: 3 }),
+  paidAt: timestamp("paid_at"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
-export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true });
+export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true, paidAt: true });
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type Order = typeof orders.$inferSelect;
 
@@ -179,8 +203,10 @@ export type OrderItem = typeof orderItems.$inferSelect;
 export const expenses = pgTable("expenses", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   branchId: integer("branch_id").references(() => branches.id).notNull(),
+  shiftId: integer("shift_id").references(() => shifts.id),
   category: text("category").notNull(),
   amount: decimal("amount", { precision: 10, scale: 3 }).notNull(),
+  source: text("source").notNull().default("cash"),
   date: date("date").notNull(),
   notes: text("notes"),
   receiptImage: text("receipt_image"),
@@ -189,6 +215,39 @@ export const expenses = pgTable("expenses", {
 export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true, createdAt: true });
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 export type Expense = typeof expenses.$inferSelect;
+
+export const cashLedger = pgTable("cash_ledger", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  date: date("date").notNull(),
+  branchId: integer("branch_id").references(() => branches.id).notNull(),
+  shiftId: integer("shift_id").references(() => shifts.id),
+  type: text("type").notNull(),
+  amountIn: decimal("amount_in", { precision: 12, scale: 3 }).default("0"),
+  amountOut: decimal("amount_out", { precision: 12, scale: 3 }).default("0"),
+  note: text("note"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertCashLedgerSchema = createInsertSchema(cashLedger).omit({ id: true, createdAt: true });
+export type InsertCashLedger = z.infer<typeof insertCashLedgerSchema>;
+export type CashLedger = typeof cashLedger.$inferSelect;
+
+export const bankLedger = pgTable("bank_ledger", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  date: date("date").notNull(),
+  branchId: integer("branch_id").references(() => branches.id).notNull(),
+  shiftId: integer("shift_id").references(() => shifts.id),
+  method: text("method").notNull(),
+  amountIn: decimal("amount_in", { precision: 12, scale: 3 }).default("0"),
+  amountOut: decimal("amount_out", { precision: 12, scale: 3 }).default("0"),
+  refId: text("ref_id"),
+  note: text("note"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertBankLedgerSchema = createInsertSchema(bankLedger).omit({ id: true, createdAt: true });
+export type InsertBankLedger = z.infer<typeof insertBankLedgerSchema>;
+export type BankLedger = typeof bankLedger.$inferSelect;
 
 export const employees = pgTable("employees", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -201,18 +260,3 @@ export const employees = pgTable("employees", {
 export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true });
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
 export type Employee = typeof employees.$inferSelect;
-
-export const shifts = pgTable("shifts", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  branchId: integer("branch_id").references(() => branches.id).notNull(),
-  cashierId: integer("cashier_id").references(() => users.id).notNull(),
-  startedAt: timestamp("started_at").defaultNow(),
-  endedAt: timestamp("ended_at"),
-  totalSales: decimal("total_sales", { precision: 10, scale: 3 }).default("0"),
-  totalCash: decimal("total_cash", { precision: 10, scale: 3 }).default("0"),
-  totalBank: decimal("total_bank", { precision: 10, scale: 3 }).default("0"),
-  status: text("status").default("open"),
-});
-export const insertShiftSchema = createInsertSchema(shifts).omit({ id: true, startedAt: true });
-export type InsertShift = z.infer<typeof insertShiftSchema>;
-export type Shift = typeof shifts.$inferSelect;

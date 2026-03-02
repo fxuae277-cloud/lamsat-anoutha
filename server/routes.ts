@@ -9,6 +9,7 @@ import {
   insertEmployeeSchema, insertOrderSchema, insertSaleSchema,
   insertInventoryTransferSchema, insertCitySchema, insertUserSchema,
   insertWarehouseSchema, insertShiftSchema, shifts,
+  PAYMENT_METHODS, type PaymentMethod,
 } from "@shared/schema";
 
 export async function registerRoutes(
@@ -16,22 +17,18 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  // === Dashboard ===
   app.get("/api/dashboard", async (_req, res) => {
     const stats = await storage.getDashboardStats();
     res.json(stats);
   });
 
-  // === Branches ===
   app.get("/api/branches", async (_req, res) => {
-    const data = await storage.getBranches();
-    res.json(data);
+    res.json(await storage.getBranches());
   });
   app.post("/api/branches", async (req, res) => {
     const parsed = insertBranchSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    const row = await storage.createBranch(parsed.data);
-    res.status(201).json(row);
+    res.status(201).json(await storage.createBranch(parsed.data));
   });
   app.patch("/api/branches/:id", async (req, res) => {
     const row = await storage.updateBranch(Number(req.params.id), req.body);
@@ -39,7 +36,6 @@ export async function registerRoutes(
     res.json(row);
   });
 
-  // === Cities ===
   app.get("/api/cities", async (_req, res) => {
     res.json(await storage.getCities());
   });
@@ -49,7 +45,6 @@ export async function registerRoutes(
     res.status(201).json(await storage.createCity(parsed.data));
   });
 
-  // === Users ===
   app.get("/api/users", async (_req, res) => {
     res.json(await storage.getUsers());
   });
@@ -59,7 +54,6 @@ export async function registerRoutes(
     res.status(201).json(await storage.createUser(parsed.data));
   });
 
-  // === Categories ===
   app.get("/api/categories", async (_req, res) => {
     res.json(await storage.getCategories());
   });
@@ -69,7 +63,6 @@ export async function registerRoutes(
     res.status(201).json(await storage.createCategory(parsed.data));
   });
 
-  // === Products ===
   app.get("/api/products", async (_req, res) => {
     res.json(await storage.getProducts());
   });
@@ -98,7 +91,6 @@ export async function registerRoutes(
     res.json({ message: "تم حذف المنتج" });
   });
 
-  // === Warehouses ===
   app.get("/api/warehouses", async (_req, res) => {
     res.json(await storage.getWarehouses());
   });
@@ -108,7 +100,6 @@ export async function registerRoutes(
     res.status(201).json(await storage.createWarehouse(parsed.data));
   });
 
-  // === Inventory ===
   app.get("/api/inventory", async (_req, res) => {
     res.json(await storage.getInventory());
   });
@@ -120,21 +111,18 @@ export async function registerRoutes(
     if (!productId || !warehouseId || !quantity) {
       return res.status(400).json({ message: "البيانات ناقصة" });
     }
-    const row = await storage.adjustInventory(productId, warehouseId, quantity);
-    res.json(row);
+    res.json(await storage.adjustInventory(productId, warehouseId, quantity));
   });
   app.post("/api/inventory/transfer", async (req, res) => {
     const parsed = insertInventoryTransferSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     try {
-      const row = await storage.createTransfer(parsed.data);
-      res.status(201).json(row);
+      res.status(201).json(await storage.createTransfer(parsed.data));
     } catch (e: any) {
       res.status(400).json({ message: e.message || "فشل التحويل" });
     }
   });
 
-  // === Customers ===
   app.get("/api/customers", async (_req, res) => {
     res.json(await storage.getCustomers());
   });
@@ -144,7 +132,6 @@ export async function registerRoutes(
     res.status(201).json(await storage.createCustomer(parsed.data));
   });
 
-  // === Suppliers ===
   app.get("/api/suppliers", async (_req, res) => {
     res.json(await storage.getSuppliers());
   });
@@ -154,7 +141,6 @@ export async function registerRoutes(
     res.status(201).json(await storage.createSupplier(parsed.data));
   });
 
-  // === Sales (POS) ===
   app.get("/api/sales", async (_req, res) => {
     res.json(await storage.getSales());
   });
@@ -171,15 +157,12 @@ export async function registerRoutes(
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "لا توجد منتجات في الفاتورة" });
     }
-    const sale = await storage.createSale(parsed.data, items);
-    res.status(201).json(sale);
+    res.status(201).json(await storage.createSale(parsed.data, items));
   });
   app.get("/api/sales/daily/summary", async (_req, res) => {
-    const stats = await storage.getDailySalesTotal();
-    res.json(stats);
+    res.json(await storage.getDailySalesTotal());
   });
 
-  // === Orders (WhatsApp/Instagram) ===
   app.get("/api/orders", async (_req, res) => {
     res.json(await storage.getOrders());
   });
@@ -206,9 +189,7 @@ export async function registerRoutes(
           .where(and(eq(shifts.status, "open"), eq(shifts.branchId, branchId)))
           .orderBy(desc(shifts.id))
           .limit(1);
-        if (openShift) {
-          shiftId = openShift.id;
-        }
+        if (openShift) shiftId = openShift.id;
       }
       const order = await storage.createOrder({ ...parsed.data, shiftId }, items);
       res.status(201).json(order);
@@ -224,18 +205,69 @@ export async function registerRoutes(
     if (!row) return res.status(404).json({ message: "الطلب غير موجود" });
     res.json(row);
   });
+  app.post("/api/orders/:id/pay", async (req, res) => {
+    const { paymentMethod, bankTxnId } = req.body;
+    if (!paymentMethod || !PAYMENT_METHODS.includes(paymentMethod)) {
+      return res.status(400).json({ message: "طريقة الدفع غير صالحة. الخيارات: cash, card, bank_transfer" });
+    }
+    const row = await storage.payOrder(Number(req.params.id), paymentMethod as PaymentMethod, bankTxnId);
+    if (!row) return res.status(404).json({ message: "الطلب غير موجود" });
+    res.json(row);
+  });
 
-  // === Expenses ===
   app.get("/api/expenses", async (_req, res) => {
     res.json(await storage.getExpenses());
   });
   app.post("/api/expenses", async (req, res) => {
-    const parsed = insertExpenseSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    res.status(201).json(await storage.createExpense(parsed.data));
+    try {
+      const { amount, notes, source, branchId, shiftId, category } = req.body;
+      if (!amount || !branchId) {
+        return res.status(400).json({ message: "المبلغ والفرع مطلوبان" });
+      }
+      const expenseSource = source || "cash";
+      if (!["cash", "card", "bank_transfer"].includes(expenseSource)) {
+        return res.status(400).json({ message: "مصدر غير صالح. الخيارات: cash, card, bank_transfer" });
+      }
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const expense = await storage.createExpense({
+        branchId,
+        shiftId: shiftId || null,
+        category: category || "عام",
+        amount: String(amount),
+        source: expenseSource,
+        date: todayStr,
+        notes: notes || null,
+      });
+
+      if (expenseSource === "cash") {
+        await storage.addCashLedgerEntry({
+          date: todayStr,
+          branchId,
+          shiftId: shiftId || null,
+          type: "expense",
+          amountIn: "0",
+          amountOut: String(amount),
+          note: notes || `مصروف: ${category || "عام"}`,
+        });
+      } else {
+        await storage.addBankLedgerEntry({
+          date: todayStr,
+          branchId,
+          shiftId: shiftId || null,
+          method: expenseSource,
+          amountIn: "0",
+          amountOut: String(amount),
+          note: notes || `مصروف: ${category || "عام"}`,
+        });
+      }
+
+      res.status(201).json(expense);
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
   });
 
-  // === Employees ===
   app.get("/api/employees", async (_req, res) => {
     res.json(await storage.getEmployees());
   });
@@ -245,7 +277,6 @@ export async function registerRoutes(
     res.status(201).json(await storage.createEmployee(parsed.data));
   });
 
-  // === Shifts ===
   app.get("/api/shifts", async (_req, res) => {
     res.json(await storage.getShifts());
   });
@@ -263,10 +294,21 @@ export async function registerRoutes(
         pendingOrders: pendingOrders.map(o => ({ id: o.id, orderNumber: o.orderNumber, status: o.status })),
       });
     }
-    const { totalSales, totalCash, totalBank } = req.body;
-    const row = await storage.closeShift(shiftId, totalSales, totalCash, totalBank);
+    const { actualCash } = req.body;
+    if (actualCash === undefined || actualCash === null) {
+      return res.status(400).json({ message: "يجب إدخال المبلغ النقدي الفعلي (actualCash)" });
+    }
+    const row = await storage.closeShift(shiftId, String(actualCash));
     if (!row) return res.status(404).json({ message: "الوردية غير موجودة" });
     res.json(row);
+  });
+
+  app.get("/api/reports/shift", async (req, res) => {
+    const shiftId = Number(req.query.shiftId);
+    if (!shiftId) return res.status(400).json({ message: "shiftId مطلوب" });
+    const report = await storage.getShiftReport(shiftId);
+    if (!report) return res.status(404).json({ message: "الشفت غير موجود" });
+    res.json(report);
   });
 
   return httpServer;

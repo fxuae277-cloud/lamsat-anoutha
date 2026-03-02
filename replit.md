@@ -38,18 +38,33 @@ shared/
 - warehouses, inventory, inventory_transfers
 - customers, suppliers
 - sales, sale_items
-- orders, order_items
-- expenses
-- employees, shifts
+- orders, order_items (orders have shift_id + payment_method + paid_at)
+- expenses (with shift_id + source: cash/card/bank_transfer)
+- employees, shifts (with expectedCash, actualCash, difference)
+- **cash_ledger** (date, branch_id, shift_id, type, amount_in, amount_out, note, created_by)
+- **bank_ledger** (date, branch_id, shift_id, method[card/bank_transfer], amount_in, amount_out, ref_id, note, created_by)
+
+## Payment Flow
+- Payment methods: `cash`, `card`, `bank_transfer` (PAYMENT_METHODS constant)
+- Orders start as status=new, become status=paid only after POST /api/orders/:id/pay
+- On payment: paymentMethod + paidAt stored on order, ledger entry created in cash_ledger or bank_ledger
+- Expenses also record ledger entries based on source (cash → cash_ledger, card/bank → bank_ledger)
+
+## Shift Closing
+- Cannot close shift if pending orders exist (status: new/processing/pending)
+- expected_cash = sum of paid cash orders - sum of cash expenses for that shift
+- actual_cash entered by user at close time
+- difference = actual - expected, recorded in cash_ledger as type=shift_difference
 
 ## Key Features
 1. **Dashboard**: Daily sales, VAT, order count, low-stock alerts, weekly chart
-2. **POS**: Branch/cashier selection, barcode scan, cart, discount, VAT 5%, cash/bank payment
+2. **POS**: Branch/cashier selection, barcode scan, cart, discount, VAT 5%, cash/card/bank payment
 3. **Products**: CRUD with barcode, category, unified price, active toggle
 4. **Inventory**: Main + branch warehouses, receive stock, transfer between warehouses, low-stock alerts
-5. **Orders**: WhatsApp/Instagram orders, auto-branch assignment by city, status tracking
-6. **Expenses**: Categorized expenses per branch with receipt upload support
-7. **Settings**: Branches, users/roles, cities mapping, VAT config
+5. **Orders**: WhatsApp/Instagram orders, auto-branch assignment by city, status tracking, payment recording
+6. **Expenses**: Categorized expenses per branch with source tracking + ledger integration
+7. **Shift Reports**: GET /api/reports/shift?shiftId=... → cash/card/bank sales, expenses, expected vs actual cash
+8. **Settings**: Branches, users/roles, cities mapping, VAT config
 
 ## API Routes
 All prefixed with `/api/`:
@@ -57,7 +72,9 @@ All prefixed with `/api/`:
 - GET/POST/PATCH/DELETE `/products/:id`
 - GET/POST `/inventory`, `/inventory/receive`, `/inventory/transfer`
 - GET/POST `/sales`, `/orders`, `/expenses`, `/employees`, `/shifts`
-- PATCH `/orders/:id/status`, `/shifts/:id/close`
+- POST `/orders/:id/pay` (paymentMethod: cash/card/bank_transfer)
+- PATCH `/orders/:id/status`, `/shifts/:id/close` (requires actualCash)
+- GET `/reports/shift?shiftId=...`
 - GET `/dashboard`
 
 ## Design
@@ -65,3 +82,11 @@ All prefixed with `/api/`:
 - Font: Cairo (Google Fonts)
 - Color palette: Soft rose/pink primary (#346 80% 65%) + light grays
 - Responsive: Desktop + Tablet
+
+## Important Notes
+- branchId in products table is nullable (unified pricing across branches)
+- users.branchId is also nullable
+- Schema has isActive field on users table (boolean, default true)
+- Seed runs only if no branches exist (idempotent)
+- Orders auto-link to open shift for the branch when created
+- DB has triggers on orders table (auto-set order_number) - do not interfere
