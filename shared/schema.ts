@@ -297,7 +297,7 @@ export const purchaseInvoices = pgTable("purchase_invoices", {
   subtotal: decimal("subtotal", { precision: 10, scale: 3 }).default("0"),
   totalExtraCost: decimal("total_extra_cost", { precision: 10, scale: 3 }).default("0"),
   grandTotal: decimal("grand_total", { precision: 10, scale: 3 }).default("0"),
-  status: text("status").notNull().default("draft"),
+  status: text("status").notNull().default("pending"),
   notes: text("notes"),
   createdBy: integer("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),

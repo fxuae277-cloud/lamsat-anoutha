@@ -712,7 +712,7 @@ export async function registerRoutes(
         customsCost: String(customsCost || 0),
         clearanceCost: String(clearanceCost || 0),
         otherCost: String(otherCost || 0),
-        status: "draft" as const,
+        status: "pending" as const,
         notes: notes || null,
         createdBy: req.session.userId!,
       };
@@ -728,8 +728,8 @@ export async function registerRoutes(
     const id = Number(req.params.id);
     const invoice = await storage.getPurchaseInvoice(id);
     if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
-    if (invoice.status !== "draft") {
-      return res.status(400).json({ message: "لا يمكن تعديل فاتورة مرحّلة" });
+    if (invoice.status !== "pending") {
+      return res.status(400).json({ message: "لا يمكن تعديل فاتورة معتمدة أو ملغاة" });
     }
     const updateData: any = {};
     const { shippingCost, customsCost, clearanceCost, otherCost, notes, supplierId } = req.body;
@@ -748,8 +748,8 @@ export async function registerRoutes(
       const purchaseId = Number(req.params.id);
       const invoice = await storage.getPurchaseInvoice(purchaseId);
       if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
-      if (invoice.status !== "draft") {
-        return res.status(400).json({ message: "لا يمكن إضافة أصناف لفاتورة مرحّلة" });
+      if (invoice.status !== "pending") {
+        return res.status(400).json({ message: "لا يمكن إضافة أصناف لفاتورة معتمدة أو ملغاة" });
       }
       const { productId, qty, unitCostBase } = req.body;
       if (!productId || !qty || !unitCostBase) {
@@ -775,16 +775,16 @@ export async function registerRoutes(
     const purchaseId = Number(req.params.purchaseId);
     const invoice = await storage.getPurchaseInvoice(purchaseId);
     if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
-    if (invoice.status !== "draft") {
-      return res.status(400).json({ message: "لا يمكن حذف أصناف من فاتورة مرحّلة" });
+    if (invoice.status !== "pending") {
+      return res.status(400).json({ message: "لا يمكن حذف أصناف من فاتورة معتمدة أو ملغاة" });
     }
     await storage.deletePurchaseItem(Number(req.params.itemId));
     res.json({ message: "تم الحذف" });
   });
 
-  app.post("/api/purchases/:id/post", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/purchase-invoices/:id/approve", requireAuth, requireManager, async (req, res) => {
     try {
-      const result = await storage.postPurchaseInvoice(Number(req.params.id));
+      const result = await storage.approvePurchaseInvoice(Number(req.params.id));
       res.json(result);
     } catch (err: any) {
       res.status(400).json({ message: err?.message ?? "فشل الترحيل" });

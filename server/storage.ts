@@ -105,7 +105,7 @@ export interface IStorage {
   getPurchaseItems(purchaseId: number): Promise<PurchaseItem[]>;
   addPurchaseItem(data: InsertPurchaseItem): Promise<PurchaseItem>;
   deletePurchaseItem(id: number): Promise<void>;
-  postPurchaseInvoice(id: number): Promise<PurchaseInvoice>;
+  approvePurchaseInvoice(id: number): Promise<PurchaseInvoice>;
   updateSupplier(id: number, data: Partial<InsertSupplier>): Promise<Supplier | undefined>;
 }
 
@@ -953,10 +953,11 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async postPurchaseInvoice(id: number): Promise<PurchaseInvoice> {
+  async approvePurchaseInvoice(id: number): Promise<PurchaseInvoice> {
     const invoice = await this.getPurchaseInvoice(id);
     if (!invoice) throw new Error("الفاتورة غير موجودة");
-    if (invoice.status !== "draft") throw new Error("لا يمكن ترحيل فاتورة مرحّلة مسبقاً");
+    if (invoice.status === "approved") throw new Error("الفاتورة معتمدة مسبقاً — لا يمكن اعتمادها مرة أخرى");
+    if (invoice.status !== "pending") throw new Error("لا يمكن اعتماد فاتورة بحالة: " + invoice.status);
 
     const items = await db.select().from(purchaseItems).where(eq(purchaseItems.purchaseId, id));
     if (items.length === 0) throw new Error("لا يمكن ترحيل فاتورة بدون أصناف");
@@ -1002,7 +1003,7 @@ export class DatabaseStorage implements IStorage {
       subtotal: subtotalItems.toFixed(3),
       totalExtraCost: totalExtraCost.toFixed(3),
       grandTotal: grandTotal.toFixed(3),
-      status: "posted",
+      status: "approved",
     }).where(eq(purchaseInvoices.id, id)).returning();
 
     return updated;

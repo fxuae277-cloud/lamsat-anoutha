@@ -387,9 +387,9 @@ function PurchasesTab() {
     },
   });
 
-  const postMutation = useMutation({
+  const approveMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/purchases/${selectedInvoice}/post`);
+      const res = await apiRequest("POST", `/api/purchase-invoices/${selectedInvoice}/approve`);
       return res.json();
     },
     onSuccess: () => {
@@ -397,16 +397,17 @@ function PurchasesTab() {
       qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
       qc.invalidateQueries({ queryKey: ["/api/products"] });
       setShowPostConfirm(false);
-      toast({ title: "تم ترحيل الفاتورة بنجاح", description: "تم تحديث تكلفة المنتجات والمخزون" });
+      toast({ title: "تم اعتماد الفاتورة بنجاح", description: "تم تحديث تكلفة المنتجات والمخزون" });
     },
     onError: (e: Error) => {
       setShowPostConfirm(false);
-      toast({ title: "فشل الترحيل", description: e.message, variant: "destructive" });
+      toast({ title: "فشل الاعتماد", description: e.message, variant: "destructive" });
     },
   });
 
   const items = invoiceDetail?.items || [];
-  const isDraft = invoiceDetail?.status === "draft";
+  const isPending = invoiceDetail?.status === "pending";
+  const statusLabel = invoiceDetail?.status === "pending" ? "مسودة" : invoiceDetail?.status === "approved" ? "معتمدة" : "ملغاة";
   const itemsSubtotal = items.reduce((s: number, it: any) => s + parseFloat(it.lineSubtotal || "0"), 0);
   const extraTotal = invoiceDetail
     ? parseFloat(invoiceDetail.shippingCost || "0") + parseFloat(invoiceDetail.customsCost || "0") +
@@ -426,14 +427,14 @@ function PurchasesTab() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant={isDraft ? "outline" : "default"} className={isDraft ? "border-amber-400 text-amber-600" : "bg-green-600"}>
-              {isDraft ? "مسودة" : "مرحّلة"}
+            <Badge variant={isPending ? "outline" : "default"} className={isPending ? "border-amber-400 text-amber-600" : invoiceDetail?.status === "approved" ? "bg-green-600" : "bg-red-500"}>
+              {statusLabel}
             </Badge>
             <Button variant="outline" onClick={() => setSelectedInvoice(null)} data-testid="button-back-to-list">رجوع</Button>
           </div>
         </div>
 
-        {isDraft && (
+        {isPending && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2"><Plus className="w-4 h-4" /> إضافة صنف</CardTitle>
@@ -479,15 +480,15 @@ function PurchasesTab() {
                   <TableHead>الكمية</TableHead>
                   <TableHead>سعر الوحدة</TableHead>
                   <TableHead>الإجمالي</TableHead>
-                  {!isDraft && <TableHead>التكلفة الإضافية</TableHead>}
-                  {!isDraft && <TableHead>التكلفة النهائية/وحدة</TableHead>}
-                  {isDraft && <TableHead></TableHead>}
+                  {!isPending && <TableHead>التكلفة الإضافية</TableHead>}
+                  {!isPending && <TableHead>التكلفة النهائية/وحدة</TableHead>}
+                  {isPending && <TableHead></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {items.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={isDraft ? 5 : 6} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={isPending ? 5 : 6} className="text-center text-muted-foreground py-8">
                       لا توجد أصناف
                     </TableCell>
                   </TableRow>
@@ -498,9 +499,9 @@ function PurchasesTab() {
                     <TableCell className="font-mono">{it.qty}</TableCell>
                     <TableCell className="font-mono">{omr(it.unitCostBase)}</TableCell>
                     <TableCell className="font-mono">{omr(it.lineSubtotal)}</TableCell>
-                    {!isDraft && <TableCell className="font-mono text-amber-600">{omr(it.allocatedExtraCost)}</TableCell>}
-                    {!isDraft && <TableCell className="font-mono font-bold text-emerald-600">{omr(it.unitCostFinal)}</TableCell>}
-                    {isDraft && (
+                    {!isPending && <TableCell className="font-mono text-amber-600">{omr(it.allocatedExtraCost)}</TableCell>}
+                    {!isPending && <TableCell className="font-mono font-bold text-emerald-600">{omr(it.unitCostFinal)}</TableCell>}
+                    {isPending && (
                       <TableCell>
                         <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700" onClick={() => deleteItemMutation.mutate(it.id)} data-testid={`button-delete-item-${it.id}`}>
                           <Trash2 className="w-4 h-4" />
@@ -514,9 +515,9 @@ function PurchasesTab() {
                   <TableCell className="font-mono">{items.reduce((s: number, it: any) => s + it.qty, 0)}</TableCell>
                   <TableCell></TableCell>
                   <TableCell className="font-mono">{omr(itemsSubtotal)}</TableCell>
-                  {!isDraft && <TableCell className="font-mono text-amber-600">{omr(extraTotal)}</TableCell>}
-                  {!isDraft && <TableCell></TableCell>}
-                  {isDraft && <TableCell></TableCell>}
+                  {!isPending && <TableCell className="font-mono text-amber-600">{omr(extraTotal)}</TableCell>}
+                  {!isPending && <TableCell></TableCell>}
+                  {isPending && <TableCell></TableCell>}
                 </TableRow>
               </TableBody>
             </Table>
@@ -531,25 +532,25 @@ function PurchasesTab() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="space-y-1">
                 <label className="text-sm font-medium flex items-center gap-1"><Truck className="w-3 h-3" /> شحن</label>
-                <Input type="number" step="0.001" value={invoiceDetail.shippingCost || "0"} disabled={!isDraft}
+                <Input type="number" step="0.001" value={invoiceDetail.shippingCost || "0"} disabled={!isPending}
                   onChange={e => updateCostsMutation.mutate({ shippingCost: Number(e.target.value) })}
                   data-testid="input-shipping-cost" />
               </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium">جمارك</label>
-                <Input type="number" step="0.001" value={invoiceDetail.customsCost || "0"} disabled={!isDraft}
+                <Input type="number" step="0.001" value={invoiceDetail.customsCost || "0"} disabled={!isPending}
                   onChange={e => updateCostsMutation.mutate({ customsCost: Number(e.target.value) })}
                   data-testid="input-customs-cost" />
               </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium">تخليص</label>
-                <Input type="number" step="0.001" value={invoiceDetail.clearanceCost || "0"} disabled={!isDraft}
+                <Input type="number" step="0.001" value={invoiceDetail.clearanceCost || "0"} disabled={!isPending}
                   onChange={e => updateCostsMutation.mutate({ clearanceCost: Number(e.target.value) })}
                   data-testid="input-clearance-cost" />
               </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium">أخرى</label>
-                <Input type="number" step="0.001" value={invoiceDetail.otherCost || "0"} disabled={!isDraft}
+                <Input type="number" step="0.001" value={invoiceDetail.otherCost || "0"} disabled={!isPending}
                   onChange={e => updateCostsMutation.mutate({ otherCost: Number(e.target.value) })}
                   data-testid="input-other-cost" />
               </div>
@@ -571,10 +572,10 @@ function PurchasesTab() {
           </CardContent>
         </Card>
 
-        {isDraft && items.length > 0 && canManage && (
+        {isPending && items.length > 0 && canManage && (
           <div className="flex justify-end">
-            <Button size="lg" className="gap-2 bg-green-600 hover:bg-green-700" onClick={() => setShowPostConfirm(true)} data-testid="button-post-invoice">
-              <FileCheck className="w-5 h-5" /> ترحيل الفاتورة
+            <Button size="lg" className="gap-2 bg-green-600 hover:bg-green-700" onClick={() => setShowPostConfirm(true)} data-testid="button-approve-invoice">
+              <FileCheck className="w-5 h-5" /> اعتماد الفاتورة
             </Button>
           </div>
         )}
@@ -583,10 +584,10 @@ function PurchasesTab() {
           <DialogContent dir="rtl" className="max-w-lg">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-amber-500" /> تأكيد الترحيل
+                <AlertTriangle className="w-5 h-5 text-amber-500" /> تأكيد اعتماد الفاتورة
               </DialogTitle>
               <DialogDescription>
-                سيتم توزيع التكاليف الإضافية على الأصناف وتحديث متوسط التكلفة والمخزون.
+                سيتم توزيع التكاليف الإضافية على الأصناف وتحديث متوسط التكلفة والمخزون. لا يمكن التراجع بعد الاعتماد.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 text-sm">
@@ -614,8 +615,8 @@ function PurchasesTab() {
             </div>
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => setShowPostConfirm(false)}>إلغاء</Button>
-              <Button className="bg-green-600 hover:bg-green-700 gap-2" onClick={() => postMutation.mutate()} disabled={postMutation.isPending} data-testid="button-confirm-post">
-                <FileCheck className="w-4 h-4" /> تأكيد الترحيل
+              <Button className="bg-green-600 hover:bg-green-700 gap-2" onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending} data-testid="button-confirm-approve">
+                <FileCheck className="w-4 h-4" /> تأكيد الاعتماد
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -659,8 +660,8 @@ function PurchasesTab() {
                   <TableCell>{inv.invoiceDate}</TableCell>
                   <TableCell className="font-mono">{omr(inv.grandTotal)} OMR</TableCell>
                   <TableCell>
-                    <Badge variant={inv.status === "draft" ? "outline" : "default"} className={inv.status === "draft" ? "border-amber-400 text-amber-600" : "bg-green-600"}>
-                      {inv.status === "draft" ? "مسودة" : "مرحّلة"}
+                    <Badge variant={inv.status === "pending" ? "outline" : "default"} className={inv.status === "pending" ? "border-amber-400 text-amber-600" : inv.status === "approved" ? "bg-green-600" : "bg-red-500"}>
+                      {inv.status === "pending" ? "مسودة" : inv.status === "approved" ? "معتمدة" : "ملغاة"}
                     </Badge>
                   </TableCell>
                 </TableRow>

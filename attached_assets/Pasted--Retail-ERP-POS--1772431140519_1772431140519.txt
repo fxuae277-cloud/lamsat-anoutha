@@ -1,0 +1,59 @@
+نفّذ نظام "اعتماد رسمي لفواتير الشراء" في مشروع Retail ERP POS وفق القاعدة التالية:
+
+البيانات الحالية:
+- جدول purchase_invoices أعمدته:
+  id, invoice_number, supplier_id, branch_id, invoice_date,
+  shipping_cost, customs_cost, clearance_cost, other_cost,
+  subtotal, total_extra_cost, grand_total, status, notes, created_by, created_at
+- جدول purchase_items أعمدته:
+  id, purchase_id, product_id, qty, unit_cost_base, line_subtotal,
+  allocated_extra_cost, unit_cost_final
+
+المطلوب (تنفيذ كامل end-to-end):
+1) ثبّت حالات الفاتورة:
+   - status = 'pending' (مسودة) | 'approved' (معتمدة) | 'cancelled' (ملغاة)
+   - اجعل الافتراضي عند إنشاء فاتورة: pending
+   - امنع اعتماد فاتورة إذا كانت already approved
+   - امنع تعديل/حذف purchase_items لفاتورة approved (API-side validation على الأقل)
+
+2) أنشئ API Endpoint لاعتماد الفاتورة:
+   POST /api/purchase-invoices/:id/approve
+   - ينفّذ داخل DB transaction واحدة.
+   - يتحقق:
+     a) الفاتورة موجودة وحالتها pending
+     b) يوجد purchase_items لها (qty > 0)
+   - يوزّع total_extra_cost على الأصناف بنسبة قيمة الصنف:
+     allocated_extra_cost لكل item = (line_subtotal / invoice.subtotal) * invoice.total_extra_cost
+     ثم يحسب:
+     unit_cost_final = (line_subtotal + allocated_extra_cost) / qty
+     (إذا subtotal=0 اجعل alloc=0 و unit_cost_final=unit_cost_base)
+
+3) بعد تحديث purchase_items:
+   - أدخل المخزون فعلياً حسب الفرع:
+     * استخدم branch_id من purchase_invoices
+     * زد الكمية في جدول location_inventory لكل product_id بمقدار qty
+     * استخدم UPSERT مناسب (إن لم يوجد سجل، أنشئه)
+   - سجّل حركة مخزون في inventory_transactions لكل item:
+     النوع: 'IN' أو 'PURCHASE'
+     المرجع: purchase_invoice_id
+     الكمية: qty
+     تكلفة الوحدة: unit_cost_final
+     الفرع: branch_id
+     (اكتشف أسماء الأعمدة الفعلية في الجداول وتكيّف معها)
+
+4) حدّث الفاتورة إلى approved بعد نجاح كل العمليات:
+   UPDATE purchase_invoices SET status='approved' WHERE id=:id AND status<>'approved'
+
+5) واجهة المستخدم:
+   - في صفحة /purchases:
+     * أظهر status بالعربي: pending=مسودة، approved=معتمدة، cancelled=ملغاة
+   - في صفحة تفاصيل الفاتورة (أو نفس القائمة إذا عندك):
+     * أضف زر "اعتماد الفاتورة" يظهر فقط إذا status=pending
+     * عند الضغط: يستدعي endpoint approve ثم يعيد تحميل البيانات ويعرض Toast نجاح/خطأ
+
+6) الدقة والسلامة:
+   - endpoint يجب أن يكون idempotent: إذا حاولت اعتماد فاتورة معتمدة يرجع 400 برسالة واضحة
+   - لا تسمح باعتماد فاتورة بدون items
+   - تأكد أن المخزون وحركة المخزون لا تتكرر لو تم ضغط اعتماد مرتين (حماية via status check + transaction)
+
+أرسل التغييرات كاملة: تعديلات السيرفر + الـ routes + أي تحديثات للـ db queries + تحديثات الواجهة.
