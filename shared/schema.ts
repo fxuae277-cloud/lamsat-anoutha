@@ -159,6 +159,7 @@ export const shifts = pgTable("shifts", {
   totalSales: decimal("total_sales", { precision: 10, scale: 3 }).default("0"),
   totalCash: decimal("total_cash", { precision: 10, scale: 3 }).default("0"),
   totalBank: decimal("total_bank", { precision: 10, scale: 3 }).default("0"),
+  openingCash: decimal("opening_cash", { precision: 12, scale: 3 }).default("0"),
   expectedCash: decimal("expected_cash", { precision: 12, scale: 3 }),
   actualCash: decimal("actual_cash", { precision: 12, scale: 3 }),
   difference: decimal("difference", { precision: 12, scale: 3 }),

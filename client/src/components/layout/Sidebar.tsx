@@ -26,7 +26,7 @@ const NAV_ITEMS = [
   { href: "/suppliers", label: "الموردون والمشتريات", icon: Truck },
   { href: "/expenses", label: "المصروفات", icon: Receipt },
   { href: "/hr", label: "الرواتب والموظفين", icon: UserCircle },
-  { href: "/finance", label: "المالية والتقارير", icon: PieChart },
+  { href: "/reports", label: "التقارير المالية", icon: PieChart },
   { href: "/settings", label: "الإعدادات", icon: Settings },
 ];
 

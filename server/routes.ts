@@ -492,5 +492,24 @@ export async function registerRoutes(
     res.json(report);
   });
 
+  app.get("/api/reports/daily", requireAuth, async (req, res) => {
+    const dateStr = req.query.date as string;
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
+    }
+    const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+    const report = await storage.getDailyReport(dateStr, branchId);
+    res.json(report);
+  });
+
+  app.get("/api/reports/shifts-by-date", requireAuth, async (req, res) => {
+    const dateStr = req.query.date as string;
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
+    }
+    const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+    res.json(await storage.getShiftsByDate(dateStr, branchId));
+  });
+
   return httpServer;
 }

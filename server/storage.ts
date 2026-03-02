@@ -83,6 +83,8 @@ export interface IStorage {
   getCashLedgerEntries(branchId?: number): Promise<CashLedger[]>;
   getBankLedgerEntries(branchId?: number): Promise<BankLedger[]>;
   getShiftReport(shiftId: number): Promise<any>;
+  getDailyReport(dateStr: string, branchId?: number): Promise<any>;
+  getShiftsByDate(dateStr: string, branchId?: number): Promise<any[]>;
   getDashboardStats(branchId?: number): Promise<any>;
 }
 
@@ -498,6 +500,10 @@ export class DatabaseStorage implements IStorage {
     const [shiftRow] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
     if (!shiftRow) return null;
 
+    const cashierRow = shiftRow.cashierId
+      ? await db.select({ name: users.name }).from(users).where(eq(users.id, shiftRow.cashierId))
+      : [];
+
     const [cashOrders] = await db.select({
       total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
       count: sql<number>`count(*)::int`,
@@ -546,22 +552,167 @@ export class DatabaseStorage implements IStorage {
       count: sql<number>`count(*)::int`,
     }).from(expenses).where(and(eq(expenses.shiftId, shiftId), sql`${expenses.source} != 'cash'`));
 
-    const totalCashIn = parseFloat(cashOrders.total) + parseFloat(cashPosSales.total);
-    const totalCardIn = parseFloat(cardOrders.total) + parseFloat(cardPosSales.total);
-    const totalBankIn = parseFloat(bankOrders.total) + parseFloat(bankPosSales.total);
-    const expectedCash = totalCashIn - parseFloat(cashExpenses.total);
+    const salesCash = parseFloat(cashOrders.total) + parseFloat(cashPosSales.total);
+    const salesCard = parseFloat(cardOrders.total) + parseFloat(cardPosSales.total);
+    const salesBankTransfer = parseFloat(bankOrders.total) + parseFloat(bankPosSales.total);
+    const expCash = parseFloat(cashExpenses.total);
+    const expBank = parseFloat(bankExpenses.total);
+    const totalSalesAll = salesCash + salesCard + salesBankTransfer;
+    const totalExpenses = expCash + expBank;
+    const netTotal = totalSalesAll - totalExpenses;
+    const openingCash = parseFloat(shiftRow.openingCash || "0");
+    const expectedCash = openingCash + salesCash - expCash;
 
     return {
       shift: shiftRow,
-      cashSales: { total: totalCashIn.toFixed(3), count: cashOrders.count + cashPosSales.count },
-      cardSales: { total: totalCardIn.toFixed(3), count: cardOrders.count + cardPosSales.count },
-      bankTransfers: { total: totalBankIn.toFixed(3), count: bankOrders.count + bankPosSales.count },
-      cashExpenses: { total: cashExpenses.total, count: cashExpenses.count },
-      bankExpenses: { total: bankExpenses.total, count: bankExpenses.count },
+      cashierName: cashierRow.length > 0 ? cashierRow[0].name : null,
+      salesCash: { total: salesCash.toFixed(3), count: cashOrders.count + cashPosSales.count },
+      salesCard: { total: salesCard.toFixed(3), count: cardOrders.count + cardPosSales.count },
+      salesBankTransfer: { total: salesBankTransfer.toFixed(3), count: bankOrders.count + bankPosSales.count },
+      expensesCash: { total: cashExpenses.total, count: cashExpenses.count },
+      expensesBank: { total: bankExpenses.total, count: bankExpenses.count },
+      totalSales: totalSalesAll.toFixed(3),
+      totalExpenses: totalExpenses.toFixed(3),
+      netTotal: netTotal.toFixed(3),
+      openingCash: openingCash.toFixed(3),
       expectedCash: expectedCash.toFixed(3),
       actualCash: shiftRow.actualCash || null,
       difference: shiftRow.difference || null,
     };
+  }
+
+  async getDailyReport(dateStr: string, branchId?: number) {
+    const dayStart = new Date(dateStr + "T00:00:00");
+    const dayEnd = new Date(dateStr + "T23:59:59.999");
+
+    const branchFilter = branchId ? eq(shifts.branchId, branchId) : undefined;
+    const orderBranchFilter = branchId ? eq(orders.branchId, branchId) : undefined;
+    const saleBranchFilter = branchId ? eq(sales.branchId, branchId) : undefined;
+    const expBranchFilter = branchId ? eq(expenses.branchId, branchId) : undefined;
+
+    const dayShifts = await db.select().from(shifts).where(
+      and(
+        sql`${shifts.startedAt} >= ${dayStart}`,
+        sql`${shifts.startedAt} <= ${dayEnd}`,
+        branchFilter
+      )
+    ).orderBy(shifts.startedAt);
+
+    const sumOpeningCash = dayShifts.reduce((s, sh) => s + parseFloat(sh.openingCash || "0"), 0);
+
+    const queryOrderSum = async (pm: string) => {
+      const [row] = await db.select({
+        total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
+        count: sql<number>`count(*)::int`,
+      }).from(orders).where(
+        and(
+          eq(orders.status, "paid"),
+          eq(orders.paymentMethod, pm),
+          sql`${orders.createdAt} >= ${dayStart}`,
+          sql`${orders.createdAt} <= ${dayEnd}`,
+          orderBranchFilter
+        )
+      );
+      return row;
+    };
+
+    const querySaleSum = async (pm: string) => {
+      const [row] = await db.select({
+        total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
+        count: sql<number>`count(*)::int`,
+      }).from(sales).where(
+        and(
+          eq(sales.paymentMethod, pm),
+          sql`${sales.createdAt} >= ${dayStart}`,
+          sql`${sales.createdAt} <= ${dayEnd}`,
+          saleBranchFilter
+        )
+      );
+      return row;
+    };
+
+    const cashOrd = await queryOrderSum("cash");
+    const cardOrd = await queryOrderSum("card");
+    const bankOrd = await queryOrderSum("bank_transfer");
+    const cashSale = await querySaleSum("cash");
+    const cardSale = await querySaleSum("card");
+    const bankSale = await querySaleSum("bank_transfer");
+
+    const salesCash = parseFloat(cashOrd.total) + parseFloat(cashSale.total);
+    const salesCard = parseFloat(cardOrd.total) + parseFloat(cardSale.total);
+    const salesBank = parseFloat(bankOrd.total) + parseFloat(bankSale.total);
+
+    const [cashExp] = await db.select({
+      total: sql<string>`coalesce(sum(${expenses.amount}::numeric), 0)::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(expenses).where(
+      and(eq(expenses.source, "cash"), sql`${expenses.date} = ${dateStr}`, expBranchFilter)
+    );
+    const [bankExp] = await db.select({
+      total: sql<string>`coalesce(sum(${expenses.amount}::numeric), 0)::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(expenses).where(
+      and(sql`${expenses.source} != 'cash'`, sql`${expenses.date} = ${dateStr}`, expBranchFilter)
+    );
+
+    const expCash = parseFloat(cashExp.total);
+    const expBank = parseFloat(bankExp.total);
+    const totalSales = salesCash + salesCard + salesBank;
+    const totalExpenses = expCash + expBank;
+    const net = totalSales - totalExpenses;
+
+    const cashClosingBalance = sumOpeningCash + salesCash - expCash;
+
+    const sumDifferences = dayShifts
+      .filter(s => s.status === "closed" && s.difference)
+      .reduce((s, sh) => s + parseFloat(sh.difference || "0"), 0);
+
+    return {
+      date: dateStr,
+      branchId: branchId || null,
+      shifts: dayShifts,
+      salesCash: { total: salesCash.toFixed(3), count: cashOrd.count + cashSale.count },
+      salesCard: { total: salesCard.toFixed(3), count: cardOrd.count + cardSale.count },
+      salesBankTransfer: { total: salesBank.toFixed(3), count: bankOrd.count + bankSale.count },
+      expensesCash: { total: cashExp.total, count: cashExp.count },
+      expensesBank: { total: bankExp.total, count: bankExp.count },
+      totalSales: totalSales.toFixed(3),
+      totalExpenses: totalExpenses.toFixed(3),
+      net: net.toFixed(3),
+      openingCash: sumOpeningCash.toFixed(3),
+      cashClosingBalance: cashClosingBalance.toFixed(3),
+      differencesSum: sumDifferences.toFixed(3),
+    };
+  }
+
+  async getShiftsByDate(dateStr: string, branchId?: number) {
+    const dayStart = new Date(dateStr + "T00:00:00");
+    const dayEnd = new Date(dateStr + "T23:59:59.999");
+    const branchFilter = branchId ? eq(shifts.branchId, branchId) : undefined;
+
+    const rows = await db.select({
+      id: shifts.id,
+      branchId: shifts.branchId,
+      cashierId: shifts.cashierId,
+      cashierName: users.name,
+      terminalName: shifts.terminalName,
+      startedAt: shifts.startedAt,
+      endedAt: shifts.endedAt,
+      status: shifts.status,
+      totalSales: shifts.totalSales,
+      openingCash: shifts.openingCash,
+    }).from(shifts)
+      .leftJoin(users, eq(shifts.cashierId, users.id))
+      .where(
+        and(
+          sql`${shifts.startedAt} >= ${dayStart}`,
+          sql`${shifts.startedAt} <= ${dayEnd}`,
+          branchFilter
+        )
+      )
+      .orderBy(desc(shifts.startedAt));
+
+    return rows;
   }
 
   async getDashboardStats(branchId?: number) {
