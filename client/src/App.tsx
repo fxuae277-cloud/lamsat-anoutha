@@ -10,6 +10,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 
 import Dashboard from "@/pages/Dashboard";
 import Executive from "@/pages/Executive";
+import ExecutivePlus from "@/pages/ExecutivePlus";
 import POS from "@/pages/POS";
 import Products from "@/pages/Products";
 import Inventory from "@/pages/Inventory";
@@ -43,6 +44,7 @@ function AuthenticatedRouter() {
       <Switch>
         <Route path="/" component={Dashboard}/>
         <Route path="/executive" component={Executive}/>
+        <Route path="/executive-plus" component={ExecutivePlus}/>
         <Route path="/pos" component={POS}/>
         <Route path="/products" component={Products}/>
         <Route path="/inventory" component={Inventory}/>

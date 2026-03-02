@@ -339,6 +339,208 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/dashboard/executive-plus", requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const branchId = req.query.branch_id ? Number(req.query.branch_id) : null;
+      const bf = branchId ? `AND branch_id = ${branchId}` : "";
+      const sbf = branchId ? `AND s.branch_id = ${branchId}` : "";
+      const lbf = branchId ? `AND l.branch_id = ${branchId}` : "";
+
+      const todayKpi = await pool.query(`
+        SELECT
+          COALESCE(SUM(total),0) AS revenue,
+          COALESCE(SUM(cogs_total),0) AS cogs,
+          COALESCE(SUM(total - cogs_total),0) AS profit,
+          ROUND(CASE WHEN COALESCE(SUM(total),0)=0 THEN 0
+               ELSE (COALESCE(SUM(total - cogs_total),0)/SUM(total))*100 END, 2) AS margin_percent,
+          ROUND(COALESCE(AVG(total),0),3) AS avg_invoice,
+          COUNT(*)::int AS invoice_count
+        FROM sales WHERE DATE(created_at)=CURRENT_DATE ${bf}
+      `);
+
+      const vsYesterday = await pool.query(`
+        SELECT
+          COALESCE(SUM(CASE WHEN DATE(created_at)=CURRENT_DATE THEN total ELSE 0 END),0) AS today_sales,
+          COALESCE(SUM(CASE WHEN DATE(created_at)=CURRENT_DATE-1 THEN total ELSE 0 END),0) AS yesterday_sales
+        FROM sales WHERE DATE(created_at) >= CURRENT_DATE-1 ${bf}
+      `);
+
+      const monthRes = await pool.query(`
+        SELECT COALESCE(SUM(total),0) AS revenue, COALESCE(SUM(total - cogs_total),0) AS profit
+        FROM sales WHERE DATE_TRUNC('month', created_at)=DATE_TRUNC('month', CURRENT_DATE) ${bf}
+      `);
+
+      const paymentRes = await pool.query(`
+        SELECT payment_method, COALESCE(SUM(total),0) AS amount
+        FROM sales WHERE DATE(created_at)=CURRENT_DATE ${bf}
+        GROUP BY payment_method ORDER BY amount DESC
+      `);
+
+      const trend7d = await pool.query(`
+        SELECT d::date AS day,
+          COALESCE(SUM(s.total),0) AS revenue,
+          COALESCE(SUM(s.total - s.cogs_total),0) AS profit,
+          ROUND(CASE WHEN COALESCE(SUM(s.total),0)=0 THEN 0
+               ELSE (COALESCE(SUM(s.total - s.cogs_total),0)/SUM(s.total))*100 END,2) AS margin
+        FROM generate_series(CURRENT_DATE - 6, CURRENT_DATE, '1 day') d
+        LEFT JOIN sales s ON DATE(s.created_at) = d ${bf}
+        GROUP BY d ORDER BY d
+      `);
+
+      const invValue = await pool.query(`
+        WITH last_cost AS (
+          SELECT DISTINCT ON (pi.product_id) pi.product_id, pi.unit_cost_final AS unit_cost
+          FROM purchase_items pi JOIN purchase_invoices pv ON pv.id=pi.purchase_id
+          WHERE pv.status='approved'
+          ORDER BY pi.product_id, pv.invoice_date DESC, pv.id DESC, pi.id DESC
+        ),
+        qty AS (
+          SELECT li.product_id, SUM(li.qty_on_hand) AS qty_on_hand
+          FROM location_inventory li JOIN locations l ON l.id=li.location_id
+          WHERE 1=1 ${lbf} GROUP BY li.product_id
+        )
+        SELECT COALESCE(SUM(qty.qty_on_hand * COALESCE(last_cost.unit_cost,0)),0) AS value
+        FROM qty LEFT JOIN last_cost ON last_cost.product_id=qty.product_id
+      `);
+
+      const turnover30 = await pool.query(`
+        WITH cogs30 AS (
+          SELECT COALESCE(SUM(si.line_cogs),0) AS total_cogs
+          FROM sale_items si JOIN sales s ON s.id=si.sale_id
+          WHERE s.created_at >= CURRENT_DATE - 30 ${sbf}
+        ),
+        avg_inv AS (
+          WITH last_cost AS (
+            SELECT DISTINCT ON (pi.product_id) pi.product_id, pi.unit_cost_final AS unit_cost
+            FROM purchase_items pi JOIN purchase_invoices pv ON pv.id=pi.purchase_id
+            WHERE pv.status='approved'
+            ORDER BY pi.product_id, pv.invoice_date DESC, pv.id DESC, pi.id DESC
+          ),
+          qty AS (
+            SELECT li.product_id, SUM(li.qty_on_hand) AS qty_on_hand
+            FROM location_inventory li JOIN locations l ON l.id=li.location_id
+            WHERE 1=1 ${lbf} GROUP BY li.product_id
+          )
+          SELECT COALESCE(SUM(qty.qty_on_hand * COALESCE(last_cost.unit_cost,0)),0) AS avg_value
+          FROM qty LEFT JOIN last_cost ON last_cost.product_id=qty.product_id
+        )
+        SELECT CASE WHEN avg_inv.avg_value = 0 THEN 0
+             ELSE ROUND((cogs30.total_cogs / avg_inv.avg_value)::numeric, 2) END AS turnover
+        FROM cogs30, avg_inv
+      `);
+
+      const topProfit7d = await pool.query(`
+        SELECT si.product_id, p.name,
+          COALESCE(SUM(si.quantity),0)::int AS qty_sold,
+          COALESCE(SUM(si.total),0) AS revenue,
+          COALESCE(SUM(si.line_cogs),0) AS cogs,
+          COALESCE(SUM(si.total - si.line_cogs),0) AS profit
+        FROM sale_items si
+        JOIN sales s ON s.id=si.sale_id
+        JOIN products p ON p.id=si.product_id
+        WHERE s.created_at >= CURRENT_DATE - 7 ${sbf}
+        GROUP BY si.product_id, p.name
+        ORDER BY profit DESC LIMIT 3
+      `);
+
+      const cashiers = await pool.query(`
+        SELECT s.cashier_id, u.name AS cashier_name,
+          COUNT(DISTINCT s.id)::int AS invoices_count,
+          COALESCE(SUM(s.total),0) AS revenue,
+          COALESCE(SUM(s.cogs_total),0) AS cogs,
+          COALESCE(SUM(s.total - s.cogs_total),0) AS profit
+        FROM sales s LEFT JOIN users u ON u.id=s.cashier_id
+        WHERE DATE(s.created_at)=CURRENT_DATE ${sbf}
+        GROUP BY s.cashier_id, u.name ORDER BY revenue DESC
+      `);
+
+      const lowStock = await pool.query(`
+        SELECT li.product_id, p.name,
+          SUM(li.qty_on_hand)::int AS total_qty,
+          MAX(li.reorder_level)::int AS reorder_level
+        FROM location_inventory li
+        JOIN products p ON p.id=li.product_id
+        JOIN locations l ON l.id=li.location_id
+        WHERE 1=1 ${lbf}
+        GROUP BY li.product_id, p.name
+        HAVING SUM(li.qty_on_hand) <= MAX(li.reorder_level)
+        ORDER BY total_qty ASC LIMIT 50
+      `);
+
+      const missingCogsToday = await pool.query(`
+        SELECT
+          COUNT(DISTINCT si.id) FILTER (WHERE COALESCE(si.unit_cost_at_sale,0) = 0) AS missing_count,
+          COUNT(DISTINCT si.id) AS total_count
+        FROM sale_items si JOIN sales s ON s.id=si.sale_id
+        WHERE DATE(s.created_at)=CURRENT_DATE ${sbf}
+      `);
+
+      const missingCostProducts = await pool.query(`
+        WITH last_cost AS (
+          SELECT DISTINCT ON (pi.product_id) pi.product_id
+          FROM purchase_items pi JOIN purchase_invoices pv ON pv.id=pi.purchase_id
+          WHERE pv.status='approved'
+          ORDER BY pi.product_id, pv.invoice_date DESC
+        )
+        SELECT
+          COUNT(*) FILTER (WHERE lc.product_id IS NULL) AS missing_count,
+          COUNT(*) AS total_count
+        FROM products p LEFT JOIN last_cost lc ON lc.product_id=p.id
+      `);
+
+      const t = todayKpi.rows[0];
+      const vs = vsYesterday.rows[0];
+      const todaySales = parseFloat(vs.today_sales);
+      const yesterdaySales = parseFloat(vs.yesterday_sales);
+      const changePercent = yesterdaySales === 0 ? null : ((todaySales - yesterdaySales) / yesterdaySales) * 100;
+
+      const mc = missingCogsToday.rows[0];
+      const mp = missingCostProducts.rows[0];
+      const missingCogsPct = parseInt(mc.total_count) === 0 ? 0 : Math.round((parseInt(mc.missing_count) / parseInt(mc.total_count)) * 10000) / 100;
+      const missingCostPct = parseInt(mp.total_count) === 0 ? 0 : Math.round((parseInt(mp.missing_count) / parseInt(mp.total_count)) * 10000) / 100;
+
+      res.json({
+        today: {
+          revenue: parseFloat(t.revenue), cogs: parseFloat(t.cogs), profit: parseFloat(t.profit),
+          margin_percent: parseFloat(t.margin_percent), avg_invoice: parseFloat(t.avg_invoice),
+          invoice_count: t.invoice_count,
+        },
+        todayVsYesterday: {
+          today_sales: todaySales, yesterday_sales: yesterdaySales,
+          change_percent: changePercent !== null ? Math.round(changePercent * 100) / 100 : null,
+        },
+        month: { revenue: parseFloat(monthRes.rows[0].revenue), profit: parseFloat(monthRes.rows[0].profit) },
+        paymentSplit: paymentRes.rows.map(r => ({ payment_method: r.payment_method, amount: parseFloat(r.amount) })),
+        trend7d: trend7d.rows.map(r => ({
+          day: r.day, revenue: parseFloat(r.revenue), profit: parseFloat(r.profit), margin: parseFloat(r.margin),
+        })),
+        inventoryValue: { value: parseFloat(invValue.rows[0].value) },
+        turnover_30d: parseFloat(turnover30.rows[0].turnover),
+        topProfitProducts7d: topProfit7d.rows.map(r => ({
+          product_id: r.product_id, name: r.name, qty_sold: r.qty_sold,
+          revenue: parseFloat(r.revenue), cogs: parseFloat(r.cogs), profit: parseFloat(r.profit),
+        })),
+        cashiersToday: cashiers.rows.map(r => ({
+          cashier_id: r.cashier_id, cashier_name: r.cashier_name, invoices_count: r.invoices_count,
+          revenue: parseFloat(r.revenue), cogs: parseFloat(r.cogs), profit: parseFloat(r.profit),
+        })),
+        lowStock: lowStock.rows.map(r => ({
+          product_id: r.product_id, name: r.name, total_qty: r.total_qty, reorder_level: r.reorder_level,
+        })),
+        risk: {
+          missing_cogs_today_pct: missingCogsPct,
+          missing_cogs_today_count: parseInt(mc.missing_count),
+          missing_cogs_today_total: parseInt(mc.total_count),
+          missing_cost_pct: missingCostPct,
+          missing_cost_count: parseInt(mp.missing_count),
+          missing_cost_total: parseInt(mp.total_count),
+        },
+      });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message || "خطأ في جلب البيانات" });
+    }
+  });
+
   app.get("/api/categories", async (_req, res) => {
     res.json(await storage.getCategories());
   });

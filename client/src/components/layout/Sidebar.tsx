@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { 
   LayoutDashboard,
   Gauge,
+  LineChart,
   Calculator, 
   Tags, 
   Package, 
@@ -21,6 +22,7 @@ import { useAuth } from "@/lib/auth";
 const NAV_ITEMS = [
   { href: "/", label: "لوحة التحكم", icon: LayoutDashboard },
   { href: "/executive", label: "لوحة الإدارة التنفيذية", icon: Gauge, adminOnly: true },
+  { href: "/executive-plus", label: "لوحة الاستثمار+", icon: LineChart, adminOnly: true },
   { href: "/pos", label: "نقطة البيع (POS)", icon: Calculator },
   { href: "/products", label: "المنتجات والأسعار", icon: Tags },
   { href: "/inventory", label: "المخزون", icon: Package },
