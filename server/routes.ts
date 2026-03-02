@@ -517,6 +517,14 @@ export async function registerRoutes(
     res.json(await storage.getShiftsByDate(dateStr, branchId));
   });
 
+  app.get("/api/reports/branch-comparison", requireAuth, async (req, res) => {
+    const dateStr = req.query.date as string;
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
+    }
+    res.json(await storage.getBranchComparisonReport(dateStr));
+  });
+
   app.get("/api/purchases", requireAuth, async (_req, res) => {
     const invoices = await storage.getPurchaseInvoices();
     res.json(invoices);

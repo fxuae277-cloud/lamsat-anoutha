@@ -81,6 +81,12 @@ shared/
   6. Update products.stock_qty += qty
 - Guards: Cannot post if status != draft or items empty; cannot modify posted invoices
 
+## COGS & Profit Tracking
+- **POS Sales** (createSale): calculates COGS = sum(qty * product.avg_cost) at time of sale, stores in sales.cogs_total and sales.gross_profit
+- **Order Payment** (payOrder): calculates COGS = sum(qty * product.avg_cost) at time of payment, stores in orders.cogs_total and orders.gross_profit
+- **Daily Report** (/api/reports/daily): includes cogsTotal, grossProfit, netProfit (= grossProfit - expenses)
+- **Branch Comparison** (/api/reports/branch-comparison): sales, cogs, gross, expenses, net per branch with margin %
+
 ## Ledger System
 - **cash_ledger types**: sale, expense, order_payment, shift_difference
 - **bank_ledger methods**: card, bank_transfer
@@ -114,8 +120,9 @@ shared/
 7. **Expenses**: Categorized expenses per branch with source tracking + ledger integration (tabbed: expenses / cash ledger / bank ledger)
 8. **Shift Reports**: GET /api/reports/shift?shiftId=... → cash/card/bank sales, expenses, expected vs actual cash
 9. **Settings**: Tabbed interface - account (change password), users (owner/admin), general settings, branches & cities
-10. **Reports**: Shift report + Daily report with CSV export + branch filter
+10. **Reports**: Shift report + Daily report (with COGS/Profit analysis) + Branch comparison report + CSV export
 11. **Purchases**: Full purchase invoice system with Average Cost calculation, extra cost allocation, posting workflow
+12. **COGS/Profit**: Automatic cost tracking on sales and order payments with profit analysis
 
 ## API Routes
 All prefixed with `/api/`:

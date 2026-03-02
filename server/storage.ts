@@ -249,13 +249,25 @@ export class DatabaseStorage implements IStorage {
   }
   async createSale(data: InsertSale, items: InsertSaleItem[]) {
     const [sale] = await db.insert(sales).values(data).returning();
+    let cogsTotal = 0;
     for (const item of items) {
       await db.insert(saleItems).values({ ...item, saleId: sale.id });
       const whList = await db.select().from(warehouses).where(eq(warehouses.branchId, data.branchId));
       if (whList.length > 0) {
         await this.adjustInventory(item.productId, whList[0].id, -item.quantity);
       }
+      const [product] = await db.select().from(products).where(eq(products.id, item.productId));
+      if (product) {
+        cogsTotal += item.quantity * parseFloat(product.avgCost || "0");
+      }
     }
+
+    const saleTotal = parseFloat(sale.total || "0");
+    const grossProfit = saleTotal - cogsTotal;
+    const [updatedSale] = await db.update(sales).set({
+      cogsTotal: cogsTotal.toFixed(3),
+      grossProfit: grossProfit.toFixed(3),
+    }).where(eq(sales.id, sale.id)).returning();
 
     const todayStr = new Date().toISOString().slice(0, 10);
     const amount = sale.total || "0";
@@ -288,7 +300,7 @@ export class DatabaseStorage implements IStorage {
       });
     }
 
-    return sale;
+    return updatedSale;
   }
   async getSaleItems(saleId: number) {
     return db.select().from(saleItems).where(eq(saleItems.saleId, saleId));
@@ -349,11 +361,24 @@ export class DatabaseStorage implements IStorage {
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
 
+    const items = await this.getOrderItems(id);
+    let cogsTotal = 0;
+    for (const item of items) {
+      const [product] = await db.select().from(products).where(eq(products.id, item.productId));
+      if (product) {
+        cogsTotal += item.quantity * parseFloat(product.avgCost || "0");
+      }
+    }
+    const orderTotal = parseFloat(order.total || "0");
+    const grossProfit = orderTotal - cogsTotal;
+
     const [updated] = await db.update(orders).set({
       status: "paid",
       paymentMethod,
       bankTxnId: bankTxnId || null,
       paidAt: now,
+      cogsTotal: cogsTotal.toFixed(3),
+      grossProfit: grossProfit.toFixed(3),
     }).where(eq(orders.id, id)).returning();
 
     const amount = updated.total || "0";
@@ -670,6 +695,20 @@ export class DatabaseStorage implements IStorage {
     const expBank = parseFloat(bankExp.total);
     const totalSales = salesCash + salesCard + salesBank;
     const totalExpenses = expCash + expBank;
+
+    const [orderCogs] = await db.select({
+      total: sql<string>`coalesce(sum(${orders.cogsTotal}::numeric), 0)::text`,
+    }).from(orders).where(
+      and(eq(orders.status, "paid"), sql`${orders.createdAt} >= ${dayStart}`, sql`${orders.createdAt} <= ${dayEnd}`, orderBranchFilter)
+    );
+    const [saleCogs] = await db.select({
+      total: sql<string>`coalesce(sum(${sales.cogsTotal}::numeric), 0)::text`,
+    }).from(sales).where(
+      and(sql`${sales.createdAt} >= ${dayStart}`, sql`${sales.createdAt} <= ${dayEnd}`, saleBranchFilter)
+    );
+    const cogsTotal = parseFloat(orderCogs.total) + parseFloat(saleCogs.total);
+    const grossProfit = totalSales - cogsTotal;
+    const netProfit = grossProfit - totalExpenses;
     const net = totalSales - totalExpenses;
 
     const cashClosingBalance = sumOpeningCash + salesCash - expCash;
@@ -689,6 +728,9 @@ export class DatabaseStorage implements IStorage {
       expensesBank: { total: bankExp.total, count: bankExp.count },
       totalSales: totalSales.toFixed(3),
       totalExpenses: totalExpenses.toFixed(3),
+      cogsTotal: cogsTotal.toFixed(3),
+      grossProfit: grossProfit.toFixed(3),
+      netProfit: netProfit.toFixed(3),
       net: net.toFixed(3),
       openingCash: sumOpeningCash.toFixed(3),
       cashClosingBalance: cashClosingBalance.toFixed(3),
@@ -842,6 +884,56 @@ export class DatabaseStorage implements IStorage {
     }).where(eq(purchaseInvoices.id, id)).returning();
 
     return updated;
+  }
+
+  async getBranchComparisonReport(dateStr: string) {
+    const dayStart = new Date(dateStr + "T00:00:00");
+    const dayEnd = new Date(dateStr + "T23:59:59.999");
+
+    const allBranches = await db.select().from(branches);
+
+    const results = [];
+    for (const branch of allBranches) {
+      const [ordSales] = await db.select({
+        total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
+        cogs: sql<string>`coalesce(sum(${orders.cogsTotal}::numeric), 0)::text`,
+      }).from(orders).where(
+        and(eq(orders.status, "paid"), eq(orders.branchId, branch.id),
+          sql`${orders.createdAt} >= ${dayStart}`, sql`${orders.createdAt} <= ${dayEnd}`)
+      );
+
+      const [posSales] = await db.select({
+        total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
+        cogs: sql<string>`coalesce(sum(${sales.cogsTotal}::numeric), 0)::text`,
+      }).from(sales).where(
+        and(eq(sales.branchId, branch.id),
+          sql`${sales.createdAt} >= ${dayStart}`, sql`${sales.createdAt} <= ${dayEnd}`)
+      );
+
+      const [expRow] = await db.select({
+        total: sql<string>`coalesce(sum(${expenses.amount}::numeric), 0)::text`,
+      }).from(expenses).where(
+        and(eq(expenses.branchId, branch.id), sql`${expenses.date} = ${dateStr}`)
+      );
+
+      const totalSales = parseFloat(ordSales.total) + parseFloat(posSales.total);
+      const totalCogs = parseFloat(ordSales.cogs) + parseFloat(posSales.cogs);
+      const grossProfit = totalSales - totalCogs;
+      const totalExpenses = parseFloat(expRow.total);
+      const netProfit = grossProfit - totalExpenses;
+
+      results.push({
+        branchId: branch.id,
+        branchName: branch.name,
+        totalSales: totalSales.toFixed(3),
+        cogsTotal: totalCogs.toFixed(3),
+        grossProfit: grossProfit.toFixed(3),
+        totalExpenses: totalExpenses.toFixed(3),
+        netProfit: netProfit.toFixed(3),
+      });
+    }
+
+    return { date: dateStr, branches: results };
   }
 }
 

@@ -134,6 +134,8 @@ export const sales = pgTable("sales", {
   paymentMethod: text("payment_method").notNull().default("cash"),
   bankTxnId: text("bank_txn_id"),
   bankReceiptImage: text("bank_receipt_image"),
+  cogsTotal: decimal("cogs_total", { precision: 10, scale: 3 }).default("0"),
+  grossProfit: decimal("gross_profit", { precision: 10, scale: 3 }).default("0"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 export const insertSaleSchema = createInsertSchema(sales).omit({ id: true, createdAt: true });
@@ -186,6 +188,8 @@ export const orders = pgTable("orders", {
   paymentMethod: text("payment_method").default("cash"),
   bankTxnId: text("bank_txn_id"),
   total: decimal("total", { precision: 10, scale: 3 }),
+  cogsTotal: decimal("cogs_total", { precision: 10, scale: 3 }).default("0"),
+  grossProfit: decimal("gross_profit", { precision: 10, scale: 3 }).default("0"),
   paidAt: timestamp("paid_at"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
