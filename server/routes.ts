@@ -337,6 +337,25 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/inventory-transfers", requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const { branch_id, items } = req.body;
+      if (!branch_id || !items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: "البيانات ناقصة أو غير صحيحة" });
+      }
+      for (const it of items) {
+        if (!it.product_id || !it.qty || it.qty <= 0) {
+          return res.status(400).json({ message: "كل صنف يجب أن يحتوي على product_id و qty > 0" });
+        }
+      }
+      const mapped = items.map((it: any) => ({ productId: Number(it.product_id), qty: Number(it.qty) }));
+      const result = await storage.createLocationTransfer(Number(branch_id), mapped, req.session.userId!);
+      res.json({ success: true, transfer_id: result.transferId, item_count: result.itemCount });
+    } catch (e: any) {
+      res.status(400).json({ message: e.message || "فشل التحويل" });
+    }
+  });
+
   app.get("/api/central-inventory", requireAuth, async (req, res) => {
     res.json(await storage.getCentralInventory());
   });
