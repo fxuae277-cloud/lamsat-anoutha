@@ -61,6 +61,8 @@ export interface IStorage {
   getCustomer(id: number): Promise<Customer | undefined>;
   createCustomer(data: InsertCustomer): Promise<Customer>;
   getSuppliers(): Promise<Supplier[]>;
+  getSupplier(id: number): Promise<Supplier | undefined>;
+  getSupplierByName(name: string): Promise<Supplier | undefined>;
   createSupplier(data: InsertSupplier): Promise<Supplier>;
   getSales(): Promise<Sale[]>;
   getSalesFiltered(filters: { from?: string; to?: string; paymentMethod?: string; employeeId?: number; branchId?: number }): Promise<any[]>;
@@ -244,7 +246,15 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getSuppliers() { return db.select().from(suppliers); }
+  async getSuppliers() { return db.select().from(suppliers).orderBy(desc(suppliers.createdAt)); }
+  async getSupplier(id: number) {
+    const [row] = await db.select().from(suppliers).where(eq(suppliers.id, id));
+    return row;
+  }
+  async getSupplierByName(name: string) {
+    const [row] = await db.select().from(suppliers).where(eq(suppliers.name, name));
+    return row;
+  }
   async createSupplier(data: InsertSupplier) {
     const [row] = await db.insert(suppliers).values(data).returning();
     return row;

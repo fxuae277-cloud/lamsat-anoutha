@@ -25,7 +25,7 @@ const NAV_ITEMS = [
   { href: "/invoices", label: "فواتير نقطة البيع", icon: FileText },
   { href: "/orders", label: "الطلبات", icon: ShoppingCart },
   { href: "/customers", label: "العملاء", icon: Users },
-  { href: "/suppliers", label: "الموردون والمشتريات", icon: Truck },
+  { href: "/suppliers", label: "الموردون والمشتريات", icon: Truck, managerOnly: true },
   { href: "/expenses", label: "المصروفات", icon: Receipt },
   { href: "/hr", label: "الرواتب والموظفين", icon: UserCircle },
   { href: "/reports", label: "التقارير المالية", icon: PieChart },
@@ -61,7 +61,10 @@ export function Sidebar() {
       </div>
       
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter((item: any) => {
+          if (item.managerOnly && (user?.role === "cashier" || user?.role === "employee")) return false;
+          return true;
+        }).map((item) => {
           const isActive = location === item.href;
           const Icon = item.icon;
           

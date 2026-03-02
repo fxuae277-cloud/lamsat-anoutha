@@ -114,8 +114,16 @@ export const suppliers = pgTable("suppliers", {
   phone: text("phone"),
   email: text("email"),
   company: text("company"),
+  address: text("address"),
+  city: text("city"),
+  country: text("country").default("عُمان"),
+  taxNo: text("tax_no"),
+  crNo: text("cr_no"),
+  notes: text("notes"),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
 });
-export const insertSupplierSchema = createInsertSchema(suppliers).omit({ id: true });
+export const insertSupplierSchema = createInsertSchema(suppliers).omit({ id: true, createdAt: true });
 export type InsertSupplier = z.infer<typeof insertSupplierSchema>;
 export type Supplier = typeof suppliers.$inferSelect;
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
-import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle, Search, Edit, Phone, Mail, Building, MapPin, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import type { Branch, Supplier, Product, PurchaseInvoice } from "@shared/schema";
@@ -18,7 +19,237 @@ function omr(val: string | number | null) {
   return parseFloat(String(val)).toFixed(3);
 }
 
-export default function Purchases() {
+function SuppliersTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+
+  const [formName, setFormName] = useState("");
+  const [formPhone, setFormPhone] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formCompany, setFormCompany] = useState("");
+  const [formAddress, setFormAddress] = useState("");
+  const [formCity, setFormCity] = useState("");
+  const [formCountry, setFormCountry] = useState("عُمان");
+  const [formTaxNo, setFormTaxNo] = useState("");
+  const [formCrNo, setFormCrNo] = useState("");
+  const [formNotes, setFormNotes] = useState("");
+
+  const { data: suppliers = [] } = useQuery<Supplier[]>({
+    queryKey: ["/api/suppliers"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const filtered = suppliers.filter(s =>
+    !search || s.name.includes(search) || (s.phone && s.phone.includes(search)) || (s.company && s.company.includes(search))
+  );
+
+  function resetForm() {
+    setFormName(""); setFormPhone(""); setFormEmail(""); setFormCompany("");
+    setFormAddress(""); setFormCity(""); setFormCountry("عُمان");
+    setFormTaxNo(""); setFormCrNo(""); setFormNotes("");
+    setEditId(null);
+  }
+
+  function openEdit(s: Supplier) {
+    setEditId(s.id);
+    setFormName(s.name);
+    setFormPhone(s.phone || "");
+    setFormEmail(s.email || "");
+    setFormCompany(s.company || "");
+    setFormAddress(s.address || "");
+    setFormCity(s.city || "");
+    setFormCountry(s.country || "عُمان");
+    setFormTaxNo(s.taxNo || "");
+    setFormCrNo(s.crNo || "");
+    setFormNotes(s.notes || "");
+    setShowForm(true);
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const body: any = {
+        name: formName.trim(),
+        phone: formPhone || null,
+        email: formEmail || null,
+        company: formCompany || null,
+        address: formAddress || null,
+        city: formCity || null,
+        country: formCountry || null,
+        taxNo: formTaxNo || null,
+        crNo: formCrNo || null,
+        notes: formNotes || null,
+      };
+      if (editId) {
+        const res = await apiRequest("PATCH", `/api/suppliers/${editId}`, body);
+        return res.json();
+      } else {
+        const res = await apiRequest("POST", "/api/suppliers", body);
+        return res.json();
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/suppliers"] });
+      setShowForm(false);
+      resetForm();
+      toast({ title: editId ? "تم تحديث المورد" : "تمت إضافة المورد" });
+    },
+    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+  });
+
+  const deactivateMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const supplier = suppliers.find(s => s.id === id);
+      const res = await apiRequest("PATCH", `/api/suppliers/${id}`, { active: !supplier?.active });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/suppliers"] });
+      toast({ title: "تم تحديث الحالة" });
+    },
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="بحث بالاسم أو الهاتف أو الشركة..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pr-9"
+            data-testid="input-supplier-search"
+          />
+        </div>
+        <Button className="gap-2" onClick={() => { resetForm(); setShowForm(true); }} data-testid="button-new-supplier">
+          <Plus className="w-4 h-4" /> إضافة مورد
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader className="bg-muted/50">
+              <TableRow>
+                <TableHead>الاسم</TableHead>
+                <TableHead>الشركة</TableHead>
+                <TableHead>الهاتف</TableHead>
+                <TableHead>البريد</TableHead>
+                <TableHead>المدينة</TableHead>
+                <TableHead>الرقم الضريبي</TableHead>
+                <TableHead>الحالة</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                    {search ? "لا توجد نتائج" : "لا يوجد موردون"}
+                  </TableCell>
+                </TableRow>
+              )}
+              {filtered.map(s => (
+                <TableRow key={s.id} data-testid={`row-supplier-${s.id}`}>
+                  <TableCell className="font-medium">{s.name}</TableCell>
+                  <TableCell>{s.company || "—"}</TableCell>
+                  <TableCell className="font-mono text-sm">{s.phone || "—"}</TableCell>
+                  <TableCell className="text-sm">{s.email || "—"}</TableCell>
+                  <TableCell>{s.city || "—"}</TableCell>
+                  <TableCell className="font-mono text-sm">{s.taxNo || "—"}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={s.active ? "default" : "outline"}
+                      className={s.active ? "bg-green-600 cursor-pointer" : "border-red-400 text-red-500 cursor-pointer"}
+                      onClick={() => deactivateMutation.mutate(s.id)}
+                      data-testid={`badge-supplier-active-${s.id}`}
+                    >
+                      {s.active ? "نشط" : "معطل"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button variant="ghost" size="sm" onClick={() => openEdit(s)} data-testid={`button-edit-supplier-${s.id}`}>
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Dialog open={showForm} onOpenChange={v => { if (!v) { setShowForm(false); resetForm(); } }}>
+        <DialogContent dir="rtl" className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building className="w-5 h-5" /> {editId ? "تعديل المورد" : "إضافة مورد جديد"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">اسم المورد *</label>
+              <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="اسم المورد" data-testid="input-supplier-name" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">الشركة</label>
+                <Input value={formCompany} onChange={e => setFormCompany(e.target.value)} placeholder="اسم الشركة" data-testid="input-supplier-company" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">الهاتف</label>
+                <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+968..." data-testid="input-supplier-phone" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">البريد الإلكتروني</label>
+              <Input type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="email@example.com" data-testid="input-supplier-email" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">المدينة</label>
+                <Input value={formCity} onChange={e => setFormCity(e.target.value)} placeholder="مسقط" data-testid="input-supplier-city" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">الدولة</label>
+                <Input value={formCountry} onChange={e => setFormCountry(e.target.value)} data-testid="input-supplier-country" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">العنوان</label>
+              <Input value={formAddress} onChange={e => setFormAddress(e.target.value)} placeholder="العنوان الكامل" data-testid="input-supplier-address" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">الرقم الضريبي</label>
+                <Input value={formTaxNo} onChange={e => setFormTaxNo(e.target.value)} data-testid="input-supplier-taxno" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">رقم السجل التجاري</label>
+                <Input value={formCrNo} onChange={e => setFormCrNo(e.target.value)} data-testid="input-supplier-crno" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">ملاحظات</label>
+              <Input value={formNotes} onChange={e => setFormNotes(e.target.value)} placeholder="ملاحظات..." data-testid="input-supplier-notes" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowForm(false); resetForm(); }}>إلغاء</Button>
+            <Button onClick={() => saveMutation.mutate()} disabled={!formName.trim() || saveMutation.isPending} data-testid="button-save-supplier">
+              {editId ? "تحديث" : "إضافة"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function PurchasesTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -27,6 +258,7 @@ export default function Purchases() {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<number | null>(null);
   const [showPostConfirm, setShowPostConfirm] = useState(false);
+  const [showQuickSupplier, setShowQuickSupplier] = useState(false);
 
   const [newSupplierId, setNewSupplierId] = useState("");
   const [newBranchId, setNewBranchId] = useState("");
@@ -40,6 +272,10 @@ export default function Purchases() {
   const [addProductId, setAddProductId] = useState("");
   const [addQty, setAddQty] = useState("");
   const [addUnitCost, setAddUnitCost] = useState("");
+
+  const [quickName, setQuickName] = useState("");
+  const [quickPhone, setQuickPhone] = useState("");
+  const [quickCompany, setQuickCompany] = useState("");
 
   const { data: invoices = [] } = useQuery<PurchaseInvoice[]>({
     queryKey: ["/api/purchases"],
@@ -75,6 +311,8 @@ export default function Purchases() {
   const supplierMap = Object.fromEntries(suppliers.map(s => [s.id, s.name]));
   const productMap = Object.fromEntries(allProducts.map(p => [p.id, p.name]));
 
+  const activeSuppliers = suppliers.filter(s => s.active !== false);
+
   const createMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/purchases", {
@@ -96,6 +334,25 @@ export default function Purchases() {
       toast({ title: "تم إنشاء فاتورة المشتريات" });
       setNewSupplierId(""); setNewBranchId(""); setNewNotes("");
       setNewShipping("0"); setNewCustoms("0"); setNewClearance("0"); setNewOther("0");
+    },
+    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+  });
+
+  const quickSupplierMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/suppliers", {
+        name: quickName.trim(),
+        phone: quickPhone || null,
+        company: quickCompany || null,
+      });
+      return res.json();
+    },
+    onSuccess: (newSupplier: Supplier) => {
+      qc.invalidateQueries({ queryKey: ["/api/suppliers"] });
+      setNewSupplierId(String(newSupplier.id));
+      setShowQuickSupplier(false);
+      setQuickName(""); setQuickPhone(""); setQuickCompany("");
+      toast({ title: "تمت إضافة المورد واختياره" });
     },
     onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
   });
@@ -376,12 +633,8 @@ export default function Purchases() {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-purchases-title">المشتريات</h1>
-          <p className="text-muted-foreground mt-1">إدارة فواتير المشتريات ومتوسط التكلفة (Average Cost)</p>
-        </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-end">
         <Button className="gap-2" onClick={() => setShowCreate(true)} data-testid="button-new-purchase">
           <Plus className="w-4 h-4" /> فاتورة مشتريات جديدة
         </Button>
@@ -435,13 +688,18 @@ export default function Purchases() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-sm font-medium">المورد</label>
-                <Select value={newSupplierId} onValueChange={setNewSupplierId}>
-                  <SelectTrigger data-testid="select-new-supplier"><SelectValue placeholder="اختر مورد..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">بدون مورد</SelectItem>
-                    {suppliers.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1">
+                  <Select value={newSupplierId} onValueChange={setNewSupplierId}>
+                    <SelectTrigger data-testid="select-new-supplier" className="flex-1"><SelectValue placeholder="اختر مورد..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">بدون مورد</SelectItem>
+                      {activeSuppliers.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" size="icon" className="shrink-0" onClick={() => setShowQuickSupplier(true)} title="إضافة مورد جديد" data-testid="button-quick-add-supplier">
+                    <UserPlus className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium">الفرع *</label>
@@ -488,6 +746,70 @@ export default function Purchases() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={showQuickSupplier} onOpenChange={setShowQuickSupplier}>
+        <DialogContent dir="rtl" className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><UserPlus className="w-5 h-5" /> إضافة مورد سريع</DialogTitle>
+            <DialogDescription>أضف مورد جديد واختره تلقائياً</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">اسم المورد *</label>
+              <Input value={quickName} onChange={e => setQuickName(e.target.value)} placeholder="اسم المورد" data-testid="input-quick-supplier-name" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">الهاتف</label>
+              <Input value={quickPhone} onChange={e => setQuickPhone(e.target.value)} placeholder="+968..." data-testid="input-quick-supplier-phone" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">الشركة</label>
+              <Input value={quickCompany} onChange={e => setQuickCompany(e.target.value)} placeholder="اسم الشركة" data-testid="input-quick-supplier-company" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowQuickSupplier(false)}>إلغاء</Button>
+            <Button onClick={() => quickSupplierMutation.mutate()} disabled={!quickName.trim() || quickSupplierMutation.isPending} data-testid="button-save-quick-supplier">
+              إضافة واختيار
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+export default function Purchases() {
+  const { user } = useAuth();
+  const canManage = user?.role === "owner" || user?.role === "admin" || user?.role === "manager";
+
+  if (!canManage) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <p className="text-muted-foreground text-lg">ليس لديك صلاحية للوصول لهذه الصفحة</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div>
+        <h1 className="text-2xl font-bold" data-testid="text-purchases-title">الموردون والمشتريات</h1>
+        <p className="text-muted-foreground mt-1">إدارة الموردين وفواتير المشتريات ومتوسط التكلفة (Average Cost)</p>
+      </div>
+
+      <Tabs defaultValue="purchases" dir="rtl">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="purchases" data-testid="tab-purchases">فواتير المشتريات</TabsTrigger>
+          <TabsTrigger value="suppliers" data-testid="tab-suppliers">الموردون</TabsTrigger>
+        </TabsList>
+        <TabsContent value="purchases" className="mt-4">
+          <PurchasesTab />
+        </TabsContent>
+        <TabsContent value="suppliers" className="mt-4">
+          <SuppliersTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

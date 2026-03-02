@@ -337,15 +337,33 @@ export async function registerRoutes(
     res.status(201).json(await storage.createCustomer(parsed.data));
   });
 
-  app.get("/api/suppliers", async (_req, res) => {
+  app.get("/api/suppliers", requireAuth, requireManager, async (_req, res) => {
     res.json(await storage.getSuppliers());
   });
-  app.post("/api/suppliers", async (req, res) => {
+  app.get("/api/suppliers/:id", requireAuth, requireManager, async (req, res) => {
+    const row = await storage.getSupplier(Number(req.params.id));
+    if (!row) return res.status(404).json({ message: "المورد غير موجود" });
+    res.json(row);
+  });
+  app.post("/api/suppliers", requireAuth, requireManager, async (req, res) => {
     const parsed = insertSupplierSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    if (!parsed.data.name || !parsed.data.name.trim()) {
+      return res.status(400).json({ message: "اسم المورد مطلوب" });
+    }
+    const existing = await storage.getSupplierByName(parsed.data.name.trim());
+    if (existing) {
+      return res.status(409).json({ message: "يوجد مورد بنفس الاسم" });
+    }
     res.status(201).json(await storage.createSupplier(parsed.data));
   });
-  app.patch("/api/suppliers/:id", async (req, res) => {
+  app.patch("/api/suppliers/:id", requireAuth, requireManager, async (req, res) => {
+    if (req.body.name) {
+      const existing = await storage.getSupplierByName(req.body.name.trim());
+      if (existing && existing.id !== Number(req.params.id)) {
+        return res.status(409).json({ message: "يوجد مورد بنفس الاسم" });
+      }
+    }
     const row = await storage.updateSupplier(Number(req.params.id), req.body);
     if (!row) return res.status(404).json({ message: "المورد غير موجود" });
     res.json(row);
