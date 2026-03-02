@@ -15,6 +15,14 @@ import {
 } from "@shared/schema";
 import { registerExportRoutes } from "./exports";
 
+declare global {
+  namespace Express {
+    interface Request {
+      branchScope?: { mode: "company" | "branch"; branchId: number | null };
+    }
+  }
+}
+
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
     return res.status(401).json({ message: "غير مصرح - يجب تسجيل الدخول" });
@@ -47,6 +55,27 @@ function requireRole(allowedRoles: string[]) {
 }
 
 const requireManager = requireRole(["owner", "admin", "manager"]);
+
+async function enforceBranchScope(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: "غير مصرح - يجب تسجيل الدخول" });
+  }
+  const user = await storage.getUser(req.session.userId);
+  if (!user) {
+    return res.status(401).json({ message: "المستخدم غير موجود" });
+  }
+  if (user.role === "owner" || user.role === "admin") {
+    const qb = (req.query.branchId || req.query.branch_id || req.body?.branchId) as string | undefined;
+    if (qb && !isNaN(Number(qb))) {
+      req.branchScope = { mode: "branch", branchId: Number(qb) };
+    } else {
+      req.branchScope = { mode: "company", branchId: null };
+    }
+  } else {
+    req.branchScope = { mode: "branch", branchId: user.branchId ?? 0 };
+  }
+  next();
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -94,13 +123,24 @@ export async function registerRoutes(
     res.json({ user: safeUser });
   });
 
-  app.get("/api/dashboard", async (_req, res) => {
+  app.get("/api/dashboard", requireAuth, async (_req, res) => {
     const stats = await storage.getDashboardStats();
     res.json(stats);
   });
 
-  app.get("/api/branches", async (_req, res) => {
-    res.json(await storage.getBranches());
+  app.get("/api/branches", requireAuth, async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "المستخدم غير موجود" });
+    if (user.role === "owner" || user.role === "admin") {
+      res.json(await storage.getBranches());
+    } else {
+      if (user.branchId) {
+        const branch = await storage.getBranch(user.branchId);
+        res.json(branch ? [branch] : []);
+      } else {
+        res.json([]);
+      }
+    }
   });
   app.post("/api/branches", async (req, res) => {
     const parsed = insertBranchSchema.safeParse(req.body);
@@ -703,7 +743,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/central-inventory", requireAuth, async (req, res) => {
+  app.get("/api/central-inventory", requireManager, async (req, res) => {
     res.json(await storage.getCentralInventory());
   });
 
@@ -771,18 +811,15 @@ export async function registerRoutes(
     res.json(row);
   });
 
-  app.get("/api/sales", requireAuth, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
-    const isBranchOnly = user?.role === "cashier" || user?.role === "employee" || user?.role === "manager";
+  app.get("/api/sales", requireAuth, enforceBranchScope, async (req, res) => {
+    const scope = req.branchScope!;
     const filters: any = {};
     if (req.query.from) filters.from = req.query.from as string;
     if (req.query.to) filters.to = req.query.to as string;
     if (req.query.paymentMethod) filters.paymentMethod = req.query.paymentMethod as string;
     if (req.query.employeeId) filters.employeeId = Number(req.query.employeeId);
-    if (isBranchOnly) {
-      filters.branchId = user!.branchId;
-    } else if (req.query.branchId) {
-      filters.branchId = Number(req.query.branchId);
+    if (scope.mode === "branch") {
+      filters.branchId = scope.branchId;
     }
     res.json(await storage.getSalesFiltered(filters));
   });
@@ -821,7 +858,7 @@ export async function registerRoutes(
       res.status(400).json({ message: e.message || "فشل إنشاء الفاتورة" });
     }
   });
-  app.get("/api/sales/daily/summary", async (_req, res) => {
+  app.get("/api/sales/daily/summary", requireAuth, enforceBranchScope, async (req, res) => {
     res.json(await storage.getDailySalesTotal());
   });
 
@@ -948,12 +985,14 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/ledger/cash", requireAuth, async (req, res) => {
-    const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+  app.get("/api/ledger/cash", requireAuth, enforceBranchScope, async (req, res) => {
+    const scope = req.branchScope!;
+    const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
     res.json(await storage.getCashLedgerEntries(branchId));
   });
-  app.get("/api/ledger/bank", requireAuth, async (req, res) => {
-    const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+  app.get("/api/ledger/bank", requireAuth, enforceBranchScope, async (req, res) => {
+    const scope = req.branchScope!;
+    const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
     res.json(await storage.getBankLedgerEntries(branchId));
   });
 
@@ -1017,7 +1056,7 @@ export async function registerRoutes(
     res.json(row);
   });
 
-  app.get("/api/reports/shift", requireAuth, async (req, res) => {
+  app.get("/api/reports/shift", requireAuth, enforceBranchScope, async (req, res) => {
     const shiftId = Number(req.query.shiftId);
     if (!shiftId) return res.status(400).json({ message: "shiftId مطلوب" });
     const report = await storage.getShiftReport(shiftId);
@@ -1025,26 +1064,28 @@ export async function registerRoutes(
     res.json(report);
   });
 
-  app.get("/api/reports/daily", requireAuth, async (req, res) => {
+  app.get("/api/reports/daily", requireAuth, enforceBranchScope, async (req, res) => {
     const dateStr = req.query.date as string;
     if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
     }
-    const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+    const scope = req.branchScope!;
+    const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
     const report = await storage.getDailyReport(dateStr, branchId);
     res.json(report);
   });
 
-  app.get("/api/reports/shifts-by-date", requireAuth, async (req, res) => {
+  app.get("/api/reports/shifts-by-date", requireAuth, enforceBranchScope, async (req, res) => {
     const dateStr = req.query.date as string;
     if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
     }
-    const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+    const scope = req.branchScope!;
+    const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
     res.json(await storage.getShiftsByDate(dateStr, branchId));
   });
 
-  app.get("/api/reports/branch-comparison", requireAuth, async (req, res) => {
+  app.get("/api/reports/branch-comparison", requireOwnerOrAdmin, async (req, res) => {
     const dateStr = req.query.date as string;
     if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
@@ -1052,7 +1093,7 @@ export async function registerRoutes(
     res.json(await storage.getBranchComparisonReport(dateStr));
   });
 
-  app.get("/api/reports/profit/branches", requireAuth, async (req, res) => {
+  app.get("/api/reports/profit/branches", requireOwnerOrAdmin, async (req, res) => {
     const from = req.query.from as string;
     const to = req.query.to as string;
     if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
@@ -1061,27 +1102,25 @@ export async function registerRoutes(
     res.json(await storage.getProfitByBranches(from, to));
   });
 
-  app.get("/api/reports/profit/employees", requireAuth, async (req, res) => {
+  app.get("/api/reports/profit/employees", requireAuth, enforceBranchScope, async (req, res) => {
     const from = req.query.from as string;
     const to = req.query.to as string;
     if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
       return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD (from & to)" });
     }
-    const user = await storage.getUser(req.session.userId!);
-    const branchId = req.query.branchId ? Number(req.query.branchId)
-      : (user?.role === "owner" || user?.role === "admin" ? undefined : user?.branchId);
+    const scope = req.branchScope!;
+    const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
     res.json(await storage.getProfitByEmployees(from, to, branchId));
   });
 
-  app.get("/api/reports/profit/products", requireAuth, async (req, res) => {
+  app.get("/api/reports/profit/products", requireAuth, enforceBranchScope, async (req, res) => {
     const from = req.query.from as string;
     const to = req.query.to as string;
     if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
       return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD (from & to)" });
     }
-    const user = await storage.getUser(req.session.userId!);
-    const branchId = req.query.branchId ? Number(req.query.branchId)
-      : (user?.role === "owner" || user?.role === "admin" ? undefined : user?.branchId);
+    const scope = req.branchScope!;
+    const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
     res.json(await storage.getProfitByProducts(from, to, branchId));
   });
 

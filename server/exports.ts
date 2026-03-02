@@ -18,6 +18,38 @@ function requireAuth(req: Request, res: Response, next: () => void) {
   next();
 }
 
+async function requireOwnerOrAdmin(req: Request, res: Response, next: () => void) {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: "غير مصرح" });
+  }
+  const user = await storage.getUser(req.session.userId);
+  if (!user || (user.role !== "owner" && user.role !== "admin")) {
+    return res.status(403).json({ message: "غير مصرح - صلاحيات غير كافية" });
+  }
+  next();
+}
+
+async function enforceBranchScope(req: Request, res: Response, next: () => void) {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: "غير مصرح" });
+  }
+  const user = await storage.getUser(req.session.userId);
+  if (!user) {
+    return res.status(401).json({ message: "المستخدم غير موجود" });
+  }
+  if (user.role === "owner" || user.role === "admin") {
+    const qb = (req.query.branchId || req.query.branch_id) as string | undefined;
+    if (qb && !isNaN(Number(qb))) {
+      req.branchScope = { mode: "branch", branchId: Number(qb) };
+    } else {
+      req.branchScope = { mode: "company", branchId: null };
+    }
+  } else {
+    req.branchScope = { mode: "branch", branchId: user.branchId ?? 0 };
+  }
+  next();
+}
+
 function omr(val: string | number | null) {
   if (val === null || val === undefined) return "0.000";
   return parseFloat(String(val)).toFixed(3);
@@ -25,13 +57,14 @@ function omr(val: string | number | null) {
 
 export function registerExportRoutes(app: Express) {
 
-  app.get("/api/exports/daily.xlsx", requireAuth, async (req, res) => {
+  app.get("/api/exports/daily.xlsx", requireAuth, enforceBranchScope, async (req, res) => {
     try {
       const dateStr = req.query.date as string;
       if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
         return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
       }
-      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      const scope = req.branchScope!;
+      const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
       const report = await storage.getDailyReport(dateStr, branchId);
 
       const branches = await storage.getBranches();
@@ -100,7 +133,7 @@ export function registerExportRoutes(app: Express) {
     }
   });
 
-  app.get("/api/exports/profit_all_branches.xlsx", requireAuth, async (req, res) => {
+  app.get("/api/exports/profit_all_branches.xlsx", requireOwnerOrAdmin, async (req, res) => {
     try {
       const from = req.query.from as string;
       const to = req.query.to as string;
@@ -163,12 +196,13 @@ export function registerExportRoutes(app: Express) {
     }
   });
 
-  app.get("/api/exports/profit_by_employee.xlsx", requireAuth, async (req, res) => {
+  app.get("/api/exports/profit_by_employee.xlsx", requireAuth, enforceBranchScope, async (req, res) => {
     try {
       const from = req.query.from as string;
       const to = req.query.to as string;
       if (!from || !to) return res.status(400).json({ message: "from & to مطلوبان" });
-      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      const scope = req.branchScope!;
+      const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
       const data = await storage.getProfitByEmployees(from, to, branchId);
 
       const branches = await storage.getBranches();
@@ -208,12 +242,13 @@ export function registerExportRoutes(app: Express) {
     }
   });
 
-  app.get("/api/exports/profit_by_product.xlsx", requireAuth, async (req, res) => {
+  app.get("/api/exports/profit_by_product.xlsx", requireAuth, enforceBranchScope, async (req, res) => {
     try {
       const from = req.query.from as string;
       const to = req.query.to as string;
       if (!from || !to) return res.status(400).json({ message: "from & to مطلوبان" });
-      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      const scope = req.branchScope!;
+      const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
       const data = await storage.getProfitByProducts(from, to, branchId);
 
       const branches = await storage.getBranches();
@@ -253,13 +288,14 @@ export function registerExportRoutes(app: Express) {
     }
   });
 
-  app.get("/api/exports/daily.pdf", requireAuth, async (req, res) => {
+  app.get("/api/exports/daily.pdf", requireAuth, enforceBranchScope, async (req, res) => {
     try {
       const dateStr = req.query.date as string;
       if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
         return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
       }
-      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      const scope = req.branchScope!;
+      const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
       const report = await storage.getDailyReport(dateStr, branchId);
 
       const branches = await storage.getBranches();
@@ -376,7 +412,7 @@ export function registerExportRoutes(app: Express) {
     }
   });
 
-  app.get("/api/exports/sales.xlsx", requireAuth, async (req, res) => {
+  app.get("/api/exports/sales.xlsx", requireAuth, enforceBranchScope, async (req, res) => {
     try {
       const from = req.query.from as string;
       const to = req.query.to as string;
@@ -384,15 +420,12 @@ export function registerExportRoutes(app: Express) {
         return res.status(400).json({ message: "التاريخ مطلوب (from & to)" });
       }
 
-      const user = await storage.getUser(req.session.userId!);
-      const isBranchOnly = user?.role === "cashier" || user?.role === "employee" || user?.role === "manager";
+      const scope = req.branchScope!;
       const filters: any = { from, to };
       if (req.query.paymentMethod) filters.paymentMethod = req.query.paymentMethod as string;
       if (req.query.employeeId) filters.employeeId = Number(req.query.employeeId);
-      if (isBranchOnly) {
-        filters.branchId = user!.branchId;
-      } else if (req.query.branchId) {
-        filters.branchId = Number(req.query.branchId);
+      if (scope.mode === "branch") {
+        filters.branchId = scope.branchId;
       }
 
       const data = await storage.getSalesFiltered(filters);

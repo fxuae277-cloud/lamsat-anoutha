@@ -1,0 +1,77 @@
+نفّذ نظام صلاحيات وعزل بيانات قوي (Strict RBAC + Branch Isolation) في مشروع POS (Express + TS):
+
+A) Middleware عام: enforceBranchScope
+1) أنشئ middleware باسم enforceBranchScope (في server/routes.ts أو server/middleware.ts):
+- يفترض أن requireAuth يضع المستخدم في req.user أو من session.
+- إذا user.role ليس "owner" ولا "admin":
+   - اجعل req.branchScope = { mode:"branch", branchId: user.branchId }
+   - تجاهل أي branchId قادم من req.query.branchId أو req.body.branchId (لا تستخدمه).
+- إذا user.role هو "owner" أو "admin":
+   - اقرأ branchId اختياري من req.query.branchId أو req.body.branchId
+   - إن وُجد رقم صحيح => req.branchScope = { mode:"branch", branchId:Number(branchId) }
+   - إن لم يوجد => req.branchScope = { mode:"company", branchId:null }
+
+2) (مستحسن) Type augmentation:
+declare global { namespace Express { interface Request { branchScope?: { mode:"company"|"branch"; branchId:number|null } } } }
+
+B) طبّق enforceBranchScope على Routes الحساسة (بعد requireAuth مباشرة)
+ضعه على:
+- GET /api/ledger/bank
+- GET /api/ledger/cash
+- GET /api/reports/daily
+- GET /api/reports/shift
+- GET /api/reports/shifts-by-date
+- GET /api/reports/profit/employees
+- GET /api/reports/profit/products
+- GET /api/sales
+- GET /api/sales/daily/summary
+- GET /api/exports/daily.xlsx
+- GET /api/exports/daily.pdf
+- GET /api/exports/profit_by_employee.xlsx
+- GET /api/exports/profit_by_product.xlsx
+- GET /api/exports/sales.xlsx
+
+ثم عدّل منطق كل Route أعلاه:
+- استخدم const scope = req.branchScope
+- إذا scope.mode==="branch": مرر branchId=scope.branchId للاستعلامات (WHERE branch_id = branchId)
+- إذا scope.mode==="company": اسمح Aggregation بدون فلتر فرع (Company level) لكن هذا لن يحدث إلا للـowner/admin لأن middleware لا يعطي company لغيرهم.
+
+C) قفل Company/Executive Endpoints (Owner/Admin فقط)
+أضف requireOwnerOrAdmin على:
+- GET /api/dashboard/executive
+- GET /api/dashboard/executive-plus
+- GET /api/reports/branch-comparison
+- GET /api/reports/profit/branches
+- GET /api/exports/profit_all_branches.xlsx
+
+D) تقييد قائمة الفروع /api/branches
+1) تأكد أن GET /api/branches عليه requireAuth.
+2) السلوك المطلوب:
+- owner/admin: يرجع كل الفروع
+- غير ذلك: يرجع فرع واحد فقط (فرع المستخدم)
+مثال منطقي:
+if user.role not owner/admin => return [branch where id=user.branchId]
+
+E) منع المخزون المركزي لغير المصرح لهم
+1) endpoints المقصودة:
+- GET /api/central-inventory
+- GET /api/central-inventory/* (إن وجدت)
+2) اجعلها requireOwnerOrAdmin (أو requireManager إذا عندكم role manager)
+لأن المخزون المركزي لا يخص الموظف العادي.
+
+F) تأمين مسارات مكشوفة
+- تأكد أن GET /api/dashboard عليه requireAuth (إن كان بدون).
+
+G) اختبارات إلزامية بعد التنفيذ
+1) حساب employee:
+- /api/reports/branch-comparison => 403
+- /api/dashboard/executive => 403
+- /api/ledger/bank?branchId=999 => يعرض فرع الموظف فقط
+- /api/reports/daily?branchId=999 => يعرض فرع الموظف فقط
+- /api/branches => يعرض فرعه فقط
+- /api/central-inventory => 403
+2) حساب owner/admin:
+- بدون branchId => company scope (Aggregation)
+- مع branchId => branch scope
+
+ملاحظة: العزل لازم يكون داخل الـAPI (السيرفر) وليس فقط إخفاء عناصر الواجهة.
