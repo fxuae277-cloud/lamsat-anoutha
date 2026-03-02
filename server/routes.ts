@@ -20,6 +20,17 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+async function requireOwnerOrAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: "غير مصرح - يجب تسجيل الدخول" });
+  }
+  const user = await storage.getUser(req.session.userId);
+  if (!user || (user.role !== "owner" && user.role !== "admin")) {
+    return res.status(403).json({ message: "غير مصرح - صلاحيات غير كافية" });
+  }
+  next();
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -94,18 +105,76 @@ export async function registerRoutes(
     res.status(201).json(await storage.createCity(parsed.data));
   });
 
-  app.get("/api/users", async (_req, res) => {
+  app.post("/api/auth/change-password", requireAuth, async (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ message: "كلمة المرور القديمة والجديدة مطلوبتان" });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: "كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل" });
+    }
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(404).json({ message: "المستخدم غير موجود" });
+    const valid = await bcrypt.compare(oldPassword, user.password);
+    if (!valid) return res.status(401).json({ message: "كلمة المرور القديمة غير صحيحة" });
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await storage.updateUser(user.id, { password: hashed });
+    res.json({ message: "تم تغيير كلمة المرور بنجاح" });
+  });
+
+  app.get("/api/users", requireOwnerOrAdmin, async (_req, res) => {
     const allUsers = await storage.getUsers();
     res.json(allUsers.map(({ password: _, ...u }) => u));
   });
-  app.post("/api/users", async (req, res) => {
-    const parsed = insertUserSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    if (parsed.data.password) {
-      parsed.data.password = await bcrypt.hash(parsed.data.password, 10);
+  app.post("/api/users", requireOwnerOrAdmin, async (req, res) => {
+    const { name, username, password, role, branchId, terminalName, isActive } = req.body;
+    if (!name || !username || !password) {
+      return res.status(400).json({ message: "الاسم واسم المستخدم وكلمة المرور مطلوبة" });
     }
-    const { password: _, ...safeUser } = await storage.createUser(parsed.data);
+    if (password.length < 6) {
+      return res.status(400).json({ message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" });
+    }
+    const existing = await storage.getUserByUsername(username);
+    if (existing) {
+      return res.status(409).json({ message: "اسم المستخدم مستخدم بالفعل" });
+    }
+    const hashed = await bcrypt.hash(password, 10);
+    const { password: _, ...safeUser } = await storage.createUser({
+      name,
+      username,
+      password: hashed,
+      role: role || "employee",
+      branchId: branchId ? Number(branchId) : 1,
+      terminalName: terminalName || "T1",
+      isActive: isActive !== undefined ? isActive : true,
+    });
     res.status(201).json(safeUser);
+  });
+  app.patch("/api/users/:id", requireOwnerOrAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const { name, role, branchId, terminalName, isActive } = req.body;
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (role !== undefined) updateData.role = role;
+    if (branchId !== undefined) updateData.branchId = Number(branchId);
+    if (terminalName !== undefined) updateData.terminalName = terminalName;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    const updated = await storage.updateUser(id, updateData);
+    if (!updated) return res.status(404).json({ message: "المستخدم غير موجود" });
+    const { password: _, ...safeUser } = updated;
+    res.json(safeUser);
+  });
+  app.patch("/api/users/:id/reset-password", requireOwnerOrAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" });
+    }
+    const user = await storage.getUser(id);
+    if (!user) return res.status(404).json({ message: "المستخدم غير موجود" });
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await storage.updateUser(id, { password: hashed });
+    res.json({ message: "تم إعادة تعيين كلمة المرور بنجاح" });
   });
 
   app.get("/api/categories", async (_req, res) => {

@@ -37,12 +37,19 @@ shared/
 - Session stored in PostgreSQL via connect-pg-simple
 - GET /api/auth/me returns current user (without password)
 - POST /api/auth/logout destroys session
+- POST /api/auth/change-password (oldPassword, newPassword) - any logged-in user
 - `requireAuth` middleware protects: /api/orders, /api/shifts, /api/expenses, /api/reports, /api/sales
+- `requireOwnerOrAdmin` middleware protects: /api/users (GET/POST/PATCH)
 - Frontend shows Login page when no session exists
-- Users table has: username, password, name, role, branchId, terminalName, isActive
+- Users table has: username (unique), password (bcrypt), name, role, branchId, terminalName, isActive
 - POST /api/shifts takes only `openingCash`; branchId, cashierId, terminalName come from session user
 - GET /api/shifts/current uses session user's branchId + terminalName
-- Default users: mariam/owner123 (owner), ahmed/owner123 (owner), fatma/cashier123, noura/cashier123, huda/cashier123
+- User management (owner/admin only):
+  - GET /api/users (strips passwords)
+  - POST /api/users (name, username, password, role, branchId, terminalName) - checks unique username
+  - PATCH /api/users/:id (name, role, branchId, terminalName, isActive)
+  - PATCH /api/users/:id/reset-password (newPassword)
+- Default users: owner/Owner@12345 (bootstrap), mariam/owner123, ahmed/owner123, fatma/cashier123, noura/cashier123, huda/cashier123
 
 ## Database Schema (PostgreSQL)
 - branches, cities
