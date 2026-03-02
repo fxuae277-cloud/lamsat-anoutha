@@ -110,13 +110,11 @@ export type Customer = typeof customers.$inferSelect;
 
 export const suppliers = pgTable("suppliers", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  name: text("name").notNull(),
+  name: text("name").notNull().unique(),
   phone: text("phone"),
   email: text("email"),
-  company: text("company"),
   address: text("address"),
   city: text("city"),
-  country: text("country").default("عُمان"),
   taxNo: text("tax_no"),
   crNo: text("cr_no"),
   notes: text("notes"),
@@ -289,7 +287,7 @@ export type Employee = typeof employees.$inferSelect;
 export const purchaseInvoices = pgTable("purchase_invoices", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   invoiceNumber: text("invoice_number").notNull(),
-  supplierId: integer("supplier_id").references(() => suppliers.id),
+  supplierId: integer("supplier_id").references(() => suppliers.id).notNull(),
   branchId: integer("branch_id").references(() => branches.id).notNull(),
   invoiceDate: date("invoice_date").notNull(),
   shippingCost: decimal("shipping_cost", { precision: 10, scale: 3 }).default("0"),

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
-import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle, Search, Edit, Phone, Mail, Building, MapPin, UserPlus } from "lucide-react";
+import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle, Search, Edit, Building, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,10 +29,8 @@ function SuppliersTab() {
   const [formName, setFormName] = useState("");
   const [formPhone, setFormPhone] = useState("");
   const [formEmail, setFormEmail] = useState("");
-  const [formCompany, setFormCompany] = useState("");
   const [formAddress, setFormAddress] = useState("");
   const [formCity, setFormCity] = useState("");
-  const [formCountry, setFormCountry] = useState("عُمان");
   const [formTaxNo, setFormTaxNo] = useState("");
   const [formCrNo, setFormCrNo] = useState("");
   const [formNotes, setFormNotes] = useState("");
@@ -43,12 +41,12 @@ function SuppliersTab() {
   });
 
   const filtered = suppliers.filter(s =>
-    !search || s.name.includes(search) || (s.phone && s.phone.includes(search)) || (s.company && s.company.includes(search))
+    !search || s.name.includes(search) || (s.phone && s.phone.includes(search)) || (s.city && s.city.includes(search))
   );
 
   function resetForm() {
-    setFormName(""); setFormPhone(""); setFormEmail(""); setFormCompany("");
-    setFormAddress(""); setFormCity(""); setFormCountry("عُمان");
+    setFormName(""); setFormPhone(""); setFormEmail("");
+    setFormAddress(""); setFormCity("");
     setFormTaxNo(""); setFormCrNo(""); setFormNotes("");
     setEditId(null);
   }
@@ -58,10 +56,8 @@ function SuppliersTab() {
     setFormName(s.name);
     setFormPhone(s.phone || "");
     setFormEmail(s.email || "");
-    setFormCompany(s.company || "");
     setFormAddress(s.address || "");
     setFormCity(s.city || "");
-    setFormCountry(s.country || "عُمان");
     setFormTaxNo(s.taxNo || "");
     setFormCrNo(s.crNo || "");
     setFormNotes(s.notes || "");
@@ -74,10 +70,8 @@ function SuppliersTab() {
         name: formName.trim(),
         phone: formPhone || null,
         email: formEmail || null,
-        company: formCompany || null,
         address: formAddress || null,
         city: formCity || null,
-        country: formCountry || null,
         taxNo: formTaxNo || null,
         crNo: formCrNo || null,
         notes: formNotes || null,
@@ -99,7 +93,7 @@ function SuppliersTab() {
     onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
   });
 
-  const deactivateMutation = useMutation({
+  const toggleActiveMutation = useMutation({
     mutationFn: async (id: number) => {
       const supplier = suppliers.find(s => s.id === id);
       const res = await apiRequest("PATCH", `/api/suppliers/${id}`, { active: !supplier?.active });
@@ -117,7 +111,7 @@ function SuppliersTab() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="بحث بالاسم أو الهاتف أو الشركة..."
+            placeholder="بحث بالاسم أو الهاتف أو المدينة..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="pr-9"
@@ -135,11 +129,11 @@ function SuppliersTab() {
             <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead>الاسم</TableHead>
-                <TableHead>الشركة</TableHead>
                 <TableHead>الهاتف</TableHead>
                 <TableHead>البريد</TableHead>
                 <TableHead>المدينة</TableHead>
                 <TableHead>الرقم الضريبي</TableHead>
+                <TableHead>السجل التجاري</TableHead>
                 <TableHead>الحالة</TableHead>
                 <TableHead></TableHead>
               </TableRow>
@@ -155,16 +149,16 @@ function SuppliersTab() {
               {filtered.map(s => (
                 <TableRow key={s.id} data-testid={`row-supplier-${s.id}`}>
                   <TableCell className="font-medium">{s.name}</TableCell>
-                  <TableCell>{s.company || "—"}</TableCell>
                   <TableCell className="font-mono text-sm">{s.phone || "—"}</TableCell>
                   <TableCell className="text-sm">{s.email || "—"}</TableCell>
                   <TableCell>{s.city || "—"}</TableCell>
                   <TableCell className="font-mono text-sm">{s.taxNo || "—"}</TableCell>
+                  <TableCell className="font-mono text-sm">{s.crNo || "—"}</TableCell>
                   <TableCell>
                     <Badge
                       variant={s.active ? "default" : "outline"}
-                      className={s.active ? "bg-green-600 cursor-pointer" : "border-red-400 text-red-500 cursor-pointer"}
-                      onClick={() => deactivateMutation.mutate(s.id)}
+                      className={`cursor-pointer ${s.active ? "bg-green-600" : "border-red-400 text-red-500"}`}
+                      onClick={() => toggleActiveMutation.mutate(s.id)}
                       data-testid={`badge-supplier-active-${s.id}`}
                     >
                       {s.active ? "نشط" : "معطل"}
@@ -188,25 +182,22 @@ function SuppliersTab() {
             <DialogTitle className="flex items-center gap-2">
               <Building className="w-5 h-5" /> {editId ? "تعديل المورد" : "إضافة مورد جديد"}
             </DialogTitle>
+            <DialogDescription>{editId ? "عدّل بيانات المورد" : "أدخل بيانات المورد الجديد"}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1">
               <label className="text-sm font-medium">اسم المورد *</label>
-              <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="اسم المورد" data-testid="input-supplier-name" />
+              <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="اسم المورد (فريد)" data-testid="input-supplier-name" />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-sm font-medium">الشركة</label>
-                <Input value={formCompany} onChange={e => setFormCompany(e.target.value)} placeholder="اسم الشركة" data-testid="input-supplier-company" />
-              </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium">الهاتف</label>
                 <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+968..." data-testid="input-supplier-phone" />
               </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">البريد الإلكتروني</label>
-              <Input type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="email@example.com" data-testid="input-supplier-email" />
+              <div className="space-y-1">
+                <label className="text-sm font-medium">البريد الإلكتروني</label>
+                <Input type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="email@example.com" data-testid="input-supplier-email" />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
@@ -214,13 +205,9 @@ function SuppliersTab() {
                 <Input value={formCity} onChange={e => setFormCity(e.target.value)} placeholder="مسقط" data-testid="input-supplier-city" />
               </div>
               <div className="space-y-1">
-                <label className="text-sm font-medium">الدولة</label>
-                <Input value={formCountry} onChange={e => setFormCountry(e.target.value)} data-testid="input-supplier-country" />
+                <label className="text-sm font-medium">العنوان</label>
+                <Input value={formAddress} onChange={e => setFormAddress(e.target.value)} placeholder="العنوان" data-testid="input-supplier-address" />
               </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">العنوان</label>
-              <Input value={formAddress} onChange={e => setFormAddress(e.target.value)} placeholder="العنوان الكامل" data-testid="input-supplier-address" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
@@ -275,7 +262,6 @@ function PurchasesTab() {
 
   const [quickName, setQuickName] = useState("");
   const [quickPhone, setQuickPhone] = useState("");
-  const [quickCompany, setQuickCompany] = useState("");
 
   const { data: invoices = [] } = useQuery<PurchaseInvoice[]>({
     queryKey: ["/api/purchases"],
@@ -287,9 +273,18 @@ function PurchasesTab() {
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const { data: suppliers = [] } = useQuery<Supplier[]>({
+  const { data: allSuppliers = [] } = useQuery<Supplier[]>({
     queryKey: ["/api/suppliers"],
     queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const { data: activeSuppliers = [] } = useQuery<Supplier[]>({
+    queryKey: ["/api/suppliers", "activeOnly"],
+    queryFn: async () => {
+      const res = await fetch("/api/suppliers?activeOnly=true", { credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
   });
 
   const { data: allProducts = [] } = useQuery<Product[]>({
@@ -308,15 +303,13 @@ function PurchasesTab() {
   });
 
   const branchMap = Object.fromEntries(branches.map(b => [b.id, b.name]));
-  const supplierMap = Object.fromEntries(suppliers.map(s => [s.id, s.name]));
+  const supplierMap = Object.fromEntries(allSuppliers.map(s => [s.id, s.name]));
   const productMap = Object.fromEntries(allProducts.map(p => [p.id, p.name]));
-
-  const activeSuppliers = suppliers.filter(s => s.active !== false);
 
   const createMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/purchases", {
-        supplierId: newSupplierId ? Number(newSupplierId) : null,
+        supplierId: Number(newSupplierId),
         branchId: Number(newBranchId),
         invoiceDate: newDate,
         shippingCost: Number(newShipping) || 0,
@@ -343,7 +336,6 @@ function PurchasesTab() {
       const res = await apiRequest("POST", "/api/suppliers", {
         name: quickName.trim(),
         phone: quickPhone || null,
-        company: quickCompany || null,
       });
       return res.json();
     },
@@ -351,7 +343,7 @@ function PurchasesTab() {
       qc.invalidateQueries({ queryKey: ["/api/suppliers"] });
       setNewSupplierId(String(newSupplier.id));
       setShowQuickSupplier(false);
-      setQuickName(""); setQuickPhone(""); setQuickCompany("");
+      setQuickName(""); setQuickPhone("");
       toast({ title: "تمت إضافة المورد واختياره" });
     },
     onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
@@ -430,7 +422,7 @@ function PurchasesTab() {
               فاتورة مشتريات #{invoiceDetail.invoiceNumber}
             </h1>
             <p className="text-muted-foreground mt-1">
-              {supplierMap[invoiceDetail.supplierId] || "بدون مورد"} | {branchMap[invoiceDetail.branchId] || ""} | {invoiceDetail.invoiceDate}
+              {supplierMap[invoiceDetail.supplierId] || "—"} | {branchMap[invoiceDetail.branchId] || ""} | {invoiceDetail.invoiceDate}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -662,7 +654,7 @@ function PurchasesTab() {
               {invoices.map((inv) => (
                 <TableRow key={inv.id} className="cursor-pointer hover:bg-muted/30" onClick={() => setSelectedInvoice(inv.id)} data-testid={`row-purchase-${inv.id}`}>
                   <TableCell className="font-mono">{inv.invoiceNumber}</TableCell>
-                  <TableCell>{supplierMap[inv.supplierId!] || "—"}</TableCell>
+                  <TableCell>{supplierMap[inv.supplierId] || "—"}</TableCell>
                   <TableCell>{branchMap[inv.branchId] || "—"}</TableCell>
                   <TableCell>{inv.invoiceDate}</TableCell>
                   <TableCell className="font-mono">{omr(inv.grandTotal)} OMR</TableCell>
@@ -687,12 +679,11 @@ function PurchasesTab() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-sm font-medium">المورد</label>
+                <label className="text-sm font-medium">المورد *</label>
                 <div className="flex gap-1">
                   <Select value={newSupplierId} onValueChange={setNewSupplierId}>
                     <SelectTrigger data-testid="select-new-supplier" className="flex-1"><SelectValue placeholder="اختر مورد..." /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">بدون مورد</SelectItem>
                       {activeSuppliers.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -740,7 +731,7 @@ function PurchasesTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>إلغاء</Button>
-            <Button onClick={() => createMutation.mutate()} disabled={!newBranchId || !newDate || createMutation.isPending} data-testid="button-create-purchase">
+            <Button onClick={() => createMutation.mutate()} disabled={!newSupplierId || !newBranchId || !newDate || createMutation.isPending} data-testid="button-create-purchase">
               إنشاء الفاتورة
             </Button>
           </DialogFooter>
@@ -751,7 +742,7 @@ function PurchasesTab() {
         <DialogContent dir="rtl" className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><UserPlus className="w-5 h-5" /> إضافة مورد سريع</DialogTitle>
-            <DialogDescription>أضف مورد جديد واختره تلقائياً</DialogDescription>
+            <DialogDescription>أضف مورد جديد واختره تلقائياً للفاتورة</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">
@@ -761,10 +752,6 @@ function PurchasesTab() {
             <div className="space-y-1">
               <label className="text-sm font-medium">الهاتف</label>
               <Input value={quickPhone} onChange={e => setQuickPhone(e.target.value)} placeholder="+968..." data-testid="input-quick-supplier-phone" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">الشركة</label>
-              <Input value={quickCompany} onChange={e => setQuickCompany(e.target.value)} placeholder="اسم الشركة" data-testid="input-quick-supplier-company" />
             </div>
           </div>
           <DialogFooter>

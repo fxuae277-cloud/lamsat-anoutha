@@ -337,8 +337,9 @@ export async function registerRoutes(
     res.status(201).json(await storage.createCustomer(parsed.data));
   });
 
-  app.get("/api/suppliers", requireAuth, requireManager, async (_req, res) => {
-    res.json(await storage.getSuppliers());
+  app.get("/api/suppliers", requireAuth, requireManager, async (req, res) => {
+    const activeOnly = req.query.activeOnly === "true";
+    res.json(await storage.getSuppliers(activeOnly));
   });
   app.get("/api/suppliers/:id", requireAuth, requireManager, async (req, res) => {
     const row = await storage.getSupplier(Number(req.params.id));
