@@ -339,6 +339,10 @@ export async function registerRoutes(
     if (!user || !user.branchId || !user.terminalName) {
       return res.status(400).json({ message: "بيانات المستخدم ناقصة (الفرع أو الجهاز)" });
     }
+    const existing = await storage.getCurrentShift(user.branchId, user.terminalName);
+    if (existing) {
+      return res.status(409).json({ message: "يوجد شفت مفتوح بالفعل لهذا الجهاز", shift: existing });
+    }
     const { openingCash } = req.body;
     const shiftData = {
       branchId: user.branchId,
