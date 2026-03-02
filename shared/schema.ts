@@ -288,7 +288,7 @@ export const purchaseInvoices = pgTable("purchase_invoices", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   invoiceNumber: text("invoice_number").notNull(),
   supplierId: integer("supplier_id").references(() => suppliers.id).notNull(),
-  branchId: integer("branch_id").references(() => branches.id).notNull(),
+  branchId: integer("branch_id").references(() => branches.id),
   invoiceDate: date("invoice_date").notNull(),
   shippingCost: decimal("shipping_cost", { precision: 10, scale: 3 }).default("0"),
   customsCost: decimal("customs_cost", { precision: 10, scale: 3 }).default("0"),
@@ -351,7 +351,7 @@ export type LocationInventory = typeof locationInventory.$inferSelect;
 export const inventoryTransactions = pgTable("inventory_transactions", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   date: date("date").notNull(),
-  branchId: integer("branch_id").references(() => branches.id).notNull(),
+  branchId: integer("branch_id").references(() => branches.id),
   fromLocationId: integer("from_location_id").references(() => locations.id),
   toLocationId: integer("to_location_id").references(() => locations.id),
   productId: integer("product_id").references(() => products.id).notNull(),

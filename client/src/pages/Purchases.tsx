@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import type { Branch, Supplier, Product, PurchaseInvoice } from "@shared/schema";
+import type { Supplier, Product, PurchaseInvoice } from "@shared/schema";
 
 function omr(val: string | number | null) {
   if (val === null || val === undefined) return "0.000";
@@ -248,7 +248,6 @@ function PurchasesTab() {
   const [showQuickSupplier, setShowQuickSupplier] = useState(false);
 
   const [newSupplierId, setNewSupplierId] = useState("");
-  const [newBranchId, setNewBranchId] = useState("");
   const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
   const [newShipping, setNewShipping] = useState("0");
   const [newCustoms, setNewCustoms] = useState("0");
@@ -268,10 +267,6 @@ function PurchasesTab() {
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const { data: branches = [] } = useQuery<Branch[]>({
-    queryKey: ["/api/branches"],
-    queryFn: getQueryFn({ on401: "throw" }),
-  });
 
   const { data: allSuppliers = [] } = useQuery<Supplier[]>({
     queryKey: ["/api/suppliers"],
@@ -302,7 +297,6 @@ function PurchasesTab() {
     enabled: !!selectedInvoice,
   });
 
-  const branchMap = Object.fromEntries(branches.map(b => [b.id, b.name]));
   const supplierMap = Object.fromEntries(allSuppliers.map(s => [s.id, s.name]));
   const productMap = Object.fromEntries(allProducts.map(p => [p.id, p.name]));
 
@@ -310,7 +304,6 @@ function PurchasesTab() {
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/purchases", {
         supplierId: Number(newSupplierId),
-        branchId: Number(newBranchId),
         invoiceDate: newDate,
         shippingCost: Number(newShipping) || 0,
         customsCost: Number(newCustoms) || 0,
@@ -325,7 +318,7 @@ function PurchasesTab() {
       setShowCreate(false);
       setSelectedInvoice(inv.id);
       toast({ title: "تم إنشاء فاتورة المشتريات" });
-      setNewSupplierId(""); setNewBranchId(""); setNewNotes("");
+      setNewSupplierId(""); setNewNotes("");
       setNewShipping("0"); setNewCustoms("0"); setNewClearance("0"); setNewOther("0");
     },
     onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
@@ -423,7 +416,7 @@ function PurchasesTab() {
               فاتورة مشتريات #{invoiceDetail.invoiceNumber}
             </h1>
             <p className="text-muted-foreground mt-1">
-              {supplierMap[invoiceDetail.supplierId] || "—"} | {branchMap[invoiceDetail.branchId] || ""} | {invoiceDetail.invoiceDate}
+              {supplierMap[invoiceDetail.supplierId] || "—"} | {invoiceDetail.invoiceDate}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -640,7 +633,6 @@ function PurchasesTab() {
               <TableRow>
                 <TableHead>#</TableHead>
                 <TableHead>المورد</TableHead>
-                <TableHead>الفرع</TableHead>
                 <TableHead>التاريخ</TableHead>
                 <TableHead>الإجمالي</TableHead>
                 <TableHead>الحالة</TableHead>
@@ -649,14 +641,13 @@ function PurchasesTab() {
             <TableBody>
               {invoices.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">لا توجد فواتير مشتريات</TableCell>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">لا توجد فواتير مشتريات</TableCell>
                 </TableRow>
               )}
               {invoices.map((inv) => (
                 <TableRow key={inv.id} className="cursor-pointer hover:bg-muted/30" onClick={() => setSelectedInvoice(inv.id)} data-testid={`row-purchase-${inv.id}`}>
                   <TableCell className="font-mono">{inv.invoiceNumber}</TableCell>
                   <TableCell>{supplierMap[inv.supplierId] || "—"}</TableCell>
-                  <TableCell>{branchMap[inv.branchId] || "—"}</TableCell>
                   <TableCell>{inv.invoiceDate}</TableCell>
                   <TableCell className="font-mono">{omr(inv.grandTotal)} OMR</TableCell>
                   <TableCell>
@@ -693,15 +684,6 @@ function PurchasesTab() {
                   </Button>
                 </div>
               </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium">الفرع *</label>
-                <Select value={newBranchId} onValueChange={setNewBranchId}>
-                  <SelectTrigger data-testid="select-new-branch"><SelectValue placeholder="اختر فرع..." /></SelectTrigger>
-                  <SelectContent>
-                    {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">تاريخ الفاتورة *</label>
@@ -732,7 +714,7 @@ function PurchasesTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>إلغاء</Button>
-            <Button onClick={() => createMutation.mutate()} disabled={!newSupplierId || !newBranchId || !newDate || createMutation.isPending} data-testid="button-create-purchase">
+            <Button onClick={() => createMutation.mutate()} disabled={!newSupplierId || !newDate || createMutation.isPending} data-testid="button-create-purchase">
               إنشاء الفاتورة
             </Button>
           </DialogFooter>

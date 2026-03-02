@@ -733,15 +733,15 @@ export async function registerRoutes(
 
   app.post("/api/purchases", requireAuth, async (req, res) => {
     try {
-      const { supplierId, branchId, invoiceDate, shippingCost, customsCost, clearanceCost, otherCost, notes } = req.body;
-      if (!branchId || !invoiceDate) {
-        return res.status(400).json({ message: "الفرع وتاريخ الفاتورة مطلوبان" });
+      const { supplierId, invoiceDate, shippingCost, customsCost, clearanceCost, otherCost, notes } = req.body;
+      if (!invoiceDate) {
+        return res.status(400).json({ message: "تاريخ الفاتورة مطلوب" });
       }
       const invoiceNumber = `PUR-${Date.now()}`;
       const data = {
         invoiceNumber,
         supplierId: supplierId || null,
-        branchId: Number(branchId),
+        branchId: null as any,
         invoiceDate,
         shippingCost: String(shippingCost || 0),
         customsCost: String(customsCost || 0),

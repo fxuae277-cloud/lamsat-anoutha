@@ -1,0 +1,92 @@
+نفّذ نظام تحويل مخزون من المخزن المركزي إلى مخزن الفرع (Admin Only).
+
+1) أنشئ Endpoint:
+POST /api/admin/inventory-transfers
+
+Body:
+{
+  "branch_id": number,
+  "items": [
+    { "product_id": number, "qty": number }
+  ]
+}
+
+2) تحقق:
+- المستخدم Admin فقط
+- يوجد مخزن مركزي (is_central=true)
+- يوجد مخزن افتراضي للفرع (is_branch_default=true)
+- كل qty > 0
+
+3) داخل DB Transaction:
+
+A) اجلب central_location_id:
+SELECT id FROM locations WHERE is_central=true ORDER BY id LIMIT 1;
+
+B) اجلب branch_location_id:
+SELECT id FROM locations
+WHERE branch_id=:branch_id AND is_branch_default=true
+ORDER BY id LIMIT 1;
+
+C) أنشئ سجل في inventory_transfers:
+INSERT INTO inventory_transfers
+(date, branch_id, from_location_id, to_location_id, created_by, created_at)
+VALUES (now(), :branch_id, central_location_id, branch_location_id, user_id, now())
+RETURNING id AS transfer_id;
+
+D) لكل item:
+
+1) تحقق توفر الكمية في المركزي:
+SELECT qty_on_hand
+FROM location_inventory
+WHERE location_id=central_location_id AND product_id=:product_id;
+
+إذا أقل من المطلوب -> ارجع 400 "الكمية غير متوفرة في المخزن المركزي"
+
+2) خصم من المركزي:
+UPDATE location_inventory
+SET qty_on_hand = qty_on_hand - :qty,
+    updated_at = now()
+WHERE location_id=central_location_id
+AND product_id=:product_id;
+
+3) إضافة لمخزن الفرع (UPSERT):
+INSERT INTO location_inventory
+(location_id, product_id, qty_on_hand, updated_at)
+VALUES (branch_location_id, :product_id, :qty, now())
+ON CONFLICT (location_id, product_id)
+DO UPDATE SET
+qty_on_hand = location_inventory.qty_on_hand + EXCLUDED.qty_on_hand,
+updated_at = now();
+
+4) سجل transfer_items:
+INSERT INTO transfer_items
+(transfer_id, product_id, qty)
+VALUES (transfer_id, :product_id, :qty);
+
+5) سجل inventory_transactions:
+
+-- TRANSFER_OUT
+INSERT INTO inventory_transactions
+(date, branch_id, from_location_id, to_location_id,
+ product_id, type, qty, ref_table, ref_id,
+ created_by, created_at)
+VALUES
+(now(), :branch_id, central_location_id, NULL,
+ :product_id, 'TRANSFER_OUT', :qty,
+ 'inventory_transfers', transfer_id,
+ user_id, now());
+
+-- TRANSFER_IN
+INSERT INTO inventory_transactions
+(date, branch_id, from_location_id, to_location_id,
+ product_id, type, qty, ref_table, ref_id,
+ created_by, created_at)
+VALUES
+(now(), :branch_id, NULL, branch_location_id,
+ :product_id, 'TRANSFER_IN', :qty,
+ 'inventory_transfers', transfer_id,
+ user_id, now());
+
+4) Commit Transaction.
+
+5) أرجع JSON نجاح يحتوي transfer_id.

@@ -1038,11 +1038,11 @@ export class DatabaseStorage implements IStorage {
             ref_table, ref_id,
             note, created_by, created_at)
            VALUES
-           (now(), $1, NULL, $2,
-            $3, 'PURCHASE', $4,
-            'purchase_invoices', $5,
-            'Purchase Invoice Approved', $6, now())`,
-          [invoice.branchId, centralLocationId, item.productId, item.qty, id, invoice.createdBy]
+           (now(), NULL, NULL, $1,
+            $2, 'PURCHASE', $3,
+            'purchase_invoices', $4,
+            'اعتماد فاتورة شراء', $5, now())`,
+          [centralLocationId, item.productId, item.qty, id, invoice.createdBy]
         );
       }
 
