@@ -22,6 +22,8 @@ import {
   bankLedger, type InsertBankLedger, type BankLedger,
   purchaseInvoices, type InsertPurchaseInvoice, type PurchaseInvoice,
   purchaseItems, type InsertPurchaseItem, type PurchaseItem,
+  branchInventory, type InsertBranchInventory, type BranchInventory,
+  inventoryTransactions, type InsertInventoryTransaction, type InventoryTransaction,
   type PaymentMethod, PAYMENT_METHODS,
 } from "@shared/schema";
 
@@ -256,6 +258,10 @@ export class DatabaseStorage implements IStorage {
       if (whList.length > 0) {
         await this.adjustInventory(item.productId, whList[0].id, -item.quantity);
       }
+      await this.adjustBranchInventory(
+        data.branchId, item.productId, -item.quantity,
+        "sale", "sales", sale.id, `بيع فاتورة ${sale.invoiceNumber}`, data.cashierId ?? undefined
+      );
       const [product] = await db.select().from(products).where(eq(products.id, item.productId));
       if (product) {
         cogsTotal += item.quantity * parseFloat(product.avgCost || "0");
@@ -874,6 +880,12 @@ export class DatabaseStorage implements IStorage {
           avgCost: newAvgCost.toFixed(3),
         }).where(eq(products.id, item.productId));
       }
+
+      await this.adjustBranchInventory(
+        invoice.branchId, item.productId, item.qty,
+        "purchase_receipt", "purchase_invoices", id,
+        `استلام مشتريات فاتورة ${invoice.invoiceNumber}`, invoice.createdBy ?? undefined
+      );
     }
 
     const [updated] = await db.update(purchaseInvoices).set({
@@ -884,6 +896,137 @@ export class DatabaseStorage implements IStorage {
     }).where(eq(purchaseInvoices.id, id)).returning();
 
     return updated;
+  }
+
+  async adjustBranchInventory(
+    branchId: number, productId: number, qtyDelta: number,
+    type: string, refTable?: string, refId?: number, note?: string, createdBy?: number
+  ) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const existing = await db.select().from(branchInventory)
+      .where(and(eq(branchInventory.branchId, branchId), eq(branchInventory.productId, productId)));
+
+    let newQty: number;
+    if (existing.length > 0) {
+      newQty = existing[0].qtyOnHand + qtyDelta;
+      if (newQty < 0) newQty = 0;
+      await db.update(branchInventory).set({
+        qtyOnHand: newQty,
+        updatedAt: new Date(),
+      }).where(eq(branchInventory.id, existing[0].id));
+    } else {
+      newQty = Math.max(0, qtyDelta);
+      await db.insert(branchInventory).values({
+        branchId, productId, qtyOnHand: newQty, qtyReserved: 0, reorderLevel: 5,
+      });
+    }
+
+    await db.insert(inventoryTransactions).values({
+      date: todayStr,
+      branchId, productId, type,
+      qtyIn: qtyDelta > 0 ? qtyDelta : 0,
+      qtyOut: qtyDelta < 0 ? Math.abs(qtyDelta) : 0,
+      refTable: refTable || null,
+      refId: refId || null,
+      note: note || null,
+      createdBy: createdBy || null,
+    });
+
+    return newQty;
+  }
+
+  async getBranchInventoryList(branchId?: number) {
+    const cond = branchId ? eq(branchInventory.branchId, branchId) : undefined;
+    return db.select({
+      id: branchInventory.id,
+      branchId: branchInventory.branchId,
+      branchName: branches.name,
+      productId: branchInventory.productId,
+      productName: products.name,
+      barcode: products.barcode,
+      qtyOnHand: branchInventory.qtyOnHand,
+      qtyReserved: branchInventory.qtyReserved,
+      reorderLevel: branchInventory.reorderLevel,
+      avgCost: products.avgCost,
+      price: products.price,
+      updatedAt: branchInventory.updatedAt,
+    }).from(branchInventory)
+      .innerJoin(products, eq(branchInventory.productId, products.id))
+      .innerJoin(branches, eq(branchInventory.branchId, branches.id))
+      .where(cond)
+      .orderBy(products.name);
+  }
+
+  async getInventoryTransactionsList(branchId?: number, productId?: number, type?: string) {
+    const conditions: any[] = [];
+    if (branchId) conditions.push(eq(inventoryTransactions.branchId, branchId));
+    if (productId) conditions.push(eq(inventoryTransactions.productId, productId));
+    if (type) conditions.push(eq(inventoryTransactions.type, type));
+
+    const cond = conditions.length > 0 ? and(...conditions) : undefined;
+
+    return db.select({
+      id: inventoryTransactions.id,
+      date: inventoryTransactions.date,
+      branchId: inventoryTransactions.branchId,
+      branchName: branches.name,
+      productId: inventoryTransactions.productId,
+      productName: products.name,
+      type: inventoryTransactions.type,
+      qtyIn: inventoryTransactions.qtyIn,
+      qtyOut: inventoryTransactions.qtyOut,
+      refTable: inventoryTransactions.refTable,
+      refId: inventoryTransactions.refId,
+      note: inventoryTransactions.note,
+      createdBy: inventoryTransactions.createdBy,
+      createdAt: inventoryTransactions.createdAt,
+    }).from(inventoryTransactions)
+      .innerJoin(products, eq(inventoryTransactions.productId, products.id))
+      .innerJoin(branches, eq(inventoryTransactions.branchId, branches.id))
+      .where(cond)
+      .orderBy(desc(inventoryTransactions.createdAt))
+      .limit(500);
+  }
+
+  async getBranchLowStock(branchId?: number) {
+    const cond = branchId
+      ? and(
+          sql`${branchInventory.qtyOnHand} <= ${branchInventory.reorderLevel}`,
+          eq(branchInventory.branchId, branchId)
+        )
+      : sql`${branchInventory.qtyOnHand} <= ${branchInventory.reorderLevel}`;
+
+    return db.select({
+      id: branchInventory.id,
+      branchId: branchInventory.branchId,
+      branchName: branches.name,
+      productId: branchInventory.productId,
+      productName: products.name,
+      qtyOnHand: branchInventory.qtyOnHand,
+      reorderLevel: branchInventory.reorderLevel,
+    }).from(branchInventory)
+      .innerJoin(products, eq(branchInventory.productId, products.id))
+      .innerJoin(branches, eq(branchInventory.branchId, branches.id))
+      .where(cond)
+      .orderBy(branchInventory.qtyOnHand);
+  }
+
+  async updateReorderLevel(branchId: number, productId: number, reorderLevel: number) {
+    const existing = await db.select().from(branchInventory)
+      .where(and(eq(branchInventory.branchId, branchId), eq(branchInventory.productId, productId)));
+    if (existing.length > 0) {
+      const [row] = await db.update(branchInventory).set({ reorderLevel }).where(eq(branchInventory.id, existing[0].id)).returning();
+      return row;
+    }
+    const [row] = await db.insert(branchInventory).values({ branchId, productId, qtyOnHand: 0, qtyReserved: 0, reorderLevel }).returning();
+    return row;
+  }
+
+  async transferBranchInventory(
+    fromBranchId: number, toBranchId: number, productId: number, qty: number, createdBy?: number
+  ) {
+    await this.adjustBranchInventory(fromBranchId, productId, -qty, "transfer_out", "branch_inventory", toBranchId, `تحويل إلى فرع #${toBranchId}`, createdBy);
+    await this.adjustBranchInventory(toBranchId, productId, qty, "transfer_in", "branch_inventory", fromBranchId, `تحويل من فرع #${fromBranchId}`, createdBy);
   }
 
   async getBranchComparisonReport(dateStr: string) {

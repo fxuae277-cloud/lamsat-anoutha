@@ -248,6 +248,70 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/branch-inventory", requireAuth, async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    const branchId = req.query.branchId
+      ? Number(req.query.branchId)
+      : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId);
+    res.json(await storage.getBranchInventoryList(branchId));
+  });
+
+  app.get("/api/branch-inventory/transactions", requireAuth, async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    const branchId = req.query.branchId
+      ? Number(req.query.branchId)
+      : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId);
+    const productId = req.query.productId ? Number(req.query.productId) : undefined;
+    const type = req.query.type as string | undefined;
+    res.json(await storage.getInventoryTransactionsList(branchId, productId, type));
+  });
+
+  app.get("/api/branch-inventory/low-stock", requireAuth, async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    const branchId = req.query.branchId
+      ? Number(req.query.branchId)
+      : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId);
+    res.json(await storage.getBranchLowStock(branchId));
+  });
+
+  app.post("/api/branch-inventory/transfer", requireAuth, async (req, res) => {
+    try {
+      const { fromBranchId, toBranchId, productId, quantity } = req.body;
+      if (!fromBranchId || !toBranchId || !productId || !quantity || quantity <= 0) {
+        return res.status(400).json({ message: "البيانات ناقصة أو غير صحيحة" });
+      }
+      await storage.transferBranchInventory(fromBranchId, toBranchId, productId, quantity, req.session.userId);
+      res.json({ message: "تم التحويل بنجاح" });
+    } catch (e: any) {
+      res.status(400).json({ message: e.message || "فشل التحويل" });
+    }
+  });
+
+  app.patch("/api/branch-inventory/reorder-level", requireAuth, async (req, res) => {
+    const { branchId, productId, reorderLevel } = req.body;
+    if (!branchId || !productId || reorderLevel === undefined) {
+      return res.status(400).json({ message: "البيانات ناقصة" });
+    }
+    const row = await storage.updateReorderLevel(branchId, productId, reorderLevel);
+    res.json(row);
+  });
+
+  app.post("/api/branch-inventory/receive", requireAuth, async (req, res) => {
+    try {
+      const { branchId, productId, quantity, note } = req.body;
+      if (!branchId || !productId || !quantity || quantity <= 0) {
+        return res.status(400).json({ message: "البيانات ناقصة أو غير صحيحة" });
+      }
+      await storage.adjustBranchInventory(branchId, productId, quantity, "manual_receipt", null, null, note || "استلام يدوي", req.session.userId);
+      res.json({ message: "تم استلام البضاعة" });
+    } catch (e: any) {
+      res.status(400).json({ message: e.message || "فشل الاستلام" });
+    }
+  });
+
   app.get("/api/customers", async (_req, res) => {
     res.json(await storage.getCustomers());
   });
