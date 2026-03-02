@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { and, eq, desc } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 import { 
   insertBranchSchema, insertCategorySchema, insertProductSchema,
   insertCustomerSchema, insertSupplierSchema, insertExpenseSchema,
@@ -30,7 +31,11 @@ export async function registerRoutes(
       return res.status(400).json({ message: "اسم المستخدم وكلمة المرور مطلوبان" });
     }
     const user = await storage.getUserByUsername(username);
-    if (!user || user.password !== password) {
+    if (!user) {
+      return res.status(401).json({ message: "اسم المستخدم أو كلمة المرور غير صحيحة" });
+    }
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
       return res.status(401).json({ message: "اسم المستخدم أو كلمة المرور غير صحيحة" });
     }
     if (!user.isActive) {
@@ -90,12 +95,17 @@ export async function registerRoutes(
   });
 
   app.get("/api/users", async (_req, res) => {
-    res.json(await storage.getUsers());
+    const allUsers = await storage.getUsers();
+    res.json(allUsers.map(({ password: _, ...u }) => u));
   });
   app.post("/api/users", async (req, res) => {
     const parsed = insertUserSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    res.status(201).json(await storage.createUser(parsed.data));
+    if (parsed.data.password) {
+      parsed.data.password = await bcrypt.hash(parsed.data.password, 10);
+    }
+    const { password: _, ...safeUser } = await storage.createUser(parsed.data);
+    res.status(201).json(safeUser);
   });
 
   app.get("/api/categories", async (_req, res) => {
