@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "./storage";
+import { pool } from "./db";
 import XLSX from "xlsx";
 import PDFDocument from "pdfkit";
 import path from "path";
@@ -723,6 +724,47 @@ export function registerExportRoutes(app: Express) {
       res.send(buf);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+    }
+  });
+
+  app.get("/api/exports/backup.json", requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      const tables = [
+        "branches", "categories", "products", "users", "customers", "suppliers",
+        "locations", "location_inventory", "inventory_transactions",
+        "sales", "sale_items", "sale_returns", "sale_return_items",
+        "orders", "order_items", "expenses", "shifts",
+        "cash_ledger", "bank_ledger", "settings",
+        "purchase_invoices", "purchase_items",
+        "payroll_runs", "payroll_details", "employee_advances", "employee_deductions",
+        "stocktakes", "stocktake_items", "inventory_adjustments",
+        "audit_log", "cities"
+      ];
+      const backup: Record<string, any[]> = {};
+      for (const table of tables) {
+        try {
+          const result = await pool.query(`SELECT * FROM "${table}" ORDER BY id`);
+          backup[table] = result.rows;
+        } catch {
+          try {
+            const result = await pool.query(`SELECT * FROM "${table}"`);
+            backup[table] = result.rows;
+          } catch { backup[table] = []; }
+        }
+      }
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0, 10);
+      const data = {
+        exportDate: now.toISOString(),
+        version: "1.0",
+        system: "لمسة أنوثة ERP",
+        tables: backup
+      };
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Disposition", `attachment; filename="backup-${dateStr}.json"`);
+      res.send(JSON.stringify(data, null, 2));
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "فشل النسخ الاحتياطي" });
     }
   });
 }

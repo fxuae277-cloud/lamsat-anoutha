@@ -15,7 +15,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import type { Branch, City } from "@shared/schema";
-import { UserPlus, Pencil, KeyRound, ShieldCheck, Eye, EyeOff, Lock, UserCircle, Settings2, Building2, MapPin, Save, X, Loader2, AlertTriangle, Globe } from "lucide-react";
+import {
+  UserPlus, Pencil, KeyRound, ShieldCheck, Eye, EyeOff, Lock, UserCircle,
+  Settings2, Building2, MapPin, Save, X, Loader2, AlertTriangle, Globe,
+  Banknote, Receipt, FileText, Printer, Database, Download, Percent, Hash
+} from "lucide-react";
 
 type SafeUser = {
   id: number;
@@ -27,11 +31,7 @@ type SafeUser = {
   isActive: boolean;
 };
 
-type SettingsData = {
-  businessName: string;
-  vatEnabled: string;
-  vatRate: string;
-};
+type SettingsData = Record<string, string>;
 
 const ROLE_OPTIONS = [
   { value: "owner", labelKey: "sidebar.role_owner" },
@@ -49,9 +49,33 @@ const ROLE_LABELS_KEYS: Record<string, string> = {
 
 const DEFAULT_SETTINGS: SettingsData = {
   businessName: "لمسة أنوثة إكسسوارات لوى",
+  currency: "OMR",
+  decimalPlaces: "3",
+  numberFormat: "ar-OM",
   vatEnabled: "true",
   vatRate: "5",
+  vatInclusive: "true",
+  taxRegistrationNumber: "",
+  taxName: "ضريبة القيمة المضافة",
+  allowEmployeeDiscount: "true",
+  invoicePrefix: "LO",
+  invoiceNumberDigits: "5",
+  allowEditAfterPayment: "false",
+  allowCancelAfterClose: "false",
+  receiptSize: "80mm",
+  thermalPrinter: "true",
+  businessLogo: "",
+  autoBackup: "true",
 };
+
+const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS);
+
+function isSettingsDirty(current: SettingsData, saved: SettingsData): boolean {
+  for (const key of SETTINGS_KEYS) {
+    if ((current[key] ?? "") !== (saved[key] ?? "")) return true;
+  }
+  return false;
+}
 
 export default function Settings() {
   const { toast } = useToast();
@@ -79,13 +103,14 @@ export default function Settings() {
   const [showOldPass, setShowOldPass] = useState(false);
   const [showChangeNewPass, setShowChangeNewPass] = useState(false);
 
-  const [currentSettings, setCurrentSettings] = useState<SettingsData>(DEFAULT_SETTINGS);
-  const [savedSettings, setSavedSettings] = useState<SettingsData>(DEFAULT_SETTINGS);
+  const [currentSettings, setCurrentSettings] = useState<SettingsData>({ ...DEFAULT_SETTINGS });
+  const [savedSettings, setSavedSettings] = useState<SettingsData>({ ...DEFAULT_SETTINGS });
   const [pendingLang, setPendingLang] = useState<Lang>(lang);
   const [savedLang, setSavedLang] = useState<Lang>(lang);
   const [activeTab, setActiveTab] = useState("account");
   const [pendingTab, setPendingTab] = useState<string | null>(null);
   const [showLeaveWarning, setShowLeaveWarning] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
 
   const { data: branchesList = [] } = useQuery<Branch[]>({ queryKey: ["/api/branches"], queryFn: getQueryFn({ on401: "throw" }) });
   const { data: usersList = [] } = useQuery<SafeUser[]>({
@@ -113,12 +138,13 @@ export default function Settings() {
     setSavedLang(lang);
   }, [lang]);
 
-  const settingsDirty = currentSettings.businessName !== savedSettings.businessName ||
-    currentSettings.vatEnabled !== savedSettings.vatEnabled ||
-    currentSettings.vatRate !== savedSettings.vatRate;
-
+  const settingsDirty = isSettingsDirty(currentSettings, savedSettings);
   const langDirty = pendingLang !== savedLang;
   const isDirty = settingsDirty || langDirty;
+
+  const updateSetting = useCallback((key: string, value: string) => {
+    setCurrentSettings(prev => ({ ...prev, [key]: value }));
+  }, []);
 
   const handleCancel = useCallback(() => {
     setCurrentSettings({ ...savedSettings });
@@ -181,6 +207,27 @@ export default function Settings() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
+
+  const handleBackup = async () => {
+    setBackupLoading(true);
+    try {
+      const res = await fetch("/api/exports/backup.json", { credentials: "include" });
+      if (!res.ok) throw new Error("فشل التحميل");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const dateStr = new Date().toISOString().slice(0, 10);
+      a.download = `backup-${dateStr}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "تم تحميل النسخة الاحتياطية" });
+    } catch (err: any) {
+      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+    } finally {
+      setBackupLoading(false);
+    }
+  };
 
   const createBranchMutation = useMutation({
     mutationFn: async () => { await apiRequest("POST", "/api/branches", newBranch); },
@@ -312,6 +359,7 @@ export default function Settings() {
           </TabsTrigger>
         </TabsList>
 
+        {/* ─── Account Tab ─── */}
         <TabsContent value="account" className="space-y-6">
           <Card>
             <CardHeader>
@@ -357,13 +405,7 @@ export default function Settings() {
                 <div className="space-y-2">
                   <Label>{t("settings.current_password")}</Label>
                   <div className="relative">
-                    <Input
-                      type={showOldPass ? "text" : "password"}
-                      value={oldPassword}
-                      onChange={e => setOldPassword(e.target.value)}
-                      placeholder={t("settings.current_password_placeholder")}
-                      data-testid="input-old-password"
-                    />
+                    <Input type={showOldPass ? "text" : "password"} value={oldPassword} onChange={e => setOldPassword(e.target.value)} placeholder={t("settings.current_password_placeholder")} data-testid="input-old-password" />
                     <button type="button" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowOldPass(!showOldPass)}>
                       {showOldPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -372,24 +414,13 @@ export default function Settings() {
                 <div className="space-y-2">
                   <Label>{t("settings.new_password")}</Label>
                   <div className="relative">
-                    <Input
-                      type={showChangeNewPass ? "text" : "password"}
-                      value={newPassword}
-                      onChange={e => setNewPassword(e.target.value)}
-                      placeholder={t("settings.new_password_placeholder")}
-                      data-testid="input-new-password"
-                    />
+                    <Input type={showChangeNewPass ? "text" : "password"} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder={t("settings.new_password_placeholder")} data-testid="input-new-password" />
                     <button type="button" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowChangeNewPass(!showChangeNewPass)}>
                       {showChangeNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
-                <Button
-                  onClick={() => changePasswordMutation.mutate()}
-                  disabled={changePasswordMutation.isPending || !oldPassword || newPassword.length < 6}
-                  className="gap-2"
-                  data-testid="button-confirm-change-password"
-                >
+                <Button onClick={() => changePasswordMutation.mutate()} disabled={changePasswordMutation.isPending || !oldPassword || newPassword.length < 6} className="gap-2" data-testid="button-confirm-change-password">
                   <KeyRound className="w-4 h-4" />
                   {changePasswordMutation.isPending ? t("settings.changing_password") : t("settings.change_password_btn")}
                 </Button>
@@ -398,6 +429,7 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
+        {/* ─── Users Tab ─── */}
         {isOwnerOrAdmin && (
           <TabsContent value="users" className="space-y-6">
             <Card>
@@ -433,12 +465,7 @@ export default function Settings() {
                         <div className="space-y-2">
                           <Label>{t("settings.password")}</Label>
                           <div className="relative">
-                            <Input
-                              type={showNewPass ? "text" : "password"}
-                              value={newUser.password}
-                              onChange={e => setNewUser({...newUser, password: e.target.value})}
-                              data-testid="input-new-user-password"
-                            />
+                            <Input type={showNewPass ? "text" : "password"} value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} data-testid="input-new-user-password" />
                             <button type="button" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowNewPass(!showNewPass)}>
                               {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                             </button>
@@ -471,11 +498,7 @@ export default function Settings() {
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button
-                        onClick={() => createUserMutation.mutate()}
-                        disabled={createUserMutation.isPending || !newUser.name || !newUser.username || newUser.password.length < 6}
-                        data-testid="button-confirm-add-user"
-                      >
+                      <Button onClick={() => createUserMutation.mutate()} disabled={createUserMutation.isPending || !newUser.name || !newUser.username || newUser.password.length < 6} data-testid="button-confirm-add-user">
                         {createUserMutation.isPending ? t("settings.adding") : t("settings.add_user_btn")}
                       </Button>
                     </DialogFooter>
@@ -542,32 +565,68 @@ export default function Settings() {
           </TabsContent>
         )}
 
+        {/* ─── General Settings Tab ─── */}
         <TabsContent value="general" className="space-y-6">
+
+          {/* 1. Business & Currency */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">{t("settings.business_settings")}</CardTitle>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Banknote className="w-5 h-5" />
+                إعدادات المنشأة والعملة
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label>{t("settings.business_name")}</Label>
-                  <Input
-                    value={currentSettings.businessName}
-                    onChange={e => setCurrentSettings({ ...currentSettings, businessName: e.target.value })}
-                    data-testid="input-business-name"
-                  />
+                  <Input value={currentSettings.businessName} onChange={e => updateSetting("businessName", e.target.value)} data-testid="input-business-name" />
                 </div>
                 <div className="space-y-2">
-                  <Label>{t("settings.default_currency")}</Label>
-                  <Input defaultValue={t("settings.currency_omr")} disabled />
+                  <Label>العملة الافتراضية</Label>
+                  <Select value={currentSettings.currency} onValueChange={v => updateSetting("currency", v)}>
+                    <SelectTrigger data-testid="select-currency"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="OMR">ريال عماني (OMR)</SelectItem>
+                      <SelectItem value="SAR">ريال سعودي (SAR)</SelectItem>
+                      <SelectItem value="AED">درهم إماراتي (AED)</SelectItem>
+                      <SelectItem value="USD">دولار أمريكي (USD)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>عدد المنازل العشرية</Label>
+                  <Select value={currentSettings.decimalPlaces} onValueChange={v => updateSetting("decimalPlaces", v)}>
+                    <SelectTrigger data-testid="select-decimal-places"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2">2 منازل عشرية (0.00)</SelectItem>
+                      <SelectItem value="3">3 منازل عشرية (0.000)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>تنسيق الأرقام</Label>
+                  <Select value={currentSettings.numberFormat} onValueChange={v => updateSetting("numberFormat", v)}>
+                    <SelectTrigger data-testid="select-number-format"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ar-OM">عربي (١٬٢٣٤٫٥٠٠)</SelectItem>
+                      <SelectItem value="en-US">إنجليزي (1,234.500)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardContent>
           </Card>
 
+          {/* 2. Tax / VAT */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">{t("settings.taxes")}</CardTitle>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Percent className="w-5 h-5" />
+                إعدادات الضريبة
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-4 border rounded-lg">
@@ -577,27 +636,177 @@ export default function Settings() {
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      min="0"
-                      max="100"
-                      className="w-20 text-center"
-                      value={currentSettings.vatRate}
-                      onChange={e => setCurrentSettings({ ...currentSettings, vatRate: e.target.value })}
-                      data-testid="input-vat-rate"
-                    />
+                    <Input type="number" min="0" max="100" className="w-20 text-center" value={currentSettings.vatRate} onChange={e => updateSetting("vatRate", e.target.value)} data-testid="input-vat-rate" />
                     <span className="font-bold text-sm">%</span>
                   </div>
-                  <Switch
-                    checked={currentSettings.vatEnabled === "true"}
-                    onCheckedChange={v => setCurrentSettings({ ...currentSettings, vatEnabled: v ? "true" : "false" })}
-                    data-testid="switch-vat-enabled"
-                  />
+                  <Switch checked={currentSettings.vatEnabled === "true"} onCheckedChange={v => updateSetting("vatEnabled", v ? "true" : "false")} data-testid="switch-vat-enabled" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <Label className="text-base">السعر شامل الضريبة؟</Label>
+                    <p className="text-sm text-muted-foreground">هل أسعار المنتجات تشمل الضريبة ضمنياً</p>
+                  </div>
+                  <Switch checked={currentSettings.vatInclusive === "true"} onCheckedChange={v => updateSetting("vatInclusive", v ? "true" : "false")} data-testid="switch-vat-inclusive" />
+                </div>
+                <div className="space-y-2">
+                  <Label>اسم الضريبة</Label>
+                  <Input value={currentSettings.taxName} onChange={e => updateSetting("taxName", e.target.value)} placeholder="ضريبة القيمة المضافة" data-testid="input-tax-name" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>رقم التسجيل الضريبي</Label>
+                <Input value={currentSettings.taxRegistrationNumber} onChange={e => updateSetting("taxRegistrationNumber", e.target.value)} placeholder="أدخل رقم التسجيل الضريبي للمنشأة (اختياري)" dir="ltr" className="text-left" data-testid="input-tax-reg-number" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 3. Discounts */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Receipt className="w-5 h-5" />
+                إعدادات الخصومات
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <Label className="text-base">السماح للموظف بتطبيق خصم</Label>
+                  <p className="text-sm text-muted-foreground">يمكن للكاشير تطبيق خصم أثناء البيع في نقطة البيع</p>
+                </div>
+                <Switch checked={currentSettings.allowEmployeeDiscount === "true"} onCheckedChange={v => updateSetting("allowEmployeeDiscount", v ? "true" : "false")} data-testid="switch-employee-discount" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 4. Invoice Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                إعدادات الفاتورة
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>بادئة رقم الفاتورة (لكل فرع)</Label>
+                  <Input value={currentSettings.invoicePrefix} onChange={e => updateSetting("invoicePrefix", e.target.value)} placeholder="LO" dir="ltr" className="text-left" data-testid="input-invoice-prefix" />
+                  <p className="text-xs text-muted-foreground">مثال: {currentSettings.invoicePrefix}-{"0".repeat(parseInt(currentSettings.invoiceNumberDigits || "5") - 1)}1</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>عدد أرقام الفاتورة</Label>
+                  <Select value={currentSettings.invoiceNumberDigits} onValueChange={v => updateSetting("invoiceNumberDigits", v)}>
+                    <SelectTrigger data-testid="select-invoice-digits"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="4">4 أرقام (0001)</SelectItem>
+                      <SelectItem value="5">5 أرقام (00001)</SelectItem>
+                      <SelectItem value="6">6 أرقام (000001)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <Label className="text-base">تعديل الفاتورة بعد الدفع</Label>
+                    <p className="text-sm text-muted-foreground">السماح بتعديل فاتورة مدفوعة</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-medium ${currentSettings.allowEditAfterPayment === "true" ? "text-green-600" : "text-red-500"}`}>
+                      {currentSettings.allowEditAfterPayment === "true" ? "مسموح" : "غير مسموح"}
+                    </span>
+                    <Switch checked={currentSettings.allowEditAfterPayment === "true"} onCheckedChange={v => updateSetting("allowEditAfterPayment", v ? "true" : "false")} data-testid="switch-edit-after-payment" />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <Label className="text-base">إلغاء الفاتورة بعد الإغلاق</Label>
+                    <p className="text-sm text-muted-foreground">السماح بإلغاء فاتورة بعد إغلاق الشفت</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-medium ${currentSettings.allowCancelAfterClose === "true" ? "text-green-600" : "text-red-500"}`}>
+                      {currentSettings.allowCancelAfterClose === "true" ? "مسموح" : "غير مسموح"}
+                    </span>
+                    <Switch checked={currentSettings.allowCancelAfterClose === "true"} onCheckedChange={v => updateSetting("allowCancelAfterClose", v ? "true" : "false")} data-testid="switch-cancel-after-close" />
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
+          {/* 5. Print Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Printer className="w-5 h-5" />
+                إعدادات الطباعة
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>حجم الإيصال</Label>
+                  <Select value={currentSettings.receiptSize} onValueChange={v => updateSetting("receiptSize", v)}>
+                    <SelectTrigger data-testid="select-receipt-size"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="58mm">58mm (حراري صغير)</SelectItem>
+                      <SelectItem value="80mm">80mm (حراري قياسي)</SelectItem>
+                      <SelectItem value="A4">A4 (ورق عادي)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <Label className="text-base">طابعة حرارية</Label>
+                    <p className="text-sm text-muted-foreground">طباعة الإيصال تلقائياً بعد كل عملية بيع</p>
+                  </div>
+                  <Switch checked={currentSettings.thermalPrinter === "true"} onCheckedChange={v => updateSetting("thermalPrinter", v ? "true" : "false")} data-testid="switch-thermal-printer" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>شعار المنشأة (رابط الصورة)</Label>
+                <Input value={currentSettings.businessLogo} onChange={e => updateSetting("businessLogo", e.target.value)} placeholder="https://example.com/logo.png" dir="ltr" className="text-left" data-testid="input-business-logo" />
+                <p className="text-xs text-muted-foreground">سيظهر في أعلى الفاتورة المطبوعة والإيصال الحراري</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 6. Backup */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Database className="w-5 h-5" />
+                النسخ الاحتياطي
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <Label className="text-base">نسخ احتياطي تلقائي يومي</Label>
+                  <p className="text-sm text-muted-foreground">يتم حفظ نسخة من البيانات تلقائياً كل يوم</p>
+                </div>
+                <Switch checked={currentSettings.autoBackup === "true"} onCheckedChange={v => updateSetting("autoBackup", v ? "true" : "false")} data-testid="switch-auto-backup" />
+              </div>
+              <div className="flex items-center justify-between p-4 bg-muted/30 border rounded-lg">
+                <div>
+                  <Label className="text-base">تحميل نسخة احتياطية الآن</Label>
+                  <p className="text-sm text-muted-foreground">تصدير جميع بيانات النظام كملف JSON</p>
+                </div>
+                <Button variant="outline" className="gap-2" onClick={handleBackup} disabled={backupLoading} data-testid="button-download-backup">
+                  {backupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  {backupLoading ? "جارٍ التحميل..." : "تحميل النسخة"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 7. Preferences (Language) */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
@@ -628,8 +837,10 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+
         </TabsContent>
 
+        {/* ─── Branches Tab ─── */}
         <TabsContent value="branches" className="space-y-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -705,44 +916,24 @@ export default function Settings() {
         </TabsContent>
       </Tabs>
 
+      {/* Sticky Save Bar */}
       {isDirty && (
-        <div
-          className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur-sm shadow-[0_-4px_20px_rgba(0,0,0,0.08)] animate-in slide-in-from-bottom-4 duration-300"
-          data-testid="sticky-save-bar"
-        >
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur-sm shadow-[0_-4px_20px_rgba(0,0,0,0.08)] animate-in slide-in-from-bottom-4 duration-300" data-testid="sticky-save-bar">
           <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-amber-600">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               <span className="text-sm font-medium">{t("settings.unsaved_changes")}</span>
             </div>
             <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleCancel}
-                className="gap-1.5"
-                data-testid="button-cancel-settings"
-              >
+              <Button variant="outline" size="sm" onClick={handleCancel} className="gap-1.5" data-testid="button-cancel-settings">
                 <X className="w-4 h-4" />
                 {t("settings.cancel")}
               </Button>
-              <Button
-                size="sm"
-                onClick={() => saveSettingsMutation.mutate()}
-                disabled={!isDirty || saveSettingsMutation.isPending}
-                className="gap-1.5 min-w-[140px]"
-                data-testid="button-save-settings"
-              >
+              <Button size="sm" onClick={() => saveSettingsMutation.mutate()} disabled={!isDirty || saveSettingsMutation.isPending} className="gap-1.5 min-w-[140px]" data-testid="button-save-settings">
                 {saveSettingsMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    {t("settings.saving_settings")}
-                  </>
+                  <><Loader2 className="w-4 h-4 animate-spin" />{t("settings.saving_settings")}</>
                 ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    {t("settings.save_settings")}
-                  </>
+                  <><Save className="w-4 h-4" />{t("settings.save_settings")}</>
                 )}
               </Button>
             </div>
@@ -750,13 +941,12 @@ export default function Settings() {
         </div>
       )}
 
+      {/* Leave Warning Dialog */}
       <AlertDialog open={showLeaveWarning} onOpenChange={setShowLeaveWarning}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("settings.unsaved_warning_title")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("settings.unsaved_warning_desc")}
-            </AlertDialogDescription>
+            <AlertDialogDescription>{t("settings.unsaved_warning_desc")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={cancelLeave} data-testid="button-stay">{t("settings.stay")}</AlertDialogCancel>
@@ -767,6 +957,7 @@ export default function Settings() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Edit User Dialog */}
       <Dialog open={editUserOpen} onOpenChange={setEditUserOpen}>
         <DialogContent>
           <DialogHeader>
@@ -817,6 +1008,7 @@ export default function Settings() {
         </DialogContent>
       </Dialog>
 
+      {/* Reset Password Dialog */}
       <Dialog open={resetPassOpen} onOpenChange={setResetPassOpen}>
         <DialogContent>
           <DialogHeader>
@@ -827,13 +1019,7 @@ export default function Settings() {
             <div className="space-y-2">
               <Label>{t("settings.new_password")}</Label>
               <div className="relative">
-                <Input
-                  type={showResetPass ? "text" : "password"}
-                  value={resetPassValue}
-                  onChange={e => setResetPassValue(e.target.value)}
-                  placeholder={t("settings.min_6_chars")}
-                  data-testid="input-reset-password"
-                />
+                <Input type={showResetPass ? "text" : "password"} value={resetPassValue} onChange={e => setResetPassValue(e.target.value)} placeholder={t("settings.min_6_chars")} data-testid="input-reset-password" />
                 <button type="button" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowResetPass(!showResetPass)}>
                   {showResetPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -841,11 +1027,7 @@ export default function Settings() {
             </div>
           </div>
           <DialogFooter>
-            <Button
-              onClick={() => resetPasswordMutation.mutate()}
-              disabled={resetPasswordMutation.isPending || resetPassValue.length < 6}
-              data-testid="button-confirm-reset-password"
-            >
+            <Button onClick={() => resetPasswordMutation.mutate()} disabled={resetPasswordMutation.isPending || resetPassValue.length < 6} data-testid="button-confirm-reset-password">
               {resetPasswordMutation.isPending ? t("settings.resetting") : t("settings.reset_btn")}
             </Button>
           </DialogFooter>
