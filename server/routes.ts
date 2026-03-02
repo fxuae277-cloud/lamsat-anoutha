@@ -124,6 +124,38 @@ export async function registerRoutes(
     res.json({ user: safeUser });
   });
 
+  app.get("/api/settings", requireAuth, async (_req, res) => {
+    try {
+      const result = await pool.query("SELECT key, value FROM settings");
+      const settings: Record<string, string> = {};
+      for (const row of result.rows) settings[row.key] = row.value;
+      res.json(settings);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.patch("/api/settings", requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const entries = req.body as Record<string, string>;
+      for (const [key, value] of Object.entries(entries)) {
+        await pool.query(
+          "INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()",
+          [key, String(value)]
+        );
+      }
+      const userId = req.session.userId!;
+      const user = await storage.getUser(userId);
+      await pool.query(
+        `INSERT INTO audit_log (action, entity_type, entity_id, user_id, user_name, details, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        ["update", "settings", 0, userId, user?.name || "", JSON.stringify(entries)]
+      );
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/dashboard", requireAuth, async (_req, res) => {
     const stats = await storage.getDashboardStats();
     res.json(stats);

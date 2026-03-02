@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -11,8 +11,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import type { Branch, City } from "@shared/schema";
-import { UserPlus, Pencil, KeyRound, ShieldCheck, Eye, EyeOff, Lock, UserCircle, Settings2, Building2, MapPin } from "lucide-react";
+import { UserPlus, Pencil, KeyRound, ShieldCheck, Eye, EyeOff, Lock, UserCircle, Settings2, Building2, MapPin, Save, X, Loader2, AlertTriangle } from "lucide-react";
 
 type SafeUser = {
   id: number;
@@ -24,6 +25,12 @@ type SafeUser = {
   isActive: boolean;
 };
 
+type SettingsData = {
+  businessName: string;
+  vatEnabled: string;
+  vatRate: string;
+};
+
 const ROLE_LABELS: Record<string, string> = { owner: "مالك", admin: "مدير", cashier: "كاشير", employee: "موظف" };
 const ROLE_OPTIONS = [
   { value: "owner", label: "مالك" },
@@ -31,6 +38,12 @@ const ROLE_OPTIONS = [
   { value: "cashier", label: "كاشير" },
   { value: "employee", label: "موظف" },
 ];
+
+const DEFAULT_SETTINGS: SettingsData = {
+  businessName: "لمسة أنوثة إكسسوارات لوى",
+  vatEnabled: "true",
+  vatRate: "5",
+};
 
 export default function Settings() {
   const { toast } = useToast();
@@ -57,6 +70,12 @@ export default function Settings() {
   const [showOldPass, setShowOldPass] = useState(false);
   const [showChangeNewPass, setShowChangeNewPass] = useState(false);
 
+  const [currentSettings, setCurrentSettings] = useState<SettingsData>(DEFAULT_SETTINGS);
+  const [savedSettings, setSavedSettings] = useState<SettingsData>(DEFAULT_SETTINGS);
+  const [activeTab, setActiveTab] = useState("account");
+  const [pendingTab, setPendingTab] = useState<string | null>(null);
+  const [showLeaveWarning, setShowLeaveWarning] = useState(false);
+
   const { data: branchesList = [] } = useQuery<Branch[]>({ queryKey: ["/api/branches"], queryFn: getQueryFn({ on401: "throw" }) });
   const { data: usersList = [] } = useQuery<SafeUser[]>({
     queryKey: ["/api/users"],
@@ -64,6 +83,74 @@ export default function Settings() {
     enabled: isOwnerOrAdmin,
   });
   const { data: citiesList = [] } = useQuery<City[]>({ queryKey: ["/api/cities"], queryFn: getQueryFn({ on401: "throw" }) });
+
+  const { data: serverSettings } = useQuery<SettingsData>({
+    queryKey: ["/api/settings"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  useEffect(() => {
+    if (serverSettings) {
+      const merged = { ...DEFAULT_SETTINGS, ...serverSettings };
+      setCurrentSettings(merged);
+      setSavedSettings(merged);
+    }
+  }, [serverSettings]);
+
+  const isDirty = currentSettings.businessName !== savedSettings.businessName ||
+    currentSettings.vatEnabled !== savedSettings.vatEnabled ||
+    currentSettings.vatRate !== savedSettings.vatRate;
+
+  const handleCancel = useCallback(() => {
+    setCurrentSettings({ ...savedSettings });
+  }, [savedSettings]);
+
+  const saveSettingsMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PATCH", "/api/settings", currentSettings);
+    },
+    onSuccess: () => {
+      setSavedSettings({ ...currentSettings });
+      toast({ title: "تم حفظ الإعدادات بنجاح" });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "خطأ في حفظ الإعدادات", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleTabChange = (newTab: string) => {
+    if (isDirty && activeTab === "general") {
+      setPendingTab(newTab);
+      setShowLeaveWarning(true);
+    } else {
+      setActiveTab(newTab);
+    }
+  };
+
+  const confirmLeave = () => {
+    handleCancel();
+    setShowLeaveWarning(false);
+    if (pendingTab) {
+      setActiveTab(pendingTab);
+      setPendingTab(null);
+    }
+  };
+
+  const cancelLeave = () => {
+    setShowLeaveWarning(false);
+    setPendingTab(null);
+  };
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
 
   const createBranchMutation = useMutation({
     mutationFn: async () => { await apiRequest("POST", "/api/branches", newBranch); },
@@ -167,13 +254,13 @@ export default function Settings() {
   const userBranch = branchesList.find(b => b.id === currentUser?.branchId);
 
   return (
-    <div className="max-w-5xl mx-auto pb-12 animate-in fade-in duration-300">
+    <div className="max-w-5xl mx-auto pb-24 animate-in fade-in duration-300">
       <div className="mb-6">
         <h1 className="text-2xl font-bold" data-testid="text-settings-title">الإعدادات</h1>
         <p className="text-muted-foreground mt-1">إدارة حسابك، المستخدمين، والإعدادات العامة</p>
       </div>
 
-      <Tabs defaultValue="account" dir="rtl" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={handleTabChange} dir="rtl" className="space-y-6">
         <TabsList className="w-full justify-start bg-muted/50 p-1 h-auto flex-wrap gap-1">
           <TabsTrigger value="account" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-account">
             <UserCircle className="w-4 h-4" />
@@ -434,7 +521,11 @@ export default function Settings() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>اسم المنشأة التجاري</Label>
-                  <Input defaultValue="لمسة أنوثة إكسسوارات لوى" />
+                  <Input
+                    value={currentSettings.businessName}
+                    onChange={e => setCurrentSettings({ ...currentSettings, businessName: e.target.value })}
+                    data-testid="input-business-name"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>العملة الافتراضية</Label>
@@ -455,8 +546,23 @@ export default function Settings() {
                   <p className="text-sm text-muted-foreground">يتم احتسابها تلقائياً في نقطة البيع.</p>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="font-bold">5%</span>
-                  <Switch defaultChecked />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      className="w-20 text-center"
+                      value={currentSettings.vatRate}
+                      onChange={e => setCurrentSettings({ ...currentSettings, vatRate: e.target.value })}
+                      data-testid="input-vat-rate"
+                    />
+                    <span className="font-bold text-sm">%</span>
+                  </div>
+                  <Switch
+                    checked={currentSettings.vatEnabled === "true"}
+                    onCheckedChange={v => setCurrentSettings({ ...currentSettings, vatEnabled: v ? "true" : "false" })}
+                    data-testid="switch-vat-enabled"
+                  />
                 </div>
               </div>
             </CardContent>
@@ -537,6 +643,68 @@ export default function Settings() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {isDirty && (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur-sm shadow-[0_-4px_20px_rgba(0,0,0,0.08)] animate-in slide-in-from-bottom-4 duration-300"
+          data-testid="sticky-save-bar"
+        >
+          <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span className="text-sm font-medium">لديك تغييرات غير محفوظة</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancel}
+                className="gap-1.5"
+                data-testid="button-cancel-settings"
+              >
+                <X className="w-4 h-4" />
+                إلغاء
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => saveSettingsMutation.mutate()}
+                disabled={!isDirty || saveSettingsMutation.isPending}
+                className="gap-1.5 min-w-[140px]"
+                data-testid="button-save-settings"
+              >
+                {saveSettingsMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    جارٍ الحفظ...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    حفظ التغييرات
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AlertDialog open={showLeaveWarning} onOpenChange={setShowLeaveWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>تغييرات غير محفوظة</AlertDialogTitle>
+            <AlertDialogDescription>
+              لديك تغييرات لم يتم حفظها. هل تريد المتابعة بدون حفظ؟ سيتم فقدان التعديلات.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelLeave} data-testid="button-stay">البقاء</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmLeave} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="button-leave-anyway">
+              المتابعة بدون حفظ
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={editUserOpen} onOpenChange={setEditUserOpen}>
         <DialogContent>
