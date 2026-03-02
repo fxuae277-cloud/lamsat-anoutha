@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { Search, Plus, Minus, Trash2, CheckCircle2, Image as ImageIcon } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Search, Plus, Minus, Trash2, CheckCircle2, Image as ImageIcon, Store, Monitor, Banknote, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,15 +7,188 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Product, Branch, User } from "@shared/schema";
+import type { Product, Branch, User, Shift } from "@shared/schema";
+
+function StartPOS({ branches, cashiers, onShiftOpened }: {
+  branches: Branch[];
+  cashiers: User[];
+  onShiftOpened: (shift: Shift, branchId: number, terminalName: string, cashierId: number) => void;
+}) {
+  const { toast } = useToast();
+  const savedBranch = localStorage.getItem("pos_branchId") || "";
+  const savedTerminal = localStorage.getItem("pos_terminalName") || "";
+
+  const [branchId, setBranchId] = useState(savedBranch);
+  const [terminalName, setTerminalName] = useState(savedTerminal);
+  const [openingCash, setOpeningCash] = useState("");
+  const [cashierId, setCashierId] = useState("");
+  const [checking, setChecking] = useState(false);
+
+  const checkExistingShift = async (bId: string, tName: string) => {
+    if (!bId || !tName) return;
+    setChecking(true);
+    try {
+      const res = await fetch(`/api/shifts/current?branchId=${bId}&terminalName=${encodeURIComponent(tName)}`);
+      const data = await res.json();
+      if (data.shift) {
+        localStorage.setItem("pos_branchId", bId);
+        localStorage.setItem("pos_terminalName", tName);
+        onShiftOpened(data.shift, Number(bId), tName, data.shift.cashierId);
+      }
+    } catch {}
+    setChecking(false);
+  };
+
+  useEffect(() => {
+    if (savedBranch && savedTerminal) {
+      checkExistingShift(savedBranch, savedTerminal);
+    }
+  }, []);
+
+  const openShiftMutation = useMutation({
+    mutationFn: async () => {
+      if (!branchId) throw new Error("يجب اختيار الفرع");
+      if (!terminalName.trim()) throw new Error("يجب إدخال اسم الجهاز");
+      if (!cashierId) throw new Error("يجب اختيار الكاشير");
+      const res = await apiRequest("POST", "/api/shifts", {
+        branchId: Number(branchId),
+        cashierId: Number(cashierId),
+        terminalName: terminalName.trim(),
+        openingCash: openingCash ? String(openingCash) : "0",
+      });
+      return await res.json();
+    },
+    onSuccess: (shift: Shift) => {
+      localStorage.setItem("pos_branchId", branchId);
+      localStorage.setItem("pos_terminalName", terminalName.trim());
+      toast({ title: "تم فتح الشفت بنجاح" });
+      onShiftOpened(shift, Number(branchId), terminalName.trim(), Number(cashierId));
+    },
+    onError: (err: Error) => {
+      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+    },
+  });
+
+  if (checking) {
+    return (
+      <div className="h-[calc(100vh-8rem)] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-muted-foreground">جارٍ التحقق من الشفت...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-[calc(100vh-8rem)] flex items-center justify-center">
+      <div className="w-full max-w-md bg-card border border-border rounded-2xl shadow-lg overflow-hidden">
+        <div className="bg-primary/10 p-6 text-center border-b border-border">
+          <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-3">
+            <Store className="w-8 h-8 text-primary" />
+          </div>
+          <h1 className="text-xl font-bold" data-testid="text-start-pos-title">تشغيل نقطة البيع</h1>
+          <p className="text-sm text-muted-foreground mt-1">أدخل بيانات الجهاز لفتح شفت جديد</p>
+        </div>
+
+        <div className="p-6 space-y-5">
+          <div className="space-y-2">
+            <label className="text-sm font-medium flex items-center gap-2">
+              <Store className="w-4 h-4 text-muted-foreground" />
+              الفرع
+            </label>
+            <Select value={branchId} onValueChange={(v) => { setBranchId(v); checkExistingShift(v, terminalName); }}>
+              <SelectTrigger data-testid="select-start-branch">
+                <SelectValue placeholder="اختر الفرع" />
+              </SelectTrigger>
+              <SelectContent>
+                {branches.map(b => (
+                  <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium flex items-center gap-2">
+              <Monitor className="w-4 h-4 text-muted-foreground" />
+              اسم الجهاز / الكاشير
+            </label>
+            <Input
+              placeholder="مثال: T1, POS-1, كاشير-1"
+              value={terminalName}
+              onChange={(e) => setTerminalName(e.target.value)}
+              onBlur={() => checkExistingShift(branchId, terminalName)}
+              data-testid="input-terminal-name"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium flex items-center gap-2">
+              <LogIn className="w-4 h-4 text-muted-foreground" />
+              الكاشير
+            </label>
+            <Select value={cashierId} onValueChange={setCashierId}>
+              <SelectTrigger data-testid="select-start-cashier">
+                <SelectValue placeholder="اختر الكاشير" />
+              </SelectTrigger>
+              <SelectContent>
+                {cashiers.map(u => (
+                  <SelectItem key={u.id} value={u.id.toString()}>{u.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium flex items-center gap-2">
+              <Banknote className="w-4 h-4 text-muted-foreground" />
+              رصيد الصندوق الافتتاحي (OMR)
+            </label>
+            <Input
+              type="number"
+              step="0.001"
+              placeholder="0.000"
+              value={openingCash}
+              onChange={(e) => setOpeningCash(e.target.value)}
+              data-testid="input-opening-cash"
+            />
+          </div>
+
+          <Button
+            className="w-full h-12 text-lg font-bold gap-2"
+            onClick={() => openShiftMutation.mutate()}
+            disabled={openShiftMutation.isPending || !branchId || !terminalName.trim() || !cashierId}
+            data-testid="button-open-shift"
+          >
+            {openShiftMutation.isPending ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                جارٍ الفتح...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-5 h-5" />
+                فتح شفت جديد
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function POS() {
   const { toast } = useToast();
+  const [currentShift, setCurrentShift] = useState<Shift | null>(null);
+  const [activeBranchId, setActiveBranchId] = useState<number>(0);
+  const [activeTerminalName, setActiveTerminalName] = useState("");
+  const [activeCashierId, setActiveCashierId] = useState<number>(0);
+
   const [cart, setCart] = useState<{product: Product, qty: number}[]>([]);
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [bankTxnId, setBankTxnId] = useState("");
-  const [selectedBranch, setSelectedBranch] = useState<string>("");
-  const [selectedCashier, setSelectedCashier] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [discountValue, setDiscountValue] = useState(0);
   const [discountType, setDiscountType] = useState<"percentage" | "value">("value");
@@ -41,6 +214,17 @@ export default function POS() {
   });
 
   const cashiers = usersList.filter(u => u.role === "cashier" || u.role === "owner");
+
+  const handleShiftOpened = (shift: Shift, branchId: number, terminalName: string, cashierId: number) => {
+    setCurrentShift(shift);
+    setActiveBranchId(branchId);
+    setActiveTerminalName(terminalName);
+    setActiveCashierId(cashierId);
+  };
+
+  if (!currentShift) {
+    return <StartPOS branches={branchesList} cashiers={cashiers} onShiftOpened={handleShiftOpened} />;
+  }
 
   const activeProducts = products.filter(p => p.active !== false);
   const filteredProducts = activeProducts.filter(p => {
@@ -96,15 +280,11 @@ export default function POS() {
 
   const saleMutation = useMutation({
     mutationFn: async () => {
-      const branchId = parseInt(selectedBranch);
-      const cashierId = selectedCashier ? parseInt(selectedCashier) : undefined;
-      if (!branchId) throw new Error("يجب اختيار الفرع");
-      
       const invoiceNumber = `INV-${Date.now()}`;
       const saleData = {
         invoiceNumber,
-        branchId,
-        cashierId: cashierId || null,
+        branchId: activeBranchId,
+        cashierId: activeCashierId || null,
         customerId: null,
         subtotal: subtotal.toFixed(3),
         discount: discountAmount.toFixed(3),
@@ -112,7 +292,7 @@ export default function POS() {
         vat: vat.toFixed(3),
         total: total.toFixed(3),
         paymentMethod,
-        bankTxnId: paymentMethod === "bank" ? bankTxnId : null,
+        bankTxnId: paymentMethod === "bank_transfer" ? bankTxnId : null,
         bankReceiptImage: null,
         items: cart.map(item => ({
           productId: item.product.id,
@@ -127,6 +307,8 @@ export default function POS() {
       toast({ title: "تمت العملية بنجاح", description: "تم حفظ الفاتورة." });
       setCart([]);
       setDiscountValue(0);
+      setBankTxnId("");
+      setPaymentMethod("cash");
       setPayDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
@@ -137,33 +319,28 @@ export default function POS() {
     },
   });
 
+  const branchName = branchesList.find(b => b.id === activeBranchId)?.name || "";
+  const cashierName = usersList.find(u => u.id === activeCashierId)?.name || "";
+
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col gap-4">
       <div className="bg-card p-4 rounded-xl shadow-sm border border-border flex items-center justify-between shrink-0">
-        <div className="flex gap-4 items-center">
-          <div className="w-48">
-            <Select value={selectedBranch} onValueChange={setSelectedBranch}>
-              <SelectTrigger data-testid="select-branch">
-                <SelectValue placeholder="اختر الفرع" />
-              </SelectTrigger>
-              <SelectContent>
-                {branchesList.map(b => (
-                  <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="flex gap-4 items-center text-sm">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 rounded-lg">
+            <Store className="w-4 h-4 text-primary" />
+            <span className="font-medium" data-testid="text-active-branch">{branchName}</span>
           </div>
-          <div className="w-48">
-            <Select value={selectedCashier} onValueChange={setSelectedCashier}>
-              <SelectTrigger data-testid="select-cashier">
-                <SelectValue placeholder="الكاشير" />
-              </SelectTrigger>
-              <SelectContent>
-                {cashiers.map(u => (
-                  <SelectItem key={u.id} value={u.id.toString()}>{u.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg">
+            <Monitor className="w-4 h-4 text-muted-foreground" />
+            <span data-testid="text-active-terminal">{activeTerminalName}</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg">
+            <LogIn className="w-4 h-4 text-muted-foreground" />
+            <span data-testid="text-active-cashier">{cashierName}</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            شفت #{currentShift.id}
           </div>
         </div>
       </div>
@@ -302,7 +479,7 @@ export default function POS() {
 
             <Dialog open={payDialogOpen} onOpenChange={setPayDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="w-full h-12 text-lg font-bold mt-2" disabled={cart.length === 0 || !selectedBranch} data-testid="button-checkout">
+                <Button className="w-full h-12 text-lg font-bold mt-2" disabled={cart.length === 0} data-testid="button-checkout">
                   دفع وإنهاء
                 </Button>
               </DialogTrigger>
@@ -318,13 +495,14 @@ export default function POS() {
                   
                   <div className="space-y-3">
                     <label className="text-sm font-medium">طريقة الدفع</label>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                       <Button variant={paymentMethod === "cash" ? "default" : "outline"} onClick={() => setPaymentMethod("cash")} className="h-12" data-testid="button-pay-cash">نقداً</Button>
-                      <Button variant={paymentMethod === "bank" ? "default" : "outline"} onClick={() => setPaymentMethod("bank")} className="h-12" data-testid="button-pay-bank">تحويل بنكي</Button>
+                      <Button variant={paymentMethod === "card" ? "default" : "outline"} onClick={() => setPaymentMethod("card")} className="h-12" data-testid="button-pay-card">بطاقة</Button>
+                      <Button variant={paymentMethod === "bank_transfer" ? "default" : "outline"} onClick={() => setPaymentMethod("bank_transfer")} className="h-12 text-xs" data-testid="button-pay-bank">تحويل بنكي</Button>
                     </div>
                   </div>
 
-                  {paymentMethod === "bank" && (
+                  {paymentMethod === "bank_transfer" && (
                     <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
                       <div className="space-y-2">
                         <label className="text-sm font-medium">رقم العملية (Txn ID)</label>
