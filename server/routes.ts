@@ -377,14 +377,20 @@ export async function registerRoutes(
     res.json(detail);
   });
   app.post("/api/sales", requireAuth, async (req, res) => {
-    const { items, ...saleData } = req.body;
+    const { items, branchId: _b, cashierId: _c, employeeId: _e, terminalName: _t, shiftId: _s, ...saleData } = req.body;
     const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "المستخدم غير موجود" });
     let shiftId: number | null = null;
-    if (user?.branchId && user?.terminalName) {
+    if (user.branchId && user.terminalName) {
       const shift = await storage.getCurrentShift(user.branchId, user.terminalName);
       if (shift) shiftId = shift.id;
     }
-    const parsed = insertSaleSchema.safeParse({ ...saleData, shiftId });
+    const parsed = insertSaleSchema.safeParse({
+      ...saleData,
+      branchId: user.branchId,
+      cashierId: user.id,
+      shiftId,
+    });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "لا توجد منتجات في الفاتورة" });
