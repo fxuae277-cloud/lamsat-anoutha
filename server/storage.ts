@@ -1672,6 +1672,9 @@ export class DatabaseStorage implements IStorage {
     if (!branchLoc) throw new Error("لا يوجد مخزن افتراضي لهذا الفرع");
     const toLocationId = branchLoc.id;
 
+    const [branch] = await db.select({ name: branches.name }).from(branches).where(eq(branches.id, branchId));
+    const branchName = branch?.name || `فرع ${branchId}`;
+
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -1679,7 +1682,7 @@ export class DatabaseStorage implements IStorage {
       const transferRes = await client.query(
         `INSERT INTO location_transfers (branch_id, from_location_id, to_location_id, note, created_by, created_at)
          VALUES ($1, $2, $3, $4, $5, now()) RETURNING id`,
-        [branchId, fromLocationId, toLocationId, `تحويل من ${centralLoc.name} إلى ${branchLoc.name}`, createdBy]
+        [branchId, fromLocationId, toLocationId, `تحويل من المخزن المركزي إلى ${branchName}`, createdBy]
       );
       const transferId = transferRes.rows[0].id;
 
@@ -1719,14 +1722,14 @@ export class DatabaseStorage implements IStorage {
           `INSERT INTO inventory_transactions
            (date, branch_id, from_location_id, to_location_id, product_id, type, qty, ref_table, ref_id, note, created_by, created_at)
            VALUES (now(), $1, $2, NULL, $3, 'TRANSFER_OUT', $4, 'location_transfers', $5, $6, $7, now())`,
-          [branchId, fromLocationId, item.productId, item.qty, transferId, `صادر من المركزي إلى ${branchLoc.name}`, createdBy]
+          [branchId, fromLocationId, item.productId, item.qty, transferId, `صادر من المخزن المركزي إلى ${branchName}`, createdBy]
         );
 
         await client.query(
           `INSERT INTO inventory_transactions
            (date, branch_id, from_location_id, to_location_id, product_id, type, qty, ref_table, ref_id, note, created_by, created_at)
            VALUES (now(), $1, NULL, $2, $3, 'TRANSFER_IN', $4, 'location_transfers', $5, $6, $7, now())`,
-          [branchId, toLocationId, item.productId, item.qty, transferId, `وارد من المركزي`, createdBy]
+          [branchId, toLocationId, item.productId, item.qty, transferId, `وارد من المخزن المركزي إلى ${branchName}`, createdBy]
         );
 
         await client.query(
