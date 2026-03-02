@@ -148,8 +148,7 @@ export const insertSaleItemSchema = createInsertSchema(saleItems).omit({ id: tru
 export type InsertSaleItem = z.infer<typeof insertSaleItemSchema>;
 export type SaleItem = typeof saleItems.$inferSelect;
 
-export const shifts = pgTable("shifts", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  export const shifts  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   branchId: integer("branch_id").references(() => branches.id).notNull(),
   cashierId: integer("cashier_id").references(() => users.id).notNull(),
   startedAt: timestamp("started_at").defaultNow(),
