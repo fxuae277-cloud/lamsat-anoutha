@@ -489,4 +489,240 @@ export function registerExportRoutes(app: Express) {
       res.status(500).json({ message: err?.message ?? "فشل التصدير" });
     }
   });
+
+  app.get("/api/exports/invoice.pdf", requireAuth, async (req, res) => {
+    try {
+      const saleId = Number(req.query.id);
+      if (!saleId) return res.status(400).json({ message: "id مطلوب" });
+      const detail = await storage.getSaleWithDetails(saleId);
+      if (!detail) return res.status(404).json({ message: "الفاتورة غير موجودة" });
+
+      const doc = new PDFDocument({ size: "A4", margin: 40 });
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="invoice-${detail.invoiceNumber || saleId}.pdf"`);
+      doc.pipe(res);
+
+      if (hasArabicFont) {
+        doc.registerFont("Cairo", FONT_PATH);
+        doc.font("Cairo");
+      }
+      const pageW = doc.page.width - 80;
+
+      doc.fontSize(22).fillColor("#8b5a7a");
+      doc.text("لمسة أنوثة", 40, 40, { width: pageW, align: "right", features: ["rtla", "arab"] });
+
+      doc.fontSize(11).fillColor("#888");
+      doc.text("فاتورة بيع", 40, 68, { width: pageW, align: "right", features: ["rtla", "arab"] });
+
+      doc.moveTo(40, 88).lineTo(40 + pageW, 88).strokeColor("#e8d5e0").lineWidth(2).stroke();
+
+      let y = 100;
+
+      const pmLabels: Record<string, string> = { cash: "نقدي", card: "بطاقة", bank_transfer: "تحويل بنكي" };
+      const dateStr = detail.createdAt
+        ? new Date(detail.createdAt).toLocaleDateString("ar-OM") + " " + new Date(detail.createdAt).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" })
+        : "";
+
+      const infoFields = [
+        ["رقم الفاتورة", detail.invoiceNumber || `#${detail.id}`],
+        ["التاريخ", dateStr],
+        ["الفرع", detail.branchName || "—"],
+        ["الكاشير", detail.cashierName || "—"],
+        ["طريقة الدفع", pmLabels[detail.paymentMethod] || detail.paymentMethod || "—"],
+      ];
+
+      doc.rect(40, y, pageW, 60).fill("#faf5f8").stroke();
+      doc.fillColor("#333");
+      const infoColW = pageW / 5;
+      for (let i = 0; i < infoFields.length; i++) {
+        const xPos = 40 + pageW - (i + 1) * infoColW;
+        doc.fontSize(8).fillColor("#999");
+        doc.text(infoFields[i][0], xPos + 4, y + 8, { width: infoColW - 8, align: "right", features: ["rtla", "arab"] });
+        doc.fontSize(11).fillColor("#333");
+        doc.text(infoFields[i][1], xPos + 4, y + 24, { width: infoColW - 8, align: "right", features: ["rtla", "arab"] });
+      }
+      y += 72;
+
+      const colWidths = [pageW * 0.08, pageW * 0.38, pageW * 0.14, pageW * 0.2, pageW * 0.2];
+      const colHeaders = ["#", "المنتج", "الكمية", "السعر", "الإجمالي"];
+
+      doc.rect(40, y, pageW, 22).fill("#f4e8f0");
+      doc.fillColor("#555").fontSize(10);
+      let xCursor = 40 + pageW;
+      for (let i = 0; i < colHeaders.length; i++) {
+        xCursor -= colWidths[i];
+        doc.text(colHeaders[i], xCursor, y + 5, { width: colWidths[i], align: "center", features: ["rtla", "arab"] });
+      }
+      y += 24;
+
+      doc.fillColor("#333").fontSize(9);
+      const items = detail.items || [];
+      for (let idx = 0; idx < items.length; idx++) {
+        const item = items[idx];
+        xCursor = 40 + pageW;
+        const vals = [String(idx + 1), item.productName || "—", String(item.quantity), omr(item.unitPrice), omr(item.total)];
+        for (let i = 0; i < vals.length; i++) {
+          xCursor -= colWidths[i];
+          doc.text(vals[i], xCursor, y + 3, { width: colWidths[i], align: "center", features: ["rtla", "arab"] });
+        }
+        doc.moveTo(40, y + 18).lineTo(40 + pageW, y + 18).strokeColor("#eee").lineWidth(0.5).stroke();
+        y += 20;
+        if (y > 700) { doc.addPage(); y = 40; }
+      }
+      y += 10;
+
+      const totalsX = 40;
+      const totalsW = 280;
+
+      function drawTotalRow(label: string, value: string, bold = false, color = "#333") {
+        doc.fontSize(bold ? 13 : 11).fillColor(color);
+        if (bold) {
+          doc.moveTo(totalsX, y).lineTo(totalsX + totalsW, y).strokeColor("#e8d5e0").lineWidth(1.5).stroke();
+          y += 5;
+        }
+        doc.text(value + " OMR", totalsX, y, { width: totalsW / 2, align: "left", features: ["rtla", "arab"] });
+        doc.text(label, totalsX + totalsW / 2, y, { width: totalsW / 2, align: "right", features: ["rtla", "arab"] });
+        y += bold ? 22 : 18;
+      }
+
+      drawTotalRow("المجموع الفرعي", omr(detail.subtotal));
+      if (parseFloat(detail.discount || "0") > 0) {
+        drawTotalRow("الخصم", "-" + omr(detail.discount), false, "#c00");
+      }
+      if (parseFloat(detail.vat || "0") > 0) {
+        drawTotalRow("الضريبة (VAT)", omr(detail.vat));
+      }
+      drawTotalRow("الإجمالي", omr(detail.total), true, "#8b5a7a");
+
+      y += 20;
+      doc.fontSize(10).fillColor("#aaa");
+      doc.text("شكراً لتسوقكم معنا - لمسة أنوثة", 40, y, { width: pageW, align: "center", features: ["rtla", "arab"] });
+
+      doc.end();
+    } catch (err: any) {
+      if (!res.headersSent) {
+        res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+      }
+    }
+  });
+
+  app.get("/api/exports/inventory.xlsx", requireAuth, enforceBranchScope, async (req, res) => {
+    try {
+      const scope = req.branchScope!;
+      const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
+      const data = await storage.getLocationInventoryList(branchId);
+      const branches = await storage.getBranches();
+      const branchLabel = branchId ? branches.find(b => b.id === branchId)?.name || "" : "جميع الفروع";
+
+      const wb = XLSX.utils.book_new();
+      const rows: any[][] = [
+        ["تقرير المخزون - لمسة أنوثة"],
+        ["الفرع", branchLabel],
+        ["تاريخ التقرير", new Date().toLocaleDateString("ar-OM")],
+        [],
+        ["المنتج", "الباركود", "الموقع", "الفرع", "الكمية", "حد إعادة الطلب", "متوسط التكلفة", "السعر", "قيمة المخزون"],
+      ];
+      let totalValue = 0;
+      let totalQty = 0;
+      for (const item of data) {
+        const qty = item.qtyOnHand || 0;
+        const cost = parseFloat(item.avgCost || "0");
+        const value = qty * cost;
+        totalValue += value;
+        totalQty += qty;
+        rows.push([
+          item.productName || "", item.barcode || "",
+          item.locationName || "", item.branchName || "",
+          qty, item.reorderLevel || 0,
+          omr(cost), omr(item.price),
+          omr(value),
+        ]);
+      }
+      rows.push([]);
+      rows.push(["المجموع", "", "", "", totalQty, "", "", "", omr(totalValue)]);
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws["!cols"] = [
+        { wch: 25 }, { wch: 16 }, { wch: 20 }, { wch: 20 },
+        { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 14 },
+      ];
+      ws["!dir"] = "rtl";
+      XLSX.utils.book_append_sheet(wb, ws, "المخزون");
+
+      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="inventory-report.xlsx"`);
+      res.send(buf);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+    }
+  });
+
+  app.get("/api/exports/purchases.xlsx", requireAuth, enforceBranchScope, async (req, res) => {
+    try {
+      const from = req.query.from as string;
+      const to = req.query.to as string;
+
+      const { pool: pgPool } = await import("./db");
+      let query = `
+        SELECT p.*, s.name as supplier_name, u.name as creator_name, b.name as branch_name
+        FROM purchases p
+        LEFT JOIN suppliers s ON s.id = p.supplier_id
+        LEFT JOIN users u ON u.id = p.created_by
+        LEFT JOIN branches b ON b.id = p.branch_id
+        WHERE 1=1
+      `;
+      const params: any[] = [];
+      let idx = 1;
+      if (from) { query += ` AND p.date >= $${idx++}`; params.push(from); }
+      if (to) { query += ` AND p.date <= $${idx++}`; params.push(to); }
+      const scope = req.branchScope!;
+      if (scope.mode === "branch" && scope.branchId) {
+        query += ` AND p.branch_id = $${idx++}`;
+        params.push(scope.branchId);
+      }
+      query += ` ORDER BY p.date DESC`;
+      const purchResult = await pgPool.query(query, params);
+
+      const wb = XLSX.utils.book_new();
+      const rows: any[][] = [
+        ["تقرير المشتريات - لمسة أنوثة"],
+        ["الفترة", from && to ? `من ${from} إلى ${to}` : "الكل"],
+        [],
+        ["رقم الأمر", "التاريخ", "المورد", "الفرع", "المبلغ", "الحالة", "أنشأ بواسطة", "ملاحظات"],
+      ];
+      let totalAmount = 0;
+      for (const p of purchResult.rows) {
+        const amt = parseFloat(p.total_amount || p.amount || "0");
+        totalAmount += amt;
+        const statusLabels: Record<string, string> = {
+          draft: "مسودة", ordered: "تم الطلب", received: "مستلم",
+          partially_received: "مستلم جزئياً", cancelled: "ملغي",
+        };
+        rows.push([
+          p.order_number || `#${p.id}`, p.date || "",
+          p.supplier_name || "—", p.branch_name || "—",
+          omr(amt), statusLabels[p.status] || p.status || "—",
+          p.creator_name || "—", p.notes || "",
+        ]);
+      }
+      rows.push([]);
+      rows.push(["المجموع", "", "", "", omr(totalAmount), "", "", ""]);
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws["!cols"] = [
+        { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 20 },
+        { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 25 },
+      ];
+      ws["!dir"] = "rtl";
+      XLSX.utils.book_append_sheet(wb, ws, "المشتريات");
+
+      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="purchases-report.xlsx"`);
+      res.send(buf);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+    }
+  });
 }

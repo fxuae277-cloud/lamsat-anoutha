@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileSpreadsheet, Search, Eye, Printer, Download, X, Banknote, CreditCard, Building2 } from "lucide-react";
+import { FileSpreadsheet, Search, Eye, Printer, Download, X, Banknote, CreditCard, Building2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,6 +53,62 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
     },
     enabled: !!saleId && open,
   });
+
+  function handleThermalPrint() {
+    if (!detail) return;
+    const pmText = PM_LABELS[detail.paymentMethod] || detail.paymentMethod;
+    const dateStr = detail.createdAt
+      ? new Date(detail.createdAt).toLocaleDateString("ar-OM") + " " + new Date(detail.createdAt).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    const itemsHtml = (detail.items || []).map((item: any) => `
+      <tr>
+        <td style="text-align:left;font-size:11px;padding:1px 0">${omr(item.total)}</td>
+        <td style="text-align:center;font-size:11px;padding:1px 0">${omr(item.unitPrice)} x${item.quantity}</td>
+        <td style="text-align:right;font-size:12px;padding:1px 0">${item.productName || "—"}</td>
+      </tr>
+    `).join("");
+    const discountLine = parseFloat(detail.discount || "0") > 0
+      ? `<div style="display:flex;justify-content:space-between"><span>الخصم</span><span>-${omr(detail.discount)} OMR</span></div>` : "";
+    const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
+      <title>إيصال</title>
+      <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+      <style>
+        @page { size: 80mm auto; margin: 0; }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Cairo',sans-serif; width:80mm; padding:6mm 4mm; color:#000; direction:rtl; font-size:12px; }
+        .center { text-align:center; }
+        .brand { font-size:18px; font-weight:700; color:#8b5a7a; }
+        .sep { border-bottom:1px dashed #999; margin:4px 0; }
+        .row { display:flex; justify-content:space-between; font-size:11px; padding:1px 0; }
+        .total-row { display:flex; justify-content:space-between; font-size:14px; font-weight:700; padding:3px 0; border-top:2px solid #333; margin-top:4px; }
+        table { width:100%; border-collapse:collapse; }
+        .footer { text-align:center; font-size:10px; color:#666; margin-top:8px; }
+        @media print { body { width:80mm; } }
+      </style>
+    </head><body>
+      <div class="center brand">لمسة أنوثة</div>
+      <div class="center" style="font-size:10px;color:#888">إيصال بيع</div>
+      <div class="sep"></div>
+      <div class="row"><span>الفاتورة:</span><span>${detail.invoiceNumber || "#" + detail.id}</span></div>
+      <div class="row"><span>التاريخ:</span><span>${dateStr}</span></div>
+      <div class="row"><span>الفرع:</span><span>${detail.branchName || "—"}</span></div>
+      <div class="row"><span>الكاشير:</span><span>${detail.cashierName || "—"}</span></div>
+      <div class="row"><span>الدفع:</span><span>${pmText}</span></div>
+      <div class="sep"></div>
+      <table>${itemsHtml}</table>
+      <div class="sep"></div>
+      <div class="row"><span>المجموع الفرعي</span><span>${omr(detail.subtotal)} OMR</span></div>
+      ${discountLine}
+      ${parseFloat(detail.vat || "0") > 0 ? `<div class="row"><span>الضريبة</span><span>${omr(detail.vat)} OMR</span></div>` : ""}
+      <div class="total-row"><span>الإجمالي</span><span>${omr(detail.total)} OMR</span></div>
+      <div class="sep" style="margin-top:6px"></div>
+      <div class="footer">شكراً لتسوقكم معنا</div>
+      <div class="footer" style="margin-top:2px">لمسة أنوثة - سلطنة عمان</div>
+      <script>window.onload=function(){window.print();}</script>
+    </body></html>`;
+    const w = window.open("", "_blank", "width=320,height=600");
+    if (w) { w.document.write(html); w.document.close(); }
+  }
 
   function handlePrint() {
     if (!detail) return;
@@ -141,10 +197,20 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
             <span>تفاصيل الفاتورة {detail?.invoiceNumber || ""}</span>
             <div className="flex gap-2">
               {detail && (
-                <Button size="sm" variant="outline" className="gap-1" onClick={handlePrint} data-testid="button-print-invoice">
-                  <Printer className="w-4 h-4" />
-                  طباعة
-                </Button>
+                <>
+                  <Button size="sm" variant="outline" className="gap-1" onClick={() => window.open(`/api/exports/invoice.pdf?id=${detail.id}`, "_blank")} data-testid="button-pdf-invoice">
+                    <FileText className="w-4 h-4" />
+                    PDF
+                  </Button>
+                  <Button size="sm" variant="outline" className="gap-1" onClick={handleThermalPrint} data-testid="button-thermal-invoice">
+                    <Printer className="w-4 h-4" />
+                    إيصال 80mm
+                  </Button>
+                  <Button size="sm" variant="outline" className="gap-1" onClick={handlePrint} data-testid="button-print-invoice">
+                    <Download className="w-4 h-4" />
+                    طباعة A4
+                  </Button>
+                </>
               )}
             </div>
           </DialogTitle>

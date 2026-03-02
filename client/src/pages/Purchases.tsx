@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
-import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle, Search, Edit, Building, UserPlus } from "lucide-react";
+import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle, Search, Edit, Building, UserPlus, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -766,6 +766,12 @@ export default function Purchases() {
       <div>
         <h1 className="text-2xl font-bold" data-testid="text-purchases-title">الموردون والمشتريات</h1>
         <p className="text-muted-foreground mt-1">إدارة الموردين وفواتير المشتريات ومتوسط التكلفة (Average Cost)</p>
+      </div>
+      <div className="flex justify-end">
+        <Button variant="outline" className="gap-2" onClick={() => window.open("/api/exports/purchases.xlsx", "_blank")} data-testid="button-export-purchases-xlsx">
+          <FileSpreadsheet className="w-4 h-4" />
+          تصدير المشتريات Excel
+        </Button>
       </div>
 
       <Tabs defaultValue="purchases" dir="rtl">

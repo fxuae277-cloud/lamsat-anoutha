@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeftRight, PackagePlus, AlertCircle, Search, Package, History, ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowLeftRight, PackagePlus, AlertCircle, Search, Package, History, ArrowDown, ArrowUp, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -500,6 +500,12 @@ export default function Inventory() {
       <div>
         <h1 className="text-2xl font-bold" data-testid="text-inventory-title">إدارة المخزون</h1>
         <p className="text-muted-foreground mt-1">تتبع الكميات وحركات المخزون لكل فرع.</p>
+      </div>
+      <div className="flex justify-end">
+        <Button variant="outline" className="gap-2" onClick={() => window.open("/api/exports/inventory.xlsx", "_blank")} data-testid="button-export-inventory-xlsx">
+          <FileSpreadsheet className="w-4 h-4" />
+          تصدير المخزون Excel
+        </Button>
       </div>
 
       <Tabs defaultValue="stock" dir="rtl">

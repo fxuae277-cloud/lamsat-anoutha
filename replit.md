@@ -170,8 +170,10 @@ shared/
 10. **Reports**: Shift report + Daily report (with COGS/Profit analysis) + Branch comparison report + Profit reports (by branch/employee/product)
 11. **Purchases**: Full purchase invoice system with Average Cost calculation, extra cost allocation, posting workflow
 12. **COGS/Profit**: Automatic cost tracking on sales and order payments with profit analysis
-13. **Export**: Daily report Excel/PDF export, multi-branch profit Excel export (date range), sales invoices Excel export
-14. **Invoices (فواتير نقطة البيع)**: POS sales invoice browser with filters (date, payment method, employee, branch), detail modal with print, Excel export
+13. **Export**: Daily report Excel/PDF export, multi-branch profit Excel export (date range), sales invoices Excel export, inventory Excel export, purchases Excel export, individual invoice PDF export
+14. **Invoices (فواتير نقطة البيع)**: POS sales invoice browser with filters (date, payment method, employee, branch), detail modal with PDF download + thermal 80mm receipt print + A4 print, Excel export
+15. **Thermal Receipt**: Auto-print 80mm thermal receipt on POS sale completion; reprint from Invoices page
+16. **Stocktake (الجرد والتسويات)**: Create stocktake sessions per branch/location, count items vs system qty, approve to auto-adjust inventory, manual adjustments (+/-), variance report by product
 
 ## API Routes
 All prefixed with `/api/`:
@@ -190,7 +192,9 @@ All prefixed with `/api/`:
 - GET/POST/PATCH `/suppliers`
 - GET `/reports/profit/branches?from=...&to=...`, `/reports/profit/employees?from=...&to=...&branchId=...`, `/reports/profit/products?from=...&to=...&branchId=...` (requireAuth, cashier sees own branch only)
 - GET `/sales` with filters: from, to, paymentMethod, employeeId, branchId (cashier sees own branch only); GET `/sales/:id` returns enriched detail with items + product/branch/cashier names
-- GET `/exports/daily.xlsx?date=...&branchId=...`, GET `/exports/daily.pdf?date=...&branchId=...`, GET `/exports/profit_all_branches.xlsx?from=...&to=...`, GET `/exports/profit_by_employee.xlsx?from=...&to=...&branchId=...`, GET `/exports/profit_by_product.xlsx?from=...&to=...&branchId=...`, GET `/exports/sales.xlsx?from=...&to=...&branchId=...&paymentMethod=...&employeeId=...` (requireAuth)
+- GET `/exports/daily.xlsx?date=...&branchId=...`, GET `/exports/daily.pdf?date=...&branchId=...`, GET `/exports/profit_all_branches.xlsx?from=...&to=...`, GET `/exports/profit_by_employee.xlsx?from=...&to=...&branchId=...`, GET `/exports/profit_by_product.xlsx?from=...&to=...&branchId=...`, GET `/exports/sales.xlsx?from=...&to=...&branchId=...&paymentMethod=...&employeeId=...`, GET `/exports/invoice.pdf?id=...`, GET `/exports/inventory.xlsx?branchId=...`, GET `/exports/purchases.xlsx?from=...&to=...&branchId=...` (requireAuth)
+- GET/POST `/stocktakes`, GET `/stocktakes/:id/items`, PATCH `/stocktake-items/:id`, POST `/stocktakes/:id/approve` (requireAuth + requireManager/requireOwnerOrAdmin)
+- GET/POST `/inventory-adjustments` (requireAuth + requireManager)
 - GET `/dashboard`
 
 ## Design

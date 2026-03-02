@@ -298,6 +298,63 @@ export default function POS() {
   const vat = afterDiscount * 0.05;
   const total = afterDiscount + vat;
 
+  function printThermalReceipt(receiptData: {
+    invoiceNumber: string; branchName: string; cashierName: string;
+    paymentMethod: string; subtotal: string; discount: string; vat: string; total: string;
+    items: { name: string; qty: number; price: string; lineTotal: string }[];
+  }) {
+    const pmLabels: Record<string, string> = { cash: "نقدي", card: "بطاقة", bank_transfer: "تحويل بنكي" };
+    const dateStr = new Date().toLocaleDateString("ar-OM") + " " + new Date().toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" });
+    const itemsHtml = receiptData.items.map(it => `
+      <tr>
+        <td style="text-align:left;font-size:11px;padding:1px 0">${it.lineTotal}</td>
+        <td style="text-align:center;font-size:11px;padding:1px 0">${it.price} x${it.qty}</td>
+        <td style="text-align:right;font-size:12px;padding:1px 0">${it.name}</td>
+      </tr>
+    `).join("");
+    const discountLine = parseFloat(receiptData.discount) > 0
+      ? `<div style="display:flex;justify-content:space-between"><span>الخصم</span><span>-${receiptData.discount}</span></div>` : "";
+    const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
+      <title>إيصال</title>
+      <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+      <style>
+        @page { size: 80mm auto; margin: 0; }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Cairo',sans-serif; width:80mm; padding:6mm 4mm; color:#000; direction:rtl; font-size:12px; }
+        .center { text-align:center; }
+        .brand { font-size:18px; font-weight:700; color:#8b5a7a; }
+        .sep { border-bottom:1px dashed #999; margin:4px 0; }
+        .row { display:flex; justify-content:space-between; font-size:11px; padding:1px 0; }
+        .total-row { display:flex; justify-content:space-between; font-size:14px; font-weight:700; padding:3px 0; border-top:2px solid #333; margin-top:4px; }
+        table { width:100%; border-collapse:collapse; }
+        .footer { text-align:center; font-size:10px; color:#666; margin-top:8px; }
+        @media print { body { width:80mm; } }
+      </style>
+    </head><body>
+      <div class="center brand">لمسة أنوثة</div>
+      <div class="center" style="font-size:10px;color:#888">إيصال بيع</div>
+      <div class="sep"></div>
+      <div class="row"><span>الفاتورة:</span><span>${receiptData.invoiceNumber}</span></div>
+      <div class="row"><span>التاريخ:</span><span>${dateStr}</span></div>
+      <div class="row"><span>الفرع:</span><span>${receiptData.branchName}</span></div>
+      <div class="row"><span>الكاشير:</span><span>${receiptData.cashierName}</span></div>
+      <div class="row"><span>الدفع:</span><span>${pmLabels[receiptData.paymentMethod] || receiptData.paymentMethod}</span></div>
+      <div class="sep"></div>
+      <table>${itemsHtml}</table>
+      <div class="sep"></div>
+      <div class="row"><span>المجموع الفرعي</span><span>${receiptData.subtotal} OMR</span></div>
+      ${discountLine}
+      ${parseFloat(receiptData.vat) > 0 ? `<div class="row"><span>الضريبة</span><span>${receiptData.vat} OMR</span></div>` : ""}
+      <div class="total-row"><span>الإجمالي</span><span>${receiptData.total} OMR</span></div>
+      <div class="sep" style="margin-top:6px"></div>
+      <div class="footer">شكراً لتسوقكم معنا</div>
+      <div class="footer" style="margin-top:2px">لمسة أنوثة - سلطنة عمان</div>
+      <script>window.onload=function(){window.print();}</script>
+    </body></html>`;
+    const w = window.open("", "_blank", "width=320,height=600");
+    if (w) { w.document.write(html); w.document.close(); }
+  }
+
   const saleMutation = useMutation({
     mutationFn: async () => {
       const invoiceNumber = `INV-${Date.now()}`;
@@ -322,9 +379,28 @@ export default function POS() {
         })),
       };
       await apiRequest("POST", "/api/sales", saleData);
+      return { invoiceNumber, saleData };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       toast({ title: "تمت العملية بنجاح", description: "تم حفظ الفاتورة." });
+
+      printThermalReceipt({
+        invoiceNumber: result.invoiceNumber,
+        branchName: branchName,
+        cashierName: user?.name || "",
+        paymentMethod: result.saleData.paymentMethod,
+        subtotal: result.saleData.subtotal,
+        discount: result.saleData.discount,
+        vat: result.saleData.vat,
+        total: result.saleData.total,
+        items: cart.map(item => ({
+          name: item.product.name,
+          qty: item.qty,
+          price: parseFloat(item.product.price).toFixed(3),
+          lineTotal: (parseFloat(item.product.price) * item.qty).toFixed(3),
+        })),
+      });
+
       setCart([]);
       setDiscountValue(0);
       setBankTxnId("");
