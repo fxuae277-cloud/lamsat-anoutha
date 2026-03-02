@@ -1,0 +1,61 @@
+ثبّت منطق المشتريات/المخزون بحيث كل شيء Branch-level للمستخدم، والـ locations مجرد طبقة داخلية.
+
+عند اعتماد فاتورة شراء (POST /api/purchase-invoices/:id/approve):
+
+A) احصل على main_location_id للفرع:
+1) حاول إيجاد Location اسمه 'المخزن' للفرع:
+   SELECT id FROM locations
+   WHERE branch_id = invoice.branch_id AND name='المخزن'
+   ORDER BY id LIMIT 1;
+
+2) إذا غير موجود، خذ أول Location للفرع:
+   SELECT id FROM locations
+   WHERE branch_id = invoice.branch_id
+   ORDER BY id LIMIT 1;
+
+3) إذا لا يوجد أي Location للفرع، أنشئ واحد تلقائيًا:
+   INSERT INTO locations (name, branch_id)
+   VALUES ('المخزن', invoice.branch_id)
+   RETURNING id;
+
+B) تأكد من Unique على location_inventory:
+   CREATE UNIQUE INDEX IF NOT EXISTS ux_location_inventory_location_product
+   ON location_inventory (location_id, product_id);
+
+C) نفّذ داخل Transaction:
+1) تحقق الفاتورة pending وبها items.
+2) وزّع total_extra_cost على purchase_items وحدّث:
+   allocated_extra_cost + unit_cost_final
+3) حدّث المخزون في location_inventory باستخدام main_location_id (UPSERT):
+   INSERT INTO location_inventory (location_id, product_id, qty_on_hand, updated_at)
+   VALUES (main_location_id, item.product_id, item.qty, now())
+   ON CONFLICT (location_id, product_id)
+   DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand + EXCLUDED.qty_on_hand,
+                updated_at = now();
+
+4) سجّل inventory_transactions لكل item:
+   - date = now()
+   - branch_id = invoice.branch_id
+   - from_location_id = NULL
+   - to_location_id = main_location_id
+   - product_id = item.product_id
+   - type = 'PURCHASE'
+   - qty = item.qty
+   - ref_table='purchase_invoices'
+   - ref_id=invoice.id
+   - note='Purchase Invoice Approved'
+   - created_by=invoice.created_by
+   - created_at=now()
+
+5) حدّث purchase_invoices.status إلى 'approved' في النهاية فقط.
+
+D) واجهة المستخدم:
+- لا تعرض صالة/مخزن في المشتريات.
+- اعرض المخزون والتقارير على مستوى الفرع.
+
+E) تقرير مخزون الفرع (Branch Inventory):
+نفّذ Query تجميع:
+SELECT l.branch_id, li.product_id, SUM(li.qty_on_hand) qty_on_hand
+FROM location_inventory li
+JOIN locations l ON l.id = li.location_id
+GROUP BY l.branch_id, li.product_id;

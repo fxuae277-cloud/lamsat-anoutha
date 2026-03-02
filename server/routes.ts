@@ -272,6 +272,15 @@ export async function registerRoutes(
     res.json(await storage.getLocations(branchId));
   });
 
+  app.get("/api/branch-inventory", requireAuth, async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    const branchId = req.query.branchId
+      ? Number(req.query.branchId)
+      : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId);
+    res.json(await storage.getBranchInventory(branchId));
+  });
+
   app.get("/api/location-inventory", requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
     if (!user) return res.status(401).json({ message: "غير مصرح" });

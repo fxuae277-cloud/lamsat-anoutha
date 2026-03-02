@@ -970,22 +970,31 @@ export class DatabaseStorage implements IStorage {
       parseFloat(invoice.otherCost || "0");
     const grandTotal = subtotalItems + totalExtraCost;
 
+    let mainLocationId: number;
     const warehouseLoc = await db.select({ id: locations.id })
       .from(locations)
       .where(and(eq(locations.branchId, invoice.branchId), eq(locations.name, "المخزن")))
       .orderBy(locations.id)
       .limit(1);
-    let toLocationId: number;
     if (warehouseLoc.length > 0) {
-      toLocationId = warehouseLoc[0].id;
+      mainLocationId = warehouseLoc[0].id;
     } else {
-      const fallbackLoc = await db.select({ id: locations.id })
+      const anyLoc = await db.select({ id: locations.id })
         .from(locations)
         .where(eq(locations.branchId, invoice.branchId))
         .orderBy(locations.id)
         .limit(1);
-      if (fallbackLoc.length === 0) throw new Error("لا يوجد موقع مخزون للفرع");
-      toLocationId = fallbackLoc[0].id;
+      if (anyLoc.length > 0) {
+        mainLocationId = anyLoc[0].id;
+      } else {
+        const [newLoc] = await db.insert(locations).values({
+          name: "المخزن",
+          branchId: invoice.branchId,
+          code: "backstore",
+          active: true,
+        }).returning();
+        mainLocationId = newLoc.id;
+      }
     }
 
     const client = await pool.connect();
@@ -1036,7 +1045,7 @@ export class DatabaseStorage implements IStorage {
            ON CONFLICT (location_id, product_id)
            DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand + EXCLUDED.qty_on_hand,
                          updated_at = now()`,
-          [toLocationId, item.productId, item.qty]
+          [mainLocationId, item.productId, item.qty]
         );
 
         await client.query(
@@ -1050,7 +1059,7 @@ export class DatabaseStorage implements IStorage {
             $3, 'PURCHASE', $4,
             'purchase_invoices', $5,
             'Purchase Invoice Approved', $6, now())`,
-          [invoice.branchId, toLocationId, item.productId, item.qty, id, invoice.createdBy]
+          [invoice.branchId, mainLocationId, item.productId, item.qty, id, invoice.createdBy]
         );
       }
 
@@ -1219,6 +1228,29 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(products, eq(locationInventory.productId, products.id))
       .innerJoin(branches, eq(locations.branchId, branches.id))
       .where(cond)
+      .orderBy(products.name);
+  }
+
+  async getBranchInventory(branchId?: number) {
+    const conditions: any[] = [];
+    if (branchId) conditions.push(eq(locations.branchId, branchId));
+    const cond = conditions.length > 0 ? and(...conditions) : undefined;
+
+    return db.select({
+      branchId: locations.branchId,
+      branchName: branches.name,
+      productId: locationInventory.productId,
+      productName: products.name,
+      barcode: products.barcode,
+      totalQty: sql<number>`SUM(${locationInventory.qtyOnHand})`.as("totalQty"),
+      avgCost: products.avgCost,
+      price: products.price,
+    }).from(locationInventory)
+      .innerJoin(locations, eq(locationInventory.locationId, locations.id))
+      .innerJoin(products, eq(locationInventory.productId, products.id))
+      .innerJoin(branches, eq(locations.branchId, branches.id))
+      .where(cond)
+      .groupBy(locations.branchId, branches.name, locationInventory.productId, products.name, products.barcode, products.avgCost, products.price)
       .orderBy(products.name);
   }
 

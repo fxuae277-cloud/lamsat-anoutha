@@ -292,11 +292,6 @@ function PurchasesTab() {
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const { data: allLocations = [] } = useQuery<any[]>({
-    queryKey: ["/api/locations"],
-    queryFn: getQueryFn({ on401: "throw" }),
-  });
-
   const { data: invoiceDetail } = useQuery<any>({
     queryKey: ["/api/purchases", selectedInvoice],
     queryFn: async () => {
@@ -310,13 +305,6 @@ function PurchasesTab() {
   const branchMap = Object.fromEntries(branches.map(b => [b.id, b.name]));
   const supplierMap = Object.fromEntries(allSuppliers.map(s => [s.id, s.name]));
   const productMap = Object.fromEntries(allProducts.map(p => [p.id, p.name]));
-
-  const getWarehouseLocation = (branchId: number) => {
-    const warehouse = allLocations.find((l: any) => l.branchId === branchId && l.name === "المخزن");
-    if (warehouse) return warehouse;
-    return allLocations.find((l: any) => l.branchId === branchId) || null;
-  };
-  const targetLocation = invoiceDetail ? getWarehouseLocation(invoiceDetail.branchId) : null;
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -437,12 +425,6 @@ function PurchasesTab() {
             <p className="text-muted-foreground mt-1">
               {supplierMap[invoiceDetail.supplierId] || "—"} | {branchMap[invoiceDetail.branchId] || ""} | {invoiceDetail.invoiceDate}
             </p>
-            {targetLocation && (
-              <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-target-location">
-                <Package className="w-3 h-3 inline ml-1" />
-                موقع الإدخال: <strong>{targetLocation.name}</strong> — {branchMap[invoiceDetail.branchId] || ""}
-              </p>
-            )}
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={isPending ? "outline" : "default"} className={isPending ? "border-amber-400 text-amber-600" : invoiceDetail?.status === "approved" ? "bg-green-600" : "bg-red-500"}>
@@ -614,9 +596,6 @@ function PurchasesTab() {
                 <p><strong>إجمالي الأصناف:</strong> {omr(itemsSubtotal)} OMR</p>
                 <p><strong>تكاليف إضافية:</strong> {omr(extraTotal)} OMR</p>
                 <p className="border-t pt-2"><strong>الإجمالي الكلي:</strong> <span className="text-lg font-bold text-emerald-700">{omr(itemsSubtotal + extraTotal)} OMR</span></p>
-                {targetLocation && (
-                  <p className="border-t pt-2"><strong>موقع الإدخال:</strong> {targetLocation.name} — {branchMap[invoiceDetail?.branchId] || ""}</p>
-                )}
               </div>
               <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-amber-800">
                 <p className="font-medium">التوزيع المتوقع:</p>

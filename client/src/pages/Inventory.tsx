@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeftRight, PackagePlus, AlertCircle, Search, Package, History, ArrowDown, ArrowUp, MapPin } from "lucide-react";
+import { ArrowLeftRight, PackagePlus, AlertCircle, Search, Package, History, ArrowDown, ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import { useAuth } from "@/lib/auth";
 import type { Product, Branch } from "@shared/schema";
 
 const TX_TYPE_LABELS: Record<string, string> = {
+  PURCHASE: "مشتريات",
   purchase_receipt: "استلام مشتريات",
   sale: "بيع",
   sale_return: "مرتجع",
@@ -23,18 +24,10 @@ const TX_TYPE_LABELS: Record<string, string> = {
   adjustment: "تسوية",
 };
 
-const LOC_LABELS: Record<string, string> = {
-  showroom: "صالة العرض",
-  backstore: "المخزن",
-};
-
-function LocationInventoryTab() {
-  const { toast } = useToast();
+function BranchInventoryTab() {
   const { user } = useAuth();
-  const canManage = user?.role === "owner" || user?.role === "admin" || user?.role === "manager";
   const isOwner = user?.role === "owner" || user?.role === "admin";
   const [selectedBranch, setSelectedBranch] = useState<string>(isOwner ? "all" : String(user?.branchId));
-  const [selectedLocation, setSelectedLocation] = useState<string>(canManage ? "all" : "showroom");
   const [search, setSearch] = useState("");
 
   const { data: branches = [] } = useQuery<Branch[]>({
@@ -44,13 +37,12 @@ function LocationInventoryTab() {
 
   const params = new URLSearchParams();
   if (selectedBranch !== "all") params.set("branchId", selectedBranch);
-  if (selectedLocation !== "all") params.set("locationCode", selectedLocation);
   const qs = params.toString() ? `?${params.toString()}` : "";
 
   const { data: inventory = [] } = useQuery<any[]>({
-    queryKey: ["/api/location-inventory", selectedBranch, selectedLocation],
+    queryKey: ["/api/branch-inventory", selectedBranch],
     queryFn: async () => {
-      const res = await fetch(`/api/location-inventory${qs}`, { credentials: "include" });
+      const res = await fetch(`/api/branch-inventory${qs}`, { credentials: "include" });
       if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },
@@ -61,8 +53,8 @@ function LocationInventoryTab() {
     return row.productName?.includes(search) || row.barcode?.includes(search);
   });
 
-  const totalQty = filtered.reduce((s: number, r: any) => s + (r.qtyOnHand || 0), 0);
-  const lowCount = filtered.filter((r: any) => r.qtyOnHand <= r.reorderLevel).length;
+  const totalQty = filtered.reduce((s: number, r: any) => s + Number(r.totalQty || 0), 0);
+  const totalValue = filtered.reduce((s: number, r: any) => s + Number(r.totalQty || 0) * parseFloat(r.avgCost || "0"), 0);
 
   return (
     <div className="space-y-4">
@@ -77,24 +69,6 @@ function LocationInventoryTab() {
                 {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
               </SelectContent>
             </Select>
-          </div>
-        )}
-        {canManage ? (
-          <div className="space-y-1 min-w-[180px]">
-            <label className="text-sm font-medium">الموقع</label>
-            <Select value={selectedLocation} onValueChange={setSelectedLocation}>
-              <SelectTrigger data-testid="select-inv-location"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">الكل</SelectItem>
-                <SelectItem value="showroom">صالة العرض</SelectItem>
-                <SelectItem value="backstore">المخزن</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            <label className="text-sm font-medium">الموقع</label>
-            <Badge variant="outline" className="text-sm px-3 py-2">صالة العرض</Badge>
           </div>
         )}
         <div className="relative min-w-[250px]">
@@ -116,13 +90,10 @@ function LocationInventoryTab() {
             <p className="text-2xl font-bold mt-1">{filtered.length}</p>
           </CardContent>
         </Card>
-        <Card className="bg-red-50 border-red-100">
-          <CardContent className="p-4 flex items-center gap-3">
-            <AlertCircle className="text-red-400 w-6 h-6" />
-            <div>
-              <p className="text-sm text-red-600">أصناف تحت الحد</p>
-              <p className="text-xl font-bold text-red-700" data-testid="text-loc-low-count">{lowCount}</p>
-            </div>
+        <Card className="bg-emerald-50 border-emerald-100">
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">قيمة المخزون (تكلفة)</p>
+            <p className="text-xl font-bold text-emerald-700">{totalValue.toFixed(3)} OMR</p>
           </CardContent>
         </Card>
       </div>
@@ -135,39 +106,30 @@ function LocationInventoryTab() {
                 <TableHead>المنتج</TableHead>
                 <TableHead>الباركود</TableHead>
                 {selectedBranch === "all" && <TableHead>الفرع</TableHead>}
-                <TableHead>الموقع</TableHead>
-                <TableHead className="text-center">الكمية المتاحة</TableHead>
-                <TableHead className="text-center">حد إعادة الطلب</TableHead>
-                <TableHead className="text-center">الحالة</TableHead>
+                <TableHead className="text-center">الكمية</TableHead>
+                <TableHead className="text-center">متوسط التكلفة</TableHead>
+                <TableHead className="text-center">سعر البيع</TableHead>
+                <TableHead className="text-center">قيمة المخزون</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">لا توجد بيانات مخزون</TableCell></TableRow>
-              ) : filtered.map((row: any) => {
-                const isLow = row.qtyOnHand <= row.reorderLevel;
+              ) : filtered.map((row: any, idx: number) => {
+                const qty = Number(row.totalQty || 0);
+                const cost = parseFloat(row.avgCost || "0");
+                const val = qty * cost;
                 return (
-                  <TableRow key={row.id} data-testid={`row-loc-inv-${row.id}`} className={isLow ? "bg-red-50/50" : ""}>
+                  <TableRow key={`${row.branchId}-${row.productId}`} data-testid={`row-branch-inv-${idx}`}>
                     <TableCell className="font-medium">{row.productName}</TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">{row.barcode || "—"}</TableCell>
                     {selectedBranch === "all" && <TableCell>{row.branchName}</TableCell>}
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs">
-                        <MapPin className="w-3 h-3 ml-1 inline" />
-                        {LOC_LABELS[row.locationCode] || row.locationName}
-                      </Badge>
-                    </TableCell>
                     <TableCell className="text-center">
-                      <span className={`font-bold text-lg ${isLow ? "text-red-600" : "text-emerald-600"}`}>{row.qtyOnHand}</span>
+                      <span className={`font-bold text-lg ${qty <= 0 ? "text-red-600" : "text-emerald-600"}`}>{qty}</span>
                     </TableCell>
-                    <TableCell className="text-center">{row.reorderLevel}</TableCell>
-                    <TableCell className="text-center">
-                      {isLow ? (
-                        <Badge variant="destructive" className="text-xs">نقص</Badge>
-                      ) : (
-                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">متوفر</Badge>
-                      )}
-                    </TableCell>
+                    <TableCell className="text-center font-mono text-sm">{cost.toFixed(3)}</TableCell>
+                    <TableCell className="text-center font-mono text-sm">{parseFloat(row.price || "0").toFixed(3)}</TableCell>
+                    <TableCell className="text-center font-mono text-sm font-medium">{val.toFixed(3)}</TableCell>
                   </TableRow>
                 );
               })}
@@ -459,14 +421,14 @@ export default function Inventory() {
     <div className="space-y-6 animate-in fade-in duration-300">
       <div>
         <h1 className="text-2xl font-bold" data-testid="text-inventory-title">إدارة المخزون</h1>
-        <p className="text-muted-foreground mt-1">تتبع الكميات وحركات المخزون لكل موقع (صالة عرض / مخزن) في كل فرع.</p>
+        <p className="text-muted-foreground mt-1">تتبع الكميات وحركات المخزون لكل فرع.</p>
       </div>
 
       <Tabs defaultValue="stock" dir="rtl">
         <TabsList className={`grid w-full max-w-lg ${canManage ? "grid-cols-3" : "grid-cols-1"}`}>
           <TabsTrigger value="stock" className="gap-1" data-testid="tab-location-stock">
-            <MapPin className="w-4 h-4" />
-            مخزون المواقع
+            <Package className="w-4 h-4" />
+            مخزون الفروع
           </TabsTrigger>
           {canManage && (
             <TabsTrigger value="transfer" className="gap-1" data-testid="tab-internal-transfer">
@@ -483,7 +445,7 @@ export default function Inventory() {
         </TabsList>
 
         <TabsContent value="stock">
-          <LocationInventoryTab />
+          <BranchInventoryTab />
         </TabsContent>
         {canManage && (
           <TabsContent value="transfer">
