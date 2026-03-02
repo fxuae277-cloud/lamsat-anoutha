@@ -191,7 +191,10 @@ export async function registerRoutes(
     const { items, ...orderData } = req.body;
     const parsed = insertOrderSchema.safeParse(orderData);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    const order = await storage.createOrder(parsed.data, items || []);
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({ message: "لا توجد منتجات في الطلب" });
+    }
+    const order = await storage.createOrder(parsed.data, items);
     res.status(201).json(order);
   });
   app.patch("/api/orders/:id/status", async (req, res) => {
