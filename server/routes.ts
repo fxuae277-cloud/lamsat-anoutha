@@ -358,7 +358,11 @@ export async function registerRoutes(
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "لا توجد منتجات في الفاتورة" });
     }
-    res.status(201).json(await storage.createSale(parsed.data, items));
+    try {
+      res.status(201).json(await storage.createSale(parsed.data, items));
+    } catch (e: any) {
+      res.status(400).json({ message: e.message || "فشل إنشاء الفاتورة" });
+    }
   });
   app.get("/api/sales/daily/summary", async (_req, res) => {
     res.json(await storage.getDailySalesTotal());

@@ -200,6 +200,7 @@ export default function POS() {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
       queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/location-inventory"] });
     },
     onError: (err: Error) => {
       toast({ title: "خطأ", description: err.message, variant: "destructive" });
