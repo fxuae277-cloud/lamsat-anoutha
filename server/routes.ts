@@ -353,13 +353,13 @@ export async function registerRoutes(
 
   app.get("/api/sales", requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
-    const isCashier = user?.role === "cashier" || user?.role === "employee";
+    const isBranchOnly = user?.role === "cashier" || user?.role === "employee" || user?.role === "manager";
     const filters: any = {};
     if (req.query.from) filters.from = req.query.from as string;
     if (req.query.to) filters.to = req.query.to as string;
     if (req.query.paymentMethod) filters.paymentMethod = req.query.paymentMethod as string;
     if (req.query.employeeId) filters.employeeId = Number(req.query.employeeId);
-    if (isCashier) {
+    if (isBranchOnly) {
       filters.branchId = user!.branchId;
     } else if (req.query.branchId) {
       filters.branchId = Number(req.query.branchId);
@@ -370,8 +370,8 @@ export async function registerRoutes(
     const detail = await storage.getSaleWithDetails(Number(req.params.id));
     if (!detail) return res.status(404).json({ message: "الفاتورة غير موجودة" });
     const user = await storage.getUser(req.session.userId!);
-    const isCashier = user?.role === "cashier" || user?.role === "employee";
-    if (isCashier && detail.branchId !== user!.branchId) {
+    const isBranchOnly = user?.role === "cashier" || user?.role === "employee" || user?.role === "manager";
+    if (isBranchOnly && detail.branchId !== user!.branchId) {
       return res.status(403).json({ message: "غير مصرح" });
     }
     res.json(detail);

@@ -385,11 +385,11 @@ export function registerExportRoutes(app: Express) {
       }
 
       const user = await storage.getUser(req.session.userId!);
-      const isCashier = user?.role === "cashier" || user?.role === "employee";
+      const isBranchOnly = user?.role === "cashier" || user?.role === "employee" || user?.role === "manager";
       const filters: any = { from, to };
       if (req.query.paymentMethod) filters.paymentMethod = req.query.paymentMethod as string;
       if (req.query.employeeId) filters.employeeId = Number(req.query.employeeId);
-      if (isCashier) {
+      if (isBranchOnly) {
         filters.branchId = user!.branchId;
       } else if (req.query.branchId) {
         filters.branchId = Number(req.query.branchId);

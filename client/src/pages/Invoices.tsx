@@ -248,7 +248,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
 
 export default function Invoices() {
   const { user } = useAuth();
-  const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin" || user?.role === "manager";
+  const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
 
   const [fromDate, setFromDate] = useState(monthAgoStr());
   const [toDate, setToDate] = useState(todayStr());
