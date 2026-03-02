@@ -1,0 +1,65 @@
+ربط المبيعات بالمخزون ومنع البيع إذا الكمية غير كافية (Branch Store).
+
+الجداول:
+sales(id, invoice_number, branch_id, cashier_id, customer_id, subtotal, discount, discount_type, vat, total, payment_method, bank_txn_id, ...)
+sale_items(id, sale_id, product_id, quantity, unit_price, total, unit_cost_at_sale, line_cogs)
+location_inventory(id, location_id, product_id, qty_on_hand, updated_at)
+locations(id, name, branch_id, is_branch_default, ...)
+inventory_transactions(id, date, branch_id, from_location_id, to_location_id, product_id, type, qty, ref_table, ref_id, note, created_by, created_at)
+
+المطلوب:
+1) عند إنشاء sale (checkout/confirm payment) نفّذ كل شيء داخل DB transaction واحدة.
+
+2) احصل على branch_location_id (مخزن الفرع الافتراضي):
+   SELECT id FROM locations
+   WHERE branch_id = sale.branch_id AND is_branch_default = true
+   ORDER BY id LIMIT 1;
+   إذا غير موجود -> 400 "لا يوجد مخزن افتراضي للفرع"
+
+3) تحقق توفر المخزون لكل sale_item:
+   SELECT qty_on_hand FROM location_inventory
+   WHERE location_id = branch_location_id AND product_id = :product_id
+   FOR UPDATE;
+   إذا qty_on_hand < quantity -> rollback وارجع 400 برسالة:
+   "المخزون غير كاف للمنتج X"
+
+4) خصم المخزون:
+   UPDATE location_inventory
+   SET qty_on_hand = qty_on_hand - :quantity,
+       updated_at = now()
+   WHERE location_id = branch_location_id AND product_id = :product_id;
+
+5) حساب تكلفة البيع (COGS):
+   - احصل على آخر تكلفة للوحدة من آخر شراء معتمد (purchase_items.unit_cost_final) لنفس المنتج.
+   - إذا لا يوجد، استخدم 0 أو product.cost إن وجد.
+   مثال Query:
+   SELECT pi.unit_cost_final
+   FROM purchase_items pi
+   JOIN purchase_invoices pv ON pv.id = pi.purchase_id
+   WHERE pv.status = 'approved' AND pi.product_id = :product_id
+   ORDER BY pv.invoice_date DESC, pv.id DESC, pi.id DESC
+   LIMIT 1;
+
+   ثم حدّث sale_items:
+   unit_cost_at_sale = unit_cost
+   line_cogs = unit_cost * quantity
+
+6) سجل حركة مخزون SALE:
+   INSERT INTO inventory_transactions
+   (date, branch_id, from_location_id, to_location_id,
+    product_id, type, qty, ref_table, ref_id,
+    note, created_by, created_at)
+   VALUES
+   (now(), sale.branch_id, branch_location_id, NULL,
+    :product_id, 'SALE', :quantity,
+    'sales', sale.id,
+    'Sale Deducted From Branch Stock', sale.cashier_id, now());
+
+7) تأكد أن العملية idempotent:
+   - امنع خصم المخزون مرتين لنفس sale:
+     قبل الخصم تحقق هل يوجد inventory_transactions
+     WHERE ref_table='sales' AND ref_id=sale.id AND type='SALE'
+     إذا موجود -> لا تعيد الخصم (ارجع OK).
+
+8) Frontend:
+   - عند محاولة بيع بكمية أكبر من المتاح اعرض رسالة واضحة للمستخدم.

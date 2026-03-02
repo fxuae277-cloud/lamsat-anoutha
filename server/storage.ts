@@ -358,66 +358,142 @@ export class DatabaseStorage implements IStorage {
     return { ...row, items };
   }
   async createSale(data: InsertSale, items: InsertSaleItem[]) {
-    const [sale] = await db.insert(sales).values(data).returning();
-    let cogsTotal = 0;
-    for (const item of items) {
-      const [product] = await db.select().from(products).where(eq(products.id, item.productId));
-      const unitCost = product ? parseFloat(product.avgCost || "0") : 0;
-      const lineCogs = item.quantity * unitCost;
-      cogsTotal += lineCogs;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
 
-      await db.insert(saleItems).values({
-        ...item,
-        saleId: sale.id,
-        unitCostAtSale: unitCost.toFixed(3),
-        lineCogs: lineCogs.toFixed(3),
-      });
-      const whList = await db.select().from(warehouses).where(eq(warehouses.branchId, data.branchId));
-      if (whList.length > 0) {
-        await this.adjustInventory(item.productId, whList[0].id, -item.quantity);
+      const branchLocRes = await client.query(
+        `SELECT id FROM locations WHERE branch_id = $1 AND is_branch_default = true ORDER BY id LIMIT 1`,
+        [data.branchId]
+      );
+      if (branchLocRes.rows.length === 0) throw new Error("لا يوجد مخزن افتراضي للفرع");
+      const branchLocationId = branchLocRes.rows[0].id;
+
+      const saleRes = await client.query(
+        `INSERT INTO sales (invoice_number, branch_id, cashier_id, customer_id, subtotal, discount, discount_type, vat, total, payment_method, bank_txn_id, shift_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+        [
+          data.invoiceNumber || null, data.branchId, data.cashierId || null, data.customerId || null,
+          data.subtotal || "0", data.discount || "0", data.discountType || "percentage",
+          data.vat || "0", data.total || "0", data.paymentMethod || "cash",
+          data.bankTxnId || null, data.shiftId || null,
+        ]
+      );
+      const sale = saleRes.rows[0];
+      const saleId = sale.id;
+
+      const existingTx = await client.query(
+        `SELECT id FROM inventory_transactions WHERE ref_table='sales' AND ref_id=$1 AND type='SALE' LIMIT 1`,
+        [saleId]
+      );
+      if (existingTx.rows.length > 0) {
+        await client.query("COMMIT");
+        const [existing] = await db.select().from(sales).where(eq(sales.id, saleId));
+        return existing;
       }
-      await this.removeStock(data.branchId, item.productId, item.quantity, "sale", "sales", sale.id, `بيع فاتورة ${sale.invoiceNumber}`, data.cashierId ?? undefined);
+
+      let cogsTotal = 0;
+
+      for (const item of items) {
+        const invRow = await client.query(
+          `SELECT qty_on_hand FROM location_inventory
+           WHERE location_id = $1 AND product_id = $2
+           FOR UPDATE`,
+          [branchLocationId, item.productId]
+        );
+        const available = invRow.rows.length > 0 ? invRow.rows[0].qty_on_hand : 0;
+        if (available < item.quantity) {
+          const prodRes = await client.query(`SELECT name FROM products WHERE id = $1`, [item.productId]);
+          const pName = prodRes.rows[0]?.name || `#${item.productId}`;
+          throw new Error(`المخزون غير كاف للمنتج "${pName}" — المتوفر: ${available}، المطلوب: ${item.quantity}`);
+        }
+
+        await client.query(
+          `UPDATE location_inventory SET qty_on_hand = qty_on_hand - $1, updated_at = now()
+           WHERE location_id = $2 AND product_id = $3`,
+          [item.quantity, branchLocationId, item.productId]
+        );
+
+        const costRes = await client.query(
+          `SELECT pi.unit_cost_final FROM purchase_items pi
+           JOIN purchase_invoices pv ON pv.id = pi.purchase_id
+           WHERE pv.status = 'approved' AND pi.product_id = $1
+           ORDER BY pv.invoice_date DESC, pv.id DESC, pi.id DESC LIMIT 1`,
+          [item.productId]
+        );
+        let unitCost = 0;
+        if (costRes.rows.length > 0 && costRes.rows[0].unit_cost_final) {
+          unitCost = parseFloat(costRes.rows[0].unit_cost_final);
+        } else {
+          const prodCost = await client.query(`SELECT avg_cost FROM products WHERE id = $1`, [item.productId]);
+          unitCost = prodCost.rows.length > 0 ? parseFloat(prodCost.rows[0].avg_cost || "0") : 0;
+        }
+        const lineCogs = unitCost * item.quantity;
+        cogsTotal += lineCogs;
+
+        await client.query(
+          `INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, total, unit_cost_at_sale, line_cogs)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [saleId, item.productId, item.quantity, item.unitPrice || "0", item.total || "0", unitCost.toFixed(3), lineCogs.toFixed(3)]
+        );
+
+        await client.query(
+          `INSERT INTO inventory_transactions
+           (date, branch_id, from_location_id, to_location_id, product_id, type, qty, ref_table, ref_id, note, created_by, created_at)
+           VALUES (now(), $1, $2, NULL, $3, 'SALE', $4, 'sales', $5, $6, $7, now())`,
+          [data.branchId, branchLocationId, item.productId, item.quantity, saleId, `بيع فاتورة ${sale.invoice_number}`, data.cashierId || null]
+        );
+      }
+
+      const saleTotal = parseFloat(sale.total || "0");
+      const grossProfit = saleTotal - cogsTotal;
+      await client.query(
+        `UPDATE sales SET cogs_total = $1, gross_profit = $2 WHERE id = $3`,
+        [cogsTotal.toFixed(3), grossProfit.toFixed(3), saleId]
+      );
+
+      await client.query("COMMIT");
+
+      const [updatedSale] = await db.select().from(sales).where(eq(sales.id, saleId));
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const amount = sale.total || "0";
+      const pm = data.paymentMethod || "cash";
+
+      if (pm === "cash") {
+        await this.addCashLedgerEntry({
+          date: todayStr,
+          branchId: data.branchId,
+          shiftId: data.shiftId ?? null,
+          type: "sale",
+          amountIn: amount,
+          amountOut: "0",
+          category: "sale",
+          note: `بيع فاتورة ${sale.invoice_number}`,
+          createdBy: data.cashierId ?? null,
+        });
+      } else {
+        await this.addBankLedgerEntry({
+          date: todayStr,
+          branchId: data.branchId,
+          shiftId: data.shiftId ?? null,
+          method: pm,
+          amountIn: amount,
+          amountOut: "0",
+          refId: data.bankTxnId || null,
+          category: "sale",
+          note: `بيع فاتورة ${sale.invoice_number}`,
+          createdBy: data.cashierId ?? null,
+        });
+      }
+
+      return updatedSale;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
     }
-
-    const saleTotal = parseFloat(sale.total || "0");
-    const grossProfit = saleTotal - cogsTotal;
-    const [updatedSale] = await db.update(sales).set({
-      cogsTotal: cogsTotal.toFixed(3),
-      grossProfit: grossProfit.toFixed(3),
-    }).where(eq(sales.id, sale.id)).returning();
-
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const amount = sale.total || "0";
-    const pm = data.paymentMethod || "cash";
-
-    if (pm === "cash") {
-      await this.addCashLedgerEntry({
-        date: todayStr,
-        branchId: data.branchId,
-        shiftId: data.shiftId ?? null,
-        type: "sale",
-        amountIn: amount,
-        amountOut: "0",
-        category: "sale",
-        note: `بيع فاتورة ${sale.invoiceNumber}`,
-        createdBy: data.cashierId ?? null,
-      });
-    } else {
-      await this.addBankLedgerEntry({
-        date: todayStr,
-        branchId: data.branchId,
-        shiftId: data.shiftId ?? null,
-        method: pm,
-        amountIn: amount,
-        amountOut: "0",
-        refId: data.bankTxnId || null,
-        category: "sale",
-        note: `بيع فاتورة ${sale.invoiceNumber}`,
-        createdBy: data.cashierId ?? null,
-      });
-    }
-
-    return updatedSale;
   }
   async getSaleItems(saleId: number) {
     return db.select().from(saleItems).where(eq(saleItems.saleId, saleId));
