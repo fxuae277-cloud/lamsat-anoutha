@@ -22,7 +22,8 @@ import {
   bankLedger, type InsertBankLedger, type BankLedger,
   purchaseInvoices, type InsertPurchaseInvoice, type PurchaseInvoice,
   purchaseItems, type InsertPurchaseItem, type PurchaseItem,
-  branchInventory, type InsertBranchInventory, type BranchInventory,
+  locations, type InsertLocation, type Location,
+  locationInventory, type InsertLocationInventory, type LocationInventory,
   inventoryTransactions, type InsertInventoryTransaction, type InventoryTransaction,
   type PaymentMethod, PAYMENT_METHODS,
 } from "@shared/schema";
@@ -258,10 +259,7 @@ export class DatabaseStorage implements IStorage {
       if (whList.length > 0) {
         await this.adjustInventory(item.productId, whList[0].id, -item.quantity);
       }
-      await this.adjustBranchInventory(
-        data.branchId, item.productId, -item.quantity,
-        "sale", "sales", sale.id, `بيع فاتورة ${sale.invoiceNumber}`, data.cashierId ?? undefined
-      );
+      await this.removeStock(data.branchId, item.productId, item.quantity, "sale", "sales", sale.id, `بيع فاتورة ${sale.invoiceNumber}`, data.cashierId ?? undefined);
       const [product] = await db.select().from(products).where(eq(products.id, item.productId));
       if (product) {
         cogsTotal += item.quantity * parseFloat(product.avgCost || "0");
@@ -881,11 +879,7 @@ export class DatabaseStorage implements IStorage {
         }).where(eq(products.id, item.productId));
       }
 
-      await this.adjustBranchInventory(
-        invoice.branchId, item.productId, item.qty,
-        "purchase_receipt", "purchase_invoices", id,
-        `استلام مشتريات فاتورة ${invoice.invoiceNumber}`, invoice.createdBy ?? undefined
-      );
+      await this.addStock(invoice.branchId, item.productId, item.qty, "purchase_receipt", "purchase_invoices", id, `استلام مشتريات فاتورة ${invoice.invoiceNumber}`, invoice.createdBy ?? undefined);
     }
 
     const [updated] = await db.update(purchaseInvoices).set({
@@ -898,83 +892,170 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async adjustBranchInventory(
-    branchId: number, productId: number, qtyDelta: number,
+  async getLocations(branchId?: number) {
+    if (branchId) {
+      return db.select().from(locations).where(eq(locations.branchId, branchId));
+    }
+    return db.select().from(locations);
+  }
+
+  async getLocationByCode(branchId: number, code: string) {
+    const [row] = await db.select().from(locations)
+      .where(and(eq(locations.branchId, branchId), eq(locations.code, code)));
+    return row;
+  }
+
+  async addStock(
+    branchId: number, productId: number, qty: number,
     type: string, refTable?: string, refId?: number, note?: string, createdBy?: number
   ) {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const existing = await db.select().from(branchInventory)
-      .where(and(eq(branchInventory.branchId, branchId), eq(branchInventory.productId, productId)));
+    const backstore = await this.getLocationByCode(branchId, "backstore");
+    if (!backstore) throw new Error(`لم يتم العثور على موقع المخزن للفرع #${branchId}`);
 
-    let newQty: number;
+    const existing = await db.select().from(locationInventory)
+      .where(and(eq(locationInventory.locationId, backstore.id), eq(locationInventory.productId, productId)));
+
     if (existing.length > 0) {
-      newQty = existing[0].qtyOnHand + qtyDelta;
-      if (newQty < 0) newQty = 0;
-      await db.update(branchInventory).set({
-        qtyOnHand: newQty,
+      await db.update(locationInventory).set({
+        qtyOnHand: existing[0].qtyOnHand + qty,
         updatedAt: new Date(),
-      }).where(eq(branchInventory.id, existing[0].id));
+      }).where(eq(locationInventory.id, existing[0].id));
     } else {
-      newQty = Math.max(0, qtyDelta);
-      await db.insert(branchInventory).values({
-        branchId, productId, qtyOnHand: newQty, qtyReserved: 0, reorderLevel: 5,
+      await db.insert(locationInventory).values({
+        locationId: backstore.id, productId, qtyOnHand: qty, reorderLevel: 5,
       });
     }
 
+    const todayStr = new Date().toISOString().slice(0, 10);
     await db.insert(inventoryTransactions).values({
-      date: todayStr,
-      branchId, productId, type,
-      qtyIn: qtyDelta > 0 ? qtyDelta : 0,
-      qtyOut: qtyDelta < 0 ? Math.abs(qtyDelta) : 0,
-      refTable: refTable || null,
-      refId: refId || null,
-      note: note || null,
-      createdBy: createdBy || null,
+      date: todayStr, branchId, productId, type, qty,
+      toLocationId: backstore.id,
+      refTable: refTable || null, refId: refId || null,
+      note: note || null, createdBy: createdBy || null,
     });
-
-    return newQty;
   }
 
-  async getBranchInventoryList(branchId?: number) {
-    const cond = branchId ? eq(branchInventory.branchId, branchId) : undefined;
+  async removeStock(
+    branchId: number, productId: number, qty: number,
+    type: string, refTable?: string, refId?: number, note?: string, createdBy?: number
+  ) {
+    const showroom = await this.getLocationByCode(branchId, "showroom");
+    if (!showroom) throw new Error(`لم يتم العثور على صالة العرض للفرع #${branchId}`);
+
+    const existing = await db.select().from(locationInventory)
+      .where(and(eq(locationInventory.locationId, showroom.id), eq(locationInventory.productId, productId)));
+
+    const available = existing.length > 0 ? existing[0].qtyOnHand : 0;
+    if (available < qty) {
+      const [prod] = await db.select({ name: products.name }).from(products).where(eq(products.id, productId));
+      const pName = prod?.name || `#${productId}`;
+      throw new Error(`الكمية غير كافية في صالة العرض: "${pName}" — المتوفر ${available}، المطلوب ${qty}`);
+    }
+
+    await db.update(locationInventory).set({
+      qtyOnHand: available - qty,
+      updatedAt: new Date(),
+    }).where(eq(locationInventory.id, existing[0].id));
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    await db.insert(inventoryTransactions).values({
+      date: todayStr, branchId, productId, type, qty,
+      fromLocationId: showroom.id,
+      refTable: refTable || null, refId: refId || null,
+      note: note || null, createdBy: createdBy || null,
+    });
+  }
+
+  async transferStock(
+    fromLocationId: number, toLocationId: number, productId: number, qty: number,
+    note?: string, createdBy?: number
+  ) {
+    const [fromLoc] = await db.select().from(locations).where(eq(locations.id, fromLocationId));
+    const [toLoc] = await db.select().from(locations).where(eq(locations.id, toLocationId));
+    if (!fromLoc || !toLoc) throw new Error("الموقع غير موجود");
+    if (fromLoc.branchId !== toLoc.branchId) throw new Error("لا يمكن النقل بين فروع مختلفة من هنا");
+
+    const existing = await db.select().from(locationInventory)
+      .where(and(eq(locationInventory.locationId, fromLocationId), eq(locationInventory.productId, productId)));
+    const available = existing.length > 0 ? existing[0].qtyOnHand : 0;
+    if (available < qty) {
+      throw new Error(`الكمية غير كافية: المتوفر ${available}، المطلوب ${qty}`);
+    }
+
+    await db.update(locationInventory).set({
+      qtyOnHand: available - qty, updatedAt: new Date(),
+    }).where(eq(locationInventory.id, existing[0].id));
+
+    const toExisting = await db.select().from(locationInventory)
+      .where(and(eq(locationInventory.locationId, toLocationId), eq(locationInventory.productId, productId)));
+    if (toExisting.length > 0) {
+      await db.update(locationInventory).set({
+        qtyOnHand: toExisting[0].qtyOnHand + qty, updatedAt: new Date(),
+      }).where(eq(locationInventory.id, toExisting[0].id));
+    } else {
+      await db.insert(locationInventory).values({
+        locationId: toLocationId, productId, qtyOnHand: qty, reorderLevel: 5,
+      });
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    await db.insert(inventoryTransactions).values({
+      date: todayStr, branchId: fromLoc.branchId, productId, type: "internal_transfer", qty,
+      fromLocationId, toLocationId,
+      note: note || `نقل من ${fromLoc.name} إلى ${toLoc.name}`,
+      createdBy: createdBy || null,
+    });
+  }
+
+  async getLocationInventoryList(branchId?: number, locationCode?: string) {
+    const conditions: any[] = [];
+    if (branchId) conditions.push(eq(locations.branchId, branchId));
+    if (locationCode) conditions.push(eq(locations.code, locationCode));
+    const cond = conditions.length > 0 ? and(...conditions) : undefined;
+
     return db.select({
-      id: branchInventory.id,
-      branchId: branchInventory.branchId,
+      id: locationInventory.id,
+      locationId: locationInventory.locationId,
+      locationName: locations.name,
+      locationCode: locations.code,
+      branchId: locations.branchId,
       branchName: branches.name,
-      productId: branchInventory.productId,
+      productId: locationInventory.productId,
       productName: products.name,
       barcode: products.barcode,
-      qtyOnHand: branchInventory.qtyOnHand,
-      qtyReserved: branchInventory.qtyReserved,
-      reorderLevel: branchInventory.reorderLevel,
+      qtyOnHand: locationInventory.qtyOnHand,
+      reorderLevel: locationInventory.reorderLevel,
       avgCost: products.avgCost,
       price: products.price,
-      updatedAt: branchInventory.updatedAt,
-    }).from(branchInventory)
-      .innerJoin(products, eq(branchInventory.productId, products.id))
-      .innerJoin(branches, eq(branchInventory.branchId, branches.id))
+      updatedAt: locationInventory.updatedAt,
+    }).from(locationInventory)
+      .innerJoin(locations, eq(locationInventory.locationId, locations.id))
+      .innerJoin(products, eq(locationInventory.productId, products.id))
+      .innerJoin(branches, eq(locations.branchId, branches.id))
       .where(cond)
       .orderBy(products.name);
   }
 
-  async getInventoryTransactionsList(branchId?: number, productId?: number, type?: string) {
+  async getLocationTransactions(branchId?: number, type?: string) {
     const conditions: any[] = [];
     if (branchId) conditions.push(eq(inventoryTransactions.branchId, branchId));
-    if (productId) conditions.push(eq(inventoryTransactions.productId, productId));
     if (type) conditions.push(eq(inventoryTransactions.type, type));
-
     const cond = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const fromLoc = db.$with("from_loc").as(db.select({ id: locations.id, name: locations.name }).from(locations));
+    const toLoc = db.$with("to_loc").as(db.select({ id: locations.id, name: locations.name }).from(locations));
 
     return db.select({
       id: inventoryTransactions.id,
       date: inventoryTransactions.date,
       branchId: inventoryTransactions.branchId,
       branchName: branches.name,
+      fromLocationId: inventoryTransactions.fromLocationId,
+      toLocationId: inventoryTransactions.toLocationId,
       productId: inventoryTransactions.productId,
       productName: products.name,
       type: inventoryTransactions.type,
-      qtyIn: inventoryTransactions.qtyIn,
-      qtyOut: inventoryTransactions.qtyOut,
+      qty: inventoryTransactions.qty,
       refTable: inventoryTransactions.refTable,
       refId: inventoryTransactions.refId,
       note: inventoryTransactions.note,
@@ -988,45 +1069,30 @@ export class DatabaseStorage implements IStorage {
       .limit(500);
   }
 
-  async getBranchLowStock(branchId?: number) {
-    const cond = branchId
-      ? and(
-          sql`${branchInventory.qtyOnHand} <= ${branchInventory.reorderLevel}`,
-          eq(branchInventory.branchId, branchId)
-        )
-      : sql`${branchInventory.qtyOnHand} <= ${branchInventory.reorderLevel}`;
+  async getLocationLowStock(branchId?: number, locationCode?: string) {
+    const conditions: any[] = [
+      sql`${locationInventory.qtyOnHand} <= ${locationInventory.reorderLevel}`,
+    ];
+    if (branchId) conditions.push(eq(locations.branchId, branchId));
+    if (locationCode) conditions.push(eq(locations.code, locationCode));
 
     return db.select({
-      id: branchInventory.id,
-      branchId: branchInventory.branchId,
+      id: locationInventory.id,
+      locationId: locationInventory.locationId,
+      locationName: locations.name,
+      locationCode: locations.code,
+      branchId: locations.branchId,
       branchName: branches.name,
-      productId: branchInventory.productId,
+      productId: locationInventory.productId,
       productName: products.name,
-      qtyOnHand: branchInventory.qtyOnHand,
-      reorderLevel: branchInventory.reorderLevel,
-    }).from(branchInventory)
-      .innerJoin(products, eq(branchInventory.productId, products.id))
-      .innerJoin(branches, eq(branchInventory.branchId, branches.id))
-      .where(cond)
-      .orderBy(branchInventory.qtyOnHand);
-  }
-
-  async updateReorderLevel(branchId: number, productId: number, reorderLevel: number) {
-    const existing = await db.select().from(branchInventory)
-      .where(and(eq(branchInventory.branchId, branchId), eq(branchInventory.productId, productId)));
-    if (existing.length > 0) {
-      const [row] = await db.update(branchInventory).set({ reorderLevel }).where(eq(branchInventory.id, existing[0].id)).returning();
-      return row;
-    }
-    const [row] = await db.insert(branchInventory).values({ branchId, productId, qtyOnHand: 0, qtyReserved: 0, reorderLevel }).returning();
-    return row;
-  }
-
-  async transferBranchInventory(
-    fromBranchId: number, toBranchId: number, productId: number, qty: number, createdBy?: number
-  ) {
-    await this.adjustBranchInventory(fromBranchId, productId, -qty, "transfer_out", "branch_inventory", toBranchId, `تحويل إلى فرع #${toBranchId}`, createdBy);
-    await this.adjustBranchInventory(toBranchId, productId, qty, "transfer_in", "branch_inventory", fromBranchId, `تحويل من فرع #${fromBranchId}`, createdBy);
+      qtyOnHand: locationInventory.qtyOnHand,
+      reorderLevel: locationInventory.reorderLevel,
+    }).from(locationInventory)
+      .innerJoin(locations, eq(locationInventory.locationId, locations.id))
+      .innerJoin(products, eq(locationInventory.productId, products.id))
+      .innerJoin(branches, eq(locations.branchId, branches.id))
+      .where(and(...conditions))
+      .orderBy(locationInventory.qtyOnHand);
   }
 
   async getBranchComparisonReport(dateStr: string) {

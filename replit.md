@@ -56,7 +56,10 @@ shared/
 - branches, cities
 - users (roles: owner/cashier/employee, with terminalName + branchId)
 - categories, products (with avg_cost + stock_qty for Average Cost tracking)
-- warehouses, inventory, inventory_transfers
+- warehouses, inventory, inventory_transfers (legacy)
+- **locations** (branch_id, code[showroom/backstore], name, active) — auto-created for each branch
+- **location_inventory** (location_id, product_id, qty_on_hand, reorder_level, updated_at) — unique(location_id, product_id)
+- **inventory_transactions** (date, branch_id, from_location_id, to_location_id, product_id, type, qty, ref_table, ref_id, note, created_by)
 - customers, suppliers
 - sales, sale_items (sales have shift_id + payment_method)
 - orders, order_items (orders have shift_id + payment_method + paid_at)
@@ -87,6 +90,18 @@ shared/
 - **Daily Report** (/api/reports/daily): includes cogsTotal, grossProfit, netProfit (= grossProfit - expenses)
 - **Branch Comparison** (/api/reports/branch-comparison): sales, cogs, gross, expenses, net per branch with margin %
 
+## Multi-Location Inventory System
+- Each branch auto-gets 2 locations: showroom (صالة العرض) + backstore (المخزن)
+- **addStock(branchId, ...)**: adds to backstore + logs transaction (used by purchase posting)
+- **removeStock(branchId, ...)**: deducts from showroom, throws error if insufficient qty (used by POS sales)
+- **transferStock(fromLocId, toLocId, ...)**: internal transfer between locations within same branch
+- Purchase posting → stock enters backstore
+- POS sale → stock deducted from showroom (blocks sale if insufficient)
+- Sale return → stock enters showroom
+- Frontend tabs: مخزون المواقع (filter by branch/location), نقل داخلي (backstore→showroom), حركات المخزون (filterable transaction log)
+- Transaction types: purchase_receipt, sale, sale_return, internal_transfer, manual_receipt, adjustment
+- Permissions: cashier sees own branch only; owner/admin can select any branch
+
 ## Ledger System
 - **cash_ledger types**: sale, expense, order_payment, shift_difference
 - **bank_ledger methods**: card, bank_transfer
@@ -115,7 +130,7 @@ shared/
 2. **Dashboard**: Daily sales, VAT, order count, low-stock alerts, weekly chart
 3. **POS**: Session-based branch/cashier (read-only), barcode scan, cart, discount, VAT 5%, cash/card/bank payment, shift open/check
 4. **Products**: CRUD with barcode, category, unified price, active toggle, avg_cost + stock_qty display
-5. **Inventory**: Main + branch warehouses, receive stock, transfer between warehouses, low-stock alerts
+5. **Inventory**: Multi-location per branch (showroom + backstore), internal transfers, low-stock alerts, transaction log
 6. **Orders**: WhatsApp/Instagram orders, auto-branch assignment by city, status tracking, payment recording
 7. **Expenses**: Categorized expenses per branch with source tracking + ledger integration (tabbed: expenses / cash ledger / bank ledger)
 8. **Shift Reports**: GET /api/reports/shift?shiftId=... → cash/card/bank sales, expenses, expected vs actual cash

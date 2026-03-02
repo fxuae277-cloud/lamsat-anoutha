@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { branches, warehouses, categories, products, inventory, users, cities } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { branches, warehouses, categories, products, inventory, users, cities, locations } from "@shared/schema";
+import { eq, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 async function hashPassword(plain: string): Promise<string> {
@@ -38,6 +38,7 @@ export async function bootstrapOwner() {
 
 export async function seedDatabase() {
   await bootstrapOwner();
+  await bootstrapLocations();
 
   const existingBranches = await db.select().from(branches);
   if (existingBranches.length > 1) return;
@@ -104,5 +105,20 @@ export async function seedDatabase() {
     ]);
   }
 
+  await bootstrapLocations();
   console.log("Database seeded successfully!");
+}
+
+export async function bootstrapLocations() {
+  const allBranches = await db.select().from(branches);
+  for (const branch of allBranches) {
+    const existing = await db.select().from(locations).where(eq(locations.branchId, branch.id));
+    if (existing.length === 0) {
+      await db.insert(locations).values([
+        { branchId: branch.id, code: "showroom", name: "صالة العرض", active: true },
+        { branchId: branch.id, code: "backstore", name: "المخزن", active: true },
+      ]);
+      console.log(`Created showroom + backstore locations for branch: ${branch.name}`);
+    }
+  }
 }

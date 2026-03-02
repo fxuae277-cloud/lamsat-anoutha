@@ -309,27 +309,38 @@ export const insertPurchaseItemSchema = createInsertSchema(purchaseItems).omit({
 export type InsertPurchaseItem = z.infer<typeof insertPurchaseItemSchema>;
 export type PurchaseItem = typeof purchaseItems.$inferSelect;
 
-export const branchInventory = pgTable("branch_inventory", {
+export const locations = pgTable("locations", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   branchId: integer("branch_id").references(() => branches.id).notNull(),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  active: boolean("active").notNull().default(true),
+});
+export const insertLocationSchema = createInsertSchema(locations).omit({ id: true });
+export type InsertLocation = z.infer<typeof insertLocationSchema>;
+export type Location = typeof locations.$inferSelect;
+
+export const locationInventory = pgTable("location_inventory", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  locationId: integer("location_id").references(() => locations.id).notNull(),
   productId: integer("product_id").references(() => products.id).notNull(),
   qtyOnHand: integer("qty_on_hand").notNull().default(0),
-  qtyReserved: integer("qty_reserved").notNull().default(0),
   reorderLevel: integer("reorder_level").notNull().default(5),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
-export const insertBranchInventorySchema = createInsertSchema(branchInventory).omit({ id: true, updatedAt: true });
-export type InsertBranchInventory = z.infer<typeof insertBranchInventorySchema>;
-export type BranchInventory = typeof branchInventory.$inferSelect;
+export const insertLocationInventorySchema = createInsertSchema(locationInventory).omit({ id: true, updatedAt: true });
+export type InsertLocationInventory = z.infer<typeof insertLocationInventorySchema>;
+export type LocationInventory = typeof locationInventory.$inferSelect;
 
 export const inventoryTransactions = pgTable("inventory_transactions", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   date: date("date").notNull(),
   branchId: integer("branch_id").references(() => branches.id).notNull(),
+  fromLocationId: integer("from_location_id").references(() => locations.id),
+  toLocationId: integer("to_location_id").references(() => locations.id),
   productId: integer("product_id").references(() => products.id).notNull(),
   type: text("type").notNull(),
-  qtyIn: integer("qty_in").notNull().default(0),
-  qtyOut: integer("qty_out").notNull().default(0),
+  qty: integer("qty").notNull().default(0),
   refTable: text("ref_table"),
   refId: integer("ref_id"),
   note: text("note"),
