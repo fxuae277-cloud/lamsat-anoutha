@@ -184,7 +184,7 @@ export async function registerRoutes(
     res.json(allUsers.map(({ password: _, ...u }) => u));
   });
   app.post("/api/users", requireOwnerOrAdmin, async (req, res) => {
-    const { name, username, password, role, branchId, terminalName, isActive } = req.body;
+    const { name, username, password, role, branchId, terminalName, isActive, pin, phone, salary } = req.body;
     if (!name || !username || !password) {
       return res.status(400).json({ message: "الاسم واسم المستخدم وكلمة المرور مطلوبة" });
     }
@@ -195,6 +195,10 @@ export async function registerRoutes(
     if (existing) {
       return res.status(409).json({ message: "اسم المستخدم مستخدم بالفعل" });
     }
+    if (pin) {
+      const pinUser = await storage.getUserByPin(pin);
+      if (pinUser) return res.status(409).json({ message: "رقم PIN مستخدم بالفعل من موظف آخر" });
+    }
     const hashed = await bcrypt.hash(password, 10);
     const { password: _, ...safeUser } = await storage.createUser({
       name,
@@ -204,21 +208,41 @@ export async function registerRoutes(
       branchId: branchId ? Number(branchId) : 1,
       terminalName: terminalName || "T1",
       isActive: isActive !== undefined ? isActive : true,
+      pin: pin || null,
+      phone: phone || null,
+      salary: salary ? String(salary) : "0",
     });
     res.status(201).json(safeUser);
   });
   app.patch("/api/users/:id", requireOwnerOrAdmin, async (req, res) => {
     const id = Number(req.params.id);
-    const { name, role, branchId, terminalName, isActive } = req.body;
+    const { name, role, branchId, terminalName, isActive, pin, phone, salary } = req.body;
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (role !== undefined) updateData.role = role;
     if (branchId !== undefined) updateData.branchId = Number(branchId);
     if (terminalName !== undefined) updateData.terminalName = terminalName;
     if (isActive !== undefined) updateData.isActive = isActive;
+    if (pin !== undefined) {
+      if (pin) {
+        const pinUser = await storage.getUserByPin(pin);
+        if (pinUser && pinUser.id !== id) return res.status(409).json({ message: "رقم PIN مستخدم بالفعل" });
+      }
+      updateData.pin = pin || null;
+    }
+    if (phone !== undefined) updateData.phone = phone || null;
+    if (salary !== undefined) updateData.salary = String(salary);
     const updated = await storage.updateUser(id, updateData);
     if (!updated) return res.status(404).json({ message: "المستخدم غير موجود" });
     const { password: _, ...safeUser } = updated;
+    res.json(safeUser);
+  });
+  app.post("/api/users/verify-pin", requireAuth, async (req, res) => {
+    const { pin } = req.body;
+    if (!pin) return res.status(400).json({ message: "رقم PIN مطلوب" });
+    const user = await storage.getUserByPin(pin);
+    if (!user) return res.status(404).json({ message: "رقم PIN غير صحيح" });
+    const { password: _, ...safeUser } = user;
     res.json(safeUser);
   });
   app.patch("/api/users/:id/reset-password", requireOwnerOrAdmin, async (req, res) => {
@@ -1111,6 +1135,20 @@ export async function registerRoutes(
       return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
     }
     res.json(await storage.getBranchComparisonReport(dateStr));
+  });
+
+  app.get("/api/reports/employee-performance/:id", requireOwnerOrAdmin, async (req, res) => {
+    const employeeId = Number(req.params.id);
+    const from = req.query.from as string;
+    const to = req.query.to as string;
+    if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD (from & to)" });
+    }
+    const user = await storage.getUser(employeeId);
+    if (!user) return res.status(404).json({ message: "الموظف غير موجود" });
+    const perf = await storage.getEmployeePerformance(employeeId, from, to);
+    const { password: _, ...safeUser } = user;
+    res.json({ employee: safeUser, performance: perf });
   });
 
   app.get("/api/reports/profit/branches", requireOwnerOrAdmin, async (req, res) => {

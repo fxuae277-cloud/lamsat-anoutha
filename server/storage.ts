@@ -40,8 +40,10 @@ export interface IStorage {
   getUsers(): Promise<User[]>;
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByPin(pin: string): Promise<User | undefined>;
   createUser(data: InsertUser): Promise<User>;
   updateUser(id: number, data: Partial<InsertUser>): Promise<User | undefined>;
+  getEmployeePerformance(employeeId: number, from: string, to: string): Promise<any>;
   getCategories(): Promise<Category[]>;
   createCategory(data: InsertCategory): Promise<Category>;
   getProducts(): Promise<Product[]>;
@@ -144,6 +146,10 @@ export class DatabaseStorage implements IStorage {
   }
   async getUserByUsername(username: string) {
     const [row] = await db.select().from(users).where(eq(users.username, username));
+    return row;
+  }
+  async getUserByPin(pin: string) {
+    const [row] = await db.select().from(users).where(and(eq(users.pin, pin), eq(users.isActive, true)));
     return row;
   }
   async createUser(data: InsertUser) {
@@ -1723,6 +1729,64 @@ export class DatabaseStorage implements IStorage {
         margin: margin.toFixed(1),
       };
     }).sort((a, b) => parseFloat(b.salesTotal) - parseFloat(a.salesTotal));
+  }
+
+  async getEmployeePerformance(employeeId: number, from: string, to: string) {
+    const fromDate = new Date(from + "T00:00:00");
+    const toDate = new Date(to + "T23:59:59.999");
+
+    const [posSales] = await db.select({
+      count: sql<number>`count(*)::int`,
+      total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
+      cogs: sql<string>`coalesce(sum(${sales.cogsTotal}::numeric), 0)::text`,
+      profit: sql<string>`coalesce(sum(${sales.grossProfit}::numeric), 0)::text`,
+    }).from(sales).where(
+      and(eq(sales.cashierId, employeeId), sql`${sales.createdAt} >= ${fromDate}`, sql`${sales.createdAt} <= ${toDate}`)
+    );
+
+    const [ordSales] = await db.select({
+      count: sql<number>`count(*)::int`,
+      total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
+      cogs: sql<string>`coalesce(sum(${orders.cogsTotal}::numeric), 0)::text`,
+      profit: sql<string>`coalesce(sum(${orders.grossProfit}::numeric), 0)::text`,
+    }).from(orders).where(
+      and(eq(orders.employeeId, employeeId), eq(orders.status, "paid"), sql`${orders.paidAt} >= ${fromDate}`, sql`${orders.paidAt} <= ${toDate}`)
+    );
+
+    const [expData] = await db.select({
+      count: sql<number>`count(*)::int`,
+      total: sql<string>`coalesce(sum(${expenses.amount}::numeric), 0)::text`,
+    }).from(expenses).where(
+      and(eq(expenses.createdBy, employeeId), sql`${expenses.date} >= ${from}`, sql`${expenses.date} <= ${to}`)
+    );
+
+    const shiftRows = await db.select({
+      count: sql<number>`count(*)::int`,
+      totalDiff: sql<string>`coalesce(sum(${shifts.difference}::numeric), 0)::text`,
+    }).from(shifts).where(
+      and(eq(shifts.cashierId, employeeId), eq(shifts.status, "closed"), sql`${shifts.startedAt} >= ${fromDate}`, sql`${shifts.startedAt} <= ${toDate}`)
+    );
+
+    const totalSales = parseFloat(posSales.total) + parseFloat(ordSales.total);
+    const totalCogs = parseFloat(posSales.cogs) + parseFloat(ordSales.cogs);
+    const totalProfit = parseFloat(posSales.profit) + parseFloat(ordSales.profit);
+    const totalCount = posSales.count + ordSales.count;
+
+    return {
+      salesCount: totalCount,
+      salesTotal: totalSales.toFixed(3),
+      cogsTotal: totalCogs.toFixed(3),
+      grossProfit: totalProfit.toFixed(3),
+      margin: totalSales > 0 ? ((totalProfit / totalSales) * 100).toFixed(1) : "0.0",
+      expensesCount: expData.count,
+      expensesTotal: expData.total,
+      shiftsCount: shiftRows[0]?.count || 0,
+      shiftsDifference: shiftRows[0]?.totalDiff || "0.000",
+      posSalesCount: posSales.count,
+      posSalesTotal: posSales.total,
+      ordersSalesCount: ordSales.count,
+      ordersSalesTotal: ordSales.total,
+    };
   }
 
   async getProfitByProducts(from: string, to: string, branchId?: number) {

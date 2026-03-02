@@ -34,6 +34,9 @@ export const users = pgTable("users", {
   branchId: integer("branch_id").references(() => branches.id).notNull(),
   terminalName: text("terminal_name").notNull().default("T1"),
   isActive: boolean("is_active").notNull().default(true),
+  pin: text("pin"),
+  phone: text("phone"),
+  salary: decimal("salary", { precision: 10, scale: 3 }).default("0"),
 });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
