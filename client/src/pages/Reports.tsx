@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, Clock, Download, Banknote, CreditCard, Building2, TrendingUp, TrendingDown, DollarSign, ArrowLeftRight, BarChart3, Package, FileSpreadsheet, FileText } from "lucide-react";
+import { Calendar, Clock, Download, Banknote, CreditCard, Building2, TrendingUp, TrendingDown, DollarSign, ArrowLeftRight, BarChart3, Package, FileSpreadsheet, FileText, Users, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,10 +9,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth";
 import type { Branch } from "@shared/schema";
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function monthAgoStr() {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 1);
+  return d.toISOString().slice(0, 10);
 }
 
 function fmtTime(ts: string | null) {
@@ -427,8 +434,6 @@ function DailyReport() {
 
 function BranchComparison() {
   const [selectedDate, setSelectedDate] = useState(todayStr());
-  const [fromDate, setFromDate] = useState(todayStr());
-  const [toDate, setToDate] = useState(todayStr());
 
   const { data: report } = useQuery<any>({
     queryKey: ["/api/reports/branch-comparison", selectedDate],
@@ -490,32 +495,6 @@ function BranchComparison() {
           </div>
         )}
       </div>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5" />
-            تصدير أرباح الفروع (فترة زمنية)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="space-y-1">
-              <label className="text-sm font-medium">من</label>
-              <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-44" data-testid="input-profit-from" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">إلى</label>
-              <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-44" data-testid="input-profit-to" />
-            </div>
-            <Button className="gap-2" data-testid="button-export-profit-xlsx"
-              onClick={() => window.open(`/api/exports/profit_all_branches.xlsx?from=${fromDate}&to=${toDate}`, "_blank")}>
-              <FileSpreadsheet className="w-4 h-4" />
-              تصدير Excel - أرباح جميع الفروع
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
       {report && report.branches && (
         <div className="space-y-4 animate-in fade-in duration-300">
@@ -601,6 +580,349 @@ function BranchComparison() {
   );
 }
 
+function ProfitReport() {
+  const { user } = useAuth();
+  const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
+
+  const [fromDate, setFromDate] = useState(monthAgoStr());
+  const [toDate, setToDate] = useState(todayStr());
+  const [selectedBranch, setSelectedBranch] = useState<string>("all");
+  const [section, setSection] = useState<string>("branches");
+
+  const { data: branches = [] } = useQuery<Branch[]>({
+    queryKey: ["/api/branches"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const branchParam = selectedBranch !== "all" ? `&branchId=${selectedBranch}` : "";
+
+  const { data: branchData = [] } = useQuery<any[]>({
+    queryKey: ["/api/reports/profit/branches", fromDate, toDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/profit/branches?from=${fromDate}&to=${toDate}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
+    enabled: section === "branches" && !!fromDate && !!toDate,
+  });
+
+  const { data: employeeData = [] } = useQuery<any[]>({
+    queryKey: ["/api/reports/profit/employees", fromDate, toDate, selectedBranch],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/profit/employees?from=${fromDate}&to=${toDate}${branchParam}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
+    enabled: section === "employees" && !!fromDate && !!toDate,
+  });
+
+  const { data: productData = [] } = useQuery<any[]>({
+    queryKey: ["/api/reports/profit/products", fromDate, toDate, selectedBranch],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/profit/products?from=${fromDate}&to=${toDate}${branchParam}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
+    enabled: section === "products" && !!fromDate && !!toDate,
+  });
+
+  const branchTotals = branchData.reduce((acc, b) => ({
+    salesTotal: acc.salesTotal + parseFloat(b.salesTotal),
+    cogsTotal: acc.cogsTotal + parseFloat(b.cogsTotal),
+    grossProfit: acc.grossProfit + parseFloat(b.grossProfit),
+    expensesTotal: acc.expensesTotal + parseFloat(b.expensesTotal),
+    netProfit: acc.netProfit + parseFloat(b.netProfit),
+  }), { salesTotal: 0, cogsTotal: 0, grossProfit: 0, expensesTotal: 0, netProfit: 0 });
+
+  const empTotals = employeeData.reduce((acc, e) => ({
+    ordersCount: acc.ordersCount + e.ordersCount,
+    salesTotal: acc.salesTotal + parseFloat(e.salesTotal),
+    cogsTotal: acc.cogsTotal + parseFloat(e.cogsTotal),
+    grossProfit: acc.grossProfit + parseFloat(e.grossProfit),
+  }), { ordersCount: 0, salesTotal: 0, cogsTotal: 0, grossProfit: 0 });
+
+  const prodTotals = productData.reduce((acc, p) => ({
+    qtySold: acc.qtySold + p.qtySold,
+    salesTotal: acc.salesTotal + parseFloat(p.salesTotal),
+    cogsTotal: acc.cogsTotal + parseFloat(p.cogsTotal),
+    grossProfit: acc.grossProfit + parseFloat(p.grossProfit),
+  }), { qtySold: 0, salesTotal: 0, cogsTotal: 0, grossProfit: 0 });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="space-y-1">
+          <label className="text-sm font-medium">من</label>
+          <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-44" data-testid="input-profit-from" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm font-medium">إلى</label>
+          <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-44" data-testid="input-profit-to" />
+        </div>
+        {isOwnerOrAdmin && (section === "employees" || section === "products") && (
+          <div className="space-y-1 min-w-[200px]">
+            <label className="text-sm font-medium">الفرع</label>
+            <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+              <SelectTrigger data-testid="select-profit-branch"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">جميع الفروع</SelectItem>
+                {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button variant={section === "branches" ? "default" : "outline"} className="gap-2" onClick={() => setSection("branches")} data-testid="button-profit-branches">
+          <Building2 className="w-4 h-4" />
+          حسب الفرع
+        </Button>
+        <Button variant={section === "employees" ? "default" : "outline"} className="gap-2" onClick={() => setSection("employees")} data-testid="button-profit-employees">
+          <Users className="w-4 h-4" />
+          حسب الموظف
+        </Button>
+        <Button variant={section === "products" ? "default" : "outline"} className="gap-2" onClick={() => setSection("products")} data-testid="button-profit-products">
+          <ShoppingBag className="w-4 h-4" />
+          حسب المنتج
+        </Button>
+      </div>
+
+      {section === "branches" && branchData.length > 0 && (
+        <div className="space-y-4 animate-in fade-in duration-300">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <StatCard title="إجمالي المبيعات" value={omr(branchTotals.salesTotal)} icon={TrendingUp} color="text-emerald-600" />
+            <StatCard title="التكلفة (COGS)" value={omr(branchTotals.cogsTotal)} icon={Package} color="text-orange-600" />
+            <StatCard title="إجمالي الربح" value={omr(branchTotals.grossProfit)} icon={BarChart3} color="text-blue-600" />
+            <StatCard title="المصروفات" value={omr(branchTotals.expensesTotal)} icon={TrendingDown} color="text-red-600" />
+            <StatCard title="صافي الربح" value={omr(branchTotals.netProfit)} icon={DollarSign} color={branchTotals.netProfit >= 0 ? "text-emerald-700" : "text-red-700"} />
+          </div>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Building2 className="w-5 h-5" />
+                  أرباح الفروع — {fromDate} إلى {toDate}
+                </CardTitle>
+                <Button variant="outline" size="sm" className="gap-2" data-testid="button-export-profit-branches-xlsx"
+                  onClick={() => window.open(`/api/exports/profit_all_branches.xlsx?from=${fromDate}&to=${toDate}`, "_blank")}>
+                  <FileSpreadsheet className="w-4 h-4" /> Excel
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead>الفرع</TableHead>
+                      <TableHead className="text-center">المبيعات</TableHead>
+                      <TableHead className="text-center">التكلفة (COGS)</TableHead>
+                      <TableHead className="text-center">إجمالي الربح</TableHead>
+                      <TableHead className="text-center">المصروفات</TableHead>
+                      <TableHead className="text-center">صافي الربح</TableHead>
+                      <TableHead className="text-center">هامش %</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {branchData.map((b: any) => (
+                      <TableRow key={b.branchId} data-testid={`row-profit-branch-${b.branchId}`}>
+                        <TableCell className="font-medium">{b.branchName}</TableCell>
+                        <TableCell className="text-center font-mono text-emerald-600">{omr(b.salesTotal)}</TableCell>
+                        <TableCell className="text-center font-mono text-orange-600">{omr(b.cogsTotal)}</TableCell>
+                        <TableCell className="text-center font-mono text-blue-600">{omr(b.grossProfit)}</TableCell>
+                        <TableCell className="text-center font-mono text-red-600">{omr(b.expensesTotal)}</TableCell>
+                        <TableCell className={`text-center font-mono font-bold ${parseFloat(b.netProfit) >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                          {omr(b.netProfit)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant={parseFloat(b.margin) >= 0 ? "default" : "destructive"} className={parseFloat(b.margin) >= 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : ""}>
+                            {b.margin}%
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="border-t-2 bg-muted/30 font-bold">
+                      <TableCell>المجموع</TableCell>
+                      <TableCell className="text-center font-mono text-emerald-600">{omr(branchTotals.salesTotal)}</TableCell>
+                      <TableCell className="text-center font-mono text-orange-600">{omr(branchTotals.cogsTotal)}</TableCell>
+                      <TableCell className="text-center font-mono text-blue-600">{omr(branchTotals.grossProfit)}</TableCell>
+                      <TableCell className="text-center font-mono text-red-600">{omr(branchTotals.expensesTotal)}</TableCell>
+                      <TableCell className={`text-center font-mono ${branchTotals.netProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                        {omr(branchTotals.netProfit)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant={branchTotals.netProfit >= 0 ? "default" : "destructive"} className={branchTotals.netProfit >= 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : ""}>
+                          {branchTotals.salesTotal > 0 ? ((branchTotals.netProfit / branchTotals.salesTotal) * 100).toFixed(1) : "0.0"}%
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {section === "employees" && employeeData.length > 0 && (
+        <div className="space-y-4 animate-in fade-in duration-300">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard title="عدد العمليات" value={String(empTotals.ordersCount)} sub="عملية" icon={Users} color="text-purple-600" />
+            <StatCard title="إجمالي المبيعات" value={omr(empTotals.salesTotal)} icon={TrendingUp} color="text-emerald-600" />
+            <StatCard title="التكلفة (COGS)" value={omr(empTotals.cogsTotal)} icon={Package} color="text-orange-600" />
+            <StatCard title="إجمالي الربح" value={omr(empTotals.grossProfit)} icon={BarChart3} color="text-blue-600" />
+          </div>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users className="w-5 h-5" />
+                  أرباح الموظفين — {fromDate} إلى {toDate}
+                </CardTitle>
+                <Button variant="outline" size="sm" className="gap-2" data-testid="button-export-profit-employees-xlsx"
+                  onClick={() => window.open(`/api/exports/profit_by_employee.xlsx?from=${fromDate}&to=${toDate}${branchParam}`, "_blank")}>
+                  <FileSpreadsheet className="w-4 h-4" /> Excel
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead>الموظف</TableHead>
+                      <TableHead className="text-center">عدد العمليات</TableHead>
+                      <TableHead className="text-center">المبيعات</TableHead>
+                      <TableHead className="text-center">التكلفة (COGS)</TableHead>
+                      <TableHead className="text-center">إجمالي الربح</TableHead>
+                      <TableHead className="text-center">هامش %</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {employeeData.map((e: any) => (
+                      <TableRow key={e.employeeId} data-testid={`row-profit-emp-${e.employeeId}`}>
+                        <TableCell className="font-medium">{e.employeeName}</TableCell>
+                        <TableCell className="text-center font-mono">{e.ordersCount}</TableCell>
+                        <TableCell className="text-center font-mono text-emerald-600">{omr(e.salesTotal)}</TableCell>
+                        <TableCell className="text-center font-mono text-orange-600">{omr(e.cogsTotal)}</TableCell>
+                        <TableCell className={`text-center font-mono font-bold ${parseFloat(e.grossProfit) >= 0 ? "text-blue-600" : "text-red-600"}`}>
+                          {omr(e.grossProfit)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant={parseFloat(e.margin) >= 0 ? "default" : "destructive"} className={parseFloat(e.margin) >= 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : ""}>
+                            {e.margin}%
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="border-t-2 bg-muted/30 font-bold">
+                      <TableCell>المجموع</TableCell>
+                      <TableCell className="text-center font-mono">{empTotals.ordersCount}</TableCell>
+                      <TableCell className="text-center font-mono text-emerald-600">{omr(empTotals.salesTotal)}</TableCell>
+                      <TableCell className="text-center font-mono text-orange-600">{omr(empTotals.cogsTotal)}</TableCell>
+                      <TableCell className={`text-center font-mono ${empTotals.grossProfit >= 0 ? "text-blue-600" : "text-red-600"}`}>
+                        {omr(empTotals.grossProfit)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
+                          {empTotals.salesTotal > 0 ? ((empTotals.grossProfit / empTotals.salesTotal) * 100).toFixed(1) : "0.0"}%
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {section === "products" && productData.length > 0 && (
+        <div className="space-y-4 animate-in fade-in duration-300">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard title="إجمالي الكمية المباعة" value={String(prodTotals.qtySold)} sub="قطعة" icon={ShoppingBag} color="text-purple-600" />
+            <StatCard title="إجمالي المبيعات" value={omr(prodTotals.salesTotal)} icon={TrendingUp} color="text-emerald-600" />
+            <StatCard title="التكلفة (COGS)" value={omr(prodTotals.cogsTotal)} icon={Package} color="text-orange-600" />
+            <StatCard title="إجمالي الربح" value={omr(prodTotals.grossProfit)} icon={BarChart3} color="text-blue-600" />
+          </div>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ShoppingBag className="w-5 h-5" />
+                  أرباح المنتجات — {fromDate} إلى {toDate}
+                </CardTitle>
+                <Button variant="outline" size="sm" className="gap-2" data-testid="button-export-profit-products-xlsx"
+                  onClick={() => window.open(`/api/exports/profit_by_product.xlsx?from=${fromDate}&to=${toDate}${branchParam}`, "_blank")}>
+                  <FileSpreadsheet className="w-4 h-4" /> Excel
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead>المنتج</TableHead>
+                      <TableHead className="text-center">الكمية المباعة</TableHead>
+                      <TableHead className="text-center">المبيعات</TableHead>
+                      <TableHead className="text-center">التكلفة (COGS)</TableHead>
+                      <TableHead className="text-center">إجمالي الربح</TableHead>
+                      <TableHead className="text-center">هامش %</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {productData.map((p: any) => (
+                      <TableRow key={p.productId} data-testid={`row-profit-prod-${p.productId}`}>
+                        <TableCell className="font-medium">{p.productName}</TableCell>
+                        <TableCell className="text-center font-mono">{p.qtySold}</TableCell>
+                        <TableCell className="text-center font-mono text-emerald-600">{omr(p.salesTotal)}</TableCell>
+                        <TableCell className="text-center font-mono text-orange-600">{omr(p.cogsTotal)}</TableCell>
+                        <TableCell className={`text-center font-mono font-bold ${parseFloat(p.grossProfit) >= 0 ? "text-blue-600" : "text-red-600"}`}>
+                          {omr(p.grossProfit)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant={parseFloat(p.margin) >= 0 ? "default" : "destructive"} className={parseFloat(p.margin) >= 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : ""}>
+                            {p.margin}%
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="border-t-2 bg-muted/30 font-bold">
+                      <TableCell>المجموع</TableCell>
+                      <TableCell className="text-center font-mono">{prodTotals.qtySold}</TableCell>
+                      <TableCell className="text-center font-mono text-emerald-600">{omr(prodTotals.salesTotal)}</TableCell>
+                      <TableCell className="text-center font-mono text-orange-600">{omr(prodTotals.cogsTotal)}</TableCell>
+                      <TableCell className={`text-center font-mono ${prodTotals.grossProfit >= 0 ? "text-blue-600" : "text-red-600"}`}>
+                        {omr(prodTotals.grossProfit)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
+                          {prodTotals.salesTotal > 0 ? ((prodTotals.grossProfit / prodTotals.salesTotal) * 100).toFixed(1) : "0.0"}%
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {((section === "branches" && branchData.length === 0) ||
+        (section === "employees" && employeeData.length === 0) ||
+        (section === "products" && productData.length === 0)) && (
+        <div className="text-center py-12 text-muted-foreground">لا توجد بيانات في الفترة المحددة</div>
+      )}
+    </div>
+  );
+}
+
 export default function Reports() {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -610,7 +932,7 @@ export default function Reports() {
       </div>
 
       <Tabs defaultValue="shift" dir="rtl">
-        <TabsList className="grid w-full grid-cols-3 max-w-lg">
+        <TabsList className="grid w-full grid-cols-4 max-w-2xl">
           <TabsTrigger value="shift" className="gap-1">
             <Clock className="w-4 h-4" />
             تقرير الشفت
@@ -623,6 +945,10 @@ export default function Reports() {
             <ArrowLeftRight className="w-4 h-4" />
             مقارنة الفروع
           </TabsTrigger>
+          <TabsTrigger value="profit" className="gap-1" data-testid="tab-profit">
+            <BarChart3 className="w-4 h-4" />
+            الأرباح
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="shift">
@@ -633,6 +959,9 @@ export default function Reports() {
         </TabsContent>
         <TabsContent value="branches">
           <BranchComparison />
+        </TabsContent>
+        <TabsContent value="profit">
+          <ProfitReport />
         </TabsContent>
       </Tabs>
     </div>

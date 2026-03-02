@@ -108,68 +108,48 @@ export function registerExportRoutes(app: Express) {
         return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD (from & to)" });
       }
 
-      const fromDate = new Date(from);
-      const toDate = new Date(to);
-      if (fromDate > toDate) {
-        return res.status(400).json({ message: "تاريخ البداية يجب أن يكون قبل تاريخ النهاية" });
-      }
-
-      const allDays: any[] = [];
-      const current = new Date(fromDate);
-      while (current <= toDate) {
-        const dayStr = current.toISOString().slice(0, 10);
-        const dayReport = await storage.getBranchComparisonReport(dayStr);
-        allDays.push(dayReport);
-        current.setDate(current.getDate() + 1);
-      }
-
+      const data = await storage.getProfitByBranches(from, to);
       const wb = XLSX.utils.book_new();
 
-      const summaryRows: any[][] = [
-        [`تقرير الأرباح - لمسة أنوثة`],
+      const rows: any[][] = [
+        [`تقرير أرباح الفروع - لمسة أنوثة`],
         [`الفترة`, `من ${from} إلى ${to}`],
         [],
-        ["التاريخ", "الفرع", "المبيعات", "التكلفة (COGS)", "إجمالي الربح", "المصروفات", "صافي الربح", "هامش الربح %"],
+        ["الفرع", "المبيعات", "التكلفة (COGS)", "إجمالي الربح", "المصروفات", "صافي الربح", "هامش الربح %"],
       ];
 
       let grandTotals = { sales: 0, cogs: 0, gross: 0, exp: 0, net: 0 };
 
-      for (const dayReport of allDays) {
-        for (const b of dayReport.branches) {
-          const sales = parseFloat(b.totalSales);
-          const cogs = parseFloat(b.cogsTotal);
-          const gross = parseFloat(b.grossProfit);
-          const exp = parseFloat(b.totalExpenses);
-          const net = parseFloat(b.netProfit);
-          const margin = sales > 0 ? ((net / sales) * 100).toFixed(1) + "%" : "0.0%";
+      for (const b of data) {
+        const sales = parseFloat(b.salesTotal);
+        const cogs = parseFloat(b.cogsTotal);
+        const gross = parseFloat(b.grossProfit);
+        const exp = parseFloat(b.expensesTotal);
+        const net = parseFloat(b.netProfit);
 
-          summaryRows.push([
-            dayReport.date, b.branchName,
-            omr(sales), omr(cogs), omr(gross), omr(exp), omr(net), margin,
-          ]);
+        rows.push([b.branchName, omr(sales), omr(cogs), omr(gross), omr(exp), omr(net), b.margin + "%"]);
 
-          grandTotals.sales += sales;
-          grandTotals.cogs += cogs;
-          grandTotals.gross += gross;
-          grandTotals.exp += exp;
-          grandTotals.net += net;
-        }
+        grandTotals.sales += sales;
+        grandTotals.cogs += cogs;
+        grandTotals.gross += gross;
+        grandTotals.exp += exp;
+        grandTotals.net += net;
       }
 
-      summaryRows.push([]);
+      rows.push([]);
       const totalMargin = grandTotals.sales > 0
         ? ((grandTotals.net / grandTotals.sales) * 100).toFixed(1) + "%"
         : "0.0%";
-      summaryRows.push([
-        "المجموع الكلي", "",
+      rows.push([
+        "المجموع الكلي",
         omr(grandTotals.sales), omr(grandTotals.cogs), omr(grandTotals.gross),
         omr(grandTotals.exp), omr(grandTotals.net), totalMargin,
       ]);
 
-      const ws = XLSX.utils.aoa_to_sheet(summaryRows);
+      const ws = XLSX.utils.aoa_to_sheet(rows);
       ws["!cols"] = [
-        { wch: 14 }, { wch: 25 }, { wch: 12 }, { wch: 14 }, { wch: 14 },
-        { wch: 12 }, { wch: 14 }, { wch: 12 },
+        { wch: 25 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+        { wch: 14 }, { wch: 14 }, { wch: 12 },
       ];
       ws["!dir"] = "rtl";
       XLSX.utils.book_append_sheet(wb, ws, "أرباح الفروع");
@@ -177,6 +157,96 @@ export function registerExportRoutes(app: Express) {
       const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="profit-all-branches-${from}-to-${to}.xlsx"`);
+      res.send(buf);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+    }
+  });
+
+  app.get("/api/exports/profit_by_employee.xlsx", requireAuth, async (req, res) => {
+    try {
+      const from = req.query.from as string;
+      const to = req.query.to as string;
+      if (!from || !to) return res.status(400).json({ message: "from & to مطلوبان" });
+      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      const data = await storage.getProfitByEmployees(from, to, branchId);
+
+      const branches = await storage.getBranches();
+      const branchLabel = branchId ? branches.find(b => b.id === branchId)?.name || "" : "جميع الفروع";
+
+      const wb = XLSX.utils.book_new();
+      const rows: any[][] = [
+        ["تقرير أرباح الموظفين - لمسة أنوثة"],
+        [`الفترة`, `من ${from} إلى ${to}`],
+        [`الفرع`, branchLabel],
+        [],
+        ["الموظف", "عدد العمليات", "المبيعات", "التكلفة (COGS)", "إجمالي الربح", "هامش الربح %"],
+      ];
+      let totals = { orders: 0, sales: 0, cogs: 0, profit: 0 };
+      for (const e of data) {
+        rows.push([e.employeeName, e.ordersCount, omr(e.salesTotal), omr(e.cogsTotal), omr(e.grossProfit), e.margin + "%"]);
+        totals.orders += e.ordersCount;
+        totals.sales += parseFloat(e.salesTotal);
+        totals.cogs += parseFloat(e.cogsTotal);
+        totals.profit += parseFloat(e.grossProfit);
+      }
+      rows.push([]);
+      const totalMargin = totals.sales > 0 ? ((totals.profit / totals.sales) * 100).toFixed(1) : "0.0";
+      rows.push(["المجموع", totals.orders, omr(totals.sales), omr(totals.cogs), omr(totals.profit), totalMargin + "%"]);
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws["!cols"] = [{ wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
+      ws["!dir"] = "rtl";
+      XLSX.utils.book_append_sheet(wb, ws, "أرباح الموظفين");
+
+      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="profit-by-employee-${from}-to-${to}.xlsx"`);
+      res.send(buf);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+    }
+  });
+
+  app.get("/api/exports/profit_by_product.xlsx", requireAuth, async (req, res) => {
+    try {
+      const from = req.query.from as string;
+      const to = req.query.to as string;
+      if (!from || !to) return res.status(400).json({ message: "from & to مطلوبان" });
+      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      const data = await storage.getProfitByProducts(from, to, branchId);
+
+      const branches = await storage.getBranches();
+      const branchLabel = branchId ? branches.find(b => b.id === branchId)?.name || "" : "جميع الفروع";
+
+      const wb = XLSX.utils.book_new();
+      const rows: any[][] = [
+        ["تقرير أرباح المنتجات - لمسة أنوثة"],
+        [`الفترة`, `من ${from} إلى ${to}`],
+        [`الفرع`, branchLabel],
+        [],
+        ["المنتج", "الكمية المباعة", "المبيعات", "التكلفة (COGS)", "إجمالي الربح", "هامش الربح %"],
+      ];
+      let totals = { qty: 0, sales: 0, cogs: 0, profit: 0 };
+      for (const p of data) {
+        rows.push([p.productName, p.qtySold, omr(p.salesTotal), omr(p.cogsTotal), omr(p.grossProfit), p.margin + "%"]);
+        totals.qty += p.qtySold;
+        totals.sales += parseFloat(p.salesTotal);
+        totals.cogs += parseFloat(p.cogsTotal);
+        totals.profit += parseFloat(p.grossProfit);
+      }
+      rows.push([]);
+      const totalMargin = totals.sales > 0 ? ((totals.profit / totals.sales) * 100).toFixed(1) : "0.0";
+      rows.push(["المجموع", totals.qty, omr(totals.sales), omr(totals.cogs), omr(totals.profit), totalMargin + "%"]);
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws["!cols"] = [{ wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
+      ws["!dir"] = "rtl";
+      XLSX.utils.book_append_sheet(wb, ws, "أرباح المنتجات");
+
+      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="profit-by-product-${from}-to-${to}.xlsx"`);
       res.send(buf);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "فشل التصدير" });

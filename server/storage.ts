@@ -91,6 +91,9 @@ export interface IStorage {
   getDailyReport(dateStr: string, branchId?: number): Promise<any>;
   getShiftsByDate(dateStr: string, branchId?: number): Promise<any[]>;
   getDashboardStats(branchId?: number): Promise<any>;
+  getProfitByBranches(from: string, to: string): Promise<any[]>;
+  getProfitByEmployees(from: string, to: string, branchId?: number): Promise<any[]>;
+  getProfitByProducts(from: string, to: string, branchId?: number): Promise<any[]>;
   getPurchaseInvoices(): Promise<PurchaseInvoice[]>;
   getPurchaseInvoice(id: number): Promise<PurchaseInvoice | undefined>;
   createPurchaseInvoice(data: InsertPurchaseInvoice): Promise<PurchaseInvoice>;
@@ -254,16 +257,22 @@ export class DatabaseStorage implements IStorage {
     const [sale] = await db.insert(sales).values(data).returning();
     let cogsTotal = 0;
     for (const item of items) {
-      await db.insert(saleItems).values({ ...item, saleId: sale.id });
+      const [product] = await db.select().from(products).where(eq(products.id, item.productId));
+      const unitCost = product ? parseFloat(product.avgCost || "0") : 0;
+      const lineCogs = item.quantity * unitCost;
+      cogsTotal += lineCogs;
+
+      await db.insert(saleItems).values({
+        ...item,
+        saleId: sale.id,
+        unitCostAtSale: unitCost.toFixed(3),
+        lineCogs: lineCogs.toFixed(3),
+      });
       const whList = await db.select().from(warehouses).where(eq(warehouses.branchId, data.branchId));
       if (whList.length > 0) {
         await this.adjustInventory(item.productId, whList[0].id, -item.quantity);
       }
       await this.removeStock(data.branchId, item.productId, item.quantity, "sale", "sales", sale.id, `بيع فاتورة ${sale.invoiceNumber}`, data.cashierId ?? undefined);
-      const [product] = await db.select().from(products).where(eq(products.id, item.productId));
-      if (product) {
-        cogsTotal += item.quantity * parseFloat(product.avgCost || "0");
-      }
     }
 
     const saleTotal = parseFloat(sale.total || "0");
@@ -369,9 +378,14 @@ export class DatabaseStorage implements IStorage {
     let cogsTotal = 0;
     for (const item of items) {
       const [product] = await db.select().from(products).where(eq(products.id, item.productId));
-      if (product) {
-        cogsTotal += item.quantity * parseFloat(product.avgCost || "0");
-      }
+      const unitCost = product ? parseFloat(product.avgCost || "0") : 0;
+      const lineCogs = item.quantity * unitCost;
+      cogsTotal += lineCogs;
+
+      await db.update(orderItems).set({
+        unitCostAtSale: unitCost.toFixed(3),
+        lineCogs: lineCogs.toFixed(3),
+      }).where(eq(orderItems.id, item.id));
     }
     const orderTotal = parseFloat(order.total || "0");
     const grossProfit = orderTotal - cogsTotal;
@@ -1093,6 +1107,188 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(branches, eq(locations.branchId, branches.id))
       .where(and(...conditions))
       .orderBy(locationInventory.qtyOnHand);
+  }
+
+  async getProfitByBranches(from: string, to: string) {
+    const fromDate = new Date(from + "T00:00:00");
+    const toDate = new Date(to + "T23:59:59.999");
+    const allBranches = await db.select().from(branches);
+
+    const results = [];
+    for (const branch of allBranches) {
+      const [ordSales] = await db.select({
+        total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
+        cogs: sql<string>`coalesce(sum(${orders.cogsTotal}::numeric), 0)::text`,
+      }).from(orders).where(
+        and(eq(orders.status, "paid"), eq(orders.branchId, branch.id),
+          sql`${orders.paidAt} >= ${fromDate}`, sql`${orders.paidAt} <= ${toDate}`)
+      );
+      const [posSales] = await db.select({
+        total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
+        cogs: sql<string>`coalesce(sum(${sales.cogsTotal}::numeric), 0)::text`,
+      }).from(sales).where(
+        and(eq(sales.branchId, branch.id),
+          sql`${sales.createdAt} >= ${fromDate}`, sql`${sales.createdAt} <= ${toDate}`)
+      );
+      const [expRow] = await db.select({
+        total: sql<string>`coalesce(sum(${expenses.amount}::numeric), 0)::text`,
+      }).from(expenses).where(
+        and(eq(expenses.branchId, branch.id),
+          sql`${expenses.date} >= ${from}`, sql`${expenses.date} <= ${to}`)
+      );
+
+      const salesTotal = parseFloat(ordSales.total) + parseFloat(posSales.total);
+      const cogsTotal = parseFloat(ordSales.cogs) + parseFloat(posSales.cogs);
+      const grossProfit = salesTotal - cogsTotal;
+      const expensesTotal = parseFloat(expRow.total);
+      const netProfit = grossProfit - expensesTotal;
+      const margin = salesTotal > 0 ? ((netProfit / salesTotal) * 100) : 0;
+
+      results.push({
+        branchId: branch.id,
+        branchName: branch.name,
+        salesTotal: salesTotal.toFixed(3),
+        cogsTotal: cogsTotal.toFixed(3),
+        grossProfit: grossProfit.toFixed(3),
+        expensesTotal: expensesTotal.toFixed(3),
+        netProfit: netProfit.toFixed(3),
+        margin: margin.toFixed(1),
+      });
+    }
+    return results;
+  }
+
+  async getProfitByEmployees(from: string, to: string, branchId?: number) {
+    const fromDate = new Date(from + "T00:00:00");
+    const toDate = new Date(to + "T23:59:59.999");
+
+    const orderConditions: any[] = [
+      eq(orders.status, "paid"),
+      sql`${orders.paidAt} >= ${fromDate}`,
+      sql`${orders.paidAt} <= ${toDate}`,
+    ];
+    if (branchId) orderConditions.push(eq(orders.branchId, branchId));
+
+    const saleConditions: any[] = [
+      sql`${sales.createdAt} >= ${fromDate}`,
+      sql`${sales.createdAt} <= ${toDate}`,
+    ];
+    if (branchId) saleConditions.push(eq(sales.branchId, branchId));
+
+    const orderRows = await db.select({
+      employeeId: orders.employeeId,
+      employeeName: users.name,
+      ordersCount: sql<number>`count(*)::int`,
+      salesTotal: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
+      cogsTotal: sql<string>`coalesce(sum(${orders.cogsTotal}::numeric), 0)::text`,
+      grossProfit: sql<string>`coalesce(sum(${orders.grossProfit}::numeric), 0)::text`,
+    }).from(orders)
+      .leftJoin(users, eq(orders.employeeId, users.id))
+      .where(and(...orderConditions))
+      .groupBy(orders.employeeId, users.name);
+
+    const saleRows = await db.select({
+      employeeId: sales.cashierId,
+      employeeName: users.name,
+      ordersCount: sql<number>`count(*)::int`,
+      salesTotal: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
+      cogsTotal: sql<string>`coalesce(sum(${sales.cogsTotal}::numeric), 0)::text`,
+      grossProfit: sql<string>`coalesce(sum(${sales.grossProfit}::numeric), 0)::text`,
+    }).from(sales)
+      .leftJoin(users, eq(sales.cashierId, users.id))
+      .where(and(...saleConditions))
+      .groupBy(sales.cashierId, users.name);
+
+    const empMap = new Map<number, { name: string; ordersCount: number; salesTotal: number; cogsTotal: number; grossProfit: number }>();
+
+    for (const row of [...orderRows, ...saleRows]) {
+      const eId = row.employeeId ?? 0;
+      const existing = empMap.get(eId) || { name: row.employeeName || "غير محدد", ordersCount: 0, salesTotal: 0, cogsTotal: 0, grossProfit: 0 };
+      existing.ordersCount += row.ordersCount;
+      existing.salesTotal += parseFloat(row.salesTotal);
+      existing.cogsTotal += parseFloat(row.cogsTotal);
+      existing.grossProfit += parseFloat(row.grossProfit);
+      empMap.set(eId, existing);
+    }
+
+    return Array.from(empMap.entries()).map(([empId, data]) => {
+      const margin = data.salesTotal > 0 ? ((data.grossProfit / data.salesTotal) * 100) : 0;
+      return {
+        employeeId: empId,
+        employeeName: data.name,
+        ordersCount: data.ordersCount,
+        salesTotal: data.salesTotal.toFixed(3),
+        cogsTotal: data.cogsTotal.toFixed(3),
+        grossProfit: data.grossProfit.toFixed(3),
+        margin: margin.toFixed(1),
+      };
+    }).sort((a, b) => parseFloat(b.salesTotal) - parseFloat(a.salesTotal));
+  }
+
+  async getProfitByProducts(from: string, to: string, branchId?: number) {
+    const fromDate = new Date(from + "T00:00:00");
+    const toDate = new Date(to + "T23:59:59.999");
+
+    const orderItemConditions: any[] = [
+      eq(orders.status, "paid"),
+      sql`${orders.paidAt} >= ${fromDate}`,
+      sql`${orders.paidAt} <= ${toDate}`,
+    ];
+    if (branchId) orderItemConditions.push(eq(orders.branchId, branchId));
+
+    const saleItemConditions: any[] = [
+      sql`${sales.createdAt} >= ${fromDate}`,
+      sql`${sales.createdAt} <= ${toDate}`,
+    ];
+    if (branchId) saleItemConditions.push(eq(sales.branchId, branchId));
+
+    const oiRows = await db.select({
+      productId: orderItems.productId,
+      productName: products.name,
+      qtySold: sql<number>`coalesce(sum(${orderItems.quantity}), 0)::int`,
+      salesTotal: sql<string>`coalesce(sum(${orderItems.total}::numeric), 0)::text`,
+      cogsTotal: sql<string>`coalesce(sum(${orderItems.lineCogs}::numeric), 0)::text`,
+    }).from(orderItems)
+      .innerJoin(orders, eq(orderItems.orderId, orders.id))
+      .innerJoin(products, eq(orderItems.productId, products.id))
+      .where(and(...orderItemConditions))
+      .groupBy(orderItems.productId, products.name);
+
+    const siRows = await db.select({
+      productId: saleItems.productId,
+      productName: products.name,
+      qtySold: sql<number>`coalesce(sum(${saleItems.quantity}), 0)::int`,
+      salesTotal: sql<string>`coalesce(sum(${saleItems.total}::numeric), 0)::text`,
+      cogsTotal: sql<string>`coalesce(sum(${saleItems.lineCogs}::numeric), 0)::text`,
+    }).from(saleItems)
+      .innerJoin(sales, eq(saleItems.saleId, sales.id))
+      .innerJoin(products, eq(saleItems.productId, products.id))
+      .where(and(...saleItemConditions))
+      .groupBy(saleItems.productId, products.name);
+
+    const prodMap = new Map<number, { name: string; qtySold: number; salesTotal: number; cogsTotal: number }>();
+
+    for (const row of [...oiRows, ...siRows]) {
+      const existing = prodMap.get(row.productId) || { name: row.productName || "", qtySold: 0, salesTotal: 0, cogsTotal: 0 };
+      existing.qtySold += row.qtySold;
+      existing.salesTotal += parseFloat(row.salesTotal);
+      existing.cogsTotal += parseFloat(row.cogsTotal);
+      prodMap.set(row.productId, existing);
+    }
+
+    return Array.from(prodMap.entries()).map(([prodId, data]) => {
+      const grossProfit = data.salesTotal - data.cogsTotal;
+      const margin = data.salesTotal > 0 ? ((grossProfit / data.salesTotal) * 100) : 0;
+      return {
+        productId: prodId,
+        productName: data.name,
+        qtySold: data.qtySold,
+        salesTotal: data.salesTotal.toFixed(3),
+        cogsTotal: data.cogsTotal.toFixed(3),
+        grossProfit: grossProfit.toFixed(3),
+        margin: margin.toFixed(1),
+      };
+    }).sort((a, b) => parseFloat(b.grossProfit) - parseFloat(a.grossProfit));
   }
 
   async getBranchComparisonReport(dateStr: string) {

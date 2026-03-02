@@ -411,7 +411,7 @@ export async function registerRoutes(
           .limit(1);
         if (openShift) shiftId = openShift.id;
       }
-      const order = await storage.createOrder({ ...parsed.data, shiftId }, items);
+      const order = await storage.createOrder({ ...parsed.data, shiftId, employeeId: req.session.userId }, items);
       res.status(201).json(order);
     } catch (err: any) {
       console.error(err);
@@ -608,6 +608,39 @@ export async function registerRoutes(
       return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
     }
     res.json(await storage.getBranchComparisonReport(dateStr));
+  });
+
+  app.get("/api/reports/profit/branches", requireAuth, async (req, res) => {
+    const from = req.query.from as string;
+    const to = req.query.to as string;
+    if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD (from & to)" });
+    }
+    res.json(await storage.getProfitByBranches(from, to));
+  });
+
+  app.get("/api/reports/profit/employees", requireAuth, async (req, res) => {
+    const from = req.query.from as string;
+    const to = req.query.to as string;
+    if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD (from & to)" });
+    }
+    const user = await storage.getUser(req.session.userId!);
+    const branchId = req.query.branchId ? Number(req.query.branchId)
+      : (user?.role === "owner" || user?.role === "admin" ? undefined : user?.branchId);
+    res.json(await storage.getProfitByEmployees(from, to, branchId));
+  });
+
+  app.get("/api/reports/profit/products", requireAuth, async (req, res) => {
+    const from = req.query.from as string;
+    const to = req.query.to as string;
+    if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD (from & to)" });
+    }
+    const user = await storage.getUser(req.session.userId!);
+    const branchId = req.query.branchId ? Number(req.query.branchId)
+      : (user?.role === "owner" || user?.role === "admin" ? undefined : user?.branchId);
+    res.json(await storage.getProfitByProducts(from, to, branchId));
   });
 
   app.get("/api/purchases", requireAuth, async (_req, res) => {

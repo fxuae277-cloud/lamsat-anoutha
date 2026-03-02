@@ -149,6 +149,8 @@ export const saleItems = pgTable("sale_items", {
   quantity: integer("quantity").notNull(),
   unitPrice: decimal("unit_price", { precision: 10, scale: 3 }).notNull(),
   total: decimal("total", { precision: 10, scale: 3 }).notNull(),
+  unitCostAtSale: decimal("unit_cost_at_sale", { precision: 10, scale: 3 }).default("0"),
+  lineCogs: decimal("line_cogs", { precision: 10, scale: 3 }).default("0"),
 });
 export const insertSaleItemSchema = createInsertSchema(saleItems).omit({ id: true });
 export type InsertSaleItem = z.infer<typeof insertSaleItemSchema>;
@@ -183,6 +185,7 @@ export const orders = pgTable("orders", {
   address: text("address"),
   branchId: integer("branch_id").references(() => branches.id),
   shiftId: integer("shift_id").references(() => shifts.id),
+  employeeId: integer("employee_id").references(() => users.id),
   deliveryType: text("delivery_type").default("pickup"),
   status: text("status").default("new"),
   paymentMethod: text("payment_method").default("cash"),
@@ -205,6 +208,8 @@ export const orderItems = pgTable("order_items", {
   quantity: integer("quantity").notNull(),
   unitPrice: decimal("unit_price", { precision: 10, scale: 3 }).notNull(),
   total: decimal("total", { precision: 10, scale: 3 }).notNull(),
+  unitCostAtSale: decimal("unit_cost_at_sale", { precision: 10, scale: 3 }).default("0"),
+  lineCogs: decimal("line_cogs", { precision: 10, scale: 3 }).default("0"),
 });
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true });
 export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
