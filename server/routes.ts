@@ -1231,6 +1231,16 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/purchases/:id/receive", requireAuth, requireManager, async (req, res) => {
+    try {
+      const result = await storage.receivePurchaseInvoice(Number(req.params.id));
+      res.json(result);
+    } catch (err: any) {
+      const status = err?.message?.includes("مستلمة مسبقاً") ? 409 : 400;
+      res.status(status).json({ message: err?.message ?? "فشل الاستلام" });
+    }
+  });
+
   registerExportRoutes(app);
 
   return httpServer;

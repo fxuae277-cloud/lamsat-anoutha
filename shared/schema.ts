@@ -301,8 +301,10 @@ export const purchaseInvoices = pgTable("purchase_invoices", {
   notes: text("notes"),
   createdBy: integer("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
+  totalAmount: decimal("total_amount", { precision: 10, scale: 3 }).default("0"),
+  receivedAt: timestamp("received_at"),
 });
-export const insertPurchaseInvoiceSchema = createInsertSchema(purchaseInvoices).omit({ id: true, createdAt: true });
+export const insertPurchaseInvoiceSchema = createInsertSchema(purchaseInvoices).omit({ id: true, createdAt: true, receivedAt: true });
 export type InsertPurchaseInvoice = z.infer<typeof insertPurchaseInvoiceSchema>;
 export type PurchaseInvoice = typeof purchaseInvoices.$inferSelect;
 

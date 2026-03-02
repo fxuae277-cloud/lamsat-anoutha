@@ -108,6 +108,7 @@ export interface IStorage {
   addPurchaseItem(data: InsertPurchaseItem): Promise<PurchaseItem>;
   deletePurchaseItem(id: number): Promise<void>;
   approvePurchaseInvoice(id: number): Promise<PurchaseInvoice>;
+  receivePurchaseInvoice(id: number): Promise<PurchaseInvoice>;
   updateSupplier(id: number, data: Partial<InsertSupplier>): Promise<Supplier | undefined>;
 }
 
@@ -1146,6 +1147,58 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async receivePurchaseInvoice(id: number): Promise<PurchaseInvoice> {
+    const invoice = await this.getPurchaseInvoice(id);
+    if (!invoice) throw new Error("الفاتورة غير موجودة");
+    if (invoice.status === "received") throw new Error("الفاتورة مستلمة مسبقاً");
+    if (invoice.status !== "approved") throw new Error("يجب اعتماد الفاتورة أولاً قبل الاستلام");
+
+    const items = await db.select().from(purchaseItems).where(eq(purchaseItems.purchaseId, id));
+    if (items.length === 0) throw new Error("لا يوجد أصناف في الفاتورة");
+
+    const totalAmount = items.reduce((s, it) => s + (it.qty * parseFloat(it.unitCostBase)), 0);
+    const totalExtraCost =
+      parseFloat(invoice.shippingCost || "0") +
+      parseFloat(invoice.customsCost || "0") +
+      parseFloat(invoice.clearanceCost || "0") +
+      parseFloat(invoice.otherCost || "0");
+    const grandTotal = totalAmount + totalExtraCost;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      for (const item of items) {
+        await client.query(
+          `INSERT INTO stock_movements (product_id, branch_id, quantity, movement_type, reference_id, created_at)
+           VALUES ($1, 0, $2, 'purchase', $3, now())`,
+          [item.productId, item.qty, id]
+        );
+      }
+
+      const result = await client.query(
+        `UPDATE purchase_invoices
+         SET status = 'received', total_amount = $1, grand_total = $2, received_at = now()
+         WHERE id = $3 AND status = 'approved'
+         RETURNING *`,
+        [totalAmount.toFixed(3), grandTotal.toFixed(3), id]
+      );
+
+      if (result.rows.length === 0) {
+        throw new Error("فشل تحديث حالة الفاتورة");
+      }
+
+      await client.query("COMMIT");
+      const [updated] = await db.select().from(purchaseInvoices).where(eq(purchaseInvoices.id, id));
+      return updated;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   async getLocations(branchId?: number) {
     if (branchId) {
       return db.select().from(locations).where(eq(locations.branchId, branchId));
@@ -1645,6 +1698,16 @@ export class DatabaseStorage implements IStorage {
           throw new Error(`الكمية المتاحة من "${prod?.name || item.productId}" في المخزن المركزي هي ${available} فقط`);
         }
 
+        const smRes = await client.query(
+          `SELECT COALESCE(SUM(quantity),0)::numeric AS balance FROM stock_movements WHERE branch_id = 0 AND product_id = $1`,
+          [item.productId]
+        );
+        const smBalance = parseFloat(smRes.rows[0].balance);
+        if (smBalance < item.qty) {
+          const [prod] = await db.select({ name: products.name }).from(products).where(eq(products.id, item.productId));
+          throw new Error(`رصيد المخزن المركزي (stock_movements) لـ "${prod?.name || item.productId}" هو ${smBalance} فقط`);
+        }
+
         await client.query(
           `INSERT INTO location_transfer_items (transfer_id, product_id, qty) VALUES ($1, $2, $3)`,
           [transferId, item.productId, item.qty]
@@ -1676,6 +1739,18 @@ export class DatabaseStorage implements IStorage {
            (date, branch_id, from_location_id, to_location_id, product_id, type, qty, ref_table, ref_id, note, created_by, created_at)
            VALUES (now(), $1, NULL, $2, $3, 'TRANSFER_IN', $4, 'location_transfers', $5, $6, $7, now())`,
           [branchId, toLocationId, item.productId, item.qty, transferId, `وارد من المركزي`, createdBy]
+        );
+
+        await client.query(
+          `INSERT INTO stock_movements (product_id, branch_id, quantity, movement_type, reference_id, created_at)
+           VALUES ($1, 0, $2, 'transfer_out', $3, now())`,
+          [item.productId, -item.qty, transferId]
+        );
+
+        await client.query(
+          `INSERT INTO stock_movements (product_id, branch_id, quantity, movement_type, reference_id, created_at)
+           VALUES ($1, $2, $3, 'transfer_in', $4, now())`,
+          [item.productId, branchId, item.qty, transferId]
         );
       }
 
