@@ -1241,6 +1241,94 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/cash-ledger", requireAuth, enforceBranchScope, async (req, res) => {
+    const { date } = req.query;
+    const branchId = req.branchScope!.mode === "branch" ? req.branchScope!.branchId : (req.query.branchId ? Number(req.query.branchId) : undefined);
+    const filterDate = date ? String(date) : new Date().toISOString().slice(0, 10);
+    const entries = await storage.getCashLedgerByDate(branchId, filterDate);
+    res.json(entries);
+  });
+
+  app.get("/api/bank-ledger", requireAuth, enforceBranchScope, async (req, res) => {
+    const { date } = req.query;
+    const branchId = req.branchScope!.mode === "branch" ? req.branchScope!.branchId : (req.query.branchId ? Number(req.query.branchId) : undefined);
+    const filterDate = date ? String(date) : new Date().toISOString().slice(0, 10);
+    const entries = await storage.getBankLedgerByDate(branchId, filterDate);
+    res.json(entries);
+  });
+
+  app.get("/api/cash-ledger/summary", requireAuth, enforceBranchScope, async (req, res) => {
+    const { date } = req.query;
+    const branchId = req.branchScope!.mode === "branch" ? req.branchScope!.branchId : (req.query.branchId ? Number(req.query.branchId) : undefined);
+    const filterDate = date ? String(date) : new Date().toISOString().slice(0, 10);
+    const summary = await storage.getDailyCashSummary(branchId, filterDate);
+    res.json(summary);
+  });
+
+  app.post("/api/cash-ledger/deposit", requireAuth, requireManager, async (req, res) => {
+    try {
+      const { amount, note } = req.body;
+      if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ message: "المبلغ مطلوب ويجب أن يكون أكبر من صفر" });
+      const user = await storage.getUser(req.session.userId!);
+      if (!user || !user.branchId) return res.status(400).json({ message: "بيانات المستخدم ناقصة" });
+      let shiftId: number | null = null;
+      if (user.terminalName) {
+        const shift = await storage.getCurrentShift(user.branchId, user.terminalName);
+        if (shift) shiftId = shift.id;
+      }
+      const entry = await storage.addCashLedgerEntry({
+        date: new Date().toISOString().slice(0, 10),
+        branchId: user.branchId,
+        shiftId,
+        type: "deposit",
+        amountIn: String(amount),
+        amountOut: "0",
+        category: "إيداع",
+        note: note || "إيداع نقدي للصندوق",
+        createdBy: user.id,
+      });
+      res.status(201).json(entry);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.post("/api/cash-ledger/withdrawal", requireAuth, requireManager, async (req, res) => {
+    try {
+      const { amount, note } = req.body;
+      if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ message: "المبلغ مطلوب ويجب أن يكون أكبر من صفر" });
+      const user = await storage.getUser(req.session.userId!);
+      if (!user || !user.branchId) return res.status(400).json({ message: "بيانات المستخدم ناقصة" });
+      let shiftId: number | null = null;
+      if (user.terminalName) {
+        const shift = await storage.getCurrentShift(user.branchId, user.terminalName);
+        if (shift) shiftId = shift.id;
+      }
+      const entry = await storage.addCashLedgerEntry({
+        date: new Date().toISOString().slice(0, 10),
+        branchId: user.branchId,
+        shiftId,
+        type: "withdrawal",
+        amountIn: "0",
+        amountOut: String(amount),
+        category: "سحب",
+        note: note || "سحب نقدي من الصندوق",
+        createdBy: user.id,
+      });
+      res.status(201).json(entry);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/shifts/closed", requireAuth, enforceBranchScope, async (req, res) => {
+    const { date } = req.query;
+    const branchId = req.branchScope!.mode === "branch" ? req.branchScope!.branchId : (req.query.branchId ? Number(req.query.branchId) : undefined);
+    const filterDate = date ? String(date) : new Date().toISOString().slice(0, 10);
+    const closedShifts = await storage.getClosedShiftsByDate(branchId, filterDate);
+    res.json(closedShifts);
+  });
+
   registerExportRoutes(app);
 
   return httpServer;

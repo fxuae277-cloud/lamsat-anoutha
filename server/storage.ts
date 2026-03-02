@@ -93,6 +93,10 @@ export interface IStorage {
   addBankLedgerEntry(data: InsertBankLedger): Promise<BankLedger>;
   getCashLedgerEntries(branchId?: number): Promise<CashLedger[]>;
   getBankLedgerEntries(branchId?: number): Promise<BankLedger[]>;
+  getCashLedgerByDate(branchId: number | undefined, date: string): Promise<CashLedger[]>;
+  getBankLedgerByDate(branchId: number | undefined, date: string): Promise<BankLedger[]>;
+  getDailyCashSummary(branchId: number | undefined, date: string): Promise<any>;
+  getClosedShiftsByDate(branchId: number | undefined, date: string): Promise<any[]>;
   getShiftReport(shiftId: number): Promise<any>;
   getDailyReport(dateStr: string, branchId?: number): Promise<any>;
   getShiftsByDate(dateStr: string, branchId?: number): Promise<any[]>;
@@ -634,6 +638,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async closeShift(id: number, actualCash: string) {
+    const [shiftRow] = await db.select().from(shifts).where(eq(shifts.id, id));
+    if (!shiftRow) return undefined;
+    const openingCash = parseFloat(shiftRow.openingCash || "0");
+
     const [cashOrdersRow] = await db.select({
       total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
     }).from(orders).where(
@@ -672,11 +680,20 @@ export class DatabaseStorage implements IStorage {
       and(eq(expenses.shiftId, id), eq(expenses.source, "cash"))
     );
 
+    const [cashDepositRow] = await db.select({
+      totalIn: sql<string>`coalesce(sum(amount_in::numeric),0)::text`,
+      totalOut: sql<string>`coalesce(sum(amount_out::numeric),0)::text`,
+    }).from(cashLedger).where(
+      and(eq(cashLedger.shiftId, id), sql`${cashLedger.type} IN ('deposit','withdrawal')`)
+    );
+
     const totalCashIn = parseFloat(cashOrdersRow.total) + parseFloat(cashSalesRow.total);
     const totalCardIn = parseFloat(cardOrdersRow.total) + parseFloat(cardSalesRow.total);
     const totalBankIn = parseFloat(bankOrdersRow.total) + parseFloat(bankSalesRow.total);
+    const depositsIn = parseFloat(cashDepositRow.totalIn);
+    const withdrawalsOut = parseFloat(cashDepositRow.totalOut);
 
-    const expectedCash = totalCashIn - parseFloat(cashExpenseRow.total);
+    const expectedCash = openingCash + totalCashIn - parseFloat(cashExpenseRow.total) + depositsIn - withdrawalsOut;
     const actual = parseFloat(actualCash);
     const diff = actual - expectedCash;
 
@@ -729,6 +746,104 @@ export class DatabaseStorage implements IStorage {
       return db.select().from(bankLedger).where(eq(bankLedger.branchId, branchId)).orderBy(desc(bankLedger.createdAt));
     }
     return db.select().from(bankLedger).orderBy(desc(bankLedger.createdAt));
+  }
+
+  async getCashLedgerByDate(branchId: number | undefined, date: string) {
+    const conditions = [eq(cashLedger.date, date)];
+    if (branchId) conditions.push(eq(cashLedger.branchId, branchId));
+    return db.select().from(cashLedger).where(and(...conditions)).orderBy(cashLedger.createdAt);
+  }
+
+  async getBankLedgerByDate(branchId: number | undefined, date: string) {
+    const conditions = [eq(bankLedger.date, date)];
+    if (branchId) conditions.push(eq(bankLedger.branchId, branchId));
+    return db.select().from(bankLedger).where(and(...conditions)).orderBy(bankLedger.createdAt);
+  }
+
+  async getDailyCashSummary(branchId: number | undefined, date: string) {
+    const branchFilter = branchId ? `AND cl.branch_id = ${Number(branchId)}` : "";
+    const shiftFilter = branchId ? `AND s.branch_id = ${Number(branchId)}` : "";
+
+    const result = await pool.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN cl.type = 'sale' THEN cl.amount_in::numeric ELSE 0 END), 0) AS cash_sales,
+        COALESCE(SUM(CASE WHEN cl.type = 'expense' THEN cl.amount_out::numeric ELSE 0 END), 0) AS cash_expenses,
+        COALESCE(SUM(CASE WHEN cl.type = 'deposit' THEN cl.amount_in::numeric ELSE 0 END), 0) AS deposits,
+        COALESCE(SUM(CASE WHEN cl.type = 'withdrawal' THEN cl.amount_out::numeric ELSE 0 END), 0) AS withdrawals,
+        COALESCE(SUM(CASE WHEN cl.type = 'shift_difference' THEN cl.amount_in::numeric - cl.amount_out::numeric ELSE 0 END), 0) AS shift_differences,
+        COALESCE(SUM(cl.amount_in::numeric), 0) AS total_in,
+        COALESCE(SUM(cl.amount_out::numeric), 0) AS total_out
+      FROM cash_ledger cl
+      WHERE cl.date = $1 ${branchFilter}
+    `, [date]);
+
+    const shiftResult = await pool.query(`
+      SELECT
+        COALESCE(SUM(s.opening_cash::numeric), 0) AS total_opening,
+        COALESCE(SUM(CASE WHEN s.status = 'closed' THEN s.actual_cash::numeric ELSE 0 END), 0) AS total_closing,
+        COALESCE(SUM(CASE WHEN s.status = 'closed' THEN s.difference::numeric ELSE 0 END), 0) AS total_difference
+      FROM shifts s
+      WHERE s.started_at::date = $1 ${shiftFilter}
+    `, [date]);
+
+    const row = result.rows[0];
+    const shiftRow = shiftResult.rows[0];
+    const openingCash = parseFloat(shiftRow.total_opening || "0");
+    const cashSales = parseFloat(row.cash_sales || "0");
+    const cashExpenses = parseFloat(row.cash_expenses || "0");
+    const deposits = parseFloat(row.deposits || "0");
+    const withdrawals = parseFloat(row.withdrawals || "0");
+    const shiftDifferences = parseFloat(row.shift_differences || "0");
+    const totalIn = parseFloat(row.total_in || "0");
+    const totalOut = parseFloat(row.total_out || "0");
+    const expectedClosing = openingCash + cashSales - cashExpenses + deposits - withdrawals;
+    const actualClosing = parseFloat(shiftRow.total_closing || "0");
+    const totalDifference = parseFloat(shiftRow.total_difference || "0");
+
+    return {
+      date,
+      openingCash,
+      cashSales,
+      cashExpenses,
+      deposits,
+      withdrawals,
+      shiftDifferences,
+      totalIn,
+      totalOut,
+      expectedClosing,
+      actualClosing,
+      totalDifference,
+      netCash: openingCash + totalIn - totalOut,
+    };
+  }
+
+  async getClosedShiftsByDate(branchId: number | undefined, date: string) {
+    const conditions = [
+      eq(shifts.status, "closed"),
+      sql`${shifts.startedAt}::date = ${date}`,
+    ];
+    if (branchId) conditions.push(eq(shifts.branchId, branchId));
+
+    const rows = await db.select({
+      id: shifts.id,
+      branchId: shifts.branchId,
+      cashierId: shifts.cashierId,
+      cashierName: users.name,
+      startedAt: shifts.startedAt,
+      endedAt: shifts.endedAt,
+      openingCash: shifts.openingCash,
+      totalSales: shifts.totalSales,
+      totalCash: shifts.totalCash,
+      totalBank: shifts.totalBank,
+      expectedCash: shifts.expectedCash,
+      actualCash: shifts.actualCash,
+      difference: shifts.difference,
+      terminalName: shifts.terminalName,
+    }).from(shifts)
+      .leftJoin(users, eq(shifts.cashierId, users.id))
+      .where(and(...conditions))
+      .orderBy(desc(shifts.endedAt));
+    return rows;
   }
 
   async getShiftReport(shiftId: number) {

@@ -20,6 +20,7 @@ import Settings from "@/pages/Settings";
 import Reports from "@/pages/Reports";
 import Purchases from "@/pages/Purchases";
 import Invoices from "@/pages/Invoices";
+import Finance from "@/pages/Finance";
 
 function AuthenticatedRouter() {
   const { user, isLoading } = useAuth();
@@ -61,7 +62,7 @@ function AuthenticatedRouter() {
           <div className="p-8 text-center text-muted-foreground">صفحة الرواتب والموظفين (قيد التطوير)</div>
         </Route>
         <Route path="/reports" component={Reports}/>
-        <Route path="/finance" component={Reports}/>
+        <Route path="/finance" component={Finance}/>
         <Route component={NotFound} />
       </Switch>
     </AppLayout>

@@ -14,7 +14,8 @@ import {
   UserCircle, 
   PieChart, 
   Settings,
-  LogOut
+  LogOut,
+  Banknote
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { href: "/customers", label: "العملاء", icon: Users },
   { href: "/suppliers", label: "الموردون والمشتريات", icon: Truck, managerOnly: true },
   { href: "/expenses", label: "المصروفات", icon: Receipt },
+  { href: "/finance", label: "المحاسبة اليومية", icon: Banknote },
   { href: "/hr", label: "الرواتب والموظفين", icon: UserCircle },
   { href: "/reports", label: "التقارير المالية", icon: PieChart },
   { href: "/settings", label: "الإعدادات", icon: Settings },
