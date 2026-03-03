@@ -136,7 +136,7 @@ function BranchInventoryTab() {
 function InternalTransferTab() {
   const { toast } = useToast();
   const { user } = useAuth();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const isOwner = user?.role === "owner" || user?.role === "admin";
   const [selectedBranch, setSelectedBranch] = useState<string>(String(user?.branchId));
   const [items, setItems] = useState<{ productId: string; qty: string }[]>([]);
@@ -352,7 +352,7 @@ function InternalTransferTab() {
                 {transfers.map((tx: any) => (
                   <TableRow key={tx.id} data-testid={`row-transfer-${tx.id}`}>
                     <TableCell className="font-mono text-xs">{tx.id}</TableCell>
-                    <TableCell className="text-sm">{tx.createdAt ? new Date(tx.createdAt).toLocaleDateString(t("lang") === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
+                    <TableCell className="text-sm">{tx.createdAt ? new Date(tx.createdAt).toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
                     <TableCell className="text-sm font-medium">{tx.branchName}</TableCell>
                     <TableCell><Badge variant="outline" className="text-xs">{tx.fromLocationName}</Badge></TableCell>
                     <TableCell><Badge variant="outline" className="text-xs">{tx.toLocationName}</Badge></TableCell>
@@ -376,7 +376,7 @@ function InternalTransferTab() {
 
 function TransactionsTab() {
   const { user } = useAuth();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const isOwner = user?.role === "owner" || user?.role === "admin";
   const [selectedBranch, setSelectedBranch] = useState<string>(isOwner ? "all" : String(user?.branchId));
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -452,7 +452,7 @@ function TransactionsTab() {
                 return (
                   <TableRow key={tx.id} data-testid={`row-tx-${tx.id}`}>
                     <TableCell className="font-mono text-xs">{tx.id}</TableCell>
-                    <TableCell className="text-sm">{tx.date ? new Date(tx.date).toLocaleDateString(t("lang") === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
+                    <TableCell className="text-sm">{tx.date ? new Date(tx.date).toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
                     <TableCell className="text-sm">{tx.branchName}</TableCell>
                     <TableCell className="font-medium">{tx.productName}</TableCell>
                     <TableCell>

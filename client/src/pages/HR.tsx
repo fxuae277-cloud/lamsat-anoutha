@@ -842,7 +842,7 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
 }
 
 function AdvancesTab({ usersList }: { usersList: any[] }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [empId, setEmpId] = useState("");
@@ -962,7 +962,7 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
               <TableRow key={a.id} data-testid={`row-advance-${a.id}`}>
                 <TableCell className="font-medium">{a.employee_name}</TableCell>
                 <TableCell className="font-bold">{fmt(a.amount)} {t("common.omr")}</TableCell>
-                <TableCell className="text-sm">{a.date}</TableCell>
+                <TableCell className="text-sm">{a.date ? new Date(a.date + "T00:00:00").toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{a.note || "—"}</TableCell>
                 <TableCell>
                   {a.settled ? (
@@ -982,7 +982,7 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
 }
 
 function DeductionsTab({ usersList }: { usersList: any[] }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [empId, setEmpId] = useState("");
@@ -1098,7 +1098,7 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
                 <TableCell className="font-medium">{d.employee_name}</TableCell>
                 <TableCell className="font-bold text-red-600">{fmt(d.amount)} {t("common.omr")}</TableCell>
                 <TableCell className="text-sm">{d.reason}</TableCell>
-                <TableCell className="text-sm">{d.date}</TableCell>
+                <TableCell className="text-sm">{d.date ? new Date(d.date + "T00:00:00").toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
                 <TableCell>
                   {d.applied_in_payroll_id ? (
                     <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">{t("hr.applied")}</Badge>

@@ -72,7 +72,7 @@ export default function StockControl() {
 
 function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; locationsList: any[] }) {
   const { toast } = useToast();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [createOpen, setCreateOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedSt, setSelectedSt] = useState<any>(null);
@@ -235,7 +235,7 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
                 <TableCell className="text-blue-600">{st.surplus_items}</TableCell>
                 <TableCell className="text-red-600">{st.shortage_items}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{st.creator_name || "—"}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">{st.created_at ? new Date(st.created_at).toLocaleDateString(t("lang") === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{st.created_at ? new Date(st.created_at).toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
                 <TableCell>
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setSelectedSt(st); setDetailsOpen(true); }} data-testid={`button-st-details-${st.id}`}>
                     <Eye className="w-3.5 h-3.5" />
@@ -390,7 +390,7 @@ function StocktakeItemRow({ item, isDraft, onUpdate }: { item: any; isDraft: boo
 
 function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; locationsList: any[] }) {
   const { toast } = useToast();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [addOpen, setAddOpen] = useState(false);
   const [adjBranch, setAdjBranch] = useState("");
   const [adjLocation, setAdjLocation] = useState("");
@@ -533,7 +533,7 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
             ) : adjustments.map((adj: any) => (
               <TableRow key={adj.id} data-testid={`row-adj-${adj.id}`}>
                 <TableCell className="font-mono text-sm">#{adj.id}</TableCell>
-                <TableCell className="text-sm">{adj.createdAt ? new Date(adj.createdAt).toLocaleDateString(t("lang") === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
+                <TableCell className="text-sm">{adj.createdAt ? new Date(adj.createdAt).toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
                 <TableCell className="text-sm">{adj.branchName}</TableCell>
                 <TableCell className="text-sm">{adj.locationName}</TableCell>
                 <TableCell className="text-sm font-medium">{adj.productName}</TableCell>
@@ -552,7 +552,7 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
 }
 
 function ReportTab({ branchesList }: { branchesList: any[] }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [selectedBranch, setSelectedBranch] = useState("__all__");
 
   const reportUrl = selectedBranch !== "__all__" ? `/api/inventory-discrepancy-report?branchId=${selectedBranch}` : "/api/inventory-discrepancy-report";
@@ -622,7 +622,7 @@ function ReportTab({ branchesList }: { branchesList: any[] }) {
               <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{t("stock_control.no_adjustments")}</TableCell></TableRow>
             ) : report.map((item: any, idx: number) => (
               <TableRow key={idx}>
-                <TableCell className="text-sm">{item.date ? new Date(item.date).toLocaleDateString(t("lang") === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
+                <TableCell className="text-sm">{item.date ? new Date(item.date).toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
                 <TableCell className="text-sm">{item.branch_name}</TableCell>
                 <TableCell className="text-sm font-medium">{item.product_name}</TableCell>
                 <TableCell>
