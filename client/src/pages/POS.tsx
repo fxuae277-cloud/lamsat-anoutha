@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Plus, Minus, Trash2, CheckCircle2, Image as ImageIcon, Store, Monitor, Banknote, LogOut, User as UserIcon, XCircle, Clock, AlertTriangle, Printer, ArrowLeft, Receipt, TrendingUp, TrendingDown } from "lucide-react";
+import { Search, Plus, Minus, Trash2, CheckCircle2, Image as ImageIcon, Store, Monitor, Banknote, LogOut, User as UserIcon, XCircle, Clock, AlertTriangle, Printer, ArrowLeft, Receipt, TrendingUp, TrendingDown, Camera } from "lucide-react";
+import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -280,6 +281,9 @@ export default function POS() {
   const [actualCash, setActualCash] = useState("");
   const [preCloseData, setPreCloseData] = useState<any>(null);
   const [pendingOrders, setPendingOrders] = useState<any[]>([]);
+  const [scannerOpen, setScannerOpen] = useState(false);
+
+  const isOwner = user?.role === "owner" || user?.role === "admin";
 
   const { data: products = [] } = useQuery<Product[]>({
     queryKey: ["/api/products"],
@@ -477,7 +481,25 @@ export default function POS() {
     },
   });
 
-  if (closedReport) {
+  useEffect(() => {
+    if (isOwner && !currentShift && !closedReport) {
+      (async () => {
+        try {
+          const res = await fetch("/api/shifts/current", { credentials: "include" });
+          const data = await res.json();
+          if (data.shift) {
+            setCurrentShift(data.shift);
+          } else {
+            const openRes = await apiRequest("POST", "/api/shifts", { openingCash: "0" });
+            const shift = await openRes.json();
+            setCurrentShift(shift);
+          }
+        } catch {}
+      })();
+    }
+  }, [isOwner, currentShift, closedReport]);
+
+  if (closedReport && !isOwner) {
     return (
       <ShiftReceipt
         report={closedReport}
@@ -489,7 +511,7 @@ export default function POS() {
     );
   }
 
-  if (!currentShift) {
+  if (!currentShift && !isOwner) {
     return (
       <StartPOS
         branchName={branchName}
@@ -497,6 +519,17 @@ export default function POS() {
         userName={user?.name || ""}
         onShiftOpened={(shift) => setCurrentShift(shift)}
       />
+    );
+  }
+
+  if (!currentShift && isOwner) {
+    return (
+      <div className="h-[calc(100vh-8rem)] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-muted-foreground">{t("pos.checking_shift")}</p>
+        </div>
+      </div>
     );
   }
 
@@ -571,26 +604,32 @@ export default function POS() {
             <UserIcon className="w-4 h-4 text-muted-foreground" />
             <span data-testid="text-active-cashier">{user?.name}</span>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            {t("pos.shift_number").replace("{0}", String(currentShift.id))}
-          </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted rounded-lg text-xs">
-            <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-            {currentShift.startedAt ? new Date(currentShift.startedAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}
-          </div>
+          {!isOwner && (
+            <>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                {t("pos.shift_number").replace("{0}", String(currentShift!.id))}
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted rounded-lg text-xs">
+                <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                {currentShift!.startedAt ? new Date(currentShift!.startedAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}
+              </div>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="destructive"
-            size="sm"
-            className="gap-1.5"
-            onClick={prepareCloseShift}
-            data-testid="button-close-shift"
-          >
-            <XCircle className="w-4 h-4" />
-            {t("pos.close_shift")}
-          </Button>
+          {!isOwner && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="gap-1.5"
+              onClick={prepareCloseShift}
+              data-testid="button-close-shift"
+            >
+              <XCircle className="w-4 h-4" />
+              {t("pos.close_shift")}
+            </Button>
+          )}
           <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5" onClick={logout} data-testid="button-logout-pos">
             <LogOut className="w-4 h-4" />
           </Button>
@@ -599,16 +638,27 @@ export default function POS() {
 
       <div className="flex gap-6 h-full min-h-0">
         <div className="flex-1 flex flex-col gap-4 min-h-0">
-          <div className="relative shrink-0">
-            <Search className={`absolute ${lang === "ar" ? "right-3" : "left-3"} top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground`} />
-            <Input 
-              ref={barcodeRef}
-              placeholder={t("pos.barcode_placeholder")} 
-              className={`${lang === "ar" ? "pr-10" : "pl-10"} h-12 text-lg bg-card shadow-sm border-transparent focus-visible:ring-primary`}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={handleBarcodeSearch}
-              data-testid="input-barcode-search"
-            />
+          <div className="relative shrink-0 flex gap-2">
+            <div className="relative flex-1">
+              <Search className={`absolute ${lang === "ar" ? "right-3" : "left-3"} top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground`} />
+              <Input 
+                ref={barcodeRef}
+                placeholder={t("pos.barcode_placeholder")} 
+                className={`${lang === "ar" ? "pr-10" : "pl-10"} h-12 text-lg bg-card shadow-sm border-transparent focus-visible:ring-primary`}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleBarcodeSearch}
+                data-testid="input-barcode-search"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-12 w-12 shrink-0 bg-card shadow-sm"
+              onClick={() => setScannerOpen(true)}
+              data-testid="button-barcode-scanner"
+            >
+              <Camera className="w-5 h-5" />
+            </Button>
           </div>
 
           <div className="flex gap-2 overflow-x-auto pb-2 shrink-0">
@@ -911,6 +961,24 @@ export default function POS() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <BarcodeScanner
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={(barcode) => {
+          const product = products.find(p => p.barcode === barcode);
+          if (product) {
+            addToCart(product);
+            toast({ title: t("pos.product_added"), description: product.name });
+          } else {
+            toast({
+              title: t("pos.product_not_found"),
+              description: t("pos.product_not_found_desc").replace("{0}", barcode),
+              variant: "destructive",
+            });
+          }
+        }}
+      />
     </div>
   );
 }

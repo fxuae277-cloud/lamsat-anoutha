@@ -459,7 +459,11 @@
     "receipt_tax": "Tax",
     "receipt_total": "Total",
     "receipt_thanks": "Thank you for shopping with us",
-    "receipt_brand": "Lamsat Onotha - Oman"
+    "receipt_brand": "Lamsat Onotha - Oman",
+    "scan_barcode": "Scan Barcode",
+    "camera_error": "Could not access camera. Please allow camera permissions.",
+    "scan_button": "Scan",
+    "product_added": "Product added"
   },
   "hr": {
     "title": "HR & Payroll",
