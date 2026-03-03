@@ -2,7 +2,9 @@
   "app": {
     "loading": "جارٍ التحميل...",
     "name": "لمسة أنوثة",
-    "search_placeholder": "ابحث عن منتج، عميل، فاتورة..."
+    "search_placeholder": "ابحث عن منتج، عميل، فاتورة...",
+    "customers_coming_soon": "صفحة العملاء (قيد التطوير)",
+    "unauthorized": "غير مصرح لك بالدخول لهذه الصفحة"
   },
   "nav": {
     "dashboard": "لوحة التحكم",
@@ -31,7 +33,15 @@
     "role_cashier": "كاشير",
     "role_employee": "موظف",
     "logout": "تسجيل الخروج",
-    "branch": "الفرع"
+    "branch": "الفرع",
+    "section_dashboard": "لوحة الإدارة",
+    "section_operations": "التشغيل",
+    "section_master_data": "البيانات",
+    "section_inventory": "المخزون",
+    "section_purchasing": "المشتريات",
+    "section_finance": "المالية",
+    "section_audit": "الرقابة",
+    "section_settings": "الإعدادات"
   },
   "settings": {
     "title": "الإعدادات",

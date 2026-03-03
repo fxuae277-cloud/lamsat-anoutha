@@ -44,16 +44,22 @@ shared/
   schema.ts             → Drizzle schema + Zod validation
 ```
 
-## Authentication & Authorization
+## Authentication & Authorization (Role-Based Access Control)
+- **Roles**: `owner`, `admin`, `manager`, `employee`/`cashier`
 - Login via POST /api/auth/login (username + password)
 - Session stored in PostgreSQL via connect-pg-simple
 - GET /api/auth/me returns current user (without password)
 - POST /api/auth/logout destroys session
 - POST /api/auth/change-password (oldPassword, newPassword) - any logged-in user
-- `requireAuth` middleware protects: /api/orders, /api/shifts, /api/expenses, /api/reports, /api/sales, /api/ledger, /api/purchases
-- `requireOwnerOrAdmin` middleware protects: /api/users (GET/POST/PATCH)
-- `requireManager` (owner/admin/manager only) middleware protects: inventory transfer, add-stock, purchase posting, suppliers CRUD
-- Cashier UI: inventory page shows showroom-only read-only view; transfer & transactions tabs hidden; purchase post button hidden; suppliers/purchases hidden from sidebar
+- **Sidebar**: Role-based sidebar config in `client/src/config/sidebar.tsx`
+  - Owner/Admin: Full management sidebar (Dashboard, Operations, Master Data, Inventory, Purchasing, Finance, Audit, Settings)
+  - Employee/Cashier: Operations only (POS, Orders, Invoices, Customers)
+  - `getSidebarForRole(role)` returns appropriate sections
+- **Frontend Route Guard**: `RequireOwner` component in App.tsx — redirects non-owner/admin to `/pos`
+- **API Middleware**:
+  - `requireAuth`: All API endpoints (no public endpoints except auth)
+  - `requireOwnerOrAdmin`: branches CRUD, cities create, categories create, products CRUD, warehouses create, users, employees, settings PATCH, dashboard executive, reports (branch-comparison, employee-performance), payroll, audit-log
+  - `requireManager`: inventory, stock transfers, purchases posting, suppliers, cash deposits/withdrawals, stocktakes, adjustments
 - Frontend shows Login page when no session exists
 - Users table has: username (unique), password (bcrypt), name, role, branchId, terminalName, isActive
 - POST /api/shifts takes only `openingCash`; branchId, cashierId, terminalName come from session user

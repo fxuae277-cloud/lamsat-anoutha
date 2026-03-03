@@ -191,21 +191,21 @@ export async function registerRoutes(
       }
     }
   });
-  app.post("/api/branches", async (req, res) => {
+  app.post("/api/branches", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     const parsed = insertBranchSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     res.status(201).json(await storage.createBranch(parsed.data));
   });
-  app.patch("/api/branches/:id", async (req, res) => {
+  app.patch("/api/branches/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     const row = await storage.updateBranch(Number(req.params.id), req.body);
     if (!row) return res.status(404).json({ message: "لم يتم العثور على الفرع" });
     res.json(row);
   });
 
-  app.get("/api/cities", async (_req, res) => {
+  app.get("/api/cities", requireAuth, async (_req, res) => {
     res.json(await storage.getCities());
   });
-  app.post("/api/cities", async (req, res) => {
+  app.post("/api/cities", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     const parsed = insertCitySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     res.status(201).json(await storage.createCity(parsed.data));
@@ -668,59 +668,59 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/categories", async (_req, res) => {
+  app.get("/api/categories", requireAuth, async (_req, res) => {
     res.json(await storage.getCategories());
   });
-  app.post("/api/categories", async (req, res) => {
+  app.post("/api/categories", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     const parsed = insertCategorySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     res.status(201).json(await storage.createCategory(parsed.data));
   });
 
-  app.get("/api/products", async (_req, res) => {
+  app.get("/api/products", requireAuth, async (_req, res) => {
     res.json(await storage.getProducts());
   });
-  app.get("/api/products/:id", async (req, res) => {
+  app.get("/api/products/:id", requireAuth, async (req, res) => {
     const row = await storage.getProduct(Number(req.params.id));
     if (!row) return res.status(404).json({ message: "المنتج غير موجود" });
     res.json(row);
   });
-  app.get("/api/products/barcode/:barcode", async (req, res) => {
+  app.get("/api/products/barcode/:barcode", requireAuth, async (req, res) => {
     const row = await storage.getProductByBarcode(req.params.barcode);
     if (!row) return res.status(404).json({ message: "المنتج غير موجود" });
     res.json(row);
   });
-  app.post("/api/products", async (req, res) => {
+  app.post("/api/products", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     const parsed = insertProductSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     res.status(201).json(await storage.createProduct(parsed.data));
   });
-  app.patch("/api/products/:id", async (req, res) => {
+  app.patch("/api/products/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     const row = await storage.updateProduct(Number(req.params.id), req.body);
     if (!row) return res.status(404).json({ message: "المنتج غير موجود" });
     res.json(row);
   });
-  app.delete("/api/products/:id", async (req, res) => {
+  app.delete("/api/products/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     await storage.deleteProduct(Number(req.params.id));
     res.json({ message: "تم حذف المنتج" });
   });
 
-  app.get("/api/warehouses", async (_req, res) => {
+  app.get("/api/warehouses", requireAuth, async (_req, res) => {
     res.json(await storage.getWarehouses());
   });
-  app.post("/api/warehouses", async (req, res) => {
+  app.post("/api/warehouses", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     const parsed = insertWarehouseSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     res.status(201).json(await storage.createWarehouse(parsed.data));
   });
 
-  app.get("/api/inventory", async (_req, res) => {
+  app.get("/api/inventory", requireAuth, requireManager, async (_req, res) => {
     res.json(await storage.getInventory());
   });
-  app.get("/api/inventory/low-stock", async (_req, res) => {
+  app.get("/api/inventory/low-stock", requireAuth, async (_req, res) => {
     res.json(await storage.getLowStockAlerts());
   });
-  app.post("/api/inventory/receive", async (req, res) => {
+  app.post("/api/inventory/receive", requireAuth, requireManager, async (req, res) => {
     const { productId, warehouseId, quantity } = req.body;
     if (!productId || !warehouseId || !quantity) {
       return res.status(400).json({ message: "البيانات ناقصة" });
@@ -856,10 +856,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/customers", async (_req, res) => {
+  app.get("/api/customers", requireAuth, async (_req, res) => {
     res.json(await storage.getCustomers());
   });
-  app.post("/api/customers", async (req, res) => {
+  app.post("/api/customers", requireAuth, async (req, res) => {
     const parsed = insertCustomerSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     res.status(201).json(await storage.createCustomer(parsed.data));
@@ -1225,10 +1225,10 @@ export async function registerRoutes(
     res.json(await storage.getBankLedgerEntries(branchId));
   });
 
-  app.get("/api/employees", async (_req, res) => {
+  app.get("/api/employees", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
     res.json(await storage.getEmployees());
   });
-  app.post("/api/employees", async (req, res) => {
+  app.post("/api/employees", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     const parsed = insertEmployeeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     res.status(201).json(await storage.createEmployee(parsed.data));

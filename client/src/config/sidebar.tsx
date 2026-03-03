@@ -1,216 +1,109 @@
-// client/src/config/sidebar.tsx
 import {
   LayoutDashboard,
-  Gauge,
-  TrendingUp,
   ShoppingCart,
-  Tag,
-  Boxes,
-  ReceiptText,
-  Users,
-  Truck,
-  Banknote,
-  RotateCcw,
   ClipboardList,
+  ReceiptText,
+  Tag,
+  Users,
+  Boxes,
+  ClipboardCheck,
+  Truck,
+  RotateCcw,
+  Banknote,
   Calculator,
-  UserCog,
   FileText,
   Activity,
   ShieldCheck,
   Settings,
+  UserCog,
 } from "lucide-react";
 
-export type UserRole = "OWNER" | "EMPLOYEE";
-
 export type SidebarItem = {
-  label: string;
+  labelKey: string;
   path: string;
   icon: any;
-  // من يقدر يشوفها؟
-  roles: UserRole[];
 };
 
 export type SidebarSection = {
-  section: string;
+  sectionKey: string;
   items: SidebarItem[];
 };
 
-/**
- * ✅ هيكلة المالك (إدارة كاملة)
- * - لوحة تحكم واحدة فقط (بدون تكرار 3 لوحات)
- * - صفحات حساسة للمالك فقط: الإعدادات، التقارير، الرواتب، سجل العمليات، المراجعة
- */
 export const OWNER_SIDEBAR: SidebarSection[] = [
   {
-    section: "الإدارة",
+    sectionKey: "sidebar.section_dashboard",
     items: [
-      {
-        label: "لوحة التحكم",
-        icon: LayoutDashboard,
-        path: "/dashboard",
-        roles: ["OWNER"],
-      },
-      {
-        label: "لوحة الإدارة التنفيذية",
-        icon: Gauge,
-        path: "/executive",
-        roles: ["OWNER"],
-      },
-      {
-        label: "لوحة الاستثمار",
-        icon: TrendingUp,
-        path: "/investment",
-        roles: ["OWNER"],
-      },
+      { labelKey: "nav.dashboard", icon: LayoutDashboard, path: "/" },
     ],
   },
   {
-    section: "التشغيل",
+    sectionKey: "sidebar.section_operations",
     items: [
-      {
-        label: "نقطة البيع (POS)",
-        icon: ShoppingCart,
-        path: "/pos",
-        roles: ["OWNER"],
-      },
-      {
-        label: "فواتير نقطة البيع",
-        icon: ReceiptText,
-        path: "/pos-invoices",
-        roles: ["OWNER"],
-      },
-      {
-        label: "المنتجات والأسعار",
-        icon: Tag,
-        path: "/products",
-        roles: ["OWNER"],
-      },
-      { label: "المخزون", icon: Boxes, path: "/inventory", roles: ["OWNER"] },
-      {
-        label: "الطلبات",
-        icon: ClipboardList,
-        path: "/orders",
-        roles: ["OWNER"],
-      },
-      { label: "العملاء", icon: Users, path: "/customers", roles: ["OWNER"] },
-      {
-        label: "الموردون والمشتريات",
-        icon: Truck,
-        path: "/suppliers",
-        roles: ["OWNER"],
-      },
-      {
-        label: "المصروفات",
-        icon: Banknote,
-        path: "/expenses",
-        roles: ["OWNER"],
-      },
-      {
-        label: "المرتجعات",
-        icon: RotateCcw,
-        path: "/returns",
-        roles: ["OWNER"],
-      },
-      {
-        label: "الجرد والتسويات",
-        icon: ClipboardList,
-        path: "/stock-adjustments",
-        roles: ["OWNER"],
-      },
-      {
-        label: "المحاسبة اليومية",
-        icon: Calculator,
-        path: "/daily-ledger",
-        roles: ["OWNER"],
-      },
+      { labelKey: "nav.pos", icon: ShoppingCart, path: "/pos" },
+      { labelKey: "nav.orders", icon: ClipboardList, path: "/orders" },
+      { labelKey: "nav.invoices", icon: ReceiptText, path: "/invoices" },
     ],
   },
   {
-    section: "الرقابة والتقارير",
+    sectionKey: "sidebar.section_master_data",
     items: [
-      {
-        label: "الرواتب والموظفين",
-        icon: UserCog,
-        path: "/payroll",
-        roles: ["OWNER"],
-      },
-      {
-        label: "التقارير المالية",
-        icon: FileText,
-        path: "/reports",
-        roles: ["OWNER"],
-      },
-      {
-        label: "آخر العمليات",
-        icon: Activity,
-        path: "/activity-log",
-        roles: ["OWNER"],
-      },
-      {
-        label: "سجل المراجعة",
-        icon: ShieldCheck,
-        path: "/audit-log",
-        roles: ["OWNER"],
-      },
+      { labelKey: "nav.products", icon: Tag, path: "/products" },
+      { labelKey: "nav.customers", icon: Users, path: "/customers" },
     ],
   },
   {
-    section: "",
+    sectionKey: "sidebar.section_inventory",
     items: [
-      {
-        label: "الإعدادات",
-        icon: Settings,
-        path: "/settings",
-        roles: ["OWNER"],
-      },
+      { labelKey: "nav.inventory", icon: Boxes, path: "/inventory" },
+      { labelKey: "nav.stockControl", icon: ClipboardCheck, path: "/stock-control" },
+    ],
+  },
+  {
+    sectionKey: "sidebar.section_purchasing",
+    items: [
+      { labelKey: "nav.suppliers", icon: Truck, path: "/suppliers" },
+      { labelKey: "nav.returns", icon: RotateCcw, path: "/returns" },
+    ],
+  },
+  {
+    sectionKey: "sidebar.section_finance",
+    items: [
+      { labelKey: "nav.expenses", icon: Banknote, path: "/expenses" },
+      { labelKey: "nav.finance", icon: Calculator, path: "/finance" },
+      { labelKey: "nav.reports", icon: FileText, path: "/reports" },
+    ],
+  },
+  {
+    sectionKey: "sidebar.section_audit",
+    items: [
+      { labelKey: "nav.operations", icon: Activity, path: "/operations" },
+      { labelKey: "nav.auditLog", icon: ShieldCheck, path: "/audit-log" },
+    ],
+  },
+  {
+    sectionKey: "sidebar.section_settings",
+    items: [
+      { labelKey: "nav.settings", icon: Settings, path: "/settings" },
+      { labelKey: "nav.hr", icon: UserCog, path: "/hr" },
     ],
   },
 ];
 
-/**
- * ✅ هيكلة الموظف (مختص للعمل فقط)
- * - لا يرى ولا يدخل: الإعدادات/التقارير/الرواتب/المراجعة/لوحات الإدارة
- * - فقط ما يحتاجه لعمله اليومي
- */
 export const EMPLOYEE_SIDEBAR: SidebarSection[] = [
   {
-    section: "التشغيل",
+    sectionKey: "sidebar.section_operations",
     items: [
-      {
-        label: "نقطة البيع (POS)",
-        icon: ShoppingCart,
-        path: "/pos",
-        roles: ["EMPLOYEE"],
-      },
-      {
-        label: "الطلبات",
-        icon: ClipboardList,
-        path: "/orders",
-        roles: ["EMPLOYEE"],
-      },
-      {
-        label: "فواتير نقطة البيع",
-        icon: ReceiptText,
-        path: "/pos-invoices",
-        roles: ["EMPLOYEE"],
-      },
-      {
-        label: "العملاء",
-        icon: Users,
-        path: "/customers",
-        roles: ["EMPLOYEE"],
-      },
-      {
-        label: "المرتجعات",
-        icon: RotateCcw,
-        path: "/returns",
-        roles: ["EMPLOYEE"],
-      },
+      { labelKey: "nav.pos", icon: ShoppingCart, path: "/pos" },
+      { labelKey: "nav.orders", icon: ClipboardList, path: "/orders" },
+      { labelKey: "nav.invoices", icon: ReceiptText, path: "/invoices" },
+      { labelKey: "nav.customers", icon: Users, path: "/customers" },
     ],
   },
 ];
 
-// استخدم هذه الدالة في الـ Sidebar component
-export function getSidebarForRole(role: UserRole): SidebarSection[] {
-  return role === "OWNER" ? OWNER_SIDEBAR : EMPLOYEE_SIDEBAR;
+export const EMPLOYEE_ALLOWED_PATHS = ["/pos", "/orders", "/invoices", "/customers"];
+
+export function getSidebarForRole(role: string): SidebarSection[] {
+  if (role === "owner" || role === "admin") return OWNER_SIDEBAR;
+  return EMPLOYEE_SIDEBAR;
 }

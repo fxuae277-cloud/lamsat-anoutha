@@ -2,7 +2,9 @@
   "app": {
     "loading": "Loading...",
     "name": "Lamsat Onotha",
-    "search_placeholder": "Search products, customers, invoices..."
+    "search_placeholder": "Search products, customers, invoices...",
+    "customers_coming_soon": "Customers page (coming soon)",
+    "unauthorized": "You are not authorized to access this page"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -31,7 +33,15 @@
     "role_cashier": "Cashier",
     "role_employee": "Employee",
     "logout": "Logout",
-    "branch": "Branch"
+    "branch": "Branch",
+    "section_dashboard": "Dashboard",
+    "section_operations": "Operations",
+    "section_master_data": "Master Data",
+    "section_inventory": "Inventory",
+    "section_purchasing": "Purchasing",
+    "section_finance": "Finance",
+    "section_audit": "Audit & Monitoring",
+    "section_settings": "Settings"
   },
   "settings": {
     "title": "Settings",
