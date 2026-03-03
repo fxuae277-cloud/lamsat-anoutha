@@ -1322,6 +1322,90 @@ export async function registerRoutes(
     res.json(await storage.getBranchComparisonReport(dateStr));
   });
 
+  app.get("/api/reports/overview", requireAuth, enforceBranchScope, async (req, res) => {
+    const from = req.query.from as string;
+    const to = req.query.to as string;
+    if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json({ message: "from & to required (YYYY-MM-DD)" });
+    }
+    const scope = req.branchScope!;
+    const branchId = req.query.branchId ? Number(req.query.branchId) : (scope.mode === "branch" ? scope.branchId! : undefined);
+    res.json(await storage.getOverviewReport(from, to, branchId));
+  });
+
+  app.get("/api/reports/sales-list", requireAuth, enforceBranchScope, async (req, res) => {
+    const from = req.query.from as string;
+    const to = req.query.to as string;
+    if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json({ message: "from & to required (YYYY-MM-DD)" });
+    }
+    const scope = req.branchScope!;
+    const branchId = req.query.branchId ? Number(req.query.branchId) : (scope.mode === "branch" ? scope.branchId! : undefined);
+    const paymentMethod = req.query.paymentMethod as string | undefined;
+    res.json(await storage.getSalesListReport(from, to, branchId, paymentMethod));
+  });
+
+  app.get("/api/reports/categories-report", requireAuth, enforceBranchScope, async (req, res) => {
+    const from = req.query.from as string;
+    const to = req.query.to as string;
+    if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json({ message: "from & to required (YYYY-MM-DD)" });
+    }
+    const scope = req.branchScope!;
+    const branchId = req.query.branchId ? Number(req.query.branchId) : (scope.mode === "branch" ? scope.branchId! : undefined);
+    res.json(await storage.getCategoriesReport(from, to, branchId));
+  });
+
+  app.get("/api/reports/payments-report", requireAuth, enforceBranchScope, async (req, res) => {
+    const from = req.query.from as string;
+    const to = req.query.to as string;
+    if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json({ message: "from & to required (YYYY-MM-DD)" });
+    }
+    const scope = req.branchScope!;
+    const branchId = req.query.branchId ? Number(req.query.branchId) : (scope.mode === "branch" ? scope.branchId! : undefined);
+    res.json(await storage.getPaymentsReport(from, to, branchId));
+  });
+
+  app.get("/api/reports/shifts-report", requireAuth, enforceBranchScope, async (req, res) => {
+    const from = req.query.from as string;
+    const to = req.query.to as string;
+    if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json({ message: "from & to required (YYYY-MM-DD)" });
+    }
+    const scope = req.branchScope!;
+    const branchId = req.query.branchId ? Number(req.query.branchId) : (scope.mode === "branch" ? scope.branchId! : undefined);
+    res.json(await storage.getShiftsReport(from, to, branchId));
+  });
+
+  app.get("/api/reports/shift-details/:id", requireAuth, enforceBranchScope, async (req, res) => {
+    const shiftId = Number(req.params.id);
+    if (!shiftId) return res.status(400).json({ message: "shiftId required" });
+    const details = await storage.getShiftDetails(shiftId);
+    if (!details) return res.status(404).json({ message: "Shift not found" });
+    res.json(details);
+  });
+
+  app.get("/api/reports/products-report", requireAuth, enforceBranchScope, async (req, res) => {
+    const from = req.query.from as string;
+    const to = req.query.to as string;
+    if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json({ message: "from & to required (YYYY-MM-DD)" });
+    }
+    const scope = req.branchScope!;
+    const branchId = req.query.branchId ? Number(req.query.branchId) : (scope.mode === "branch" ? scope.branchId! : undefined);
+    res.json(await storage.getProfitByProducts(from, to, branchId));
+  });
+
+  app.get("/api/reports/branch-comparison-range", requireOwnerOrAdmin, async (req, res) => {
+    const from = req.query.from as string;
+    const to = req.query.to as string;
+    if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json({ message: "from & to required (YYYY-MM-DD)" });
+    }
+    res.json(await storage.getBranchComparisonRange(from, to));
+  });
+
   app.get("/api/reports/employee-performance/:id", requireOwnerOrAdmin, async (req, res) => {
     const employeeId = Number(req.params.id);
     const from = req.query.from as string;

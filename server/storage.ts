@@ -116,6 +116,13 @@ export interface IStorage {
   getProfitByBranches(from: string, to: string): Promise<any[]>;
   getProfitByEmployees(from: string, to: string, branchId?: number): Promise<any[]>;
   getProfitByProducts(from: string, to: string, branchId?: number): Promise<any[]>;
+  getOverviewReport(from: string, to: string, branchId?: number): Promise<any>;
+  getSalesListReport(from: string, to: string, branchId?: number, paymentMethod?: string): Promise<any>;
+  getCategoriesReport(from: string, to: string, branchId?: number): Promise<any[]>;
+  getPaymentsReport(from: string, to: string, branchId?: number): Promise<any>;
+  getShiftsReport(from: string, to: string, branchId?: number): Promise<any[]>;
+  getShiftDetails(shiftId: number): Promise<any>;
+  getBranchComparisonRange(from: string, to: string): Promise<any>;
   getPurchaseInvoices(): Promise<PurchaseInvoice[]>;
   getPurchaseInvoice(id: number): Promise<PurchaseInvoice | undefined>;
   createPurchaseInvoice(data: InsertPurchaseInvoice): Promise<PurchaseInvoice>;
@@ -1945,6 +1952,405 @@ export class DatabaseStorage implements IStorage {
     }
 
     return { date: dateStr, branches: results };
+  }
+
+  async getOverviewReport(from: string, to: string, branchId?: number) {
+    const fromDate = new Date(from + "T00:00:00");
+    const toDate = new Date(to + "T23:59:59.999");
+
+    const saleBranchFilter = branchId ? eq(sales.branchId, branchId) : undefined;
+    const orderBranchFilter = branchId ? eq(orders.branchId, branchId) : undefined;
+    const expBranchFilter = branchId ? eq(expenses.branchId, branchId) : undefined;
+    const shiftBranchFilter = branchId ? eq(shifts.branchId, branchId) : undefined;
+
+    const querySaleSum = async (pm?: string) => {
+      const conds: any[] = [sql`${sales.createdAt} >= ${fromDate}`, sql`${sales.createdAt} <= ${toDate}`];
+      if (saleBranchFilter) conds.push(saleBranchFilter);
+      if (pm) conds.push(eq(sales.paymentMethod, pm));
+      const [row] = await db.select({
+        total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
+        count: sql<number>`count(*)::int`,
+        cogs: sql<string>`coalesce(sum(${sales.cogsTotal}::numeric), 0)::text`,
+      }).from(sales).where(and(...conds));
+      return row;
+    };
+
+    const queryOrderSum = async (pm?: string) => {
+      const conds: any[] = [eq(orders.status, "paid"), sql`${orders.createdAt} >= ${fromDate}`, sql`${orders.createdAt} <= ${toDate}`];
+      if (orderBranchFilter) conds.push(orderBranchFilter);
+      if (pm) conds.push(eq(orders.paymentMethod, pm));
+      const [row] = await db.select({
+        total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
+        count: sql<number>`count(*)::int`,
+        cogs: sql<string>`coalesce(sum(${orders.cogsTotal}::numeric), 0)::text`,
+      }).from(orders).where(and(...conds));
+      return row;
+    };
+
+    const [cashS, cardS, bankS] = await Promise.all([querySaleSum("cash"), querySaleSum("card"), querySaleSum("bank_transfer")]);
+    const [cashO, cardO, bankO] = await Promise.all([queryOrderSum("cash"), queryOrderSum("card"), queryOrderSum("bank_transfer")]);
+    const [allS] = await Promise.all([querySaleSum()]);
+    const [allO] = await Promise.all([queryOrderSum()]);
+
+    const salesCash = parseFloat(cashS.total) + parseFloat(cashO.total);
+    const salesCard = parseFloat(cardS.total) + parseFloat(cardO.total);
+    const salesBank = parseFloat(bankS.total) + parseFloat(bankO.total);
+    const totalSales = parseFloat(allS.total) + parseFloat(allO.total);
+    const totalCogs = parseFloat(allS.cogs) + parseFloat(allO.cogs);
+    const grossProfit = totalSales - totalCogs;
+    const invoiceCount = allS.count + allO.count;
+
+    const [cashExp] = await db.select({
+      total: sql<string>`coalesce(sum(${expenses.amount}::numeric), 0)::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(expenses).where(and(eq(expenses.source, "cash"), sql`${expenses.date} >= ${from}`, sql`${expenses.date} <= ${to}`, expBranchFilter));
+
+    const [bankExp] = await db.select({
+      total: sql<string>`coalesce(sum(${expenses.amount}::numeric), 0)::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(expenses).where(and(sql`${expenses.source} != 'cash'`, sql`${expenses.date} >= ${from}`, sql`${expenses.date} <= ${to}`, expBranchFilter));
+
+    const totalExpenses = parseFloat(cashExp.total) + parseFloat(bankExp.total);
+    const netProfit = grossProfit - totalExpenses;
+
+    const dayShifts = await db.select().from(shifts).where(
+      and(sql`${shifts.startedAt} >= ${fromDate}`, sql`${shifts.startedAt} <= ${toDate}`, shiftBranchFilter)
+    ).orderBy(shifts.startedAt);
+
+    const sumOpeningCash = dayShifts.reduce((s, sh) => s + parseFloat(sh.openingCash || "0"), 0);
+    const cashClosingBalance = sumOpeningCash + salesCash - parseFloat(cashExp.total);
+    const sumDifferences = dayShifts.filter(s => s.status === "closed" && s.difference).reduce((s, sh) => s + parseFloat(sh.difference || "0"), 0);
+
+    return {
+      from, to, branchId: branchId || null,
+      totalSales: totalSales.toFixed(3),
+      cogsTotal: totalCogs.toFixed(3),
+      grossProfit: grossProfit.toFixed(3),
+      totalExpenses: totalExpenses.toFixed(3),
+      netProfit: netProfit.toFixed(3),
+      invoiceCount,
+      salesCash: { total: salesCash.toFixed(3), count: cashS.count + cashO.count },
+      salesCard: { total: salesCard.toFixed(3), count: cardS.count + cardO.count },
+      salesBankTransfer: { total: salesBank.toFixed(3), count: bankS.count + bankO.count },
+      expensesCash: { total: cashExp.total, count: cashExp.count },
+      expensesBank: { total: bankExp.total, count: bankExp.count },
+      openingCash: sumOpeningCash.toFixed(3),
+      cashClosingBalance: cashClosingBalance.toFixed(3),
+      differencesSum: sumDifferences.toFixed(3),
+      shiftsCount: dayShifts.length,
+    };
+  }
+
+  async getSalesListReport(from: string, to: string, branchId?: number, paymentMethod?: string) {
+    const fromDate = new Date(from + "T00:00:00");
+    const toDate = new Date(to + "T23:59:59.999");
+
+    const saleConds: any[] = [sql`${sales.createdAt} >= ${fromDate}`, sql`${sales.createdAt} <= ${toDate}`];
+    if (branchId) saleConds.push(eq(sales.branchId, branchId));
+    if (paymentMethod) saleConds.push(eq(sales.paymentMethod, paymentMethod));
+
+    const saleRows = await db.select({
+      id: sales.id,
+      invoiceNumber: sales.invoiceNumber,
+      branchId: sales.branchId,
+      shiftId: sales.shiftId,
+      cashierId: sales.cashierId,
+      cashierName: users.name,
+      subtotal: sales.subtotal,
+      discount: sales.discount,
+      vat: sales.vat,
+      total: sales.total,
+      paymentMethod: sales.paymentMethod,
+      bankTxnId: sales.bankTxnId,
+      cogsTotal: sales.cogsTotal,
+      grossProfit: sales.grossProfit,
+      createdAt: sales.createdAt,
+    }).from(sales)
+      .leftJoin(users, eq(sales.cashierId, users.id))
+      .where(and(...saleConds))
+      .orderBy(desc(sales.createdAt));
+
+    const allBranches = await db.select().from(branches);
+    const branchMap = Object.fromEntries(allBranches.map(b => [b.id, b.name]));
+
+    const rows = saleRows.map(s => ({
+      type: "sale" as const,
+      id: s.id,
+      invoiceNumber: s.invoiceNumber,
+      branchName: branchMap[s.branchId] || "",
+      branchId: s.branchId,
+      shiftId: s.shiftId,
+      cashierName: s.cashierName || "",
+      subtotal: s.subtotal,
+      discount: s.discount,
+      vat: s.vat,
+      total: s.total,
+      paymentMethod: s.paymentMethod,
+      bankTxnId: s.bankTxnId,
+      cogsTotal: s.cogsTotal,
+      grossProfit: s.grossProfit,
+      createdAt: s.createdAt,
+    }));
+
+    const totalSales = rows.reduce((s, r) => s + parseFloat(String(r.total || "0")), 0);
+    const totalDiscount = rows.reduce((s, r) => s + parseFloat(String(r.discount || "0")), 0);
+    const totalVat = rows.reduce((s, r) => s + parseFloat(String(r.vat || "0")), 0);
+
+    return {
+      rows,
+      summary: {
+        count: rows.length,
+        totalSales: totalSales.toFixed(3),
+        totalDiscount: totalDiscount.toFixed(3),
+        totalVat: totalVat.toFixed(3),
+      }
+    };
+  }
+
+  async getCategoriesReport(from: string, to: string, branchId?: number) {
+    const fromDate = new Date(from + "T00:00:00");
+    const toDate = new Date(to + "T23:59:59.999");
+
+    const siConds: any[] = [sql`${sales.createdAt} >= ${fromDate}`, sql`${sales.createdAt} <= ${toDate}`];
+    if (branchId) siConds.push(eq(sales.branchId, branchId));
+
+    const oiConds: any[] = [eq(orders.status, "paid"), sql`${orders.createdAt} >= ${fromDate}`, sql`${orders.createdAt} <= ${toDate}`];
+    if (branchId) oiConds.push(eq(orders.branchId, branchId));
+
+    const siRows = await db.select({
+      categoryId: products.categoryId,
+      categoryName: categories.name,
+      qtySold: sql<number>`coalesce(sum(${saleItems.quantity}), 0)::int`,
+      revenue: sql<string>`coalesce(sum(${saleItems.total}::numeric), 0)::text`,
+      cogs: sql<string>`coalesce(sum(${saleItems.lineCogs}::numeric), 0)::text`,
+    }).from(saleItems)
+      .innerJoin(sales, eq(saleItems.saleId, sales.id))
+      .innerJoin(products, eq(saleItems.productId, products.id))
+      .leftJoin(categories, eq(products.categoryId, categories.id))
+      .where(and(...siConds))
+      .groupBy(products.categoryId, categories.name);
+
+    const oiRows = await db.select({
+      categoryId: products.categoryId,
+      categoryName: categories.name,
+      qtySold: sql<number>`coalesce(sum(${orderItems.quantity}), 0)::int`,
+      revenue: sql<string>`coalesce(sum(${orderItems.total}::numeric), 0)::text`,
+      cogs: sql<string>`coalesce(sum(${orderItems.lineCogs}::numeric), 0)::text`,
+    }).from(orderItems)
+      .innerJoin(orders, eq(orderItems.orderId, orders.id))
+      .innerJoin(products, eq(orderItems.productId, products.id))
+      .leftJoin(categories, eq(products.categoryId, categories.id))
+      .where(and(...oiConds))
+      .groupBy(products.categoryId, categories.name);
+
+    const catMap = new Map<number | null, { name: string; qtySold: number; revenue: number; cogs: number }>();
+    for (const row of [...siRows, ...oiRows]) {
+      const key = row.categoryId;
+      const existing = catMap.get(key) || { name: row.categoryName || "—", qtySold: 0, revenue: 0, cogs: 0 };
+      existing.qtySold += row.qtySold;
+      existing.revenue += parseFloat(row.revenue);
+      existing.cogs += parseFloat(row.cogs);
+      catMap.set(key, existing);
+    }
+
+    return Array.from(catMap.entries()).map(([catId, data]) => {
+      const profit = data.revenue - data.cogs;
+      const margin = data.revenue > 0 ? ((profit / data.revenue) * 100) : 0;
+      return {
+        categoryId: catId,
+        categoryName: data.name,
+        qtySold: data.qtySold,
+        revenue: data.revenue.toFixed(3),
+        cogs: data.cogs.toFixed(3),
+        profit: profit.toFixed(3),
+        margin: margin.toFixed(1),
+      };
+    }).sort((a, b) => parseFloat(b.revenue) - parseFloat(a.revenue));
+  }
+
+  async getPaymentsReport(from: string, to: string, branchId?: number) {
+    const fromDate = new Date(from + "T00:00:00");
+    const toDate = new Date(to + "T23:59:59.999");
+
+    const saleConds: any[] = [sql`${sales.createdAt} >= ${fromDate}`, sql`${sales.createdAt} <= ${toDate}`];
+    if (branchId) saleConds.push(eq(sales.branchId, branchId));
+
+    const orderConds: any[] = [eq(orders.status, "paid"), sql`${orders.createdAt} >= ${fromDate}`, sql`${orders.createdAt} <= ${toDate}`];
+    if (branchId) orderConds.push(eq(orders.branchId, branchId));
+
+    const saleByMethod = await db.select({
+      method: sales.paymentMethod,
+      total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(sales).where(and(...saleConds)).groupBy(sales.paymentMethod);
+
+    const orderByMethod = await db.select({
+      method: orders.paymentMethod,
+      total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(orders).where(and(...orderConds)).groupBy(orders.paymentMethod);
+
+    const methodMap = new Map<string, { total: number; count: number }>();
+    for (const row of [...saleByMethod, ...orderByMethod]) {
+      const key = row.method || "cash";
+      const existing = methodMap.get(key) || { total: 0, count: 0 };
+      existing.total += parseFloat(row.total);
+      existing.count += row.count;
+      methodMap.set(key, existing);
+    }
+
+    const grandTotal = Array.from(methodMap.values()).reduce((s, v) => s + v.total, 0);
+
+    const methods = Array.from(methodMap.entries()).map(([method, data]) => ({
+      method,
+      total: data.total.toFixed(3),
+      count: data.count,
+      percentage: grandTotal > 0 ? ((data.total / grandTotal) * 100).toFixed(1) : "0.0",
+    }));
+
+    const allBranches = await db.select().from(branches);
+    const branchMap = Object.fromEntries(allBranches.map(b => [b.id, b.name]));
+
+    const transactions = await db.select({
+      id: sales.id,
+      invoiceNumber: sales.invoiceNumber,
+      branchId: sales.branchId,
+      method: sales.paymentMethod,
+      total: sales.total,
+      bankTxnId: sales.bankTxnId,
+      createdAt: sales.createdAt,
+      cashierName: users.name,
+    }).from(sales)
+      .leftJoin(users, eq(sales.cashierId, users.id))
+      .where(and(...saleConds))
+      .orderBy(desc(sales.createdAt))
+      .limit(200);
+
+    const txnRows = transactions.map(t => ({
+      id: t.id,
+      invoiceNumber: t.invoiceNumber,
+      branchName: branchMap[t.branchId] || "",
+      method: t.method,
+      total: t.total,
+      bankTxnId: t.bankTxnId,
+      createdAt: t.createdAt,
+      cashierName: t.cashierName || "",
+    }));
+
+    return { methods, transactions: txnRows, grandTotal: grandTotal.toFixed(3) };
+  }
+
+  async getShiftsReport(from: string, to: string, branchId?: number) {
+    const fromDate = new Date(from + "T00:00:00");
+    const toDate = new Date(to + "T23:59:59.999");
+
+    const conds: any[] = [sql`${shifts.startedAt} >= ${fromDate}`, sql`${shifts.startedAt} <= ${toDate}`];
+    if (branchId) conds.push(eq(shifts.branchId, branchId));
+
+    const rows = await db.select({
+      id: shifts.id,
+      branchId: shifts.branchId,
+      cashierId: shifts.cashierId,
+      cashierName: users.name,
+      terminalName: shifts.terminalName,
+      startedAt: shifts.startedAt,
+      endedAt: shifts.endedAt,
+      status: shifts.status,
+      openingCash: shifts.openingCash,
+      expectedCash: shifts.expectedCash,
+      actualCash: shifts.actualCash,
+      difference: shifts.difference,
+      totalSales: shifts.totalSales,
+      totalCash: shifts.totalCash,
+      totalBank: shifts.totalBank,
+    }).from(shifts)
+      .leftJoin(users, eq(shifts.cashierId, users.id))
+      .where(and(...conds))
+      .orderBy(desc(shifts.startedAt));
+
+    const allBranches = await db.select().from(branches);
+    const branchMap = Object.fromEntries(allBranches.map(b => [b.id, b.name]));
+
+    return rows.map(s => ({
+      ...s,
+      branchName: branchMap[s.branchId] || "",
+    }));
+  }
+
+  async getShiftDetails(shiftId: number) {
+    const report = await this.getShiftReport(shiftId);
+    if (!report) return null;
+
+    const shiftSales = await db.select({
+      id: sales.id,
+      invoiceNumber: sales.invoiceNumber,
+      total: sales.total,
+      paymentMethod: sales.paymentMethod,
+      createdAt: sales.createdAt,
+    }).from(sales).where(eq(sales.shiftId, shiftId)).orderBy(sales.createdAt);
+
+    const shiftExpenses = await db.select({
+      id: expenses.id,
+      category: expenses.category,
+      amount: expenses.amount,
+      source: expenses.source,
+      note: expenses.note,
+      date: expenses.date,
+    }).from(expenses).where(eq(expenses.shiftId, shiftId)).orderBy(expenses.date);
+
+    return { ...report, sales: shiftSales, expenses: shiftExpenses };
+  }
+
+  async getBranchComparisonRange(from: string, to: string) {
+    const fromDate = new Date(from + "T00:00:00");
+    const toDate = new Date(to + "T23:59:59.999");
+
+    const allBranches = await db.select().from(branches);
+    const results = [];
+
+    for (const branch of allBranches) {
+      const [ordSales] = await db.select({
+        total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
+        cogs: sql<string>`coalesce(sum(${orders.cogsTotal}::numeric), 0)::text`,
+      }).from(orders).where(
+        and(eq(orders.status, "paid"), eq(orders.branchId, branch.id),
+          sql`${orders.createdAt} >= ${fromDate}`, sql`${orders.createdAt} <= ${toDate}`)
+      );
+
+      const [posSales] = await db.select({
+        total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
+        cogs: sql<string>`coalesce(sum(${sales.cogsTotal}::numeric), 0)::text`,
+      }).from(sales).where(
+        and(eq(sales.branchId, branch.id),
+          sql`${sales.createdAt} >= ${fromDate}`, sql`${sales.createdAt} <= ${toDate}`)
+      );
+
+      const [expRow] = await db.select({
+        total: sql<string>`coalesce(sum(${expenses.amount}::numeric), 0)::text`,
+      }).from(expenses).where(
+        and(eq(expenses.branchId, branch.id), sql`${expenses.date} >= ${from}`, sql`${expenses.date} <= ${to}`)
+      );
+
+      const totalSales = parseFloat(ordSales.total) + parseFloat(posSales.total);
+      const totalCogs = parseFloat(ordSales.cogs) + parseFloat(posSales.cogs);
+      const grossProfit = totalSales - totalCogs;
+      const totalExpenses = parseFloat(expRow.total);
+      const netProfit = grossProfit - totalExpenses;
+      const margin = totalSales > 0 ? ((netProfit / totalSales) * 100) : 0;
+
+      results.push({
+        branchId: branch.id,
+        branchName: branch.name,
+        totalSales: totalSales.toFixed(3),
+        cogsTotal: totalCogs.toFixed(3),
+        grossProfit: grossProfit.toFixed(3),
+        totalExpenses: totalExpenses.toFixed(3),
+        netProfit: netProfit.toFixed(3),
+        margin: margin.toFixed(1),
+      });
+    }
+
+    return { from, to, branches: results };
   }
 
   async createLocationTransfer(

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, Clock, Download, Banknote, CreditCard, Building2, TrendingUp, TrendingDown, DollarSign, ArrowLeftRight, BarChart3, Package, FileSpreadsheet, FileText, Users, ShoppingBag } from "lucide-react";
+import { Calendar, Download, Banknote, CreditCard, Building2, TrendingUp, TrendingDown, DollarSign, BarChart3, Package, ShoppingBag, Eye, Layers, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
@@ -17,10 +18,16 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function monthAgoStr() {
-  const d = new Date();
-  d.setMonth(d.getMonth() - 1);
-  return d.toISOString().slice(0, 10);
+function omr(val: string | number | null) {
+  if (val === null || val === undefined) return "0.000";
+  return parseFloat(String(val)).toFixed(3);
+}
+
+function fmtDateTime(ts: string | null, lang: string) {
+  if (!ts) return "-";
+  return new Date(ts).toLocaleString(lang === "ar" ? "ar-OM" : "en-US", {
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
 }
 
 function fmtTime(ts: string | null, lang: string) {
@@ -28,9 +35,23 @@ function fmtTime(ts: string | null, lang: string) {
   return new Date(ts).toLocaleTimeString(lang === "ar" ? "ar-OM" : "en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
-function omr(val: string | number | null) {
-  if (val === null || val === undefined) return "0.000";
-  return parseFloat(String(val)).toFixed(3);
+function downloadCSV(filename: string, rows: any[][]) {
+  const bom = "\uFEFF";
+  const csv = bom + rows.map(r => r.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function pmLabel(method: string, t: (k: string) => string) {
+  if (method === "cash") return t("reports.cash_sales");
+  if (method === "card") return t("reports.card_sales");
+  if (method === "bank_transfer") return t("reports.bank_sales");
+  return method;
 }
 
 function StatCard({ title, value, sub, icon: Icon, color }: {
@@ -54,464 +75,789 @@ function StatCard({ title, value, sub, icon: Icon, color }: {
   );
 }
 
-function ShiftReport() {
-  const { t, lang } = useI18n();
-  const [selectedDate, setSelectedDate] = useState(todayStr());
-  const [selectedShiftId, setSelectedShiftId] = useState<string>("");
-
-  const { data: branches = [] } = useQuery<Branch[]>({
-    queryKey: ["/api/branches"],
-    queryFn: getQueryFn({ on401: "throw" }),
-  });
-  const branchMap = Object.fromEntries(branches.map(b => [b.id, b.name]));
-
-  const { data: dayShifts = [] } = useQuery<any[]>({
-    queryKey: ["/api/reports/shifts-by-date", selectedDate],
-    queryFn: async () => {
-      const res = await fetch(`/api/reports/shifts-by-date?date=${selectedDate}`, { credentials: "include" });
-      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-      return res.json();
-    },
-    enabled: !!selectedDate,
-  });
-
-  const { data: report } = useQuery<any>({
-    queryKey: ["/api/reports/shift", selectedShiftId],
-    queryFn: async () => {
-      const res = await fetch(`/api/reports/shift?shiftId=${selectedShiftId}`, { credentials: "include" });
-      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-      return res.json();
-    },
-    enabled: !!selectedShiftId,
-  });
-
+function EmptyState({ t }: { t: (k: string) => string }) {
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="space-y-1">
-          <label className="text-sm font-medium">{t("reports.date_label")}</label>
-          <Input type="date" value={selectedDate} onChange={e => { setSelectedDate(e.target.value); setSelectedShiftId(""); }} className="w-44" data-testid="input-shift-report-date" />
-        </div>
-        <div className="space-y-1 min-w-[220px]">
-          <label className="text-sm font-medium">{t("reports.select_shift")}</label>
-          <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
-            <SelectTrigger data-testid="select-shift-report"><SelectValue placeholder={t("reports.select_shift_placeholder")} /></SelectTrigger>
-            <SelectContent>
-              {dayShifts.length === 0 && (
-                <div className="p-3 text-center text-sm text-muted-foreground">{t("reports.no_shifts_day")}</div>
-              )}
-              {dayShifts.map((s: any) => (
-                <SelectItem key={s.id} value={String(s.id)}>
-                  #{s.id} - {s.cashierName || "—"} ({s.terminalName}) - {fmtTime(s.startedAt, lang)}
-                  {s.status === "open" ? " 🟢" : " 🔴"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {report && (
-        <div className="space-y-4 animate-in fade-in duration-300">
-          <div className="p-4 bg-muted/30 rounded-xl border space-y-1 text-sm">
-            <div className="flex flex-wrap gap-x-6 gap-y-1">
-              <span><strong>{t("reports.shift_prefix")}:</strong> #{report.shift.id}</span>
-              <span><strong>{t("reports.cashier_label")}:</strong> {report.cashierName || "—"}</span>
-              <span><strong>{t("reports.terminal_label")}:</strong> {report.shift.terminalName}</span>
-              <span><strong>{t("reports.branch_label")}:</strong> {branchMap[report.shift.branchId] || "—"}</span>
-              <span><strong>{t("reports.start_label")}:</strong> {fmtTime(report.shift.startedAt, lang)}</span>
-              <span><strong>{t("reports.end_label")}:</strong> {report.shift.endedAt ? fmtTime(report.shift.endedAt, lang) : t("reports.open")}</span>
-              <Badge variant={report.shift.status === "open" ? "default" : "secondary"}>
-                {report.shift.status === "open" ? t("reports.open") : t("reports.closed")}
-              </Badge>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard title={t("reports.cash_sales")} value={omr(report.salesCash.total)} sub={`${report.salesCash.count} ${t("common.transaction")}`} icon={Banknote} color="text-green-600" />
-            <StatCard title={t("reports.card_sales")} value={omr(report.salesCard.total)} sub={`${report.salesCard.count} ${t("common.transaction")}`} icon={CreditCard} color="text-blue-600" />
-            <StatCard title={t("reports.bank_sales")} value={omr(report.salesBankTransfer.total)} sub={`${report.salesBankTransfer.count} ${t("common.transaction")}`} icon={Building2} color="text-purple-600" />
-            <StatCard title={t("reports.total_sales_report")} value={omr(report.totalSales)} icon={TrendingUp} color="text-emerald-600" />
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard title={t("reports.cash_expenses")} value={omr(report.expensesCash.total)} sub={`${report.expensesCash.count} ${t("nav.expenses")}`} icon={TrendingDown} color="text-red-500" />
-            <StatCard title={t("reports.bank_expenses")} value={omr(report.expensesBank.total)} sub={`${report.expensesBank.count} ${t("nav.expenses")}`} icon={TrendingDown} color="text-orange-500" />
-            <StatCard title={t("reports.total_expenses")} value={omr(report.totalExpenses)} icon={TrendingDown} color="text-red-600" />
-            <StatCard title={t("reports.net_profit")} value={omr(report.netTotal)} icon={DollarSign} color={parseFloat(report.netTotal) >= 0 ? "text-emerald-700" : "text-red-700"} />
-          </div>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">{t("reports.cash_recon")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableBody>
-                  <TableRow>
-                    <TableCell className="font-medium">{t("reports.opening_balance")}</TableCell>
-                    <TableCell className="text-left font-mono">{omr(report.openingCash)} OMR</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium text-green-600">{t("reports.plus_cash_sales")}</TableCell>
-                    <TableCell className="text-left font-mono text-green-600">+{omr(report.salesCash.total)} OMR</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium text-red-600">{t("reports.minus_cash_expenses")}</TableCell>
-                    <TableCell className="text-left font-mono text-red-600">-{omr(report.expensesCash.total)} OMR</TableCell>
-                  </TableRow>
-                  <TableRow className="border-t-2">
-                    <TableCell className="font-bold">{t("reports.expected_cash")}</TableCell>
-                    <TableCell className="text-left font-mono font-bold">{omr(report.expectedCash)} OMR</TableCell>
-                  </TableRow>
-                  {report.actualCash !== null && (
-                    <>
-                      <TableRow>
-                        <TableCell className="font-medium">{t("reports.actual_cash")}</TableCell>
-                        <TableCell className="text-left font-mono">{omr(report.actualCash)} OMR</TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell className="font-bold">{t("reports.difference")}</TableCell>
-                        <TableCell className={`text-left font-mono font-bold ${parseFloat(report.difference || "0") === 0 ? "text-green-600" : "text-red-600"}`}>
-                          {omr(report.difference)} OMR
-                          {parseFloat(report.difference || "0") === 0 && " ✓"}
-                        </TableCell>
-                      </TableRow>
-                    </>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {!report && selectedShiftId && (
-        <div className="text-center py-12 text-muted-foreground">{t("reports.loading_report")}</div>
-      )}
-      {!selectedShiftId && (
-        <div className="text-center py-12 text-muted-foreground">{t("reports.select_shift_to_view")}</div>
-      )}
+    <div className="text-center py-16 text-muted-foreground space-y-2">
+      <BarChart3 className="w-12 h-12 mx-auto opacity-30" />
+      <p className="font-medium">{t("reports.no_data_date")}</p>
+      <p className="text-sm">{t("reports.no_data_hint")}</p>
     </div>
   );
 }
 
-function DailyReport() {
+function OverviewTab({ from, to, branchId }: { from: string; to: string; branchId?: number }) {
   const { t, lang } = useI18n();
-  const [selectedDate, setSelectedDate] = useState(todayStr());
-  const [selectedBranch, setSelectedBranch] = useState<string>("all");
-
-  const { data: branches = [] } = useQuery<Branch[]>({
-    queryKey: ["/api/branches"],
-    queryFn: getQueryFn({ on401: "throw" }),
-  });
-  const branchMap = Object.fromEntries(branches.map(b => [b.id, b.name]));
-
-  const branchParam = selectedBranch !== "all" ? `&branchId=${selectedBranch}` : "";
-  const { data: report } = useQuery<any>({
-    queryKey: ["/api/reports/daily", selectedDate, selectedBranch],
+  const params = `from=${from}&to=${to}${branchId ? `&branchId=${branchId}` : ""}`;
+  const { data: report, isLoading } = useQuery<any>({
+    queryKey: ["/api/reports/overview", from, to, branchId],
     queryFn: async () => {
-      const res = await fetch(`/api/reports/daily?date=${selectedDate}${branchParam}`, { credentials: "include" });
-      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      const res = await fetch(`/api/reports/overview?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },
-    enabled: !!selectedDate,
   });
 
   function exportCSV() {
     if (!report) return;
-    const bom = "\uFEFF";
-    const rows = [
-      [t("reports.daily_report_title"), report.date, selectedBranch !== "all" ? branchMap[Number(selectedBranch)] || "" : t("reports.all_branches")],
+    downloadCSV(`overview-${from}-${to}.csv`, [
+      [t("reports.tab_overview"), `${from} → ${to}`],
       [],
       [t("reports.item_label"), t("reports.amount_omr"), t("reports.count_label")],
       [t("reports.cash_sales"), report.salesCash.total, report.salesCash.count],
       [t("reports.card_sales"), report.salesCard.total, report.salesCard.count],
       [t("reports.bank_sales"), report.salesBankTransfer.total, report.salesBankTransfer.count],
-      [t("reports.total_sales_report"), report.totalSales, ""],
+      [t("reports.total_sales"), report.totalSales, report.invoiceCount],
       [],
-      [t("reports.cogs"), report.cogsTotal, ""],
-      [t("reports.gross_profit"), report.grossProfit, ""],
-      [],
-      [t("reports.cash_expenses"), report.expensesCash.total, report.expensesCash.count],
-      [t("reports.bank_expenses"), report.expensesBank.total, report.expensesBank.count],
-      [t("reports.total_expenses"), report.totalExpenses, ""],
-      [],
-      [t("reports.net_profit"), report.netProfit, ""],
-      [],
-      [t("reports.opening_balance"), report.openingCash, ""],
-      [t("reports.cash_closing_est"), report.cashClosingBalance, ""],
-      [t("reports.total_differences"), report.differencesSum, ""],
-      [],
-      [t("reports.shifts_label")],
-      ["#", t("reports.cashier_label"), t("reports.terminal_label"), t("reports.start_label"), t("reports.end_label"), t("common.status"), t("reports.revenue"), t("reports.opening_balance")],
-      ...report.shifts.map((s: any) => [
-        s.id,
-        "",
-        s.terminalName,
-        s.startedAt ? new Date(s.startedAt).toLocaleTimeString(lang === "ar" ? "ar-OM" : "en-US") : "",
-        s.endedAt ? new Date(s.endedAt).toLocaleTimeString(lang === "ar" ? "ar-OM" : "en-US") : t("reports.open"),
-        s.status === "open" ? t("reports.open") : t("reports.closed"),
-        omr(s.totalSales),
-        omr(s.openingCash),
-      ]),
-    ];
-    const csv = bom + rows.map(r => r.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `daily-report-${report.date}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+      [t("reports.cogs"), report.cogsTotal],
+      [t("reports.gross_profit"), report.grossProfit],
+      [t("reports.total_expenses"), report.totalExpenses],
+      [t("reports.net_profit"), report.netProfit],
+    ]);
   }
 
+  if (isLoading) return <div className="text-center py-12 text-muted-foreground">{t("reports.loading_report")}</div>;
+  if (!report) return <EmptyState t={t} />;
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="space-y-1">
-          <label className="text-sm font-medium">{t("reports.date_label")}</label>
-          <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-44" data-testid="input-daily-report-date" />
-        </div>
-        <div className="space-y-1 min-w-[200px]">
-          <label className="text-sm font-medium">{t("reports.branch_label")}</label>
-          <Select value={selectedBranch} onValueChange={setSelectedBranch}>
-            <SelectTrigger data-testid="select-daily-branch"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("reports.all_branches")}</SelectItem>
-              {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        {report && (
-          <div className="flex gap-2">
-            <Button variant="outline" className="gap-2" onClick={exportCSV} data-testid="button-export-csv">
-              <Download className="w-4 h-4" />
-              {t("reports.export_csv")}
-            </Button>
-            <Button variant="outline" className="gap-2" data-testid="button-export-xlsx"
-              onClick={() => window.open(`/api/exports/daily.xlsx?date=${selectedDate}${branchParam}`, "_blank")}>
-              <FileSpreadsheet className="w-4 h-4" />
-              {t("reports.export_excel")}
-            </Button>
-            <Button variant="outline" className="gap-2" data-testid="button-export-pdf"
-              onClick={() => window.open(`/api/exports/daily.pdf?date=${selectedDate}${branchParam}`, "_blank")}>
-              <FileText className="w-4 h-4" />
-              {t("reports.export_pdf")}
-            </Button>
-          </div>
-        )}
+    <div className="space-y-4 animate-in fade-in duration-300">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" className="gap-2" onClick={exportCSV} data-testid="button-export-overview-csv">
+          <Download className="w-4 h-4" />{t("reports.export_csv")}
+        </Button>
       </div>
 
-      {report && (
-        <div className="space-y-4 animate-in fade-in duration-300">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard title={t("reports.cash_sales")} value={omr(report.salesCash.total)} sub={`${report.salesCash.count} ${t("common.transaction")}`} icon={Banknote} color="text-green-600" />
-            <StatCard title={t("reports.card_sales")} value={omr(report.salesCard.total)} sub={`${report.salesCard.count} ${t("common.transaction")}`} icon={CreditCard} color="text-blue-600" />
-            <StatCard title={t("reports.bank_sales")} value={omr(report.salesBankTransfer.total)} sub={`${report.salesBankTransfer.count} ${t("common.transaction")}`} icon={Building2} color="text-purple-600" />
-            <StatCard title={t("reports.total_sales_report")} value={omr(report.totalSales)} icon={TrendingUp} color="text-emerald-600" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard title={t("reports.cash_sales")} value={omr(report.salesCash.total)} sub={`${report.salesCash.count} ${t("reports.invoice_count")}`} icon={Banknote} color="text-green-600" />
+        <StatCard title={t("reports.card_sales")} value={omr(report.salesCard.total)} sub={`${report.salesCard.count} ${t("reports.invoice_count")}`} icon={CreditCard} color="text-blue-600" />
+        <StatCard title={t("reports.bank_sales")} value={omr(report.salesBankTransfer.total)} sub={`${report.salesBankTransfer.count} ${t("reports.invoice_count")}`} icon={Building2} color="text-purple-600" />
+        <StatCard title={t("reports.total_sales")} value={omr(report.totalSales)} sub={`${report.invoiceCount} ${t("reports.invoice_count")}`} icon={TrendingUp} color="text-emerald-600" />
+      </div>
+
+      <Card className="border-2 border-primary/20 bg-primary/5">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <BarChart3 className="w-5 h-5" />{t("reports.profit_analysis")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="p-3 bg-white rounded-lg border text-center" data-testid="stat-total-sales">
+              <p className="text-xs text-muted-foreground">{t("reports.total_sales")}</p>
+              <p className="text-lg font-bold text-emerald-600 mt-1">{omr(report.totalSales)}</p>
+              <p className="text-[10px] text-muted-foreground">OMR</p>
+            </div>
+            <div className="p-3 bg-white rounded-lg border text-center" data-testid="stat-cogs">
+              <p className="text-xs text-muted-foreground">{t("reports.cogs")}</p>
+              <p className="text-lg font-bold text-orange-600 mt-1">{omr(report.cogsTotal)}</p>
+              <p className="text-[10px] text-muted-foreground">OMR</p>
+            </div>
+            <div className="p-3 bg-white rounded-lg border text-center" data-testid="stat-gross-profit">
+              <p className="text-xs text-muted-foreground">{t("reports.gross_profit")}</p>
+              <p className={`text-lg font-bold mt-1 ${parseFloat(report.grossProfit) >= 0 ? "text-blue-600" : "text-red-600"}`}>{omr(report.grossProfit)}</p>
+              <p className="text-[10px] text-muted-foreground">OMR</p>
+            </div>
+            <div className="p-3 bg-white rounded-lg border text-center" data-testid="stat-expenses">
+              <p className="text-xs text-muted-foreground">{t("reports.total_expenses")}</p>
+              <p className="text-lg font-bold text-red-600 mt-1">{omr(report.totalExpenses)}</p>
+              <p className="text-[10px] text-muted-foreground">OMR</p>
+            </div>
+            <div className="p-3 bg-white rounded-lg border-2 border-primary/30 text-center" data-testid="stat-net-profit">
+              <p className="text-xs text-muted-foreground font-medium">{t("reports.net_profit")}</p>
+              <p className={`text-xl font-bold mt-1 ${parseFloat(report.netProfit) >= 0 ? "text-emerald-700" : "text-red-700"}`}>{omr(report.netProfit)}</p>
+              <p className="text-[10px] text-muted-foreground">OMR</p>
+            </div>
           </div>
+        </CardContent>
+      </Card>
 
-          <Card className="border-2 border-primary/20 bg-primary/5">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <BarChart3 className="w-5 h-5" />
-                {t("reports.profit_analysis")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <div className="p-3 bg-white rounded-lg border text-center" data-testid="stat-total-sales">
-                  <p className="text-xs text-muted-foreground">{t("reports.total_sales_report")}</p>
-                  <p className="text-lg font-bold text-emerald-600 mt-1">{omr(report.totalSales)}</p>
-                  <p className="text-[10px] text-muted-foreground">OMR</p>
-                </div>
-                <div className="p-3 bg-white rounded-lg border text-center" data-testid="stat-cogs">
-                  <p className="text-xs text-muted-foreground">{t("reports.cogs")}</p>
-                  <p className="text-lg font-bold text-orange-600 mt-1">{omr(report.cogsTotal)}</p>
-                  <p className="text-[10px] text-muted-foreground">OMR</p>
-                </div>
-                <div className="p-3 bg-white rounded-lg border text-center" data-testid="stat-gross-profit">
-                  <p className="text-xs text-muted-foreground">{t("reports.gross_profit")}</p>
-                  <p className={`text-lg font-bold mt-1 ${parseFloat(report.grossProfit) >= 0 ? "text-blue-600" : "text-red-600"}`}>{omr(report.grossProfit)}</p>
-                  <p className="text-[10px] text-muted-foreground">OMR</p>
-                </div>
-                <div className="p-3 bg-white rounded-lg border text-center" data-testid="stat-expenses">
-                  <p className="text-xs text-muted-foreground">{t("nav.expenses")}</p>
-                  <p className="text-lg font-bold text-red-600 mt-1">{omr(report.totalExpenses)}</p>
-                  <p className="text-[10px] text-muted-foreground">OMR</p>
-                </div>
-                <div className="p-3 bg-white rounded-lg border-2 border-primary/30 text-center" data-testid="stat-net-profit">
-                  <p className="text-xs text-muted-foreground font-medium">{t("reports.net_profit")}</p>
-                  <p className={`text-xl font-bold mt-1 ${parseFloat(report.netProfit) >= 0 ? "text-emerald-700" : "text-red-700"}`}>{omr(report.netProfit)}</p>
-                  <p className="text-[10px] text-muted-foreground">OMR</p>
-                </div>
-              </div>
-              {lang === "ar" && (
-                <div className="mt-3 p-2 bg-white rounded border text-xs text-muted-foreground text-center">
-                  {t("reports.profit_formula")}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <StatCard title={t("reports.cash_expenses")} value={omr(report.expensesCash.total)} sub={`${report.expensesCash.count}`} icon={TrendingDown} color="text-red-500" />
-            <StatCard title={t("reports.bank_expenses")} value={omr(report.expensesBank.total)} sub={`${report.expensesBank.count}`} icon={TrendingDown} color="text-orange-500" />
-            <StatCard title={t("reports.net_today")} value={omr(report.net)} icon={DollarSign} color={parseFloat(report.net) >= 0 ? "text-emerald-700" : "text-red-700"} />
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">{t("reports.cash_summary")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="p-3 bg-muted/30 rounded-lg border text-center">
+              <p className="text-xs text-muted-foreground">{t("reports.opening_balance")}</p>
+              <p className="text-lg font-bold mt-1">{omr(report.openingCash)} <span className="text-xs font-normal">OMR</span></p>
+            </div>
+            <div className="p-3 bg-muted/30 rounded-lg border text-center">
+              <p className="text-xs text-muted-foreground">{t("reports.cash_closing_est")}</p>
+              <p className="text-lg font-bold mt-1">{omr(report.cashClosingBalance)} <span className="text-xs font-normal">OMR</span></p>
+            </div>
+            <div className="p-3 bg-muted/30 rounded-lg border text-center">
+              <p className="text-xs text-muted-foreground">{t("reports.total_differences")}</p>
+              <p className={`text-lg font-bold mt-1 ${parseFloat(report.differencesSum) === 0 ? "text-green-600" : "text-red-600"}`}>
+                {omr(report.differencesSum)} <span className="text-xs font-normal">OMR</span>
+              </p>
+            </div>
+            <div className="p-3 bg-muted/30 rounded-lg border text-center">
+              <p className="text-xs text-muted-foreground">{t("reports.shifts_label")}</p>
+              <p className="text-lg font-bold mt-1">{report.shiftsCount}</p>
+            </div>
           </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">{t("reports.cash_summary")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-3 bg-muted/30 rounded-lg border text-center">
-                  <p className="text-xs text-muted-foreground">{t("reports.opening_balance")}</p>
-                  <p className="text-lg font-bold mt-1">{omr(report.openingCash)} <span className="text-xs font-normal">OMR</span></p>
-                </div>
-                <div className="p-3 bg-muted/30 rounded-lg border text-center">
-                  <p className="text-xs text-muted-foreground">{t("reports.cash_closing_est")}</p>
-                  <p className="text-lg font-bold mt-1">{omr(report.cashClosingBalance)} <span className="text-xs font-normal">OMR</span></p>
-                </div>
-                <div className="p-3 bg-muted/30 rounded-lg border text-center">
-                  <p className="text-xs text-muted-foreground">{t("reports.total_differences")}</p>
-                  <p className={`text-lg font-bold mt-1 ${parseFloat(report.differencesSum) === 0 ? "text-green-600" : "text-red-600"}`}>
-                    {omr(report.differencesSum)} <span className="text-xs font-normal">OMR</span>
-                    {parseFloat(report.differencesSum) === 0 && " ✓"}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+function SalesTab({ from, to, branchId }: { from: string; to: string; branchId?: number }) {
+  const { t, lang } = useI18n();
+  const [pmFilter, setPmFilter] = useState<string>("all");
+  const params = `from=${from}&to=${to}${branchId ? `&branchId=${branchId}` : ""}${pmFilter !== "all" ? `&paymentMethod=${pmFilter}` : ""}`;
 
-          {report.shifts.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">{t("reports.shifts_count").replace("{0}", report.shifts.length)}</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader className="bg-muted/50">
-                    <TableRow>
-                      <TableHead>#</TableHead>
-                      <TableHead>{t("reports.branch_label")}</TableHead>
-                      <TableHead>{t("reports.terminal_label")}</TableHead>
-                      <TableHead>{t("reports.start_label")}</TableHead>
-                      <TableHead>{t("reports.end_label")}</TableHead>
-                      <TableHead>{t("common.status")}</TableHead>
-                      <TableHead>{t("reports.revenue")}</TableHead>
-                      <TableHead>{t("reports.opening_balance")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {report.shifts.map((s: any) => (
-                      <TableRow key={s.id} data-testid={`row-shift-${s.id}`}>
-                        <TableCell className="font-mono">{s.id}</TableCell>
-                        <TableCell>{branchMap[s.branchId] || "—"}</TableCell>
-                        <TableCell>{s.terminalName}</TableCell>
-                        <TableCell>{fmtTime(s.startedAt, lang)}</TableCell>
-                        <TableCell>{s.endedAt ? fmtTime(s.endedAt, lang) : "-"}</TableCell>
-                        <TableCell>
-                          <Badge variant={s.status === "open" ? "default" : "secondary"} className={s.status === "open" ? "bg-green-100 text-green-700 border-green-200" : ""}>
-                            {s.status === "open" ? t("reports.open") : t("reports.closed")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-mono">{omr(s.totalSales)}</TableCell>
-                        <TableCell className="font-mono">{omr(s.openingCash)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["/api/reports/sales-list", from, to, branchId, pmFilter],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/sales-list?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  function exportCSV() {
+    if (!data) return;
+    downloadCSV(`sales-${from}-${to}.csv`, [
+      [t("reports.tab_sales"), `${from} → ${to}`],
+      [],
+      [t("reports.table_invoice"), t("reports.table_date"), t("reports.table_branch"), t("reports.table_cashier"), t("reports.table_subtotal"), t("reports.table_discount"), t("reports.table_vat"), t("reports.table_total"), t("reports.table_payment")],
+      ...data.rows.map((r: any) => [
+        r.invoiceNumber || r.id, fmtDateTime(r.createdAt, lang), r.branchName, r.cashierName,
+        omr(r.subtotal), omr(r.discount), omr(r.vat), omr(r.total), r.paymentMethod,
+      ]),
+      [],
+      [t("reports.grand_total"), "", "", "", "", "", "", data.summary.totalSales],
+    ]);
+  }
+
+  if (isLoading) return <div className="text-center py-12 text-muted-foreground">{t("reports.loading_report")}</div>;
+  if (!data || data.rows.length === 0) return <EmptyState t={t} />;
+
+  return (
+    <div className="space-y-4 animate-in fade-in duration-300">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Select value={pmFilter} onValueChange={setPmFilter}>
+            <SelectTrigger className="w-44" data-testid="select-sales-pm-filter"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("reports.all_methods")}</SelectItem>
+              <SelectItem value="cash">{t("reports.cash_sales")}</SelectItem>
+              <SelectItem value="card">{t("reports.card_sales")}</SelectItem>
+              <SelectItem value="bank_transfer">{t("reports.bank_sales")}</SelectItem>
+            </SelectContent>
+          </Select>
+          <Badge variant="secondary">{data.summary.count} {t("reports.invoice_count")}</Badge>
         </div>
-      )}
+        <Button variant="outline" size="sm" className="gap-2" onClick={exportCSV} data-testid="button-export-sales-csv">
+          <Download className="w-4 h-4" />{t("reports.export_csv")}
+        </Button>
+      </div>
 
-      {!report && (
-        <div className="text-center py-12 text-muted-foreground">{t("reports.select_date")}</div>
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard title={t("reports.total_sales")} value={omr(data.summary.totalSales)} icon={TrendingUp} color="text-emerald-600" />
+        <StatCard title={t("reports.total_discount")} value={omr(data.summary.totalDiscount)} icon={TrendingDown} color="text-orange-500" />
+        <StatCard title={t("reports.total_vat")} value={omr(data.summary.totalVat)} icon={DollarSign} color="text-blue-600" />
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead>{t("reports.table_invoice")}</TableHead>
+                  <TableHead>{t("reports.table_date")}</TableHead>
+                  <TableHead>{t("reports.table_branch")}</TableHead>
+                  <TableHead>{t("reports.table_cashier")}</TableHead>
+                  <TableHead className="text-center">{t("reports.table_subtotal")}</TableHead>
+                  <TableHead className="text-center">{t("reports.table_discount")}</TableHead>
+                  <TableHead className="text-center">{t("reports.table_vat")}</TableHead>
+                  <TableHead className="text-center">{t("reports.table_total")}</TableHead>
+                  <TableHead>{t("reports.table_payment")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.rows.map((row: any) => (
+                  <TableRow key={`${row.type}-${row.id}`} data-testid={`row-sale-${row.id}`}>
+                    <TableCell className="font-mono text-sm">{row.invoiceNumber || `#${row.id}`}</TableCell>
+                    <TableCell className="text-sm">{fmtDateTime(row.createdAt, lang)}</TableCell>
+                    <TableCell className="text-sm">{row.branchName}</TableCell>
+                    <TableCell className="text-sm">{row.cashierName}</TableCell>
+                    <TableCell className="text-center font-mono">{omr(row.subtotal)}</TableCell>
+                    <TableCell className="text-center font-mono text-orange-500">{omr(row.discount)}</TableCell>
+                    <TableCell className="text-center font-mono">{omr(row.vat)}</TableCell>
+                    <TableCell className="text-center font-mono font-bold">{omr(row.total)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">{pmLabel(row.paymentMethod, t)}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function PaymentsTab({ from, to, branchId }: { from: string; to: string; branchId?: number }) {
+  const { t, lang } = useI18n();
+  const params = `from=${from}&to=${to}${branchId ? `&branchId=${branchId}` : ""}`;
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["/api/reports/payments-report", from, to, branchId],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/payments-report?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  function exportCSV() {
+    if (!data) return;
+    downloadCSV(`payments-${from}-${to}.csv`, [
+      [t("reports.tab_payments"), `${from} → ${to}`],
+      [],
+      [t("reports.pm_method"), t("reports.pm_count"), t("reports.pm_total"), t("reports.pm_percentage")],
+      ...data.methods.map((m: any) => [pmLabel(m.method, t), m.count, m.total, `${m.percentage}%`]),
+      [],
+      [t("reports.grand_total"), "", data.grandTotal],
+    ]);
+  }
+
+  if (isLoading) return <div className="text-center py-12 text-muted-foreground">{t("reports.loading_report")}</div>;
+  if (!data || data.methods.length === 0) return <EmptyState t={t} />;
+
+  return (
+    <div className="space-y-4 animate-in fade-in duration-300">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" className="gap-2" onClick={exportCSV} data-testid="button-export-payments-csv">
+          <Download className="w-4 h-4" />{t("reports.export_csv")}
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {data.methods.map((m: any) => (
+          <StatCard
+            key={m.method}
+            title={pmLabel(m.method, t)}
+            value={omr(m.total)}
+            sub={`${m.count} ${t("reports.invoice_count")} (${m.percentage}%)`}
+            icon={m.method === "cash" ? Banknote : m.method === "card" ? CreditCard : Building2}
+            color={m.method === "cash" ? "text-green-600" : m.method === "card" ? "text-blue-600" : "text-purple-600"}
+          />
+        ))}
+        <StatCard title={t("reports.grand_total")} value={omr(data.grandTotal)} icon={TrendingUp} color="text-emerald-700" />
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">{t("reports.payment_methods_summary")}</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader className="bg-muted/50">
+              <TableRow>
+                <TableHead>{t("reports.pm_method")}</TableHead>
+                <TableHead className="text-center">{t("reports.pm_count")}</TableHead>
+                <TableHead className="text-center">{t("reports.pm_total")}</TableHead>
+                <TableHead className="text-center">{t("reports.pm_percentage")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.methods.map((m: any) => (
+                <TableRow key={m.method}>
+                  <TableCell className="font-medium">{pmLabel(m.method, t)}</TableCell>
+                  <TableCell className="text-center">{m.count}</TableCell>
+                  <TableCell className="text-center font-mono font-bold">{omr(m.total)} OMR</TableCell>
+                  <TableCell className="text-center">
+                    <Badge variant="outline">{m.percentage}%</Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {data.transactions.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">{t("reports.payment_transactions")}</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead>{t("reports.table_invoice")}</TableHead>
+                    <TableHead>{t("reports.table_date")}</TableHead>
+                    <TableHead>{t("reports.table_branch")}</TableHead>
+                    <TableHead>{t("reports.table_cashier")}</TableHead>
+                    <TableHead>{t("reports.table_payment")}</TableHead>
+                    <TableHead className="text-center">{t("reports.table_total")}</TableHead>
+                    <TableHead>{t("reports.table_ref")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.transactions.map((txn: any) => (
+                    <TableRow key={txn.id}>
+                      <TableCell className="font-mono text-sm">{txn.invoiceNumber || `#${txn.id}`}</TableCell>
+                      <TableCell className="text-sm">{fmtDateTime(txn.createdAt, lang)}</TableCell>
+                      <TableCell className="text-sm">{txn.branchName}</TableCell>
+                      <TableCell className="text-sm">{txn.cashierName}</TableCell>
+                      <TableCell><Badge variant="outline" className="text-xs">{pmLabel(txn.method, t)}</Badge></TableCell>
+                      <TableCell className="text-center font-mono font-bold">{omr(txn.total)}</TableCell>
+                      <TableCell className="font-mono text-sm text-muted-foreground">{txn.bankTxnId || "-"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
 }
 
-function BranchComparison() {
-  const { t } = useI18n();
-  const [selectedDate, setSelectedDate] = useState(todayStr());
+function ShiftsTab({ from, to, branchId }: { from: string; to: string; branchId?: number }) {
+  const { t, lang } = useI18n();
+  const [detailShiftId, setDetailShiftId] = useState<number | null>(null);
+  const params = `from=${from}&to=${to}${branchId ? `&branchId=${branchId}` : ""}`;
 
-  const { data: report } = useQuery<any>({
-    queryKey: ["/api/reports/branch-comparison", selectedDate],
+  const { data: shiftsData = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/reports/shifts-report", from, to, branchId],
     queryFn: async () => {
-      const res = await fetch(`/api/reports/branch-comparison?date=${selectedDate}`, { credentials: "include" });
-      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      const res = await fetch(`/api/reports/shifts-report?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },
-    enabled: !!selectedDate,
+  });
+
+  const { data: shiftDetails } = useQuery<any>({
+    queryKey: ["/api/reports/shift-details", detailShiftId],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/shift-details/${detailShiftId}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+    enabled: !!detailShiftId,
   });
 
   function exportCSV() {
-    if (!report) return;
-    const bom = "\uFEFF";
-    const rows = [
-      [t("reports.branch_comp_title"), report.date],
+    downloadCSV(`shifts-${from}-${to}.csv`, [
+      [t("reports.tab_shifts"), `${from} → ${to}`],
       [],
-      [t("reports.branch_label"), t("reports.revenue"), t("reports.cost"), t("reports.gross_profit"), t("nav.expenses"), t("reports.net_profit")],
-      ...report.branches.map((b: any) => [
-        b.branchName,
-        b.totalSales,
-        b.cogsTotal,
-        b.grossProfit,
-        b.totalExpenses,
-        b.netProfit
+      ["#", t("reports.table_branch"), t("reports.table_cashier"), t("reports.terminal_label"), t("reports.start_label"), t("reports.end_label"), t("reports.table_status"), t("reports.opening_balance"), t("reports.total_sales"), t("reports.shift_expected"), t("reports.shift_actual"), t("reports.difference")],
+      ...shiftsData.map((s: any) => [
+        s.id, s.branchName, s.cashierName, s.terminalName,
+        fmtDateTime(s.startedAt, lang), s.endedAt ? fmtDateTime(s.endedAt, lang) : "-",
+        s.status, omr(s.openingCash), omr(s.totalSales), omr(s.expectedCash), omr(s.actualCash), omr(s.difference),
       ]),
-    ];
-    const csv = bom + rows.map(r => r.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `branch-comparison-${report.date}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    ]);
   }
 
+  if (isLoading) return <div className="text-center py-12 text-muted-foreground">{t("reports.loading_report")}</div>;
+  if (shiftsData.length === 0) return <EmptyState t={t} />;
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="space-y-1">
-          <label className="text-sm font-medium">{t("reports.date_label")}</label>
-          <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-44" data-testid="input-branch-comp-date" />
-        </div>
-        {report && (
-          <Button variant="outline" className="gap-2" onClick={exportCSV} data-testid="button-export-branch-csv">
-            <Download className="w-4 h-4" />
-            {t("reports.export_csv")}
-          </Button>
-        )}
+    <div className="space-y-4 animate-in fade-in duration-300">
+      <div className="flex items-center justify-between">
+        <Badge variant="secondary">{shiftsData.length} {t("reports.shifts_label")}</Badge>
+        <Button variant="outline" size="sm" className="gap-2" onClick={exportCSV} data-testid="button-export-shifts-csv">
+          <Download className="w-4 h-4" />{t("reports.export_csv")}
+        </Button>
       </div>
 
-      {report && report.branches.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("reports.branch_comp_title")}</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead>{t("reports.branch_label")}</TableHead>
+                  <TableHead>#</TableHead>
+                  <TableHead>{t("reports.table_branch")}</TableHead>
+                  <TableHead>{t("reports.table_cashier")}</TableHead>
+                  <TableHead>{t("reports.terminal_label")}</TableHead>
+                  <TableHead>{t("reports.start_label")}</TableHead>
+                  <TableHead>{t("reports.end_label")}</TableHead>
+                  <TableHead>{t("reports.table_status")}</TableHead>
+                  <TableHead className="text-center">{t("reports.opening_balance")}</TableHead>
+                  <TableHead className="text-center">{t("reports.total_sales")}</TableHead>
+                  <TableHead className="text-center">{t("reports.difference")}</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {shiftsData.map((s: any) => (
+                  <TableRow key={s.id} data-testid={`row-shift-${s.id}`}>
+                    <TableCell className="font-mono">{s.id}</TableCell>
+                    <TableCell>{s.branchName}</TableCell>
+                    <TableCell>{s.cashierName || "-"}</TableCell>
+                    <TableCell>{s.terminalName}</TableCell>
+                    <TableCell className="text-sm">{fmtDateTime(s.startedAt, lang)}</TableCell>
+                    <TableCell className="text-sm">{s.endedAt ? fmtDateTime(s.endedAt, lang) : "-"}</TableCell>
+                    <TableCell>
+                      <Badge variant={s.status === "open" ? "default" : "secondary"} className={s.status === "open" ? "bg-green-100 text-green-700 border-green-200" : ""}>
+                        {s.status === "open" ? t("reports.open") : t("reports.closed")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center font-mono">{omr(s.openingCash)}</TableCell>
+                    <TableCell className="text-center font-mono font-bold">{omr(s.totalSales)}</TableCell>
+                    <TableCell className="text-center font-mono">
+                      {s.status === "closed" ? (
+                        <span className={parseFloat(s.difference || "0") === 0 ? "text-green-600" : "text-red-600"}>
+                          {omr(s.difference)}
+                        </span>
+                      ) : "-"}
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="sm" onClick={() => setDetailShiftId(s.id)} data-testid={`button-shift-details-${s.id}`}>
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!detailShiftId} onOpenChange={(open) => { if (!open) setDetailShiftId(null); }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t("reports.shift_details_title").replace("{0}", String(detailShiftId || ""))}</DialogTitle>
+          </DialogHeader>
+          {shiftDetails && (
+            <div className="space-y-4">
+              <div className="p-3 bg-muted/30 rounded-lg border text-sm">
+                <div className="flex flex-wrap gap-x-6 gap-y-1">
+                  <span><strong>{t("reports.cashier_label")}:</strong> {shiftDetails.cashierName || "-"}</span>
+                  <span><strong>{t("reports.terminal_label")}:</strong> {shiftDetails.shift?.terminalName}</span>
+                  <span><strong>{t("reports.start_label")}:</strong> {fmtDateTime(shiftDetails.shift?.startedAt, lang)}</span>
+                  <span><strong>{t("reports.end_label")}:</strong> {shiftDetails.shift?.endedAt ? fmtDateTime(shiftDetails.shift.endedAt, lang) : t("reports.open")}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <StatCard title={t("reports.cash_sales")} value={omr(shiftDetails.salesCash?.total)} icon={Banknote} color="text-green-600" />
+                <StatCard title={t("reports.card_sales")} value={omr(shiftDetails.salesCard?.total)} icon={CreditCard} color="text-blue-600" />
+                <StatCard title={t("reports.total_sales")} value={omr(shiftDetails.totalSales)} icon={TrendingUp} color="text-emerald-600" />
+                <StatCard title={t("reports.net_profit")} value={omr(shiftDetails.netTotal)} icon={DollarSign} color={parseFloat(shiftDetails.netTotal || "0") >= 0 ? "text-emerald-700" : "text-red-700"} />
+              </div>
+
+              {shiftDetails.sales?.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">{t("reports.shift_invoices")} ({shiftDetails.sales.length})</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader className="bg-muted/30">
+                        <TableRow>
+                          <TableHead>{t("reports.table_invoice")}</TableHead>
+                          <TableHead>{t("reports.table_time")}</TableHead>
+                          <TableHead className="text-center">{t("reports.table_total")}</TableHead>
+                          <TableHead>{t("reports.table_payment")}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {shiftDetails.sales.map((s: any) => (
+                          <TableRow key={s.id}>
+                            <TableCell className="font-mono text-sm">{s.invoiceNumber || `#${s.id}`}</TableCell>
+                            <TableCell className="text-sm">{fmtTime(s.createdAt, lang)}</TableCell>
+                            <TableCell className="text-center font-mono font-bold">{omr(s.total)}</TableCell>
+                            <TableCell><Badge variant="outline" className="text-xs">{pmLabel(s.paymentMethod, t)}</Badge></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
+
+              {shiftDetails.expenses?.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">{t("reports.shift_expenses")} ({shiftDetails.expenses.length})</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader className="bg-muted/30">
+                        <TableRow>
+                          <TableHead>{t("reports.category_label")}</TableHead>
+                          <TableHead className="text-center">{t("reports.amount_label")}</TableHead>
+                          <TableHead>{t("reports.source_label")}</TableHead>
+                          <TableHead>{t("reports.note_label")}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {shiftDetails.expenses.map((e: any) => (
+                          <TableRow key={e.id}>
+                            <TableCell>{e.category}</TableCell>
+                            <TableCell className="text-center font-mono text-red-600">{omr(e.amount)}</TableCell>
+                            <TableCell>{e.source}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{e.note || "-"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
+
+              {shiftDetails.shift?.status === "closed" && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">{t("reports.cash_recon")}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell className="font-medium">{t("reports.opening_balance")}</TableCell>
+                          <TableCell className="font-mono">{omr(shiftDetails.openingCash)} OMR</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="font-medium text-green-600">{t("reports.plus_cash_sales")}</TableCell>
+                          <TableCell className="font-mono text-green-600">+{omr(shiftDetails.salesCash?.total)} OMR</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="font-medium text-red-600">{t("reports.minus_cash_expenses")}</TableCell>
+                          <TableCell className="font-mono text-red-600">-{omr(shiftDetails.expensesCash?.total)} OMR</TableCell>
+                        </TableRow>
+                        <TableRow className="border-t-2">
+                          <TableCell className="font-bold">{t("reports.expected_cash")}</TableCell>
+                          <TableCell className="font-mono font-bold">{omr(shiftDetails.expectedCash)} OMR</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="font-medium">{t("reports.actual_cash")}</TableCell>
+                          <TableCell className="font-mono">{omr(shiftDetails.actualCash)} OMR</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="font-bold">{t("reports.difference")}</TableCell>
+                          <TableCell className={`font-mono font-bold ${parseFloat(shiftDetails.difference || "0") === 0 ? "text-green-600" : "text-red-600"}`}>
+                            {omr(shiftDetails.difference)} OMR
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function ProductsTab({ from, to, branchId }: { from: string; to: string; branchId?: number }) {
+  const { t } = useI18n();
+  const params = `from=${from}&to=${to}${branchId ? `&branchId=${branchId}` : ""}`;
+  const { data = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/reports/products-report", from, to, branchId],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/products-report?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  function exportCSV() {
+    downloadCSV(`products-${from}-${to}.csv`, [
+      [t("reports.tab_products"), `${from} → ${to}`],
+      [],
+      [t("reports.product_name"), t("reports.product_qty"), t("reports.product_revenue"), t("reports.product_cost"), t("reports.product_profit"), t("reports.product_margin")],
+      ...data.map((p: any) => [p.productName, p.quantity, p.revenue, p.cost, p.profit, `${p.margin || 0}%`]),
+    ]);
+  }
+
+  if (isLoading) return <div className="text-center py-12 text-muted-foreground">{t("reports.loading_report")}</div>;
+  if (data.length === 0) return <EmptyState t={t} />;
+
+  return (
+    <div className="space-y-4 animate-in fade-in duration-300">
+      <div className="flex items-center justify-between">
+        <Badge variant="secondary">{data.length} {t("reports.product_name")}</Badge>
+        <Button variant="outline" size="sm" className="gap-2" onClick={exportCSV} data-testid="button-export-products-csv">
+          <Download className="w-4 h-4" />{t("reports.export_csv")}
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead>{t("reports.product_name")}</TableHead>
+                  <TableHead className="text-center">{t("reports.product_qty")}</TableHead>
+                  <TableHead className="text-center">{t("reports.product_revenue")}</TableHead>
+                  <TableHead className="text-center">{t("reports.product_cost")}</TableHead>
+                  <TableHead className="text-center">{t("reports.product_profit")}</TableHead>
+                  <TableHead className="text-center">{t("reports.product_margin")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.map((p: any, idx: number) => {
+                  const profit = parseFloat(p.profit || "0");
+                  const margin = parseFloat(p.margin || "0");
+                  return (
+                    <TableRow key={p.productId || idx} data-testid={`row-product-${p.productId}`}>
+                      <TableCell className="font-medium">{p.productName}</TableCell>
+                      <TableCell className="text-center">{p.quantity}</TableCell>
+                      <TableCell className="text-center font-mono">{omr(p.revenue)}</TableCell>
+                      <TableCell className="text-center font-mono text-orange-600">{omr(p.cost)}</TableCell>
+                      <TableCell className={`text-center font-mono font-bold ${profit >= 0 ? "text-emerald-700" : "text-red-600"}`}>{omr(p.profit)}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant={margin >= 20 ? "default" : margin >= 0 ? "secondary" : "destructive"} className={margin >= 20 ? "bg-green-100 text-green-700" : ""}>
+                          {margin.toFixed(1)}%
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function CategoriesTab({ from, to, branchId }: { from: string; to: string; branchId?: number }) {
+  const { t } = useI18n();
+  const params = `from=${from}&to=${to}${branchId ? `&branchId=${branchId}` : ""}`;
+  const { data = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/reports/categories-report", from, to, branchId],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/categories-report?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  function exportCSV() {
+    downloadCSV(`categories-${from}-${to}.csv`, [
+      [t("reports.tab_categories"), `${from} → ${to}`],
+      [],
+      [t("reports.category_name"), t("reports.category_qty"), t("reports.category_revenue"), t("reports.category_cost"), t("reports.category_profit"), t("reports.margin")],
+      ...data.map((c: any) => [c.categoryName, c.qtySold, c.revenue, c.cogs, c.profit, `${c.margin}%`]),
+    ]);
+  }
+
+  if (isLoading) return <div className="text-center py-12 text-muted-foreground">{t("reports.loading_report")}</div>;
+  if (data.length === 0) return <EmptyState t={t} />;
+
+  return (
+    <div className="space-y-4 animate-in fade-in duration-300">
+      <div className="flex items-center justify-between">
+        <Badge variant="secondary">{data.length} {t("reports.category_name")}</Badge>
+        <Button variant="outline" size="sm" className="gap-2" onClick={exportCSV} data-testid="button-export-categories-csv">
+          <Download className="w-4 h-4" />{t("reports.export_csv")}
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead>{t("reports.category_name")}</TableHead>
+                  <TableHead className="text-center">{t("reports.category_qty")}</TableHead>
+                  <TableHead className="text-center">{t("reports.category_revenue")}</TableHead>
+                  <TableHead className="text-center">{t("reports.category_cost")}</TableHead>
+                  <TableHead className="text-center">{t("reports.category_profit")}</TableHead>
+                  <TableHead className="text-center">{t("reports.margin")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.map((c: any, idx: number) => {
+                  const profit = parseFloat(c.profit || "0");
+                  const margin = parseFloat(c.margin || "0");
+                  return (
+                    <TableRow key={c.categoryId || idx} data-testid={`row-category-${c.categoryId}`}>
+                      <TableCell className="font-medium">{c.categoryName}</TableCell>
+                      <TableCell className="text-center">{c.qtySold}</TableCell>
+                      <TableCell className="text-center font-mono">{omr(c.revenue)}</TableCell>
+                      <TableCell className="text-center font-mono text-orange-600">{omr(c.cogs)}</TableCell>
+                      <TableCell className={`text-center font-mono font-bold ${profit >= 0 ? "text-emerald-700" : "text-red-600"}`}>{omr(c.profit)}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant={margin >= 20 ? "default" : margin >= 0 ? "secondary" : "destructive"} className={margin >= 20 ? "bg-green-100 text-green-700" : ""}>
+                          {margin}%
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function BranchesTab({ from, to }: { from: string; to: string }) {
+  const { t } = useI18n();
+  const params = `from=${from}&to=${to}`;
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["/api/reports/branch-comparison-range", from, to],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/branch-comparison-range?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  function exportCSV() {
+    if (!data) return;
+    downloadCSV(`branches-${from}-${to}.csv`, [
+      [t("reports.tab_branches"), `${from} → ${to}`],
+      [],
+      [t("reports.branch_name"), t("reports.revenue"), t("reports.cost"), t("reports.gross_profit"), t("reports.total_expenses"), t("reports.net_profit"), t("reports.margin")],
+      ...data.branches.map((b: any) => [b.branchName, b.totalSales, b.cogsTotal, b.grossProfit, b.totalExpenses, b.netProfit, `${b.margin}%`]),
+    ]);
+  }
+
+  if (isLoading) return <div className="text-center py-12 text-muted-foreground">{t("reports.loading_report")}</div>;
+  if (!data || data.branches.length === 0) return <EmptyState t={t} />;
+
+  return (
+    <div className="space-y-4 animate-in fade-in duration-300">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" className="gap-2" onClick={exportCSV} data-testid="button-export-branches-csv">
+          <Download className="w-4 h-4" />{t("reports.export_csv")}
+        </Button>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">{t("reports.branch_comp_title")}</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead>{t("reports.branch_name")}</TableHead>
                   <TableHead className="text-center">{t("reports.revenue")}</TableHead>
                   <TableHead className="text-center">{t("reports.cost")}</TableHead>
                   <TableHead className="text-center">{t("reports.gross_profit")}</TableHead>
-                  <TableHead className="text-center">{t("nav.expenses")}</TableHead>
+                  <TableHead className="text-center">{t("reports.total_expenses")}</TableHead>
                   <TableHead className="text-center">{t("reports.net_profit")}</TableHead>
                   <TableHead className="text-center">{t("reports.margin")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {report.branches.map((b: any) => (
+                {data.branches.map((b: any) => (
                   <TableRow key={b.branchId} data-testid={`row-branch-${b.branchId}`}>
                     <TableCell className="font-medium">{b.branchName}</TableCell>
                     <TableCell className="text-center font-mono">{omr(b.totalSales)}</TableCell>
@@ -520,209 +866,15 @@ function BranchComparison() {
                     <TableCell className="text-center font-mono text-red-500">{omr(b.totalExpenses)}</TableCell>
                     <TableCell className="text-center font-mono font-bold text-emerald-700">{omr(b.netProfit)}</TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="outline">{b.profitMargin}%</Badge>
+                      <Badge variant="outline">{b.margin}%</Badge>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-      ) : report ? (
-        <div className="text-center py-12 text-muted-foreground">{t("reports.no_data_date")}</div>
-      ) : (
-        <div className="text-center py-12 text-muted-foreground">{t("reports.select_date")}</div>
-      )}
-    </div>
-  );
-}
-
-function ProductReport() {
-  const { t } = useI18n();
-  const [selectedDate, setSelectedDate] = useState(todayStr());
-
-  const { data: report } = useQuery<any>({
-    queryKey: ["/api/reports/products", selectedDate],
-    queryFn: async () => {
-      const res = await fetch(`/api/reports/products?date=${selectedDate}`, { credentials: "include" });
-      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-      return res.json();
-    },
-    enabled: !!selectedDate,
-  });
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="space-y-1">
-          <label className="text-sm font-medium">{t("reports.date_label")}</label>
-          <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-44" data-testid="input-product-report-date" />
-        </div>
-      </div>
-
-      {report && report.products.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("reports.top_products")}</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("reports.product_name")}</TableHead>
-                  <TableHead className="text-center">{t("reports.qty_sold")}</TableHead>
-                  <TableHead className="text-center">{t("reports.revenue")}</TableHead>
-                  <TableHead className="text-center">{t("reports.cost")}</TableHead>
-                  <TableHead className="text-center">{t("reports.product_profit")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {report.products.map((p: any) => (
-                  <TableRow key={p.productId} data-testid={`row-product-${p.productId}`}>
-                    <TableCell className="font-medium">{p.productName}</TableCell>
-                    <TableCell className="text-center">{p.quantity}</TableCell>
-                    <TableCell className="text-center font-mono">{omr(p.revenue)}</TableCell>
-                    <TableCell className="text-center font-mono text-orange-600">{omr(p.cost)}</TableCell>
-                    <TableCell className="text-center font-mono text-emerald-700">{omr(p.profit)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      ) : report ? (
-        <div className="text-center py-12 text-muted-foreground">{t("reports.no_data_date")}</div>
-      ) : (
-        <div className="text-center py-12 text-muted-foreground">{t("reports.select_date")}</div>
-      )}
-    </div>
-  );
-}
-
-function CategoryReport() {
-  const { t } = useI18n();
-  const [selectedDate, setSelectedDate] = useState(todayStr());
-
-  const { data: report } = useQuery<any>({
-    queryKey: ["/api/reports/categories", selectedDate],
-    queryFn: async () => {
-      const res = await fetch(`/api/reports/categories?date=${selectedDate}`, { credentials: "include" });
-      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-      return res.json();
-    },
-    enabled: !!selectedDate,
-  });
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="space-y-1">
-          <label className="text-sm font-medium">{t("reports.date_label")}</label>
-          <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-44" data-testid="input-category-report-date" />
-        </div>
-      </div>
-
-      {report && report.categories.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("reports.category_comp")}</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("reports.category_name")}</TableHead>
-                  <TableHead className="text-center">{t("reports.qty_sold")}</TableHead>
-                  <TableHead className="text-center">{t("reports.revenue")}</TableHead>
-                  <TableHead className="text-center">{t("reports.cost")}</TableHead>
-                  <TableHead className="text-center">{t("reports.category_profit")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {report.categories.map((c: any) => (
-                  <TableRow key={c.category} data-testid={`row-category-${c.category}`}>
-                    <TableCell className="font-medium">{c.category || "—"}</TableCell>
-                    <TableCell className="text-center">{c.quantity}</TableCell>
-                    <TableCell className="text-center font-mono">{omr(c.revenue)}</TableCell>
-                    <TableCell className="text-center font-mono text-orange-600">{omr(c.cost)}</TableCell>
-                    <TableCell className="text-center font-mono text-emerald-700">{omr(c.profit)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      ) : report ? (
-        <div className="text-center py-12 text-muted-foreground">{t("reports.no_data_date")}</div>
-      ) : (
-        <div className="text-center py-12 text-muted-foreground">{t("reports.select_date")}</div>
-      )}
-    </div>
-  );
-}
-
-function PaymentReport() {
-  const { t } = useI18n();
-  const [selectedDate, setSelectedDate] = useState(todayStr());
-
-  const { data: report } = useQuery<any>({
-    queryKey: ["/api/reports/payments", selectedDate],
-    queryFn: async () => {
-      const res = await fetch(`/api/reports/payments?date=${selectedDate}`, { credentials: "include" });
-      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-      return res.json();
-    },
-    enabled: !!selectedDate,
-  });
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="space-y-1">
-          <label className="text-sm font-medium">{t("reports.date_label")}</label>
-          <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-44" data-testid="input-payment-report-date" />
-        </div>
-      </div>
-
-      {report && report.methods.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("reports.payment_methods_summary")}</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("reports.pm_method")}</TableHead>
-                  <TableHead className="text-center">{t("reports.pm_count")}</TableHead>
-                  <TableHead className="text-center">{t("reports.pm_total")}</TableHead>
-                  <TableHead className="text-center">{t("reports.pm_percentage")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {report.methods.map((m: any) => (
-                  <TableRow key={m.method} data-testid={`row-payment-${m.method}`}>
-                    <TableCell className="font-medium">
-                      {m.method === "cash" ? t("payment_methods.cash") :
-                       m.method === "card" ? t("payment_methods.card") :
-                       m.method === "bank_transfer" ? t("payment_methods.bank_transfer") : m.method}
-                    </TableCell>
-                    <TableCell className="text-center">{m.count}</TableCell>
-                    <TableCell className="text-center font-mono">{omr(m.total)}</TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="outline">{m.percentage}%</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      ) : report ? (
-        <div className="text-center py-12 text-muted-foreground">{t("reports.no_data_date")}</div>
-      ) : (
-        <div className="text-center py-12 text-muted-foreground">{t("reports.select_date")}</div>
-      )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -730,57 +882,99 @@ function PaymentReport() {
 export default function Reports() {
   const { t } = useI18n();
   const { user } = useAuth();
+  const isOwner = user?.role === "owner" || user?.role === "admin";
 
-  if (user?.role !== "owner" && user?.role !== "admin") {
-    return (
-      <div className="h-[60vh] flex flex-col items-center justify-center space-y-4">
-        <Clock className="w-16 h-16 text-muted-foreground/40" />
-        <h2 className="text-xl font-bold">{t("executive.unauthorized")}</h2>
-      </div>
-    );
-  }
+  const [fromDate, setFromDate] = useState(todayStr());
+  const [toDate, setToDate] = useState(todayStr());
+  const [selectedBranch, setSelectedBranch] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState("overview");
+
+  const { data: branches = [] } = useQuery<Branch[]>({
+    queryKey: ["/api/branches"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const branchId = selectedBranch !== "all" ? Number(selectedBranch) : undefined;
+
+  const tabs = [
+    { id: "overview", label: t("reports.tab_overview"), icon: BarChart3 },
+    { id: "sales", label: t("reports.tab_sales"), icon: ShoppingBag },
+    { id: "payments", label: t("reports.tab_payments"), icon: CreditCard },
+    { id: "shifts", label: t("reports.tab_shifts"), icon: Calendar },
+    { id: "products", label: t("reports.tab_products"), icon: Package },
+    { id: "categories", label: t("reports.tab_categories"), icon: Layers },
+    ...(isOwner ? [{ id: "branches", label: t("reports.tab_branches"), icon: GitBranch }] : []),
+  ];
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 md:p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">{t("reports.title")}</h1>
-        <p className="text-muted-foreground">{t("reports.subtitle")}</p>
+        <h1 className="text-2xl font-bold" data-testid="text-reports-title">{t("reports.title")}</h1>
+        <p className="text-muted-foreground mt-1">{t("reports.subtitle")}</p>
       </div>
 
-      <Tabs defaultValue="daily" className="space-y-4">
-        <TabsList className="bg-muted/50 p-1">
-          <TabsTrigger value="daily" className="gap-2" data-testid="tab-daily">
-            <BarChart3 className="w-4 h-4" />
-            {t("reports.daily_sales")}
-          </TabsTrigger>
-          <TabsTrigger value="shift" className="gap-2" data-testid="tab-shift">
-            <Clock className="w-4 h-4" />
-            {t("reports.shift_reports")}
-          </TabsTrigger>
-          <TabsTrigger value="product" className="gap-2" data-testid="tab-product">
-            <Package className="w-4 h-4" />
-            {t("reports.product_reports")}
-          </TabsTrigger>
-          <TabsTrigger value="category" className="gap-2" data-testid="tab-category">
-            <FileSpreadsheet className="w-4 h-4" />
-            {t("reports.category_reports")}
-          </TabsTrigger>
-          <TabsTrigger value="branches" className="gap-2" data-testid="tab-branches">
-            <Building2 className="w-4 h-4" />
-            {t("reports.branch_compare")}
-          </TabsTrigger>
-          <TabsTrigger value="payments" className="gap-2" data-testid="tab-payments">
-            <CreditCard className="w-4 h-4" />
-            {t("reports.payment_reports")}
-          </TabsTrigger>
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{t("reports.from_label")}</label>
+              <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-44" data-testid="input-from-date" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{t("reports.to_label")}</label>
+              <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-44" data-testid="input-to-date" />
+            </div>
+            {activeTab !== "branches" && (
+              <div className="space-y-1 min-w-[200px]">
+                <label className="text-sm font-medium">{t("reports.branch_label")}</label>
+                <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+                  <SelectTrigger data-testid="select-report-branch"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("reports.all_branches")}</SelectItem>
+                    {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="w-full flex flex-wrap h-auto gap-1 bg-muted/50 p-1">
+          {tabs.map(tab => (
+            <TabsTrigger key={tab.id} value={tab.id} className="flex items-center gap-1.5 text-sm" data-testid={`tab-${tab.id}`}>
+              <tab.icon className="w-4 h-4" />
+              <span className="hidden sm:inline">{tab.label}</span>
+            </TabsTrigger>
+          ))}
         </TabsList>
 
-        <TabsContent value="daily" className="space-y-4"><DailyReport /></TabsContent>
-        <TabsContent value="shift" className="space-y-4"><ShiftReport /></TabsContent>
-        <TabsContent value="product" className="space-y-4"><ProductReport /></TabsContent>
-        <TabsContent value="category" className="space-y-4"><CategoryReport /></TabsContent>
-        <TabsContent value="branches" className="space-y-4"><BranchComparison /></TabsContent>
-        <TabsContent value="payments" className="space-y-4"><PaymentReport /></TabsContent>
+        <div className="mt-4">
+          <TabsContent value="overview" className="mt-0">
+            <OverviewTab from={fromDate} to={toDate} branchId={branchId} />
+          </TabsContent>
+          <TabsContent value="sales" className="mt-0">
+            <SalesTab from={fromDate} to={toDate} branchId={branchId} />
+          </TabsContent>
+          <TabsContent value="payments" className="mt-0">
+            <PaymentsTab from={fromDate} to={toDate} branchId={branchId} />
+          </TabsContent>
+          <TabsContent value="shifts" className="mt-0">
+            <ShiftsTab from={fromDate} to={toDate} branchId={branchId} />
+          </TabsContent>
+          <TabsContent value="products" className="mt-0">
+            <ProductsTab from={fromDate} to={toDate} branchId={branchId} />
+          </TabsContent>
+          <TabsContent value="categories" className="mt-0">
+            <CategoriesTab from={fromDate} to={toDate} branchId={branchId} />
+          </TabsContent>
+          {isOwner && (
+            <TabsContent value="branches" className="mt-0">
+              <BranchesTab from={fromDate} to={toDate} />
+            </TabsContent>
+          )}
+        </div>
       </Tabs>
     </div>
   );
