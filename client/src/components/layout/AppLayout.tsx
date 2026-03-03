@@ -2,8 +2,12 @@ import { ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { Bell, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { useI18n } from "@/lib/i18n";
 
 export function AppLayout({ children }: { children: ReactNode }) {
+  const { t, lang } = useI18n();
+  const locale = lang === "ar" ? "ar-OM" : "en-US";
+
   return (
     <div className="flex h-screen bg-background overflow-hidden text-foreground">
       <Sidebar />
@@ -13,7 +17,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <div className="relative w-full">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
-                placeholder="ابحث عن منتج، عميل، فاتورة..." 
+                placeholder={t("app.search_placeholder")} 
                 className="pr-10 bg-muted/50 border-transparent focus-visible:bg-background"
               />
             </div>
@@ -24,7 +28,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full"></span>
             </button>
             <div className="text-sm font-medium text-muted-foreground">
-              {new Date().toLocaleDateString('ar-OM', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              {new Date().toLocaleDateString(locale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </div>
           </div>
         </header>

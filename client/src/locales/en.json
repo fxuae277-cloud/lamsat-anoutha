@@ -1,7 +1,8 @@
 {
   "app": {
     "loading": "Loading...",
-    "name": "Lamsat Onotha"
+    "name": "Lamsat Onotha",
+    "search_placeholder": "Search products, customers, invoices..."
   },
   "nav": {
     "dashboard": "Dashboard",
