@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
 import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle, Search, Edit, Building, UserPlus, FileSpreadsheet } from "lucide-react";
+import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -439,14 +440,20 @@ function PurchasesTab() {
               <div className="flex flex-wrap items-end gap-3">
                 <div className="space-y-1 min-w-[200px] flex-1">
                   <label className="text-sm font-medium">{t("purchases.product")}</label>
-                  <Select value={addProductId} onValueChange={setAddProductId}>
-                    <SelectTrigger data-testid="select-add-product"><SelectValue placeholder={t("purchases.select_product")} /></SelectTrigger>
-                    <SelectContent>
-                      {allProducts.map(p => (
-                        <SelectItem key={p.id} value={String(p.id)}>{p.name} ({omr(p.price)} {t("common.omr")})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex gap-2">
+                    <Select value={addProductId} onValueChange={setAddProductId}>
+                      <SelectTrigger data-testid="select-add-product" className="flex-1"><SelectValue placeholder={t("purchases.select_product")} /></SelectTrigger>
+                      <SelectContent>
+                        {allProducts.map(p => (
+                          <SelectItem key={p.id} value={String(p.id)}>{p.name} ({omr(p.price)} {t("common.omr")})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <BarcodeScanButton onScan={(barcode) => {
+                      const found = allProducts.find((p: any) => p.barcode === barcode);
+                      if (found) setAddProductId(String(found.id));
+                    }} />
+                  </div>
                 </div>
                 <div className="space-y-1 w-28">
                   <label className="text-sm font-medium">{t("purchases.qty")}</label>

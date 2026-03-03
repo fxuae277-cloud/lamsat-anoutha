@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus, ClipboardCheck, Search, Package, ArrowUpDown, CheckCircle2, Eye, AlertTriangle, TrendingUp, TrendingDown, Minus, BarChart3, Building2, RefreshCw } from "lucide-react";
+import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -289,6 +290,7 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder={t("stock_control.search_items_placeholder")} className="pr-9" value={itemSearch} onChange={e => setItemSearch(e.target.value)} data-testid="input-st-item-search" />
             </div>
+            <BarcodeScanButton onScan={(barcode) => setItemSearch(barcode)} />
             {selectedSt?.status === "draft" && (
               <Button className="gap-2 bg-green-600 hover:bg-green-700" onClick={() => approveMutation.mutate(selectedSt.id)} disabled={approveMutation.isPending} data-testid="button-approve-stocktake">
                 <CheckCircle2 className="w-4 h-4" />

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus, Search, Edit, Trash, Image as ImageIcon } from "lucide-react";
+import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -90,7 +91,10 @@ export default function Products() {
             <div className="grid grid-cols-2 gap-4 py-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("products.barcode")}</label>
-                <Input placeholder={t("products.barcode_placeholder")} value={newProduct.barcode} onChange={e => setNewProduct({...newProduct, barcode: e.target.value})} data-testid="input-product-barcode" />
+                <div className="flex gap-2">
+                  <Input placeholder={t("products.barcode_placeholder")} value={newProduct.barcode} onChange={e => setNewProduct({...newProduct, barcode: e.target.value})} data-testid="input-product-barcode" className="flex-1" />
+                  <BarcodeScanButton onScan={(code) => setNewProduct({...newProduct, barcode: code})} />
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("products.product_name")}</label>
