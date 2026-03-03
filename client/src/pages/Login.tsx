@@ -31,8 +31,8 @@ export default function Login() {
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl">💎</span>
+          <div className="w-24 h-24 flex items-center justify-center mx-auto mb-4">
+            <img src="/logo.png" alt="شعار" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-foreground" data-testid="text-login-title">لمسة أنوثة</h1>
           <p className="text-muted-foreground mt-1">نظام نقاط البيع والإدارة</p>

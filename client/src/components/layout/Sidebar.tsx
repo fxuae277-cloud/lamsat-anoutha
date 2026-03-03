@@ -67,12 +67,7 @@ export function Sidebar() {
     <aside className="w-64 bg-sidebar border-e border-sidebar-border h-full flex flex-col shadow-sm">
       <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
         <h1 className="text-xl font-bold text-primary flex items-center gap-2">
-          <span className="bg-primary/10 text-primary p-2 rounded-lg">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2a8 8 0 0 0-8 8c0 5.4 8 12 8 12s8-6.6 8-12a8 8 0 0 0-8-8z"/>
-              <circle cx="12" cy="10" r="3"/>
-            </svg>
-          </span>
+          <img src="/logo.png" alt="شعار" className="w-10 h-10 object-contain" />
           {t("app.name")}
         </h1>
       </div>
