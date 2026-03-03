@@ -10,7 +10,6 @@ import Login from "@/pages/Login";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { EMPLOYEE_ALLOWED_PATHS } from "@/config/sidebar";
 
-import Dashboard from "@/pages/Dashboard";
 import Executive from "@/pages/Executive";
 import ExecutivePlus from "@/pages/ExecutivePlus";
 import POS from "@/pages/POS";
@@ -68,9 +67,6 @@ function AuthenticatedRouter() {
         </Route>
 
         <Route path="/">
-          <RequireOwner><Dashboard /></RequireOwner>
-        </Route>
-        <Route path="/executive">
           <RequireOwner><Executive /></RequireOwner>
         </Route>
         <Route path="/executive-plus">
