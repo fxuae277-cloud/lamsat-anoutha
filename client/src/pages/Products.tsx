@@ -10,8 +10,10 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Product, Category } from "@shared/schema";
+import { useI18n } from "@/lib/i18n";
 
 export default function Products() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("all");
@@ -35,13 +37,13 @@ export default function Products() {
       });
     },
     onSuccess: () => {
-      toast({ title: "تمت الإضافة", description: "تم إضافة المنتج بنجاح." });
+      toast({ title: t("products.added_success"), description: t("products.added_desc") });
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       setAddOpen(false);
       setNewProduct({ barcode: "", name: "", categoryId: "", price: "", active: true });
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -50,7 +52,7 @@ export default function Products() {
       await apiRequest("DELETE", `/api/products/${id}`);
     },
     onSuccess: () => {
-      toast({ title: "تم الحذف" });
+      toast({ title: t("products.deleted") });
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
     },
   });
@@ -70,34 +72,34 @@ export default function Products() {
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-products-title">المنتجات والأسعار</h1>
-          <p className="text-muted-foreground mt-1">إدارة قائمة المنتجات وتوحيد الأسعار لجميع الفروع.</p>
+          <h1 className="text-2xl font-bold" data-testid="text-products-title">{t("products.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("products.subtitle")}</p>
         </div>
         
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2" data-testid="button-add-product">
               <Plus className="w-4 h-4" />
-              إضافة منتج جديد
+              {t("products.add_product")}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[600px]">
             <DialogHeader>
-              <DialogTitle>إضافة منتج</DialogTitle>
+              <DialogTitle>{t("products.add_product_dialog_title")}</DialogTitle>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-4 py-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">الباركود</label>
-                <Input placeholder="امسح أو اكتب الباركود..." value={newProduct.barcode} onChange={e => setNewProduct({...newProduct, barcode: e.target.value})} data-testid="input-product-barcode" />
+                <label className="text-sm font-medium">{t("products.barcode")}</label>
+                <Input placeholder={t("products.barcode_placeholder")} value={newProduct.barcode} onChange={e => setNewProduct({...newProduct, barcode: e.target.value})} data-testid="input-product-barcode" />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">اسم المنتج</label>
-                <Input placeholder="مثال: خاتم فضة 925" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} data-testid="input-product-name" />
+                <label className="text-sm font-medium">{t("products.product_name")}</label>
+                <Input placeholder={t("products.product_name_placeholder")} value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} data-testid="input-product-name" />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">الفئة</label>
+                <label className="text-sm font-medium">{t("products.category")}</label>
                 <Select value={newProduct.categoryId} onValueChange={v => setNewProduct({...newProduct, categoryId: v})}>
-                  <SelectTrigger><SelectValue placeholder="اختر الفئة" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t("products.select_category")} /></SelectTrigger>
                   <SelectContent>
                     {categories.map(c => (
                       <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
@@ -106,13 +108,13 @@ export default function Products() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">السعر (الريال العماني)</label>
+                <label className="text-sm font-medium">{t("products.price_omr")}</label>
                 <Input type="number" step="0.001" placeholder="0.000" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} data-testid="input-product-price" />
               </div>
             </div>
             <DialogFooter>
               <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !newProduct.name || !newProduct.price} data-testid="button-save-product">
-                {createMutation.isPending ? "جارِ الحفظ..." : "حفظ المنتج"}
+                {createMutation.isPending ? t("products.saving_product") : t("products.save_product")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -123,12 +125,12 @@ export default function Products() {
         <div className="p-4 border-b flex items-center gap-4">
           <div className="relative w-72">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="بحث بالاسم أو الباركود..." className="pr-9" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-products" />
+            <Input placeholder={t("products.search_placeholder")} className="pr-9" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-products" />
           </div>
           <Select value={filterCat} onValueChange={setFilterCat}>
-            <SelectTrigger className="w-40"><SelectValue placeholder="الفئة" /></SelectTrigger>
+            <SelectTrigger className="w-40"><SelectValue placeholder={t("products.category")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">كل الفئات</SelectItem>
+              <SelectItem value="all">{t("products.all_categories")}</SelectItem>
               {categories.map(c => (
                 <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
               ))}
@@ -139,18 +141,18 @@ export default function Products() {
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead>الباركود</TableHead>
-              <TableHead>اسم المنتج</TableHead>
-              <TableHead>الفئة</TableHead>
-              <TableHead>السعر (OMR)</TableHead>
-              <TableHead>الحالة</TableHead>
-              <TableHead className="text-left">الإجراءات</TableHead>
+              <TableHead>{t("products.table_barcode")}</TableHead>
+              <TableHead>{t("products.table_name")}</TableHead>
+              <TableHead>{t("products.table_category")}</TableHead>
+              <TableHead>{t("products.table_price")}</TableHead>
+              <TableHead>{t("products.table_status")}</TableHead>
+              <TableHead className="text-left">{t("products.table_actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredProducts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">لا توجد منتجات</TableCell>
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t("products.no_products")}</TableCell>
               </TableRow>
             ) : filteredProducts.map((p) => (
               <TableRow key={p.id}>
@@ -161,7 +163,7 @@ export default function Products() {
                 <TableCell>
                   <button onClick={() => toggleActiveMutation.mutate({ id: p.id, active: !p.active })}>
                     <Badge variant={p.active ? "default" : "secondary"} className={p.active ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 cursor-pointer" : "cursor-pointer"}>
-                      {p.active ? "نشط" : "غير نشط"}
+                      {p.active ? t("products.active") : t("products.inactive")}
                     </Badge>
                   </button>
                 </TableCell>

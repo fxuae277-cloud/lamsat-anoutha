@@ -12,22 +12,12 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import type { Product, Branch } from "@shared/schema";
-
-const TX_TYPE_LABELS: Record<string, string> = {
-  PURCHASE: "مشتريات",
-  purchase_receipt: "استلام مشتريات",
-  TRANSFER_OUT: "صادر تحويل",
-  TRANSFER_IN: "وارد تحويل",
-  sale: "بيع",
-  sale_return: "مرتجع",
-  internal_transfer: "نقل داخلي",
-  manual_receipt: "استلام يدوي",
-  adjustment: "تسوية",
-};
 
 function BranchInventoryTab() {
   const { user } = useAuth();
+  const { t } = useI18n();
   const isOwner = user?.role === "owner" || user?.role === "admin";
   const [selectedBranch, setSelectedBranch] = useState<string>(isOwner ? "all" : String(user?.branchId));
   const [search, setSearch] = useState("");
@@ -52,7 +42,7 @@ function BranchInventoryTab() {
 
   const filtered = inventory.filter(row => {
     if (!search) return true;
-    return row.productName?.includes(search) || row.barcode?.includes(search);
+    return row.productName?.toLowerCase().includes(search.toLowerCase()) || row.barcode?.includes(search);
   });
 
   const totalQty = filtered.reduce((s: number, r: any) => s + Number(r.totalQty || 0), 0);
@@ -63,11 +53,11 @@ function BranchInventoryTab() {
       <div className="flex flex-wrap items-end gap-4">
         {isOwner && (
           <div className="space-y-1 min-w-[200px]">
-            <label className="text-sm font-medium">الفرع</label>
+            <label className="text-sm font-medium">{t("inventory_page.table_branch")}</label>
             <Select value={selectedBranch} onValueChange={setSelectedBranch}>
               <SelectTrigger data-testid="select-inv-branch"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">جميع الفروع</SelectItem>
+                <SelectItem value="all">{t("inventory_page.all_branches")}</SelectItem>
                 {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -75,26 +65,26 @@ function BranchInventoryTab() {
         )}
         <div className="relative min-w-[250px]">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="بحث بالاسم أو الباركود..." className="pr-9" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-loc-inv" />
+          <Input placeholder={t("inventory_page.search_placeholder_inv")} className="pr-9" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-loc-inv" />
         </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <Card className="bg-primary/5 border-primary/20">
           <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">إجمالي القطع</p>
+            <p className="text-sm text-muted-foreground">{t("inventory_page.total_items_qty")}</p>
             <p className="text-2xl font-bold mt-1" data-testid="text-loc-total-qty">{totalQty}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">عدد الأصناف</p>
+            <p className="text-sm text-muted-foreground">{t("inventory_page.number_of_items")}</p>
             <p className="text-2xl font-bold mt-1">{filtered.length}</p>
           </CardContent>
         </Card>
         <Card className="bg-emerald-50 border-emerald-100">
           <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">قيمة المخزون (تكلفة)</p>
+            <p className="text-sm text-muted-foreground">{t("inventory_page.inventory_value_cost")}</p>
             <p className="text-xl font-bold text-emerald-700">{totalValue.toFixed(3)} OMR</p>
           </CardContent>
         </Card>
@@ -105,18 +95,18 @@ function BranchInventoryTab() {
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
-                <TableHead>المنتج</TableHead>
-                <TableHead>الباركود</TableHead>
-                {selectedBranch === "all" && <TableHead>الفرع</TableHead>}
-                <TableHead className="text-center">الكمية</TableHead>
-                <TableHead className="text-center">متوسط التكلفة</TableHead>
-                <TableHead className="text-center">سعر البيع</TableHead>
-                <TableHead className="text-center">قيمة المخزون</TableHead>
+                <TableHead>{t("inventory_page.table_product")}</TableHead>
+                <TableHead>{t("inventory_page.table_barcode")}</TableHead>
+                {selectedBranch === "all" && <TableHead>{t("inventory_page.table_branch")}</TableHead>}
+                <TableHead className="text-center">{t("inventory_page.table_quantity")}</TableHead>
+                <TableHead className="text-center">{t("inventory_page.table_avg_cost")}</TableHead>
+                <TableHead className="text-center">{t("inventory_page.table_sale_price")}</TableHead>
+                <TableHead className="text-center">{t("inventory_page.table_inventory_value")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">لا توجد بيانات مخزون</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{t("inventory_page.no_inventory_data")}</TableCell></TableRow>
               ) : filtered.map((row: any, idx: number) => {
                 const qty = Number(row.totalQty || 0);
                 const cost = parseFloat(row.avgCost || "0");
@@ -146,6 +136,7 @@ function BranchInventoryTab() {
 function InternalTransferTab() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { t } = useI18n();
   const isOwner = user?.role === "owner" || user?.role === "admin";
   const [selectedBranch, setSelectedBranch] = useState<string>(String(user?.branchId));
   const [items, setItems] = useState<{ productId: string; qty: string }[]>([]);
@@ -188,7 +179,7 @@ function InternalTransferTab() {
       });
     },
     onSuccess: () => {
-      toast({ title: "تم التحويل بنجاح من المخزن المركزي إلى الفرع" });
+      toast({ title: t("inventory_page.transfer_success") });
       queryClient.invalidateQueries({ queryKey: ["/api/central-inventory"] });
       queryClient.invalidateQueries({ queryKey: ["/api/location-inventory"] });
       queryClient.invalidateQueries({ queryKey: ["/api/branch-inventory"] });
@@ -196,13 +187,13 @@ function InternalTransferTab() {
       setItems([]);
       setAddProduct(""); setAddQty("");
     },
-    onError: (err: Error) => toast({ title: "خطأ", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
 
   function addItem() {
     if (!addProduct || !addQty || Number(addQty) <= 0) return;
     if (items.find(i => i.productId === addProduct)) {
-      toast({ title: "الصنف مضاف مسبقاً", variant: "destructive" });
+      toast({ title: t("inventory_page.item_already_added"), variant: "destructive" });
       return;
     }
     setItems([...items, { productId: addProduct, qty: addQty }]);
@@ -219,13 +210,13 @@ function InternalTransferTab() {
         <CardContent className="p-6">
           <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
             <ArrowLeftRight className="w-5 h-5 text-primary" />
-            تحويل من المخزن المركزي إلى الفرع
+            {t("inventory_page.transfer_central_to_branch")}
           </h3>
-          <p className="text-sm text-muted-foreground mb-4">اختر الفرع والأصناف المطلوبة، سيتم خصمها من المخزن المركزي وإضافتها لمخزن الفرع تلقائياً</p>
+          <p className="text-sm text-muted-foreground mb-4">{t("inventory_page.transfer_desc")}</p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">الفرع المستلم</label>
+              <label className="text-sm font-medium">{t("inventory_page.receiving_branch")}</label>
               <Select value={selectedBranch} onValueChange={v => { setSelectedBranch(v); setItems([]); }}>
                 <SelectTrigger data-testid="select-transfer-branch"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -238,24 +229,24 @@ function InternalTransferTab() {
           <div className="space-y-3">
             <div className="flex flex-wrap items-end gap-3 p-3 bg-muted/30 rounded-lg border">
               <div className="space-y-1 min-w-[200px] flex-1">
-                <label className="text-sm font-medium">الصنف (من المخزن المركزي)</label>
+                <label className="text-sm font-medium">{t("inventory_page.item_from_central")}</label>
                 <Select value={addProduct} onValueChange={setAddProduct}>
-                  <SelectTrigger data-testid="select-transfer-product"><SelectValue placeholder="اختر صنف..." /></SelectTrigger>
+                  <SelectTrigger data-testid="select-transfer-product"><SelectValue placeholder={t("inventory_page.select_item_placeholder")} /></SelectTrigger>
                   <SelectContent>
                     {centralInv.filter((r: any) => r.qtyOnHand > 0).map((r: any) => (
                       <SelectItem key={r.productId} value={String(r.productId)}>
-                        {r.productName} (متوفر: {r.qtyOnHand})
+                        {t("inventory_page.available_qty", [r.productName, r.qtyOnHand])}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1 w-28">
-                <label className="text-sm font-medium">الكمية</label>
+                <label className="text-sm font-medium">{t("inventory_page.table_quantity")}</label>
                 <Input type="number" min="1" max={centralInvMap[addProduct] || 999} value={addQty} onChange={e => setAddQty(e.target.value)} data-testid="input-transfer-qty" />
               </div>
               <Button onClick={addItem} disabled={!addProduct || !addQty} data-testid="button-add-transfer-item">
-                <PackagePlus className="w-4 h-4 ml-1" /> إضافة
+                <PackagePlus className="w-4 h-4 ml-1" /> {t("inventory_page.add_item")}
               </Button>
             </div>
 
@@ -263,9 +254,9 @@ function InternalTransferTab() {
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow>
-                    <TableHead>الصنف</TableHead>
-                    <TableHead className="text-center">الكمية المطلوبة</TableHead>
-                    <TableHead className="text-center">المتوفر في المركزي</TableHead>
+                    <TableHead>{t("inventory_page.table_product")}</TableHead>
+                    <TableHead className="text-center">{t("inventory_page.requested_qty")}</TableHead>
+                    <TableHead className="text-center">{t("inventory_page.available_in_central")}</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -278,7 +269,7 @@ function InternalTransferTab() {
                         <TableCell className="text-center font-bold">{it.qty}</TableCell>
                         <TableCell className="text-center text-muted-foreground">{centralInvMap[it.productId] || 0}</TableCell>
                         <TableCell className="text-center">
-                          <Button size="sm" variant="ghost" className="text-red-500" onClick={() => removeItem(idx)}>حذف</Button>
+                          <Button size="sm" variant="ghost" className="text-red-500" onClick={() => removeItem(idx)}>{t("inventory_page.remove")}</Button>
                         </TableCell>
                       </TableRow>
                     );
@@ -296,7 +287,7 @@ function InternalTransferTab() {
                   data-testid="button-confirm-transfer"
                 >
                   <ArrowLeftRight className="w-4 h-4" />
-                  تحويل من المركزي للفرع ({items.length} صنف)
+                  {t("inventory_page.transfer_confirm_btn", [items.length])}
                 </Button>
               </div>
             )}
@@ -309,15 +300,15 @@ function InternalTransferTab() {
           <div className="p-4 border-b bg-muted/30">
             <h4 className="font-bold flex items-center gap-2">
               <Package className="w-4 h-4" />
-              مخزون المخزن المركزي
+              {t("inventory_page.central_inventory_stock")}
             </h4>
           </div>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead>الصنف</TableHead>
-                  <TableHead className="text-center">الكمية المتاحة</TableHead>
+                  <TableHead>{t("inventory_page.table_product")}</TableHead>
+                  <TableHead className="text-center">{t("inventory_page.table_quantity")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -342,26 +333,26 @@ function InternalTransferTab() {
           <div className="p-4 border-b bg-muted/30">
             <h4 className="font-bold flex items-center gap-2">
               <History className="w-4 h-4" />
-              سجل التحويلات
+              {t("inventory_page.transfer_history")}
             </h4>
           </div>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>التاريخ</TableHead>
-                  <TableHead>الفرع</TableHead>
-                  <TableHead>من</TableHead>
-                  <TableHead>إلى</TableHead>
-                  <TableHead>الأصناف</TableHead>
+                  <TableHead>{t("inventory_page.table_id")}</TableHead>
+                  <TableHead>{t("inventory_page.table_date")}</TableHead>
+                  <TableHead>{t("inventory_page.table_branch")}</TableHead>
+                  <TableHead>{t("inventory_page.table_from")}</TableHead>
+                  <TableHead>{t("inventory_page.table_to")}</TableHead>
+                  <TableHead>{t("inventory_page.table_items")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {transfers.map((tx: any) => (
                   <TableRow key={tx.id} data-testid={`row-transfer-${tx.id}`}>
                     <TableCell className="font-mono text-xs">{tx.id}</TableCell>
-                    <TableCell className="text-sm">{tx.createdAt ? new Date(tx.createdAt).toLocaleDateString("ar-OM") : "—"}</TableCell>
+                    <TableCell className="text-sm">{tx.createdAt ? new Date(tx.createdAt).toLocaleDateString(t("lang") === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
                     <TableCell className="text-sm font-medium">{tx.branchName}</TableCell>
                     <TableCell><Badge variant="outline" className="text-xs">{tx.fromLocationName}</Badge></TableCell>
                     <TableCell><Badge variant="outline" className="text-xs">{tx.toLocationName}</Badge></TableCell>
@@ -385,6 +376,7 @@ function InternalTransferTab() {
 
 function TransactionsTab() {
   const { user } = useAuth();
+  const { t } = useI18n();
   const isOwner = user?.role === "owner" || user?.role === "admin";
   const [selectedBranch, setSelectedBranch] = useState<string>(isOwner ? "all" : String(user?.branchId));
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -413,23 +405,23 @@ function TransactionsTab() {
       <div className="flex flex-wrap items-end gap-4">
         {isOwner && (
           <div className="space-y-1 min-w-[200px]">
-            <label className="text-sm font-medium">الفرع</label>
+            <label className="text-sm font-medium">{t("inventory_page.table_branch")}</label>
             <Select value={selectedBranch} onValueChange={setSelectedBranch}>
               <SelectTrigger data-testid="select-tx-branch"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">جميع الفروع</SelectItem>
+                <SelectItem value="all">{t("inventory_page.all_branches")}</SelectItem>
                 {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
         )}
         <div className="space-y-1 min-w-[180px]">
-          <label className="text-sm font-medium">نوع الحركة</label>
+          <label className="text-sm font-medium">{t("inventory_page.transaction_type")}</label>
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger data-testid="select-tx-type"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">الكل</SelectItem>
-              {Object.entries(TX_TYPE_LABELS).map(([k, v]) => (
+              <SelectItem value="all">{t("common.all")}</SelectItem>
+              {Object.entries(t("inventory_page.tx_type_labels") as unknown as Record<string, string>).map(([k, v]) => (
                 <SelectItem key={k} value={k}>{v}</SelectItem>
               ))}
             </SelectContent>
@@ -442,29 +434,30 @@ function TransactionsTab() {
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>التاريخ</TableHead>
-                <TableHead>الفرع</TableHead>
-                <TableHead>المنتج</TableHead>
-                <TableHead>النوع</TableHead>
-                <TableHead className="text-center">الكمية</TableHead>
-                <TableHead>ملاحظة</TableHead>
+                <TableHead>{t("inventory_page.table_id")}</TableHead>
+                <TableHead>{t("inventory_page.table_date")}</TableHead>
+                <TableHead>{t("inventory_page.table_branch")}</TableHead>
+                <TableHead>{t("inventory_page.table_product")}</TableHead>
+                <TableHead>{t("common.type")}</TableHead>
+                <TableHead className="text-center">{t("inventory_page.table_quantity")}</TableHead>
+                <TableHead>{t("inventory_page.note")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {transactions.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">لا توجد حركات مخزون</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{t("inventory_page.no_transactions")}</TableCell></TableRow>
               ) : transactions.map((tx: any) => {
                 const isSale = tx.type === "sale";
+                const labels = t("inventory_page.tx_type_labels") as unknown as Record<string, string>;
                 return (
                   <TableRow key={tx.id} data-testid={`row-tx-${tx.id}`}>
                     <TableCell className="font-mono text-xs">{tx.id}</TableCell>
-                    <TableCell className="text-sm">{tx.date}</TableCell>
+                    <TableCell className="text-sm">{tx.date ? new Date(tx.date).toLocaleDateString(t("lang") === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
                     <TableCell className="text-sm">{tx.branchName}</TableCell>
                     <TableCell className="font-medium">{tx.productName}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-xs">
-                        {TX_TYPE_LABELS[tx.type] || tx.type}
+                        {labels[tx.type] || tx.type}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center">
@@ -492,38 +485,38 @@ function TransactionsTab() {
 
 export default function Inventory() {
   const { user } = useAuth();
+  const { t } = useI18n();
   const canManage = user?.role === "owner" || user?.role === "admin" || user?.role === "manager";
-  const tabCount = canManage ? 3 : 1;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div>
-        <h1 className="text-2xl font-bold" data-testid="text-inventory-title">إدارة المخزون</h1>
-        <p className="text-muted-foreground mt-1">تتبع الكميات وحركات المخزون لكل فرع.</p>
+        <h1 className="text-2xl font-bold" data-testid="text-inventory-title">{t("inventory_page.inventory_management")}</h1>
+        <p className="text-muted-foreground mt-1">{t("inventory_page.track_inventory_desc")}</p>
       </div>
       <div className="flex justify-end">
         <Button variant="outline" className="gap-2" onClick={() => window.open("/api/exports/inventory.xlsx", "_blank")} data-testid="button-export-inventory-xlsx">
           <FileSpreadsheet className="w-4 h-4" />
-          تصدير المخزون Excel
+          {t("inventory_page.export_inventory_excel")}
         </Button>
       </div>
 
-      <Tabs defaultValue="stock" dir="rtl">
+      <Tabs defaultValue="stock" dir={t("dir")}>
         <TabsList className={`grid w-full max-w-lg ${canManage ? "grid-cols-3" : "grid-cols-1"}`}>
           <TabsTrigger value="stock" className="gap-1" data-testid="tab-location-stock">
             <Package className="w-4 h-4" />
-            مخزون الفروع
+            {t("inventory_page.tab_branch_stock")}
           </TabsTrigger>
           {canManage && (
             <TabsTrigger value="transfer" className="gap-1" data-testid="tab-internal-transfer">
               <ArrowLeftRight className="w-4 h-4" />
-              نقل داخلي
+              {t("inventory_page.tab_transfer")}
             </TabsTrigger>
           )}
           {canManage && (
             <TabsTrigger value="transactions" className="gap-1" data-testid="tab-transactions">
               <History className="w-4 h-4" />
-              حركات المخزون
+              {t("inventory_page.tab_transactions")}
             </TabsTrigger>
           )}
         </TabsList>

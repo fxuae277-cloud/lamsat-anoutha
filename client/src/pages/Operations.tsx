@@ -9,17 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 import type { Branch } from "@shared/schema";
-
-const OP_TYPE_LABELS: Record<string, { label: string; color: string; icon: any }> = {
-  sale:        { label: "بيع", color: "bg-green-100 text-green-700 border-green-200", icon: ShoppingBag },
-  order:       { label: "طلب", color: "bg-blue-100 text-blue-700 border-blue-200", icon: ShoppingCart },
-  expense:     { label: "مصروف", color: "bg-red-100 text-red-700 border-red-200", icon: Receipt },
-  transfer:    { label: "تحويل مخزون", color: "bg-purple-100 text-purple-700 border-purple-200", icon: Package },
-  shift_open:  { label: "افتتاح شفت", color: "bg-amber-100 text-amber-700 border-amber-200", icon: DoorOpen },
-  shift_close: { label: "إغلاق شفت", color: "bg-orange-100 text-orange-700 border-orange-200", icon: DoorClosed },
-  return:      { label: "مرتجع", color: "bg-pink-100 text-pink-700 border-pink-200", icon: RotateCcw },
-  purchase:    { label: "مشتريات", color: "bg-indigo-100 text-indigo-700 border-indigo-200", icon: Truck },
-};
+import { useI18n } from "@/lib/i18n";
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -33,15 +23,29 @@ function fmt(v: string | number | null | undefined) {
   if (!v || v === "0" || v === "0.000") return "";
   return parseFloat(String(v)).toFixed(3);
 }
-function formatDateTime(dt: string | null) {
-  if (!dt) return "—";
-  const d = new Date(dt);
-  const date = d.toLocaleDateString("ar-OM", { year: "numeric", month: "2-digit", day: "2-digit" });
-  const time = d.toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit", hour12: true });
-  return { date, time };
-}
 
 export default function Operations() {
+  const { t, lang } = useI18n();
+
+  const OP_TYPE_LABELS: Record<string, { label: string; color: string; icon: any }> = {
+    sale:        { label: t("operations.op_types.sale"), color: "bg-green-100 text-green-700 border-green-200", icon: ShoppingBag },
+    order:       { label: t("operations.op_types.order"), color: "bg-blue-100 text-blue-700 border-blue-200", icon: ShoppingCart },
+    expense:     { label: t("operations.op_types.expense"), color: "bg-red-100 text-red-700 border-red-200", icon: Receipt },
+    transfer:    { label: t("operations.op_types.transfer"), color: "bg-purple-100 text-purple-700 border-purple-200", icon: Package },
+    shift_open:  { label: t("operations.op_types.shift_open"), color: "bg-amber-100 text-amber-700 border-amber-200", icon: DoorOpen },
+    shift_close: { label: t("operations.op_types.shift_close"), color: "bg-orange-100 text-orange-700 border-orange-200", icon: DoorClosed },
+    return:      { label: t("operations.op_types.return"), color: "bg-pink-100 text-pink-700 border-pink-200", icon: RotateCcw },
+    purchase:    { label: t("operations.op_types.purchase"), color: "bg-indigo-100 text-indigo-700 border-indigo-200", icon: Truck },
+  };
+
+  function formatDateTime(dt: string | null) {
+    if (!dt) return "—";
+    const d = new Date(dt);
+    const date = d.toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US", { year: "numeric", month: "2-digit", day: "2-digit" });
+    const time = d.toLocaleTimeString(lang === "ar" ? "ar-OM" : "en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+    return { date, time };
+  }
+
   const [from, setFrom] = useState(weekAgoStr());
   const [to, setTo] = useState(todayStr());
   const [branchId, setBranchId] = useState("__all__");
@@ -76,8 +80,8 @@ export default function Operations() {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div>
-        <h1 className="text-2xl font-bold" data-testid="text-operations-title">آخر العمليات</h1>
-        <p className="text-muted-foreground mt-1">عرض موحد لجميع العمليات في النظام</p>
+        <h1 className="text-2xl font-bold" data-testid="text-operations-title">{t("operations.title")}</h1>
+        <p className="text-muted-foreground mt-1">{t("operations.subtitle")}</p>
       </div>
 
       <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
@@ -104,22 +108,22 @@ export default function Operations() {
       <div className="flex flex-wrap items-end gap-3 bg-card border rounded-xl p-4">
         <div className="space-y-1">
           <label className="text-xs font-medium flex items-center gap-1">
-            <Calendar className="w-3 h-3" /> من
+            <Calendar className="w-3 h-3" /> {t("operations.from_label")}
           </label>
           <Input type="date" className="w-40" value={from} onChange={e => setFrom(e.target.value)} data-testid="input-ops-from" />
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-medium">إلى</label>
+          <label className="text-xs font-medium">{t("operations.to_label")}</label>
           <Input type="date" className="w-40" value={to} onChange={e => setTo(e.target.value)} data-testid="input-ops-to" />
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium flex items-center gap-1">
-            <Building2 className="w-3 h-3" /> الفرع
+            <Building2 className="w-3 h-3" /> {t("operations.branch_label")}
           </label>
           <Select value={branchId} onValueChange={setBranchId}>
-            <SelectTrigger className="w-52" data-testid="select-ops-branch"><SelectValue placeholder="كل الفروع" /></SelectTrigger>
+            <SelectTrigger className="w-52" data-testid="select-ops-branch"><SelectValue placeholder={t("operations.all_branches")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">كل الفروع</SelectItem>
+              <SelectItem value="__all__">{t("operations.all_branches")}</SelectItem>
               {branchesList.map(b => (
                 <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
               ))}
@@ -128,12 +132,12 @@ export default function Operations() {
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium flex items-center gap-1">
-            <Filter className="w-3 h-3" /> النوع
+            <Filter className="w-3 h-3" /> {t("operations.type_label")}
           </label>
           <Select value={opType} onValueChange={setOpType}>
-            <SelectTrigger className="w-44" data-testid="select-ops-type"><SelectValue placeholder="كل العمليات" /></SelectTrigger>
+            <SelectTrigger className="w-44" data-testid="select-ops-type"><SelectValue placeholder={t("operations.all_operations")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">كل العمليات</SelectItem>
+              <SelectItem value="__all__">{t("operations.all_operations")}</SelectItem>
               {Object.entries(OP_TYPE_LABELS).map(([k, v]) => (
                 <SelectItem key={k} value={k}>{v.label}</SelectItem>
               ))}
@@ -142,11 +146,11 @@ export default function Operations() {
         </div>
         <div className="space-y-1 flex-1 min-w-[200px]">
           <label className="text-xs font-medium flex items-center gap-1">
-            <Search className="w-3 h-3" /> بحث
+            <Search className="w-3 h-3" /> {t("operations.search_label")}
           </label>
           <div className="flex gap-2">
             <Input
-              placeholder="رقم فاتورة أو اسم موظف..."
+              placeholder={t("operations.search_placeholder")}
               className="bg-background"
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
@@ -154,7 +158,7 @@ export default function Operations() {
               data-testid="input-ops-search"
             />
             <Button variant="secondary" size="sm" onClick={() => setSearch(searchInput)} data-testid="button-ops-search">
-              بحث
+              {t("operations.search_btn")}
             </Button>
           </div>
         </div>
@@ -164,20 +168,20 @@ export default function Operations() {
         <div className="p-3 border-b bg-muted/20 flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Activity className="w-4 h-4" />
-            <span>{operations.length} عملية</span>
-            {search && <Badge variant="outline" className="text-xs">بحث: {search}</Badge>}
+            <span>{operations.length} {t("operations.operation_count")}</span>
+            {search && <Badge variant="outline" className="text-xs">{t("operations.search_tag")} {search}</Badge>}
           </div>
         </div>
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead className="w-[160px]">الوقت والتاريخ</TableHead>
-              <TableHead>الفرع</TableHead>
-              <TableHead>الموظف</TableHead>
-              <TableHead>نوع العملية</TableHead>
-              <TableHead>رقم المرجع</TableHead>
-              <TableHead>المبلغ</TableHead>
-              <TableHead className="min-w-[250px]">ملاحظة</TableHead>
+              <TableHead className="w-[160px]">{t("operations.table_datetime")}</TableHead>
+              <TableHead>{t("operations.table_branch")}</TableHead>
+              <TableHead>{t("operations.table_employee")}</TableHead>
+              <TableHead>{t("operations.table_type")}</TableHead>
+              <TableHead>{t("operations.table_ref")}</TableHead>
+              <TableHead>{t("operations.table_amount")}</TableHead>
+              <TableHead className="min-w-[250px]">{t("operations.table_note")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -185,13 +189,13 @@ export default function Operations() {
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-12">
                   <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                  <p className="text-muted-foreground">جارِ التحميل...</p>
+                  <p className="text-muted-foreground">{t("operations.loading")}</p>
                 </TableCell>
               </TableRow>
             ) : operations.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                  لا توجد عمليات في الفترة المحددة
+                  {t("operations.no_operations")}
                 </TableCell>
               </TableRow>
             ) : operations.map((op: any, i: number) => {
@@ -227,7 +231,7 @@ export default function Operations() {
                   </TableCell>
                   <TableCell>
                     {amountStr ? (
-                      <span className="font-medium text-sm">{amountStr} <span className="text-xs text-muted-foreground">ر.ع</span></span>
+                      <span className="font-medium text-sm">{amountStr} <span className="text-xs text-muted-foreground">{t("common.omr")}</span></span>
                     ) : "—"}
                   </TableCell>
                   <TableCell>
@@ -243,7 +247,7 @@ export default function Operations() {
 
         {operations.length > 0 && (
           <div className="p-3 border-t bg-muted/30 text-sm text-muted-foreground">
-            عرض {operations.length} عملية (الحد الأقصى 500)
+            {t("operations.showing_count").replace("{0}", operations.length.toString())}
           </div>
         )}
       </div>

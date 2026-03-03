@@ -12,6 +12,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import type { Branch } from "@shared/schema";
 
 function fmt(v: string | number | null | undefined) {
@@ -19,6 +20,7 @@ function fmt(v: string | number | null | undefined) {
 }
 
 export default function Returns() {
+  const { t, lang } = useI18n();
   const { toast } = useToast();
   const { user } = useAuth();
   const isManagerPlus = ["owner", "admin", "manager"].includes(user?.role || "");
@@ -52,14 +54,14 @@ export default function Returns() {
         if (res.ok) return res.json();
       }
       const listRes = await fetch(`/api/sales?invoiceNumber=${encodeURIComponent(searchVal)}`, { credentials: "include" });
-      if (!listRes.ok) throw new Error("الفاتورة غير موجودة");
+      if (!listRes.ok) throw new Error(t("returns.error_invoice_not_found"));
       const list = await listRes.json();
       if (Array.isArray(list) && list.length > 0) {
         const match = list.find((s: any) => (s.invoiceNumber || s.invoice_number) === searchVal) || list[0];
         const detailRes = await fetch(`/api/sales/${match.id}`, { credentials: "include" });
         if (detailRes.ok) return detailRes.json();
       }
-      throw new Error("الفاتورة غير موجودة");
+      throw new Error(t("returns.error_invoice_not_found"));
     },
     onSuccess: (data) => {
       setFoundSale(data);
@@ -67,7 +69,7 @@ export default function Returns() {
       setReturnItems({});
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
       setFoundSale(null);
       setSaleItems([]);
     },
@@ -75,7 +77,7 @@ export default function Returns() {
 
   const createReturnMutation = useMutation({
     mutationFn: async () => {
-      if (!foundSale) throw new Error("لم يتم تحديد الفاتورة");
+      if (!foundSale) throw new Error(t("returns.error_no_invoice_selected"));
       const items = Object.entries(returnItems)
         .filter(([_, qty]) => qty > 0)
         .map(([saleItemId, qty]) => {
@@ -87,7 +89,7 @@ export default function Returns() {
             unitPrice: si.unit_price || si.unitPrice,
           };
         });
-      if (items.length === 0) throw new Error("يجب تحديد عنصر واحد على الأقل");
+      if (items.length === 0) throw new Error(t("returns.error_min_one_item"));
 
       await apiRequest("POST", `/api/sales/${foundSale.id}/return`, {
         items,
@@ -96,13 +98,13 @@ export default function Returns() {
       });
     },
     onSuccess: () => {
-      toast({ title: "تم إنشاء المرتجع بنجاح" });
+      toast({ title: t("returns.success_created") });
       queryClient.invalidateQueries({ queryKey: ["/api/sale-returns"] });
       resetForm();
       setNewReturnOpen(false);
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -129,13 +131,13 @@ export default function Returns() {
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-returns-title">المرتجعات</h1>
-          <p className="text-muted-foreground mt-1">إدارة مرتجعات المبيعات مع إعادة المخزون وتسجيل القيود المالية</p>
+          <h1 className="text-2xl font-bold" data-testid="text-returns-title">{t("returns.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("returns.subtitle")}</p>
         </div>
         {isManagerPlus && (
           <Button className="gap-2" onClick={() => { resetForm(); setNewReturnOpen(true); }} data-testid="button-new-return">
             <Plus className="w-4 h-4" />
-            مرتجع جديد
+            {t("returns.new_return")}
           </Button>
         )}
       </div>
@@ -147,7 +149,7 @@ export default function Returns() {
               <RotateCcw className="w-5 h-5 text-red-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">عدد المرتجعات</p>
+              <p className="text-xs text-muted-foreground">{t("returns.returns_count")}</p>
               <p className="text-xl font-bold" data-testid="text-returns-count">{filteredReturns.length}</p>
             </div>
           </CardContent>
@@ -158,8 +160,8 @@ export default function Returns() {
               <ShoppingBag className="w-5 h-5 text-amber-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">إجمالي المبالغ المستردة</p>
-              <p className="text-lg font-bold text-red-600">{totalRefunds.toFixed(3)} <span className="text-xs font-normal">ر.ع</span></p>
+              <p className="text-xs text-muted-foreground">{t("returns.total_refunds")}</p>
+              <p className="text-lg font-bold text-red-600">{totalRefunds.toFixed(3)} <span className="text-xs font-normal">{t("common.omr")}</span></p>
             </div>
           </CardContent>
         </Card>
@@ -169,9 +171,9 @@ export default function Returns() {
               <Package className="w-5 h-5 text-blue-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">أعادت مخزون</p>
+              <p className="text-xs text-muted-foreground">{t("returns.restored_stock")}</p>
               <p className="text-xl font-bold text-blue-600">
-                {filteredReturns.reduce((s: number, r: any) => s + (r.items?.length || 0), 0)} عنصر
+                {filteredReturns.reduce((s: number, r: any) => s + (r.items?.length || 0), 0)} {t("returns.items_suffix")}
               </p>
             </div>
           </CardContent>
@@ -183,10 +185,10 @@ export default function Returns() {
           {(user?.role === "owner" || user?.role === "admin") && (
             <Select value={branchFilter} onValueChange={setBranchFilter}>
               <SelectTrigger className="w-48 bg-background" data-testid="select-returns-branch">
-                <SelectValue placeholder="كل الفروع" />
+                <SelectValue placeholder={t("returns.all_branches")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">كل الفروع</SelectItem>
+                <SelectItem value="all">{t("returns.all_branches")}</SelectItem>
                 {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -196,21 +198,21 @@ export default function Returns() {
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead>رقم المرتجع</TableHead>
-              <TableHead>رقم الفاتورة</TableHead>
-              <TableHead>الفرع</TableHead>
-              <TableHead>المبلغ المسترد</TableHead>
-              <TableHead>تكلفة المرتجع</TableHead>
-              <TableHead>طريقة الاسترداد</TableHead>
-              <TableHead>السبب</TableHead>
-              <TableHead>بواسطة</TableHead>
-              <TableHead>التاريخ</TableHead>
-              <TableHead className="w-[60px]">عرض</TableHead>
+              <TableHead>{t("returns.table_return_no")}</TableHead>
+              <TableHead>{t("returns.table_invoice_no")}</TableHead>
+              <TableHead>{t("returns.table_branch")}</TableHead>
+              <TableHead>{t("returns.table_refund_amount")}</TableHead>
+              <TableHead>{t("returns.table_return_cost")}</TableHead>
+              <TableHead>{t("returns.table_refund_method")}</TableHead>
+              <TableHead>{t("returns.table_reason")}</TableHead>
+              <TableHead>{t("returns.table_by")}</TableHead>
+              <TableHead>{t("returns.table_date")}</TableHead>
+              <TableHead className="w-[60px]">{t("returns.table_view")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredReturns.length === 0 ? (
-              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">لا توجد مرتجعات</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">{t("returns.no_returns")}</TableCell></TableRow>
             ) : filteredReturns.map((ret: any) => (
               <TableRow key={ret.id} data-testid={`row-return-${ret.id}`}>
                 <TableCell>
@@ -224,13 +226,13 @@ export default function Returns() {
                 <TableCell className="text-amber-600">{fmt(ret.cogs_returned)}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className="text-xs">
-                    {ret.refund_method === "cash" ? "نقد" : ret.refund_method === "card" ? "بطاقة" : "تحويل"}
+                    {ret.refund_method === "cash" ? t("payment_methods.cash") : ret.refund_method === "card" ? t("payment_methods.card") : t("payment_methods.bank_transfer")}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground max-w-[150px] truncate">{ret.reason || "—"}</TableCell>
                 <TableCell className="text-sm">{ret.created_by_name || "—"}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {ret.created_at ? new Date(ret.created_at).toLocaleDateString("ar-OM") : "—"}
+                  {ret.created_at ? new Date(ret.created_at).toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}
                 </TableCell>
                 <TableCell>
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
@@ -246,8 +248,8 @@ export default function Returns() {
 
         {filteredReturns.length > 0 && (
           <div className="p-3 border-t bg-muted/30 flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">{filteredReturns.length} مرتجع</span>
-            <span className="font-bold text-red-600">إجمالي: {totalRefunds.toFixed(3)} ر.ع</span>
+            <span className="text-muted-foreground">{filteredReturns.length} {t("returns.items_suffix")}</span>
+            <span className="font-bold text-red-600">{t("returns.total_label")} {totalRefunds.toFixed(3)} {t("common.omr")}</span>
           </div>
         )}
       </div>
@@ -257,18 +259,18 @@ export default function Returns() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <RotateCcw className="w-5 h-5 text-red-600" />
-              إنشاء مرتجع جديد
+              {t("returns.new_return_title")}
             </DialogTitle>
-            <DialogDescription>ابحث عن الفاتورة ثم حدد العناصر المراد إرجاعها</DialogDescription>
+            <DialogDescription>{t("returns.new_return_desc")}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="flex gap-3 items-end">
               <div className="flex-1 space-y-1">
-                <label className="text-sm font-medium">رقم الفاتورة أو البحث</label>
+                <label className="text-sm font-medium">{t("returns.invoice_search_label")}</label>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="أدخل رقم الفاتورة..."
+                    placeholder={t("returns.invoice_search_placeholder")}
                     value={invoiceSearch}
                     onChange={e => setInvoiceSearch(e.target.value)}
                     data-testid="input-return-invoice"
@@ -285,28 +287,28 @@ export default function Returns() {
               <>
                 <div className="border rounded-lg p-3 bg-muted/30 space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="font-medium">فاتورة: {foundSale.invoice_number || foundSale.invoiceNumber}</span>
-                    <span className="text-muted-foreground">{foundSale.created_at ? new Date(foundSale.created_at).toLocaleDateString("ar-OM") : ""}</span>
+                    <span className="font-medium">{t("returns.invoice_label")} {foundSale.invoice_number || foundSale.invoiceNumber}</span>
+                    <span className="text-muted-foreground">{foundSale.created_at ? new Date(foundSale.created_at).toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : ""}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>إجمالي الفاتورة: <span className="font-bold text-primary">{fmt(foundSale.total)} ر.ع</span></span>
-                    <span>الدفع: {foundSale.payment_method === "cash" || foundSale.paymentMethod === "cash" ? "نقد" : "بطاقة/تحويل"}</span>
+                    <span>{t("returns.invoice_total")} <span className="font-bold text-primary">{fmt(foundSale.total)} {t("common.omr")}</span></span>
+                    <span>{t("returns.payment_label")} {foundSale.payment_method === "cash" || foundSale.paymentMethod === "cash" ? t("payment_methods.cash") : t("payment_methods.card")}</span>
                   </div>
                 </div>
 
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-muted/30 px-4 py-2 font-bold border-b text-sm flex items-center gap-2">
                     <Package className="w-4 h-4" />
-                    عناصر الفاتورة — حدد الكمية المراد إرجاعها
+                    {t("returns.invoice_items")}
                   </div>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>المنتج</TableHead>
-                        <TableHead>الكمية المباعة</TableHead>
-                        <TableHead>سعر الوحدة</TableHead>
-                        <TableHead>كمية الإرجاع</TableHead>
-                        <TableHead>المبلغ</TableHead>
+                        <TableHead>{t("returns.table_product")}</TableHead>
+                        <TableHead>{t("returns.table_sold_qty")}</TableHead>
+                        <TableHead>{t("returns.table_unit_price")}</TableHead>
+                        <TableHead>{t("returns.table_return_qty")}</TableHead>
+                        <TableHead>{t("returns.table_amount")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -349,28 +351,28 @@ export default function Returns() {
                   <div className="border rounded-lg p-3 bg-red-50 border-red-200 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-red-700">
                       <AlertTriangle className="w-4 h-4" />
-                      <span className="font-bold">إجمالي المبلغ المسترد:</span>
+                      <span className="font-bold">{t("returns.total_refund_label")}</span>
                     </div>
-                    <span className="text-xl font-bold text-red-700">{refundTotal.toFixed(3)} ر.ع</span>
+                    <span className="text-xl font-bold text-red-700">{refundTotal.toFixed(3)} {t("common.omr")}</span>
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-sm font-medium">طريقة الاسترداد</label>
+                    <label className="text-sm font-medium">{t("returns.refund_method_label")}</label>
                     <Select value={refundMethod} onValueChange={setRefundMethod}>
                       <SelectTrigger data-testid="select-refund-method"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="cash">نقد</SelectItem>
-                        <SelectItem value="card">بطاقة</SelectItem>
-                        <SelectItem value="bank_transfer">تحويل بنكي</SelectItem>
+                        <SelectItem value="cash">{t("payment_methods.cash")}</SelectItem>
+                        <SelectItem value="card">{t("payment_methods.card")}</SelectItem>
+                        <SelectItem value="bank_transfer">{t("payment_methods.bank_transfer")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-sm font-medium">سبب الإرجاع</label>
+                    <label className="text-sm font-medium">{t("returns.return_reason_label")}</label>
                     <Textarea
-                      placeholder="عيب في المنتج / تغيير رأي..."
+                      placeholder={t("returns.return_reason_placeholder")}
                       value={reason}
                       onChange={e => setReason(e.target.value)}
                       className="h-9 min-h-[36px]"
@@ -383,14 +385,14 @@ export default function Returns() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNewReturnOpen(false)}>إلغاء</Button>
+            <Button variant="outline" onClick={() => setNewReturnOpen(false)}>{t("returns.cancel_btn")}</Button>
             <Button
               variant="destructive"
               disabled={createReturnMutation.isPending || refundTotal <= 0}
               onClick={() => createReturnMutation.mutate()}
               data-testid="button-submit-return"
             >
-              {createReturnMutation.isPending ? "جارِ المعالجة..." : `تأكيد المرتجع (${refundTotal.toFixed(3)} ر.ع)`}
+              {createReturnMutation.isPending ? t("returns.processing") : t("returns.confirm_return_btn").replace("{0}", refundTotal.toFixed(3))}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -401,36 +403,36 @@ export default function Returns() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" />
-              تفاصيل المرتجع: {selectedReturn?.return_number}
+              {t("returns.detail_title").replace("{0}", selectedReturn?.return_number)}
             </DialogTitle>
           </DialogHeader>
           {selectedReturn && (
             <div className="space-y-4">
               <div className="border rounded-lg overflow-hidden text-sm">
-                <div className="bg-muted/30 px-4 py-2 font-bold border-b">معلومات المرتجع</div>
+                <div className="bg-muted/30 px-4 py-2 font-bold border-b">{t("returns.return_info")}</div>
                 <div className="divide-y">
                   <div className="flex justify-between px-4 py-2">
-                    <span className="text-muted-foreground">رقم الفاتورة الأصلية</span>
+                    <span className="text-muted-foreground">{t("returns.original_invoice")}</span>
                     <span className="font-medium text-primary">{selectedReturn.invoice_number}</span>
                   </div>
                   <div className="flex justify-between px-4 py-2">
-                    <span className="text-muted-foreground">المبلغ المسترد</span>
-                    <span className="font-bold text-red-600">{fmt(selectedReturn.refund_amount)} ر.ع</span>
+                    <span className="text-muted-foreground">{t("returns.refund_amount")}</span>
+                    <span className="font-bold text-red-600">{fmt(selectedReturn.refund_amount)} {t("common.omr")}</span>
                   </div>
                   <div className="flex justify-between px-4 py-2">
-                    <span className="text-muted-foreground">تكلفة البضاعة المرتجعة</span>
-                    <span className="font-medium text-amber-600">{fmt(selectedReturn.cogs_returned)} ر.ع</span>
+                    <span className="text-muted-foreground">{t("returns.cogs_returned")}</span>
+                    <span className="font-medium text-amber-600">{fmt(selectedReturn.cogs_returned)} {t("common.omr")}</span>
                   </div>
                   <div className="flex justify-between px-4 py-2">
-                    <span className="text-muted-foreground">طريقة الاسترداد</span>
-                    <span>{selectedReturn.refund_method === "cash" ? "نقد" : selectedReturn.refund_method === "card" ? "بطاقة" : "تحويل"}</span>
+                    <span className="text-muted-foreground">{t("returns.refund_method")}</span>
+                    <span>{selectedReturn.refund_method === "cash" ? t("payment_methods.cash") : selectedReturn.refund_method === "card" ? t("payment_methods.card") : t("payment_methods.bank_transfer")}</span>
                   </div>
                   <div className="flex justify-between px-4 py-2">
-                    <span className="text-muted-foreground">السبب</span>
-                    <span>{selectedReturn.reason || "لم يحدد"}</span>
+                    <span className="text-muted-foreground">{t("returns.reason")}</span>
+                    <span>{selectedReturn.reason || t("returns.not_specified")}</span>
                   </div>
                   <div className="flex justify-between px-4 py-2">
-                    <span className="text-muted-foreground">بواسطة</span>
+                    <span className="text-muted-foreground">{t("returns.by_user")}</span>
                     <span>{selectedReturn.created_by_name || "—"}</span>
                   </div>
                 </div>
@@ -438,14 +440,14 @@ export default function Returns() {
 
               {selectedReturn.items && selectedReturn.items.length > 0 && (
                 <div className="border rounded-lg overflow-hidden text-sm">
-                  <div className="bg-muted/30 px-4 py-2 font-bold border-b">العناصر المرتجعة</div>
+                  <div className="bg-muted/30 px-4 py-2 font-bold border-b">{t("returns.returned_items")}</div>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>المنتج</TableHead>
-                        <TableHead>الكمية</TableHead>
-                        <TableHead>السعر</TableHead>
-                        <TableHead>المبلغ</TableHead>
+                        <TableHead>{t("returns.table_product")}</TableHead>
+                        <TableHead>{t("returns.table_qty")}</TableHead>
+                        <TableHead>{t("returns.table_price")}</TableHead>
+                        <TableHead>{t("returns.table_amount")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

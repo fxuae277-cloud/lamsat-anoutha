@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import type { Supplier, Product, PurchaseInvoice } from "@shared/schema";
 
 function omr(val: string | number | null) {
@@ -20,6 +21,7 @@ function omr(val: string | number | null) {
 }
 
 function SuppliersTab() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
@@ -88,9 +90,9 @@ function SuppliersTab() {
       qc.invalidateQueries({ queryKey: ["/api/suppliers"] });
       setShowForm(false);
       resetForm();
-      toast({ title: editId ? "تم تحديث المورد" : "تمت إضافة المورد" });
+      toast({ title: editId ? t("purchases.supplier_updated") : t("purchases.supplier_added") });
     },
-    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
 
   const toggleActiveMutation = useMutation({
@@ -101,7 +103,7 @@ function SuppliersTab() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/suppliers"] });
-      toast({ title: "تم تحديث الحالة" });
+      toast({ title: t("purchases.status_updated") });
     },
   });
 
@@ -111,7 +113,7 @@ function SuppliersTab() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="بحث بالاسم أو الهاتف أو المدينة..."
+            placeholder={t("purchases.search_suppliers")}
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="pr-9"
@@ -119,7 +121,7 @@ function SuppliersTab() {
           />
         </div>
         <Button className="gap-2" onClick={() => { resetForm(); setShowForm(true); }} data-testid="button-new-supplier">
-          <Plus className="w-4 h-4" /> إضافة مورد
+          <Plus className="w-4 h-4" /> {t("purchases.add_supplier")}
         </Button>
       </div>
 
@@ -128,13 +130,13 @@ function SuppliersTab() {
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
-                <TableHead>الاسم</TableHead>
-                <TableHead>الهاتف</TableHead>
-                <TableHead>البريد</TableHead>
-                <TableHead>المدينة</TableHead>
-                <TableHead>الرقم الضريبي</TableHead>
-                <TableHead>السجل التجاري</TableHead>
-                <TableHead>الحالة</TableHead>
+                <TableHead>{t("purchases.table_name")}</TableHead>
+                <TableHead>{t("purchases.table_phone")}</TableHead>
+                <TableHead>{t("purchases.table_email")}</TableHead>
+                <TableHead>{t("purchases.table_city")}</TableHead>
+                <TableHead>{t("purchases.table_tax_no")}</TableHead>
+                <TableHead>{t("purchases.table_cr_no")}</TableHead>
+                <TableHead>{t("purchases.table_status")}</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
@@ -142,7 +144,7 @@ function SuppliersTab() {
               {filtered.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                    {search ? "لا توجد نتائج" : "لا يوجد موردون"}
+                    {search ? t("purchases.no_results") : t("purchases.no_suppliers")}
                   </TableCell>
                 </TableRow>
               )}
@@ -161,7 +163,7 @@ function SuppliersTab() {
                       onClick={() => toggleActiveMutation.mutate(s.id)}
                       data-testid={`badge-supplier-active-${s.id}`}
                     >
-                      {s.active ? "نشط" : "معطل"}
+                      {s.active ? t("purchases.active") : t("purchases.disabled")}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -177,57 +179,57 @@ function SuppliersTab() {
       </Card>
 
       <Dialog open={showForm} onOpenChange={v => { if (!v) { setShowForm(false); resetForm(); } }}>
-        <DialogContent dir="rtl" className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Building className="w-5 h-5" /> {editId ? "تعديل المورد" : "إضافة مورد جديد"}
+              <Building className="w-5 h-5" /> {editId ? t("purchases.edit_supplier") : t("purchases.new_supplier")}
             </DialogTitle>
-            <DialogDescription>{editId ? "عدّل بيانات المورد" : "أدخل بيانات المورد الجديد"}</DialogDescription>
+            <DialogDescription>{editId ? t("purchases.edit_supplier_desc") : t("purchases.new_supplier_desc")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1">
-              <label className="text-sm font-medium">اسم المورد *</label>
-              <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="اسم المورد (فريد)" data-testid="input-supplier-name" />
+              <label className="text-sm font-medium">{t("purchases.supplier_name")} *</label>
+              <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder={t("purchases.supplier_name_placeholder")} data-testid="input-supplier-name" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-sm font-medium">الهاتف</label>
+                <label className="text-sm font-medium">{t("purchases.phone")}</label>
                 <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+968..." data-testid="input-supplier-phone" />
               </div>
               <div className="space-y-1">
-                <label className="text-sm font-medium">البريد الإلكتروني</label>
+                <label className="text-sm font-medium">{t("purchases.email")}</label>
                 <Input type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="email@example.com" data-testid="input-supplier-email" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-sm font-medium">المدينة</label>
-                <Input value={formCity} onChange={e => setFormCity(e.target.value)} placeholder="مسقط" data-testid="input-supplier-city" />
+                <label className="text-sm font-medium">{t("purchases.city")}</label>
+                <Input value={formCity} onChange={e => setFormCity(e.target.value)} data-testid="input-supplier-city" />
               </div>
               <div className="space-y-1">
-                <label className="text-sm font-medium">العنوان</label>
-                <Input value={formAddress} onChange={e => setFormAddress(e.target.value)} placeholder="العنوان" data-testid="input-supplier-address" />
+                <label className="text-sm font-medium">{t("purchases.address")}</label>
+                <Input value={formAddress} onChange={e => setFormAddress(e.target.value)} data-testid="input-supplier-address" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-sm font-medium">الرقم الضريبي</label>
+                <label className="text-sm font-medium">{t("purchases.tax_no")}</label>
                 <Input value={formTaxNo} onChange={e => setFormTaxNo(e.target.value)} data-testid="input-supplier-taxno" />
               </div>
               <div className="space-y-1">
-                <label className="text-sm font-medium">رقم السجل التجاري</label>
+                <label className="text-sm font-medium">{t("purchases.cr_no")}</label>
                 <Input value={formCrNo} onChange={e => setFormCrNo(e.target.value)} data-testid="input-supplier-crno" />
               </div>
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">ملاحظات</label>
-              <Input value={formNotes} onChange={e => setFormNotes(e.target.value)} placeholder="ملاحظات..." data-testid="input-supplier-notes" />
+              <label className="text-sm font-medium">{t("purchases.notes")}</label>
+              <Input value={formNotes} onChange={e => setFormNotes(e.target.value)} placeholder={t("purchases.notes")} data-testid="input-supplier-notes" />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowForm(false); resetForm(); }}>إلغاء</Button>
+            <Button variant="outline" onClick={() => { setShowForm(false); resetForm(); }}>{t("common.cancel")}</Button>
             <Button onClick={() => saveMutation.mutate()} disabled={!formName.trim() || saveMutation.isPending} data-testid="button-save-supplier">
-              {editId ? "تحديث" : "إضافة"}
+              {editId ? t("purchases.update_supplier") : t("purchases.add_supplier")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -237,6 +239,7 @@ function SuppliersTab() {
 }
 
 function PurchasesTab() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -317,11 +320,11 @@ function PurchasesTab() {
       qc.invalidateQueries({ queryKey: ["/api/purchases"] });
       setShowCreate(false);
       setSelectedInvoice(inv.id);
-      toast({ title: "تم إنشاء فاتورة المشتريات" });
+      toast({ title: t("purchases.invoice_created") });
       setNewSupplierId(""); setNewNotes("");
       setNewShipping("0"); setNewCustoms("0"); setNewClearance("0"); setNewOther("0");
     },
-    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
 
   const quickSupplierMutation = useMutation({
@@ -337,9 +340,9 @@ function PurchasesTab() {
       setNewSupplierId(String(newSupplier.id));
       setShowQuickSupplier(false);
       setQuickName(""); setQuickPhone("");
-      toast({ title: "تمت إضافة المورد واختياره" });
+      toast({ title: t("purchases.quick_supplier_success") });
     },
-    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
 
   const addItemMutation = useMutation({
@@ -354,9 +357,9 @@ function PurchasesTab() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
       setAddProductId(""); setAddQty(""); setAddUnitCost("");
-      toast({ title: "تمت إضافة الصنف" });
+      toast({ title: t("purchases.item_added") });
     },
-    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
 
   const deleteItemMutation = useMutation({
@@ -365,7 +368,7 @@ function PurchasesTab() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
-      toast({ title: "تم حذف الصنف" });
+      toast({ title: t("purchases.item_deleted") });
     },
   });
 
@@ -390,17 +393,17 @@ function PurchasesTab() {
       qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
       qc.invalidateQueries({ queryKey: ["/api/products"] });
       setShowPostConfirm(false);
-      toast({ title: "تم اعتماد الفاتورة بنجاح", description: "تم تحديث تكلفة المنتجات والمخزون" });
+      toast({ title: t("purchases.invoice_approved"), description: t("purchases.invoice_approved_desc") });
     },
     onError: (e: Error) => {
       setShowPostConfirm(false);
-      toast({ title: "فشل الاعتماد", description: e.message, variant: "destructive" });
+      toast({ title: t("purchases.approve_failed"), description: e.message, variant: "destructive" });
     },
   });
 
   const items = invoiceDetail?.items || [];
   const isPending = invoiceDetail?.status === "pending";
-  const statusLabel = invoiceDetail?.status === "pending" ? "مسودة" : invoiceDetail?.status === "approved" ? "معتمدة" : "ملغاة";
+  const statusLabel = invoiceDetail?.status === "pending" ? t("purchases.pending") : invoiceDetail?.status === "approved" ? t("purchases.approved") : t("purchases.cancelled");
   const itemsSubtotal = items.reduce((s: number, it: any) => s + parseFloat(it.lineSubtotal || "0"), 0);
   const extraTotal = invoiceDetail
     ? parseFloat(invoiceDetail.shippingCost || "0") + parseFloat(invoiceDetail.customsCost || "0") +
@@ -413,7 +416,7 @@ function PurchasesTab() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold" data-testid="text-purchase-detail-title">
-              فاتورة مشتريات #{invoiceDetail.invoiceNumber}
+              {t("purchases.purchase_invoice")} #{invoiceDetail.invoiceNumber}
             </h1>
             <p className="text-muted-foreground mt-1">
               {supplierMap[invoiceDetail.supplierId] || "—"} | {invoiceDetail.invoiceDate}
@@ -423,38 +426,38 @@ function PurchasesTab() {
             <Badge variant={isPending ? "outline" : "default"} className={isPending ? "border-amber-400 text-amber-600" : invoiceDetail?.status === "approved" ? "bg-green-600" : "bg-red-500"}>
               {statusLabel}
             </Badge>
-            <Button variant="outline" onClick={() => setSelectedInvoice(null)} data-testid="button-back-to-list">رجوع</Button>
+            <Button variant="outline" onClick={() => setSelectedInvoice(null)} data-testid="button-back-to-list">{t("purchases.back_to_list")}</Button>
           </div>
         </div>
 
         {isPending && (
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2"><Plus className="w-4 h-4" /> إضافة صنف</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2"><Plus className="w-4 h-4" /> {t("purchases.add_item")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap items-end gap-3">
                 <div className="space-y-1 min-w-[200px] flex-1">
-                  <label className="text-sm font-medium">المنتج</label>
+                  <label className="text-sm font-medium">{t("purchases.product")}</label>
                   <Select value={addProductId} onValueChange={setAddProductId}>
-                    <SelectTrigger data-testid="select-add-product"><SelectValue placeholder="اختر منتج..." /></SelectTrigger>
+                    <SelectTrigger data-testid="select-add-product"><SelectValue placeholder={t("purchases.select_product")} /></SelectTrigger>
                     <SelectContent>
                       {allProducts.map(p => (
-                        <SelectItem key={p.id} value={String(p.id)}>{p.name} ({omr(p.price)} OMR)</SelectItem>
+                        <SelectItem key={p.id} value={String(p.id)}>{p.name} ({omr(p.price)} {t("common.omr")})</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1 w-28">
-                  <label className="text-sm font-medium">الكمية</label>
+                  <label className="text-sm font-medium">{t("purchases.qty")}</label>
                   <Input type="number" min="1" value={addQty} onChange={e => setAddQty(e.target.value)} placeholder="0" data-testid="input-add-qty" />
                 </div>
                 <div className="space-y-1 w-36">
-                  <label className="text-sm font-medium">سعر التكلفة</label>
+                  <label className="text-sm font-medium">{t("purchases.unit_cost")}</label>
                   <Input type="number" step="0.001" min="0" value={addUnitCost} onChange={e => setAddUnitCost(e.target.value)} placeholder="0.000" data-testid="input-add-unit-cost" />
                 </div>
                 <Button onClick={() => addItemMutation.mutate()} disabled={!addProductId || !addQty || !addUnitCost || addItemMutation.isPending} data-testid="button-add-item">
-                  <Plus className="w-4 h-4 ml-1" /> إضافة
+                  <Plus className="w-4 h-4 ml-1" /> {t("purchases.add")}
                 </Button>
               </div>
             </CardContent>
@@ -463,18 +466,18 @@ function PurchasesTab() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2"><Package className="w-4 h-4" /> الأصناف ({items.length})</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2"><Package className="w-4 h-4" /> {t("purchases.items")} ({items.length})</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead>المنتج</TableHead>
-                  <TableHead>الكمية</TableHead>
-                  <TableHead>سعر الوحدة</TableHead>
-                  <TableHead>الإجمالي</TableHead>
-                  {!isPending && <TableHead>التكلفة الإضافية</TableHead>}
-                  {!isPending && <TableHead>التكلفة النهائية/وحدة</TableHead>}
+                  <TableHead>{t("purchases.table_product")}</TableHead>
+                  <TableHead>{t("purchases.table_qty")}</TableHead>
+                  <TableHead>{t("purchases.table_unit_price")}</TableHead>
+                  <TableHead>{t("purchases.table_total")}</TableHead>
+                  {!isPending && <TableHead>{t("purchases.table_extra_cost")}</TableHead>}
+                  {!isPending && <TableHead>{t("purchases.table_final_cost")}</TableHead>}
                   {isPending && <TableHead></TableHead>}
                 </TableRow>
               </TableHeader>
@@ -482,7 +485,7 @@ function PurchasesTab() {
                 {items.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={isPending ? 5 : 6} className="text-center text-muted-foreground py-8">
-                      لا توجد أصناف
+                      {t("purchases.no_items")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -504,12 +507,12 @@ function PurchasesTab() {
                   </TableRow>
                 ))}
                 <TableRow className="border-t-2 font-bold bg-muted/30">
-                  <TableCell>المجموع</TableCell>
+                  <TableCell>{t("common.total")}</TableCell>
                   <TableCell className="font-mono">{items.reduce((s: number, it: any) => s + it.qty, 0)}</TableCell>
                   <TableCell></TableCell>
                   <TableCell className="font-mono">{omr(itemsSubtotal)}</TableCell>
                   {!isPending && <TableCell className="font-mono text-amber-600">{omr(extraTotal)}</TableCell>}
-                  {!isPending && <TableCell></TableCell>}
+                  {!isPending && <TableCell className="font-mono text-emerald-600">{omr(parseFloat(invoiceDetail.totalAmount))}</TableCell>}
                   {isPending && <TableCell></TableCell>}
                 </TableRow>
               </TableBody>
@@ -519,30 +522,30 @@ function PurchasesTab() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2"><Ship className="w-4 h-4" /> التكاليف الإضافية</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2"><Ship className="w-4 h-4" /> {t("purchases.extra_costs")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="space-y-1">
-                <label className="text-sm font-medium flex items-center gap-1"><Truck className="w-3 h-3" /> شحن</label>
+                <label className="text-sm font-medium flex items-center gap-1"><Truck className="w-3 h-3" /> {t("purchases.shipping")}</label>
                 <Input type="number" step="0.001" value={invoiceDetail.shippingCost || "0"} disabled={!isPending}
                   onChange={e => updateCostsMutation.mutate({ shippingCost: Number(e.target.value) })}
                   data-testid="input-shipping-cost" />
               </div>
               <div className="space-y-1">
-                <label className="text-sm font-medium">جمارك</label>
+                <label className="text-sm font-medium">{t("purchases.customs")}</label>
                 <Input type="number" step="0.001" value={invoiceDetail.customsCost || "0"} disabled={!isPending}
                   onChange={e => updateCostsMutation.mutate({ customsCost: Number(e.target.value) })}
                   data-testid="input-customs-cost" />
               </div>
               <div className="space-y-1">
-                <label className="text-sm font-medium">تخليص</label>
+                <label className="text-sm font-medium">{t("purchases.clearance")}</label>
                 <Input type="number" step="0.001" value={invoiceDetail.clearanceCost || "0"} disabled={!isPending}
                   onChange={e => updateCostsMutation.mutate({ clearanceCost: Number(e.target.value) })}
                   data-testid="input-clearance-cost" />
               </div>
               <div className="space-y-1">
-                <label className="text-sm font-medium">أخرى</label>
+                <label className="text-sm font-medium">{t("purchases.other")}</label>
                 <Input type="number" step="0.001" value={invoiceDetail.otherCost || "0"} disabled={!isPending}
                   onChange={e => updateCostsMutation.mutate({ otherCost: Number(e.target.value) })}
                   data-testid="input-other-cost" />
@@ -550,16 +553,16 @@ function PurchasesTab() {
             </div>
             <div className="mt-4 p-3 bg-muted/50 rounded-lg border flex flex-wrap gap-6">
               <div>
-                <span className="text-xs text-muted-foreground">إجمالي الأصناف</span>
-                <p className="font-bold font-mono">{omr(itemsSubtotal)} OMR</p>
+                <span className="text-xs text-muted-foreground">{t("purchases.subtotal")}</span>
+                <p className="font-bold font-mono">{omr(itemsSubtotal)} {t("common.omr")}</p>
               </div>
               <div>
-                <span className="text-xs text-muted-foreground">إجمالي التكاليف الإضافية</span>
-                <p className="font-bold font-mono text-amber-600">{omr(extraTotal)} OMR</p>
+                <span className="text-xs text-muted-foreground">{t("purchases.total_extra")}</span>
+                <p className="font-bold font-mono text-amber-600">{omr(extraTotal)} {t("common.omr")}</p>
               </div>
               <div>
-                <span className="text-xs text-muted-foreground">الإجمالي الكلي</span>
-                <p className="font-bold font-mono text-lg text-emerald-700">{omr(itemsSubtotal + extraTotal)} OMR</p>
+                <span className="text-xs text-muted-foreground">{t("purchases.grand_total")}</span>
+                <p className="font-bold font-mono text-lg text-emerald-700">{omr(itemsSubtotal + extraTotal)} {t("common.omr")}</p>
               </div>
             </div>
           </CardContent>
@@ -568,48 +571,33 @@ function PurchasesTab() {
         {isPending && items.length > 0 && canManage && (
           <div className="flex justify-end">
             <Button size="lg" className="gap-2 bg-green-600 hover:bg-green-700" onClick={() => setShowPostConfirm(true)} data-testid="button-approve-invoice">
-              <FileCheck className="w-5 h-5" /> اعتماد الفاتورة
+              <FileCheck className="w-5 h-5" /> {t("purchases.approve_invoice")}
             </Button>
           </div>
         )}
 
         <Dialog open={showPostConfirm} onOpenChange={setShowPostConfirm}>
-          <DialogContent dir="rtl" className="max-w-lg">
+          <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-amber-500" /> تأكيد اعتماد الفاتورة
+                <AlertTriangle className="w-5 h-5 text-amber-500" /> {t("purchases.approve_confirm_title")}
               </DialogTitle>
               <DialogDescription>
-                سيتم توزيع التكاليف الإضافية على الأصناف وتحديث متوسط التكلفة والمخزون. لا يمكن التراجع بعد الاعتماد.
+                {t("purchases.approve_confirm_desc")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 text-sm">
               <div className="p-3 bg-muted/50 rounded-lg border space-y-2">
-                <p><strong>عدد الأصناف:</strong> {items.length}</p>
-                <p><strong>إجمالي الأصناف:</strong> {omr(itemsSubtotal)} OMR</p>
-                <p><strong>تكاليف إضافية:</strong> {omr(extraTotal)} OMR</p>
-                <p className="border-t pt-2"><strong>الإجمالي الكلي:</strong> <span className="text-lg font-bold text-emerald-700">{omr(itemsSubtotal + extraTotal)} OMR</span></p>
-              </div>
-              <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-amber-800">
-                <p className="font-medium">التوزيع المتوقع:</p>
-                {items.map((it: any) => {
-                  const lineVal = parseFloat(it.lineSubtotal || "0");
-                  const ratio = itemsSubtotal > 0 ? lineVal / itemsSubtotal : 0;
-                  const allocated = extraTotal * ratio;
-                  const finalUnit = it.qty > 0 ? (lineVal + allocated) / it.qty : 0;
-                  return (
-                    <div key={it.id} className="flex justify-between text-xs mt-1">
-                      <span>{it.productName || productMap[it.productId]}: {it.qty} x {omr(finalUnit)}</span>
-                      <span className="text-amber-600">+{omr(allocated)}</span>
-                    </div>
-                  );
-                })}
+                <p><strong>{t("purchases.items")}:</strong> {items.length}</p>
+                <p><strong>{t("purchases.subtotal")}:</strong> {omr(itemsSubtotal)} {t("common.omr")}</p>
+                <p><strong>{t("purchases.total_extra")}:</strong> {omr(extraTotal)} {t("common.omr")}</p>
+                <p className="border-t pt-2"><strong>{t("purchases.grand_total")}:</strong> <span className="text-lg font-bold text-emerald-700">{omr(itemsSubtotal + extraTotal)} {t("common.omr")}</span></p>
               </div>
             </div>
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setShowPostConfirm(false)}>إلغاء</Button>
+              <Button variant="outline" onClick={() => setShowPostConfirm(false)}>{t("common.cancel")}</Button>
               <Button className="bg-green-600 hover:bg-green-700 gap-2" onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending} data-testid="button-confirm-approve">
-                <FileCheck className="w-4 h-4" /> تأكيد الاعتماد
+                <FileCheck className="w-4 h-4" /> {approveMutation.isPending ? t("common.loading") : t("purchases.approve_invoice")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -622,7 +610,7 @@ function PurchasesTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-end">
         <Button className="gap-2" onClick={() => setShowCreate(true)} data-testid="button-new-purchase">
-          <Plus className="w-4 h-4" /> فاتورة مشتريات جديدة
+          <Plus className="w-4 h-4" /> {t("purchases.new_purchase")}
         </Button>
       </div>
 
@@ -632,16 +620,16 @@ function PurchasesTab() {
             <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead>#</TableHead>
-                <TableHead>المورد</TableHead>
-                <TableHead>التاريخ</TableHead>
-                <TableHead>الإجمالي</TableHead>
-                <TableHead>الحالة</TableHead>
+                <TableHead>{t("purchases.supplier")}</TableHead>
+                <TableHead>{t("purchases.date")}</TableHead>
+                <TableHead>{t("purchases.grand_total")}</TableHead>
+                <TableHead>{t("purchases.status")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {invoices.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">لا توجد فواتير مشتريات</TableCell>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">{t("common.no_data")}</TableCell>
                 </TableRow>
               )}
               {invoices.map((inv) => (
@@ -649,10 +637,10 @@ function PurchasesTab() {
                   <TableCell className="font-mono">{inv.invoiceNumber}</TableCell>
                   <TableCell>{supplierMap[inv.supplierId] || "—"}</TableCell>
                   <TableCell>{inv.invoiceDate}</TableCell>
-                  <TableCell className="font-mono">{omr(inv.grandTotal)} OMR</TableCell>
+                  <TableCell className="font-mono">{omr(inv.grandTotal)} {t("common.omr")}</TableCell>
                   <TableCell>
                     <Badge variant={inv.status === "pending" ? "outline" : "default"} className={inv.status === "pending" ? "border-amber-400 text-amber-600" : inv.status === "approved" ? "bg-green-600" : "bg-red-500"}>
-                      {inv.status === "pending" ? "مسودة" : inv.status === "approved" ? "معتمدة" : "ملغاة"}
+                      {inv.status === "pending" ? t("purchases.pending") : inv.status === "approved" ? t("purchases.approved") : t("purchases.cancelled")}
                     </Badge>
                   </TableCell>
                 </TableRow>
@@ -663,84 +651,79 @@ function PurchasesTab() {
       </Card>
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent dir="rtl" className="max-w-lg">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> فاتورة مشتريات جديدة</DialogTitle>
-            <DialogDescription>أدخل بيانات الفاتورة ثم أضف الأصناف بعد الإنشاء</DialogDescription>
+            <DialogTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> {t("purchases.new_purchase")}</DialogTitle>
+            <DialogDescription>{t("purchases.create_invoice_desc")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-sm font-medium">المورد *</label>
+                <label className="text-sm font-medium">{t("purchases.supplier")} *</label>
                 <div className="flex gap-1">
                   <Select value={newSupplierId} onValueChange={setNewSupplierId}>
-                    <SelectTrigger data-testid="select-new-supplier" className="flex-1"><SelectValue placeholder="اختر مورد..." /></SelectTrigger>
+                    <SelectTrigger data-testid="select-new-supplier" className="flex-1"><SelectValue placeholder={t("purchases.select_supplier")} /></SelectTrigger>
                     <SelectContent>
                       {activeSuppliers.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <Button variant="outline" size="icon" className="shrink-0" onClick={() => setShowQuickSupplier(true)} title="إضافة مورد جديد" data-testid="button-quick-add-supplier">
+                  <Button variant="outline" size="icon" className="shrink-0" onClick={() => setShowQuickSupplier(true)} title={t("purchases.new_supplier")} data-testid="button-quick-add-supplier">
                     <UserPlus className="w-4 h-4" />
                   </Button>
                 </div>
               </div>
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">تاريخ الفاتورة *</label>
+              <label className="text-sm font-medium">{t("purchases.date")} *</label>
               <Input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} data-testid="input-new-date" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-sm font-medium">شحن</label>
+                <label className="text-sm font-medium">{t("purchases.shipping")}</label>
                 <Input type="number" step="0.001" value={newShipping} onChange={e => setNewShipping(e.target.value)} data-testid="input-new-shipping" />
               </div>
               <div className="space-y-1">
-                <label className="text-sm font-medium">جمارك</label>
+                <label className="text-sm font-medium">{t("purchases.customs")}</label>
                 <Input type="number" step="0.001" value={newCustoms} onChange={e => setNewCustoms(e.target.value)} data-testid="input-new-customs" />
               </div>
               <div className="space-y-1">
-                <label className="text-sm font-medium">تخليص</label>
+                <label className="text-sm font-medium">{t("purchases.clearance")}</label>
                 <Input type="number" step="0.001" value={newClearance} onChange={e => setNewClearance(e.target.value)} data-testid="input-new-clearance" />
               </div>
               <div className="space-y-1">
-                <label className="text-sm font-medium">أخرى</label>
+                <label className="text-sm font-medium">{t("purchases.other")}</label>
                 <Input type="number" step="0.001" value={newOther} onChange={e => setNewOther(e.target.value)} data-testid="input-new-other" />
               </div>
             </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">ملاحظات</label>
-              <Input value={newNotes} onChange={e => setNewNotes(e.target.value)} placeholder="ملاحظات اختيارية..." data-testid="input-new-notes" />
-            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>إلغاء</Button>
-            <Button onClick={() => createMutation.mutate()} disabled={!newSupplierId || !newDate || createMutation.isPending} data-testid="button-create-purchase">
-              إنشاء الفاتورة
+            <Button variant="outline" onClick={() => setShowCreate(false)}>{t("common.cancel")}</Button>
+            <Button className="bg-primary gap-2" onClick={() => createMutation.mutate()} disabled={!newSupplierId || createMutation.isPending} data-testid="button-save-purchase">
+              <Plus className="w-4 h-4" /> {createMutation.isPending ? t("common.loading") : t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={showQuickSupplier} onOpenChange={setShowQuickSupplier}>
-        <DialogContent dir="rtl" className="max-w-sm">
+        <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><UserPlus className="w-5 h-5" /> إضافة مورد سريع</DialogTitle>
-            <DialogDescription>أضف مورد جديد واختره تلقائياً للفاتورة</DialogDescription>
+            <DialogTitle>{t("purchases.quick_supplier")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-4 py-4">
             <div className="space-y-1">
-              <label className="text-sm font-medium">اسم المورد *</label>
-              <Input value={quickName} onChange={e => setQuickName(e.target.value)} placeholder="اسم المورد" data-testid="input-quick-supplier-name" />
+              <label className="text-sm font-medium">{t("purchases.supplier_name")} *</label>
+              <Input value={quickName} onChange={e => setQuickName(e.target.value)} placeholder={t("purchases.supplier_name")} data-testid="input-quick-supplier-name" />
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">الهاتف</label>
+              <label className="text-sm font-medium">{t("purchases.phone")}</label>
               <Input value={quickPhone} onChange={e => setQuickPhone(e.target.value)} placeholder="+968..." data-testid="input-quick-supplier-phone" />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowQuickSupplier(false)}>إلغاء</Button>
-            <Button onClick={() => quickSupplierMutation.mutate()} disabled={!quickName.trim() || quickSupplierMutation.isPending} data-testid="button-save-quick-supplier">
-              إضافة واختيار
+            <Button variant="outline" onClick={() => setShowQuickSupplier(false)}>{t("common.cancel")}</Button>
+            <Button onClick={() => quickSupplierMutation.mutate()} disabled={!quickName.trim() || quickSupplierMutation.isPending}>
+              {quickSupplierMutation.isPending ? t("common.loading") : t("common.add")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -749,40 +732,24 @@ function PurchasesTab() {
   );
 }
 
-export default function Purchases() {
-  const { user } = useAuth();
-  const canManage = user?.role === "owner" || user?.role === "admin" || user?.role === "manager";
-
-  if (!canManage) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <p className="text-muted-foreground text-lg">ليس لديك صلاحية للوصول لهذه الصفحة</p>
-      </div>
-    );
-  }
-
+export default function PurchasesPage() {
+  const { t } = useI18n();
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="text-purchases-title">الموردون والمشتريات</h1>
-        <p className="text-muted-foreground mt-1">إدارة الموردين وفواتير المشتريات ومتوسط التكلفة (Average Cost)</p>
-      </div>
-      <div className="flex justify-end">
-        <Button variant="outline" className="gap-2" onClick={() => window.open("/api/exports/purchases.xlsx", "_blank")} data-testid="button-export-purchases-xlsx">
-          <FileSpreadsheet className="w-4 h-4" />
-          تصدير المشتريات Excel
-        </Button>
+    <div className="container mx-auto p-4 lg:p-6 pb-20">
+      <div className="mb-6 text-right">
+        <h1 className="text-3xl font-bold tracking-tight">{t("purchases.title")}</h1>
+        <p className="text-muted-foreground">{t("purchases.subtitle")}</p>
       </div>
 
-      <Tabs defaultValue="purchases" dir="rtl">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="purchases" data-testid="tab-purchases">فواتير المشتريات</TabsTrigger>
-          <TabsTrigger value="suppliers" data-testid="tab-suppliers">الموردون</TabsTrigger>
+      <Tabs defaultValue="purchases" className="space-y-4">
+        <TabsList className="flex justify-start">
+          <TabsTrigger value="purchases" className="gap-2"><FileText className="w-4 h-4" /> {t("purchases.tab_purchases")}</TabsTrigger>
+          <TabsTrigger value="suppliers" className="gap-2"><Truck className="w-4 h-4" /> {t("purchases.tab_suppliers")}</TabsTrigger>
         </TabsList>
-        <TabsContent value="purchases" className="mt-4">
+        <TabsContent value="purchases" className="border-none p-0 outline-none">
           <PurchasesTab />
         </TabsContent>
-        <TabsContent value="suppliers" className="mt-4">
+        <TabsContent value="suppliers" className="border-none p-0 outline-none">
           <SuppliersTab />
         </TabsContent>
       </Tabs>

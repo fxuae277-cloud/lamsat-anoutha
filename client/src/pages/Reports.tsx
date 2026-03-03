@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import type { Branch } from "@shared/schema";
 
 function todayStr() {
@@ -22,9 +23,9 @@ function monthAgoStr() {
   return d.toISOString().slice(0, 10);
 }
 
-function fmtTime(ts: string | null) {
+function fmtTime(ts: string | null, lang: string) {
   if (!ts) return "-";
-  return new Date(ts).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" });
+  return new Date(ts).toLocaleTimeString(lang === "ar" ? "ar-OM" : "en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
 function omr(val: string | number | null) {
@@ -54,6 +55,7 @@ function StatCard({ title, value, sub, icon: Icon, color }: {
 }
 
 function ShiftReport() {
+  const { t, lang } = useI18n();
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
 
@@ -87,20 +89,20 @@ function ShiftReport() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-4">
         <div className="space-y-1">
-          <label className="text-sm font-medium">التاريخ</label>
+          <label className="text-sm font-medium">{t("reports.date_label")}</label>
           <Input type="date" value={selectedDate} onChange={e => { setSelectedDate(e.target.value); setSelectedShiftId(""); }} className="w-44" data-testid="input-shift-report-date" />
         </div>
         <div className="space-y-1 min-w-[220px]">
-          <label className="text-sm font-medium">اختر الشفت</label>
+          <label className="text-sm font-medium">{t("reports.select_shift")}</label>
           <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
-            <SelectTrigger data-testid="select-shift-report"><SelectValue placeholder="اختر شفت..." /></SelectTrigger>
+            <SelectTrigger data-testid="select-shift-report"><SelectValue placeholder={t("reports.select_shift_placeholder")} /></SelectTrigger>
             <SelectContent>
               {dayShifts.length === 0 && (
-                <div className="p-3 text-center text-sm text-muted-foreground">لا توجد شفتات في هذا اليوم</div>
+                <div className="p-3 text-center text-sm text-muted-foreground">{t("reports.no_shifts_day")}</div>
               )}
               {dayShifts.map((s: any) => (
                 <SelectItem key={s.id} value={String(s.id)}>
-                  #{s.id} - {s.cashierName || "—"} ({s.terminalName}) - {fmtTime(s.startedAt)}
+                  #{s.id} - {s.cashierName || "—"} ({s.terminalName}) - {fmtTime(s.startedAt, lang)}
                   {s.status === "open" ? " 🟢" : " 🔴"}
                 </SelectItem>
               ))}
@@ -113,63 +115,63 @@ function ShiftReport() {
         <div className="space-y-4 animate-in fade-in duration-300">
           <div className="p-4 bg-muted/30 rounded-xl border space-y-1 text-sm">
             <div className="flex flex-wrap gap-x-6 gap-y-1">
-              <span><strong>الشفت:</strong> #{report.shift.id}</span>
-              <span><strong>الكاشير:</strong> {report.cashierName || "—"}</span>
-              <span><strong>الجهاز:</strong> {report.shift.terminalName}</span>
-              <span><strong>الفرع:</strong> {branchMap[report.shift.branchId] || "—"}</span>
-              <span><strong>البداية:</strong> {fmtTime(report.shift.startedAt)}</span>
-              <span><strong>النهاية:</strong> {report.shift.endedAt ? fmtTime(report.shift.endedAt) : "مفتوح"}</span>
+              <span><strong>{t("reports.shift_prefix")}:</strong> #{report.shift.id}</span>
+              <span><strong>{t("reports.cashier_label")}:</strong> {report.cashierName || "—"}</span>
+              <span><strong>{t("reports.terminal_label")}:</strong> {report.shift.terminalName}</span>
+              <span><strong>{t("reports.branch_label")}:</strong> {branchMap[report.shift.branchId] || "—"}</span>
+              <span><strong>{t("reports.start_label")}:</strong> {fmtTime(report.shift.startedAt, lang)}</span>
+              <span><strong>{t("reports.end_label")}:</strong> {report.shift.endedAt ? fmtTime(report.shift.endedAt, lang) : t("reports.open")}</span>
               <Badge variant={report.shift.status === "open" ? "default" : "secondary"}>
-                {report.shift.status === "open" ? "مفتوح" : "مغلق"}
+                {report.shift.status === "open" ? t("reports.open") : t("reports.closed")}
               </Badge>
             </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard title="مبيعات نقدي" value={omr(report.salesCash.total)} sub={`${report.salesCash.count} عملية`} icon={Banknote} color="text-green-600" />
-            <StatCard title="مبيعات بطاقة" value={omr(report.salesCard.total)} sub={`${report.salesCard.count} عملية`} icon={CreditCard} color="text-blue-600" />
-            <StatCard title="تحويل بنكي" value={omr(report.salesBankTransfer.total)} sub={`${report.salesBankTransfer.count} عملية`} icon={Building2} color="text-purple-600" />
-            <StatCard title="إجمالي المبيعات" value={omr(report.totalSales)} icon={TrendingUp} color="text-emerald-600" />
+            <StatCard title={t("reports.cash_sales")} value={omr(report.salesCash.total)} sub={`${report.salesCash.count} ${t("common.transaction")}`} icon={Banknote} color="text-green-600" />
+            <StatCard title={t("reports.card_sales")} value={omr(report.salesCard.total)} sub={`${report.salesCard.count} ${t("common.transaction")}`} icon={CreditCard} color="text-blue-600" />
+            <StatCard title={t("reports.bank_sales")} value={omr(report.salesBankTransfer.total)} sub={`${report.salesBankTransfer.count} ${t("common.transaction")}`} icon={Building2} color="text-purple-600" />
+            <StatCard title={t("reports.total_sales_report")} value={omr(report.totalSales)} icon={TrendingUp} color="text-emerald-600" />
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard title="مصروفات نقدي" value={omr(report.expensesCash.total)} sub={`${report.expensesCash.count} مصروف`} icon={TrendingDown} color="text-red-500" />
-            <StatCard title="مصروفات بنكي" value={omr(report.expensesBank.total)} sub={`${report.expensesBank.count} مصروف`} icon={TrendingDown} color="text-orange-500" />
-            <StatCard title="إجمالي المصروفات" value={omr(report.totalExpenses)} icon={TrendingDown} color="text-red-600" />
-            <StatCard title="صافي الربح" value={omr(report.netTotal)} icon={DollarSign} color={parseFloat(report.netTotal) >= 0 ? "text-emerald-700" : "text-red-700"} />
+            <StatCard title={t("reports.cash_expenses")} value={omr(report.expensesCash.total)} sub={`${report.expensesCash.count} ${t("nav.expenses")}`} icon={TrendingDown} color="text-red-500" />
+            <StatCard title={t("reports.bank_expenses")} value={omr(report.expensesBank.total)} sub={`${report.expensesBank.count} ${t("nav.expenses")}`} icon={TrendingDown} color="text-orange-500" />
+            <StatCard title={t("reports.total_expenses")} value={omr(report.totalExpenses)} icon={TrendingDown} color="text-red-600" />
+            <StatCard title={t("reports.net_profit")} value={omr(report.netTotal)} icon={DollarSign} color={parseFloat(report.netTotal) >= 0 ? "text-emerald-700" : "text-red-700"} />
           </div>
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">تسوية الصندوق النقدي</CardTitle>
+              <CardTitle className="text-base">{t("reports.cash_recon")}</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableBody>
                   <TableRow>
-                    <TableCell className="font-medium">رصيد الافتتاح</TableCell>
+                    <TableCell className="font-medium">{t("reports.opening_balance")}</TableCell>
                     <TableCell className="text-left font-mono">{omr(report.openingCash)} OMR</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell className="font-medium text-green-600">+ مبيعات نقدي</TableCell>
+                    <TableCell className="font-medium text-green-600">{t("reports.plus_cash_sales")}</TableCell>
                     <TableCell className="text-left font-mono text-green-600">+{omr(report.salesCash.total)} OMR</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell className="font-medium text-red-600">- مصروفات نقدي</TableCell>
+                    <TableCell className="font-medium text-red-600">{t("reports.minus_cash_expenses")}</TableCell>
                     <TableCell className="text-left font-mono text-red-600">-{omr(report.expensesCash.total)} OMR</TableCell>
                   </TableRow>
                   <TableRow className="border-t-2">
-                    <TableCell className="font-bold">المتوقع في الصندوق</TableCell>
+                    <TableCell className="font-bold">{t("reports.expected_cash")}</TableCell>
                     <TableCell className="text-left font-mono font-bold">{omr(report.expectedCash)} OMR</TableCell>
                   </TableRow>
                   {report.actualCash !== null && (
                     <>
                       <TableRow>
-                        <TableCell className="font-medium">الفعلي في الصندوق</TableCell>
+                        <TableCell className="font-medium">{t("reports.actual_cash")}</TableCell>
                         <TableCell className="text-left font-mono">{omr(report.actualCash)} OMR</TableCell>
                       </TableRow>
                       <TableRow>
-                        <TableCell className="font-bold">الفرق</TableCell>
+                        <TableCell className="font-bold">{t("reports.difference")}</TableCell>
                         <TableCell className={`text-left font-mono font-bold ${parseFloat(report.difference || "0") === 0 ? "text-green-600" : "text-red-600"}`}>
                           {omr(report.difference)} OMR
                           {parseFloat(report.difference || "0") === 0 && " ✓"}
@@ -185,16 +187,17 @@ function ShiftReport() {
       )}
 
       {!report && selectedShiftId && (
-        <div className="text-center py-12 text-muted-foreground">جارٍ تحميل التقرير...</div>
+        <div className="text-center py-12 text-muted-foreground">{t("reports.loading_report")}</div>
       )}
       {!selectedShiftId && (
-        <div className="text-center py-12 text-muted-foreground">اختر شفتاً لعرض التقرير</div>
+        <div className="text-center py-12 text-muted-foreground">{t("reports.select_shift_to_view")}</div>
       )}
     </div>
   );
 }
 
 function DailyReport() {
+  const { t, lang } = useI18n();
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
 
@@ -219,36 +222,36 @@ function DailyReport() {
     if (!report) return;
     const bom = "\uFEFF";
     const rows = [
-      ["التقرير اليومي", report.date, selectedBranch !== "all" ? branchMap[Number(selectedBranch)] || "" : "جميع الفروع"],
+      [t("reports.daily_report_title"), report.date, selectedBranch !== "all" ? branchMap[Number(selectedBranch)] || "" : t("reports.all_branches")],
       [],
-      ["البند", "المبلغ (OMR)", "العدد"],
-      ["مبيعات نقدي", report.salesCash.total, report.salesCash.count],
-      ["مبيعات بطاقة", report.salesCard.total, report.salesCard.count],
-      ["تحويل بنكي", report.salesBankTransfer.total, report.salesBankTransfer.count],
-      ["إجمالي المبيعات", report.totalSales, ""],
+      [t("reports.item_label"), t("reports.amount_omr"), t("reports.count_label")],
+      [t("reports.cash_sales"), report.salesCash.total, report.salesCash.count],
+      [t("reports.card_sales"), report.salesCard.total, report.salesCard.count],
+      [t("reports.bank_sales"), report.salesBankTransfer.total, report.salesBankTransfer.count],
+      [t("reports.total_sales_report"), report.totalSales, ""],
       [],
-      ["تكلفة البضاعة المباعة", report.cogsTotal, ""],
-      ["إجمالي الربح", report.grossProfit, ""],
+      [t("reports.cogs"), report.cogsTotal, ""],
+      [t("reports.gross_profit"), report.grossProfit, ""],
       [],
-      ["مصروفات نقدي", report.expensesCash.total, report.expensesCash.count],
-      ["مصروفات بنكي", report.expensesBank.total, report.expensesBank.count],
-      ["إجمالي المصروفات", report.totalExpenses, ""],
+      [t("reports.cash_expenses"), report.expensesCash.total, report.expensesCash.count],
+      [t("reports.bank_expenses"), report.expensesBank.total, report.expensesBank.count],
+      [t("reports.total_expenses"), report.totalExpenses, ""],
       [],
-      ["صافي الربح", report.netProfit, ""],
+      [t("reports.net_profit"), report.netProfit, ""],
       [],
-      ["رصيد افتتاح نقدي", report.openingCash, ""],
-      ["رصيد إغلاق نقدي (تقديري)", report.cashClosingBalance, ""],
-      ["مجموع الفروقات", report.differencesSum, ""],
+      [t("reports.opening_balance"), report.openingCash, ""],
+      [t("reports.cash_closing_est"), report.cashClosingBalance, ""],
+      [t("reports.total_differences"), report.differencesSum, ""],
       [],
-      ["الشفتات"],
-      ["#", "الكاشير", "الجهاز", "البداية", "النهاية", "الحالة", "المبيعات", "رصيد الافتتاح"],
+      [t("reports.shifts_label")],
+      ["#", t("reports.cashier_label"), t("reports.terminal_label"), t("reports.start_label"), t("reports.end_label"), t("common.status"), t("reports.revenue"), t("reports.opening_balance")],
       ...report.shifts.map((s: any) => [
         s.id,
         "",
         s.terminalName,
-        s.startedAt ? new Date(s.startedAt).toLocaleTimeString("ar-OM") : "",
-        s.endedAt ? new Date(s.endedAt).toLocaleTimeString("ar-OM") : "مفتوح",
-        s.status === "open" ? "مفتوح" : "مغلق",
+        s.startedAt ? new Date(s.startedAt).toLocaleTimeString(lang === "ar" ? "ar-OM" : "en-US") : "",
+        s.endedAt ? new Date(s.endedAt).toLocaleTimeString(lang === "ar" ? "ar-OM" : "en-US") : t("reports.open"),
+        s.status === "open" ? t("reports.open") : t("reports.closed"),
         omr(s.totalSales),
         omr(s.openingCash),
       ]),
@@ -267,15 +270,15 @@ function DailyReport() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-4">
         <div className="space-y-1">
-          <label className="text-sm font-medium">التاريخ</label>
+          <label className="text-sm font-medium">{t("reports.date_label")}</label>
           <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-44" data-testid="input-daily-report-date" />
         </div>
         <div className="space-y-1 min-w-[200px]">
-          <label className="text-sm font-medium">الفرع</label>
+          <label className="text-sm font-medium">{t("reports.branch_label")}</label>
           <Select value={selectedBranch} onValueChange={setSelectedBranch}>
             <SelectTrigger data-testid="select-daily-branch"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">جميع الفروع</SelectItem>
+              <SelectItem value="all">{t("reports.all_branches")}</SelectItem>
               {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -284,17 +287,17 @@ function DailyReport() {
           <div className="flex gap-2">
             <Button variant="outline" className="gap-2" onClick={exportCSV} data-testid="button-export-csv">
               <Download className="w-4 h-4" />
-              CSV
+              {t("reports.export_csv")}
             </Button>
             <Button variant="outline" className="gap-2" data-testid="button-export-xlsx"
               onClick={() => window.open(`/api/exports/daily.xlsx?date=${selectedDate}${branchParam}`, "_blank")}>
               <FileSpreadsheet className="w-4 h-4" />
-              Excel
+              {t("reports.export_excel")}
             </Button>
             <Button variant="outline" className="gap-2" data-testid="button-export-pdf"
               onClick={() => window.open(`/api/exports/daily.pdf?date=${selectedDate}${branchParam}`, "_blank")}>
               <FileText className="w-4 h-4" />
-              PDF
+              {t("reports.export_pdf")}
             </Button>
           </div>
         )}
@@ -303,75 +306,77 @@ function DailyReport() {
       {report && (
         <div className="space-y-4 animate-in fade-in duration-300">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard title="مبيعات نقدي" value={omr(report.salesCash.total)} sub={`${report.salesCash.count} عملية`} icon={Banknote} color="text-green-600" />
-            <StatCard title="مبيعات بطاقة" value={omr(report.salesCard.total)} sub={`${report.salesCard.count} عملية`} icon={CreditCard} color="text-blue-600" />
-            <StatCard title="تحويل بنكي" value={omr(report.salesBankTransfer.total)} sub={`${report.salesBankTransfer.count} عملية`} icon={Building2} color="text-purple-600" />
-            <StatCard title="إجمالي المبيعات" value={omr(report.totalSales)} icon={TrendingUp} color="text-emerald-600" />
+            <StatCard title={t("reports.cash_sales")} value={omr(report.salesCash.total)} sub={`${report.salesCash.count} ${t("common.transaction")}`} icon={Banknote} color="text-green-600" />
+            <StatCard title={t("reports.card_sales")} value={omr(report.salesCard.total)} sub={`${report.salesCard.count} ${t("common.transaction")}`} icon={CreditCard} color="text-blue-600" />
+            <StatCard title={t("reports.bank_sales")} value={omr(report.salesBankTransfer.total)} sub={`${report.salesBankTransfer.count} ${t("common.transaction")}`} icon={Building2} color="text-purple-600" />
+            <StatCard title={t("reports.total_sales_report")} value={omr(report.totalSales)} icon={TrendingUp} color="text-emerald-600" />
           </div>
 
           <Card className="border-2 border-primary/20 bg-primary/5">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <BarChart3 className="w-5 h-5" />
-                تحليل الربحية
+                {t("reports.profit_analysis")}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 <div className="p-3 bg-white rounded-lg border text-center" data-testid="stat-total-sales">
-                  <p className="text-xs text-muted-foreground">إجمالي المبيعات</p>
+                  <p className="text-xs text-muted-foreground">{t("reports.total_sales_report")}</p>
                   <p className="text-lg font-bold text-emerald-600 mt-1">{omr(report.totalSales)}</p>
                   <p className="text-[10px] text-muted-foreground">OMR</p>
                 </div>
                 <div className="p-3 bg-white rounded-lg border text-center" data-testid="stat-cogs">
-                  <p className="text-xs text-muted-foreground">تكلفة البضاعة (COGS)</p>
+                  <p className="text-xs text-muted-foreground">{t("reports.cogs")}</p>
                   <p className="text-lg font-bold text-orange-600 mt-1">{omr(report.cogsTotal)}</p>
                   <p className="text-[10px] text-muted-foreground">OMR</p>
                 </div>
                 <div className="p-3 bg-white rounded-lg border text-center" data-testid="stat-gross-profit">
-                  <p className="text-xs text-muted-foreground">إجمالي الربح</p>
+                  <p className="text-xs text-muted-foreground">{t("reports.gross_profit")}</p>
                   <p className={`text-lg font-bold mt-1 ${parseFloat(report.grossProfit) >= 0 ? "text-blue-600" : "text-red-600"}`}>{omr(report.grossProfit)}</p>
                   <p className="text-[10px] text-muted-foreground">OMR</p>
                 </div>
                 <div className="p-3 bg-white rounded-lg border text-center" data-testid="stat-expenses">
-                  <p className="text-xs text-muted-foreground">المصروفات</p>
+                  <p className="text-xs text-muted-foreground">{t("nav.expenses")}</p>
                   <p className="text-lg font-bold text-red-600 mt-1">{omr(report.totalExpenses)}</p>
                   <p className="text-[10px] text-muted-foreground">OMR</p>
                 </div>
                 <div className="p-3 bg-white rounded-lg border-2 border-primary/30 text-center" data-testid="stat-net-profit">
-                  <p className="text-xs text-muted-foreground font-medium">صافي الربح</p>
+                  <p className="text-xs text-muted-foreground font-medium">{t("reports.net_profit")}</p>
                   <p className={`text-xl font-bold mt-1 ${parseFloat(report.netProfit) >= 0 ? "text-emerald-700" : "text-red-700"}`}>{omr(report.netProfit)}</p>
                   <p className="text-[10px] text-muted-foreground">OMR</p>
                 </div>
               </div>
-              <div className="mt-3 p-2 bg-white rounded border text-xs text-muted-foreground text-center">
-                المبيعات - التكلفة = إجمالي الربح | إجمالي الربح - المصروفات = صافي الربح
-              </div>
+              {lang === "ar" && (
+                <div className="mt-3 p-2 bg-white rounded border text-xs text-muted-foreground text-center">
+                  {t("reports.profit_formula")}
+                </div>
+              )}
             </CardContent>
           </Card>
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <StatCard title="مصروفات نقدي" value={omr(report.expensesCash.total)} sub={`${report.expensesCash.count}`} icon={TrendingDown} color="text-red-500" />
-            <StatCard title="مصروفات بنكي" value={omr(report.expensesBank.total)} sub={`${report.expensesBank.count}`} icon={TrendingDown} color="text-orange-500" />
-            <StatCard title="صافي اليوم (مبيعات - مصروفات)" value={omr(report.net)} icon={DollarSign} color={parseFloat(report.net) >= 0 ? "text-emerald-700" : "text-red-700"} />
+            <StatCard title={t("reports.cash_expenses")} value={omr(report.expensesCash.total)} sub={`${report.expensesCash.count}`} icon={TrendingDown} color="text-red-500" />
+            <StatCard title={t("reports.bank_expenses")} value={omr(report.expensesBank.total)} sub={`${report.expensesBank.count}`} icon={TrendingDown} color="text-orange-500" />
+            <StatCard title={t("reports.net_today")} value={omr(report.net)} icon={DollarSign} color={parseFloat(report.net) >= 0 ? "text-emerald-700" : "text-red-700"} />
           </div>
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">ملخص الصندوق النقدي</CardTitle>
+              <CardTitle className="text-base">{t("reports.cash_summary")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-3 bg-muted/30 rounded-lg border text-center">
-                  <p className="text-xs text-muted-foreground">رصيد الافتتاح</p>
+                  <p className="text-xs text-muted-foreground">{t("reports.opening_balance")}</p>
                   <p className="text-lg font-bold mt-1">{omr(report.openingCash)} <span className="text-xs font-normal">OMR</span></p>
                 </div>
                 <div className="p-3 bg-muted/30 rounded-lg border text-center">
-                  <p className="text-xs text-muted-foreground">رصيد الإغلاق (تقديري)</p>
+                  <p className="text-xs text-muted-foreground">{t("reports.cash_closing_est")}</p>
                   <p className="text-lg font-bold mt-1">{omr(report.cashClosingBalance)} <span className="text-xs font-normal">OMR</span></p>
                 </div>
                 <div className="p-3 bg-muted/30 rounded-lg border text-center">
-                  <p className="text-xs text-muted-foreground">مجموع الفروقات</p>
+                  <p className="text-xs text-muted-foreground">{t("reports.total_differences")}</p>
                   <p className={`text-lg font-bold mt-1 ${parseFloat(report.differencesSum) === 0 ? "text-green-600" : "text-red-600"}`}>
                     {omr(report.differencesSum)} <span className="text-xs font-normal">OMR</span>
                     {parseFloat(report.differencesSum) === 0 && " ✓"}
@@ -384,20 +389,20 @@ function DailyReport() {
           {report.shifts.length > 0 && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">الشفتات ({report.shifts.length})</CardTitle>
+                <CardTitle className="text-base">{t("reports.shifts_count").replace("{0}", report.shifts.length)}</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
                   <TableHeader className="bg-muted/50">
                     <TableRow>
                       <TableHead>#</TableHead>
-                      <TableHead>الفرع</TableHead>
-                      <TableHead>الجهاز</TableHead>
-                      <TableHead>البداية</TableHead>
-                      <TableHead>النهاية</TableHead>
-                      <TableHead>الحالة</TableHead>
-                      <TableHead>المبيعات</TableHead>
-                      <TableHead>رصيد الافتتاح</TableHead>
+                      <TableHead>{t("reports.branch_label")}</TableHead>
+                      <TableHead>{t("reports.terminal_label")}</TableHead>
+                      <TableHead>{t("reports.start_label")}</TableHead>
+                      <TableHead>{t("reports.end_label")}</TableHead>
+                      <TableHead>{t("common.status")}</TableHead>
+                      <TableHead>{t("reports.revenue")}</TableHead>
+                      <TableHead>{t("reports.opening_balance")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -406,11 +411,11 @@ function DailyReport() {
                         <TableCell className="font-mono">{s.id}</TableCell>
                         <TableCell>{branchMap[s.branchId] || "—"}</TableCell>
                         <TableCell>{s.terminalName}</TableCell>
-                        <TableCell>{fmtTime(s.startedAt)}</TableCell>
-                        <TableCell>{s.endedAt ? fmtTime(s.endedAt) : "-"}</TableCell>
+                        <TableCell>{fmtTime(s.startedAt, lang)}</TableCell>
+                        <TableCell>{s.endedAt ? fmtTime(s.endedAt, lang) : "-"}</TableCell>
                         <TableCell>
                           <Badge variant={s.status === "open" ? "default" : "secondary"} className={s.status === "open" ? "bg-green-100 text-green-700 border-green-200" : ""}>
-                            {s.status === "open" ? "مفتوح" : "مغلق"}
+                            {s.status === "open" ? t("reports.open") : t("reports.closed")}
                           </Badge>
                         </TableCell>
                         <TableCell className="font-mono">{omr(s.totalSales)}</TableCell>
@@ -426,13 +431,14 @@ function DailyReport() {
       )}
 
       {!report && (
-        <div className="text-center py-12 text-muted-foreground">اختر تاريخاً لعرض التقرير اليومي</div>
+        <div className="text-center py-12 text-muted-foreground">{t("reports.select_date")}</div>
       )}
     </div>
   );
 }
 
 function BranchComparison() {
+  const { t } = useI18n();
   const [selectedDate, setSelectedDate] = useState(todayStr());
 
   const { data: report } = useQuery<any>({
@@ -449,16 +455,16 @@ function BranchComparison() {
     if (!report) return;
     const bom = "\uFEFF";
     const rows = [
-      ["مقارنة الفروع", report.date],
+      [t("reports.branch_comp_title"), report.date],
       [],
-      ["الفرع", "المبيعات", "التكلفة (COGS)", "إجمالي الربح", "المصروفات", "صافي الربح"],
+      [t("reports.branch_label"), t("reports.revenue"), t("reports.cost"), t("reports.gross_profit"), t("nav.expenses"), t("reports.net_profit")],
       ...report.branches.map((b: any) => [
         b.branchName,
         b.totalSales,
         b.cogsTotal,
         b.grossProfit,
         b.totalExpenses,
-        b.netProfit,
+        b.netProfit
       ]),
     ];
     const csv = bom + rows.map(r => r.join(",")).join("\n");
@@ -471,498 +477,310 @@ function BranchComparison() {
     URL.revokeObjectURL(url);
   }
 
-  const totals = report?.branches?.reduce((acc: any, b: any) => ({
-    totalSales: acc.totalSales + parseFloat(b.totalSales),
-    cogsTotal: acc.cogsTotal + parseFloat(b.cogsTotal),
-    grossProfit: acc.grossProfit + parseFloat(b.grossProfit),
-    totalExpenses: acc.totalExpenses + parseFloat(b.totalExpenses),
-    netProfit: acc.netProfit + parseFloat(b.netProfit),
-  }), { totalSales: 0, cogsTotal: 0, grossProfit: 0, totalExpenses: 0, netProfit: 0 });
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-4">
         <div className="space-y-1">
-          <label className="text-sm font-medium">التاريخ</label>
-          <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-44" data-testid="input-branch-comparison-date" />
+          <label className="text-sm font-medium">{t("reports.date_label")}</label>
+          <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-44" data-testid="input-branch-comp-date" />
         </div>
         {report && (
-          <div className="flex gap-2">
-            <Button variant="outline" className="gap-2" onClick={exportCSV} data-testid="button-export-branch-csv">
-              <Download className="w-4 h-4" />
-              CSV
-            </Button>
-          </div>
+          <Button variant="outline" className="gap-2" onClick={exportCSV} data-testid="button-export-branch-csv">
+            <Download className="w-4 h-4" />
+            {t("reports.export_csv")}
+          </Button>
         )}
       </div>
 
-      {report && report.branches && (
-        <div className="space-y-4 animate-in fade-in duration-300">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <StatCard title="إجمالي المبيعات" value={omr(totals.totalSales)} icon={TrendingUp} color="text-emerald-600" />
-            <StatCard title="التكلفة (COGS)" value={omr(totals.cogsTotal)} icon={Package} color="text-orange-600" />
-            <StatCard title="إجمالي الربح" value={omr(totals.grossProfit)} icon={BarChart3} color="text-blue-600" />
-            <StatCard title="المصروفات" value={omr(totals.totalExpenses)} icon={TrendingDown} color="text-red-600" />
-            <StatCard title="صافي الربح" value={omr(totals.netProfit)} icon={DollarSign} color={totals.netProfit >= 0 ? "text-emerald-700" : "text-red-700"} />
-          </div>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <ArrowLeftRight className="w-5 h-5" />
-                مقارنة الفروع - {report.date}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader className="bg-muted/50">
-                    <TableRow>
-                      <TableHead>الفرع</TableHead>
-                      <TableHead className="text-center">المبيعات</TableHead>
-                      <TableHead className="text-center">التكلفة (COGS)</TableHead>
-                      <TableHead className="text-center">إجمالي الربح</TableHead>
-                      <TableHead className="text-center">المصروفات</TableHead>
-                      <TableHead className="text-center">صافي الربح</TableHead>
-                      <TableHead className="text-center">هامش الربح %</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {report.branches.map((b: any) => {
-                      const margin = parseFloat(b.totalSales) > 0
-                        ? ((parseFloat(b.netProfit) / parseFloat(b.totalSales)) * 100).toFixed(1)
-                        : "0.0";
-                      return (
-                        <TableRow key={b.branchId} data-testid={`row-branch-${b.branchId}`}>
-                          <TableCell className="font-medium">{b.branchName}</TableCell>
-                          <TableCell className="text-center font-mono text-emerald-600">{omr(b.totalSales)}</TableCell>
-                          <TableCell className="text-center font-mono text-orange-600">{omr(b.cogsTotal)}</TableCell>
-                          <TableCell className="text-center font-mono text-blue-600">{omr(b.grossProfit)}</TableCell>
-                          <TableCell className="text-center font-mono text-red-600">{omr(b.totalExpenses)}</TableCell>
-                          <TableCell className={`text-center font-mono font-bold ${parseFloat(b.netProfit) >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-                            {omr(b.netProfit)}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant={parseFloat(margin) >= 0 ? "default" : "destructive"} className={parseFloat(margin) >= 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : ""}>
-                              {margin}%
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                    <TableRow className="border-t-2 bg-muted/30 font-bold">
-                      <TableCell>المجموع</TableCell>
-                      <TableCell className="text-center font-mono text-emerald-600">{omr(totals.totalSales)}</TableCell>
-                      <TableCell className="text-center font-mono text-orange-600">{omr(totals.cogsTotal)}</TableCell>
-                      <TableCell className="text-center font-mono text-blue-600">{omr(totals.grossProfit)}</TableCell>
-                      <TableCell className="text-center font-mono text-red-600">{omr(totals.totalExpenses)}</TableCell>
-                      <TableCell className={`text-center font-mono ${totals.netProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-                        {omr(totals.netProfit)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant={totals.netProfit >= 0 ? "default" : "destructive"} className={totals.netProfit >= 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : ""}>
-                          {totals.totalSales > 0 ? ((totals.netProfit / totals.totalSales) * 100).toFixed(1) : "0.0"}%
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {!report && (
-        <div className="text-center py-12 text-muted-foreground">اختر تاريخاً لعرض مقارنة الفروع</div>
+      {report && report.branches.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("reports.branch_comp_title")}</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("reports.branch_label")}</TableHead>
+                  <TableHead className="text-center">{t("reports.revenue")}</TableHead>
+                  <TableHead className="text-center">{t("reports.cost")}</TableHead>
+                  <TableHead className="text-center">{t("reports.gross_profit")}</TableHead>
+                  <TableHead className="text-center">{t("nav.expenses")}</TableHead>
+                  <TableHead className="text-center">{t("reports.net_profit")}</TableHead>
+                  <TableHead className="text-center">{t("reports.margin")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {report.branches.map((b: any) => (
+                  <TableRow key={b.branchId} data-testid={`row-branch-${b.branchId}`}>
+                    <TableCell className="font-medium">{b.branchName}</TableCell>
+                    <TableCell className="text-center font-mono">{omr(b.totalSales)}</TableCell>
+                    <TableCell className="text-center font-mono text-orange-600">{omr(b.cogsTotal)}</TableCell>
+                    <TableCell className="text-center font-mono text-blue-600">{omr(b.grossProfit)}</TableCell>
+                    <TableCell className="text-center font-mono text-red-500">{omr(b.totalExpenses)}</TableCell>
+                    <TableCell className="text-center font-mono font-bold text-emerald-700">{omr(b.netProfit)}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="outline">{b.profitMargin}%</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : report ? (
+        <div className="text-center py-12 text-muted-foreground">{t("reports.no_data_date")}</div>
+      ) : (
+        <div className="text-center py-12 text-muted-foreground">{t("reports.select_date")}</div>
       )}
     </div>
   );
 }
 
-function ProfitReport() {
-  const { user } = useAuth();
-  const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
+function ProductReport() {
+  const { t } = useI18n();
+  const [selectedDate, setSelectedDate] = useState(todayStr());
 
-  const [fromDate, setFromDate] = useState(monthAgoStr());
-  const [toDate, setToDate] = useState(todayStr());
-  const [selectedBranch, setSelectedBranch] = useState<string>("all");
-  const [section, setSection] = useState<string>("branches");
-
-  const { data: branches = [] } = useQuery<Branch[]>({
-    queryKey: ["/api/branches"],
-    queryFn: getQueryFn({ on401: "throw" }),
-  });
-
-  const branchParam = selectedBranch !== "all" ? `&branchId=${selectedBranch}` : "";
-
-  const { data: branchData = [] } = useQuery<any[]>({
-    queryKey: ["/api/reports/profit/branches", fromDate, toDate],
+  const { data: report } = useQuery<any>({
+    queryKey: ["/api/reports/products", selectedDate],
     queryFn: async () => {
-      const res = await fetch(`/api/reports/profit/branches?from=${fromDate}&to=${toDate}`, { credentials: "include" });
+      const res = await fetch(`/api/reports/products?date=${selectedDate}`, { credentials: "include" });
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
       return res.json();
     },
-    enabled: section === "branches" && !!fromDate && !!toDate,
+    enabled: !!selectedDate,
   });
-
-  const { data: employeeData = [] } = useQuery<any[]>({
-    queryKey: ["/api/reports/profit/employees", fromDate, toDate, selectedBranch],
-    queryFn: async () => {
-      const res = await fetch(`/api/reports/profit/employees?from=${fromDate}&to=${toDate}${branchParam}`, { credentials: "include" });
-      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-      return res.json();
-    },
-    enabled: section === "employees" && !!fromDate && !!toDate,
-  });
-
-  const { data: productData = [] } = useQuery<any[]>({
-    queryKey: ["/api/reports/profit/products", fromDate, toDate, selectedBranch],
-    queryFn: async () => {
-      const res = await fetch(`/api/reports/profit/products?from=${fromDate}&to=${toDate}${branchParam}`, { credentials: "include" });
-      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-      return res.json();
-    },
-    enabled: section === "products" && !!fromDate && !!toDate,
-  });
-
-  const branchTotals = branchData.reduce((acc, b) => ({
-    salesTotal: acc.salesTotal + parseFloat(b.salesTotal),
-    cogsTotal: acc.cogsTotal + parseFloat(b.cogsTotal),
-    grossProfit: acc.grossProfit + parseFloat(b.grossProfit),
-    expensesTotal: acc.expensesTotal + parseFloat(b.expensesTotal),
-    netProfit: acc.netProfit + parseFloat(b.netProfit),
-  }), { salesTotal: 0, cogsTotal: 0, grossProfit: 0, expensesTotal: 0, netProfit: 0 });
-
-  const empTotals = employeeData.reduce((acc, e) => ({
-    ordersCount: acc.ordersCount + e.ordersCount,
-    salesTotal: acc.salesTotal + parseFloat(e.salesTotal),
-    cogsTotal: acc.cogsTotal + parseFloat(e.cogsTotal),
-    grossProfit: acc.grossProfit + parseFloat(e.grossProfit),
-  }), { ordersCount: 0, salesTotal: 0, cogsTotal: 0, grossProfit: 0 });
-
-  const prodTotals = productData.reduce((acc, p) => ({
-    qtySold: acc.qtySold + p.qtySold,
-    salesTotal: acc.salesTotal + parseFloat(p.salesTotal),
-    cogsTotal: acc.cogsTotal + parseFloat(p.cogsTotal),
-    grossProfit: acc.grossProfit + parseFloat(p.grossProfit),
-  }), { qtySold: 0, salesTotal: 0, cogsTotal: 0, grossProfit: 0 });
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-4">
         <div className="space-y-1">
-          <label className="text-sm font-medium">من</label>
-          <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-44" data-testid="input-profit-from" />
+          <label className="text-sm font-medium">{t("reports.date_label")}</label>
+          <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-44" data-testid="input-product-report-date" />
         </div>
+      </div>
+
+      {report && report.products.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("reports.top_products")}</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("reports.product_name")}</TableHead>
+                  <TableHead className="text-center">{t("reports.qty_sold")}</TableHead>
+                  <TableHead className="text-center">{t("reports.revenue")}</TableHead>
+                  <TableHead className="text-center">{t("reports.cost")}</TableHead>
+                  <TableHead className="text-center">{t("reports.product_profit")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {report.products.map((p: any) => (
+                  <TableRow key={p.productId} data-testid={`row-product-${p.productId}`}>
+                    <TableCell className="font-medium">{p.productName}</TableCell>
+                    <TableCell className="text-center">{p.quantity}</TableCell>
+                    <TableCell className="text-center font-mono">{omr(p.revenue)}</TableCell>
+                    <TableCell className="text-center font-mono text-orange-600">{omr(p.cost)}</TableCell>
+                    <TableCell className="text-center font-mono text-emerald-700">{omr(p.profit)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : report ? (
+        <div className="text-center py-12 text-muted-foreground">{t("reports.no_data_date")}</div>
+      ) : (
+        <div className="text-center py-12 text-muted-foreground">{t("reports.select_date")}</div>
+      )}
+    </div>
+  );
+}
+
+function CategoryReport() {
+  const { t } = useI18n();
+  const [selectedDate, setSelectedDate] = useState(todayStr());
+
+  const { data: report } = useQuery<any>({
+    queryKey: ["/api/reports/categories", selectedDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/categories?date=${selectedDate}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
+    enabled: !!selectedDate,
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-4">
         <div className="space-y-1">
-          <label className="text-sm font-medium">إلى</label>
-          <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-44" data-testid="input-profit-to" />
+          <label className="text-sm font-medium">{t("reports.date_label")}</label>
+          <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-44" data-testid="input-category-report-date" />
         </div>
-        {isOwnerOrAdmin && (section === "employees" || section === "products") && (
-          <div className="space-y-1 min-w-[200px]">
-            <label className="text-sm font-medium">الفرع</label>
-            <Select value={selectedBranch} onValueChange={setSelectedBranch}>
-              <SelectTrigger data-testid="select-profit-branch"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">جميع الفروع</SelectItem>
-                {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <Button variant={section === "branches" ? "default" : "outline"} className="gap-2" onClick={() => setSection("branches")} data-testid="button-profit-branches">
-          <Building2 className="w-4 h-4" />
-          حسب الفرع
-        </Button>
-        <Button variant={section === "employees" ? "default" : "outline"} className="gap-2" onClick={() => setSection("employees")} data-testid="button-profit-employees">
-          <Users className="w-4 h-4" />
-          حسب الموظف
-        </Button>
-        <Button variant={section === "products" ? "default" : "outline"} className="gap-2" onClick={() => setSection("products")} data-testid="button-profit-products">
-          <ShoppingBag className="w-4 h-4" />
-          حسب المنتج
-        </Button>
+      {report && report.categories.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("reports.category_comp")}</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("reports.category_name")}</TableHead>
+                  <TableHead className="text-center">{t("reports.qty_sold")}</TableHead>
+                  <TableHead className="text-center">{t("reports.revenue")}</TableHead>
+                  <TableHead className="text-center">{t("reports.cost")}</TableHead>
+                  <TableHead className="text-center">{t("reports.category_profit")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {report.categories.map((c: any) => (
+                  <TableRow key={c.category} data-testid={`row-category-${c.category}`}>
+                    <TableCell className="font-medium">{c.category || "—"}</TableCell>
+                    <TableCell className="text-center">{c.quantity}</TableCell>
+                    <TableCell className="text-center font-mono">{omr(c.revenue)}</TableCell>
+                    <TableCell className="text-center font-mono text-orange-600">{omr(c.cost)}</TableCell>
+                    <TableCell className="text-center font-mono text-emerald-700">{omr(c.profit)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : report ? (
+        <div className="text-center py-12 text-muted-foreground">{t("reports.no_data_date")}</div>
+      ) : (
+        <div className="text-center py-12 text-muted-foreground">{t("reports.select_date")}</div>
+      )}
+    </div>
+  );
+}
+
+function PaymentReport() {
+  const { t } = useI18n();
+  const [selectedDate, setSelectedDate] = useState(todayStr());
+
+  const { data: report } = useQuery<any>({
+    queryKey: ["/api/reports/payments", selectedDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/payments?date=${selectedDate}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
+    enabled: !!selectedDate,
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="space-y-1">
+          <label className="text-sm font-medium">{t("reports.date_label")}</label>
+          <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-44" data-testid="input-payment-report-date" />
+        </div>
       </div>
 
-      {section === "branches" && branchData.length > 0 && (
-        <div className="space-y-4 animate-in fade-in duration-300">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <StatCard title="إجمالي المبيعات" value={omr(branchTotals.salesTotal)} icon={TrendingUp} color="text-emerald-600" />
-            <StatCard title="التكلفة (COGS)" value={omr(branchTotals.cogsTotal)} icon={Package} color="text-orange-600" />
-            <StatCard title="إجمالي الربح" value={omr(branchTotals.grossProfit)} icon={BarChart3} color="text-blue-600" />
-            <StatCard title="المصروفات" value={omr(branchTotals.expensesTotal)} icon={TrendingDown} color="text-red-600" />
-            <StatCard title="صافي الربح" value={omr(branchTotals.netProfit)} icon={DollarSign} color={branchTotals.netProfit >= 0 ? "text-emerald-700" : "text-red-700"} />
-          </div>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Building2 className="w-5 h-5" />
-                  أرباح الفروع — {fromDate} إلى {toDate}
-                </CardTitle>
-                <Button variant="outline" size="sm" className="gap-2" data-testid="button-export-profit-branches-xlsx"
-                  onClick={() => window.open(`/api/exports/profit_all_branches.xlsx?from=${fromDate}&to=${toDate}`, "_blank")}>
-                  <FileSpreadsheet className="w-4 h-4" /> Excel
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader className="bg-muted/50">
-                    <TableRow>
-                      <TableHead>الفرع</TableHead>
-                      <TableHead className="text-center">المبيعات</TableHead>
-                      <TableHead className="text-center">التكلفة (COGS)</TableHead>
-                      <TableHead className="text-center">إجمالي الربح</TableHead>
-                      <TableHead className="text-center">المصروفات</TableHead>
-                      <TableHead className="text-center">صافي الربح</TableHead>
-                      <TableHead className="text-center">هامش %</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {branchData.map((b: any) => (
-                      <TableRow key={b.branchId} data-testid={`row-profit-branch-${b.branchId}`}>
-                        <TableCell className="font-medium">{b.branchName}</TableCell>
-                        <TableCell className="text-center font-mono text-emerald-600">{omr(b.salesTotal)}</TableCell>
-                        <TableCell className="text-center font-mono text-orange-600">{omr(b.cogsTotal)}</TableCell>
-                        <TableCell className="text-center font-mono text-blue-600">{omr(b.grossProfit)}</TableCell>
-                        <TableCell className="text-center font-mono text-red-600">{omr(b.expensesTotal)}</TableCell>
-                        <TableCell className={`text-center font-mono font-bold ${parseFloat(b.netProfit) >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-                          {omr(b.netProfit)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant={parseFloat(b.margin) >= 0 ? "default" : "destructive"} className={parseFloat(b.margin) >= 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : ""}>
-                            {b.margin}%
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow className="border-t-2 bg-muted/30 font-bold">
-                      <TableCell>المجموع</TableCell>
-                      <TableCell className="text-center font-mono text-emerald-600">{omr(branchTotals.salesTotal)}</TableCell>
-                      <TableCell className="text-center font-mono text-orange-600">{omr(branchTotals.cogsTotal)}</TableCell>
-                      <TableCell className="text-center font-mono text-blue-600">{omr(branchTotals.grossProfit)}</TableCell>
-                      <TableCell className="text-center font-mono text-red-600">{omr(branchTotals.expensesTotal)}</TableCell>
-                      <TableCell className={`text-center font-mono ${branchTotals.netProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-                        {omr(branchTotals.netProfit)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant={branchTotals.netProfit >= 0 ? "default" : "destructive"} className={branchTotals.netProfit >= 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : ""}>
-                          {branchTotals.salesTotal > 0 ? ((branchTotals.netProfit / branchTotals.salesTotal) * 100).toFixed(1) : "0.0"}%
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {section === "employees" && employeeData.length > 0 && (
-        <div className="space-y-4 animate-in fade-in duration-300">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard title="عدد العمليات" value={String(empTotals.ordersCount)} sub="عملية" icon={Users} color="text-purple-600" />
-            <StatCard title="إجمالي المبيعات" value={omr(empTotals.salesTotal)} icon={TrendingUp} color="text-emerald-600" />
-            <StatCard title="التكلفة (COGS)" value={omr(empTotals.cogsTotal)} icon={Package} color="text-orange-600" />
-            <StatCard title="إجمالي الربح" value={omr(empTotals.grossProfit)} icon={BarChart3} color="text-blue-600" />
-          </div>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Users className="w-5 h-5" />
-                  أرباح الموظفين — {fromDate} إلى {toDate}
-                </CardTitle>
-                <Button variant="outline" size="sm" className="gap-2" data-testid="button-export-profit-employees-xlsx"
-                  onClick={() => window.open(`/api/exports/profit_by_employee.xlsx?from=${fromDate}&to=${toDate}${branchParam}`, "_blank")}>
-                  <FileSpreadsheet className="w-4 h-4" /> Excel
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader className="bg-muted/50">
-                    <TableRow>
-                      <TableHead>الموظف</TableHead>
-                      <TableHead className="text-center">عدد العمليات</TableHead>
-                      <TableHead className="text-center">المبيعات</TableHead>
-                      <TableHead className="text-center">التكلفة (COGS)</TableHead>
-                      <TableHead className="text-center">إجمالي الربح</TableHead>
-                      <TableHead className="text-center">هامش %</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {employeeData.map((e: any) => (
-                      <TableRow key={e.employeeId} data-testid={`row-profit-emp-${e.employeeId}`}>
-                        <TableCell className="font-medium">{e.employeeName}</TableCell>
-                        <TableCell className="text-center font-mono">{e.ordersCount}</TableCell>
-                        <TableCell className="text-center font-mono text-emerald-600">{omr(e.salesTotal)}</TableCell>
-                        <TableCell className="text-center font-mono text-orange-600">{omr(e.cogsTotal)}</TableCell>
-                        <TableCell className={`text-center font-mono font-bold ${parseFloat(e.grossProfit) >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                          {omr(e.grossProfit)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant={parseFloat(e.margin) >= 0 ? "default" : "destructive"} className={parseFloat(e.margin) >= 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : ""}>
-                            {e.margin}%
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow className="border-t-2 bg-muted/30 font-bold">
-                      <TableCell>المجموع</TableCell>
-                      <TableCell className="text-center font-mono">{empTotals.ordersCount}</TableCell>
-                      <TableCell className="text-center font-mono text-emerald-600">{omr(empTotals.salesTotal)}</TableCell>
-                      <TableCell className="text-center font-mono text-orange-600">{omr(empTotals.cogsTotal)}</TableCell>
-                      <TableCell className={`text-center font-mono ${empTotals.grossProfit >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                        {omr(empTotals.grossProfit)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
-                          {empTotals.salesTotal > 0 ? ((empTotals.grossProfit / empTotals.salesTotal) * 100).toFixed(1) : "0.0"}%
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {section === "products" && productData.length > 0 && (
-        <div className="space-y-4 animate-in fade-in duration-300">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard title="إجمالي الكمية المباعة" value={String(prodTotals.qtySold)} sub="قطعة" icon={ShoppingBag} color="text-purple-600" />
-            <StatCard title="إجمالي المبيعات" value={omr(prodTotals.salesTotal)} icon={TrendingUp} color="text-emerald-600" />
-            <StatCard title="التكلفة (COGS)" value={omr(prodTotals.cogsTotal)} icon={Package} color="text-orange-600" />
-            <StatCard title="إجمالي الربح" value={omr(prodTotals.grossProfit)} icon={BarChart3} color="text-blue-600" />
-          </div>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <ShoppingBag className="w-5 h-5" />
-                  أرباح المنتجات — {fromDate} إلى {toDate}
-                </CardTitle>
-                <Button variant="outline" size="sm" className="gap-2" data-testid="button-export-profit-products-xlsx"
-                  onClick={() => window.open(`/api/exports/profit_by_product.xlsx?from=${fromDate}&to=${toDate}${branchParam}`, "_blank")}>
-                  <FileSpreadsheet className="w-4 h-4" /> Excel
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader className="bg-muted/50">
-                    <TableRow>
-                      <TableHead>المنتج</TableHead>
-                      <TableHead className="text-center">الكمية المباعة</TableHead>
-                      <TableHead className="text-center">المبيعات</TableHead>
-                      <TableHead className="text-center">التكلفة (COGS)</TableHead>
-                      <TableHead className="text-center">إجمالي الربح</TableHead>
-                      <TableHead className="text-center">هامش %</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {productData.map((p: any) => (
-                      <TableRow key={p.productId} data-testid={`row-profit-prod-${p.productId}`}>
-                        <TableCell className="font-medium">{p.productName}</TableCell>
-                        <TableCell className="text-center font-mono">{p.qtySold}</TableCell>
-                        <TableCell className="text-center font-mono text-emerald-600">{omr(p.salesTotal)}</TableCell>
-                        <TableCell className="text-center font-mono text-orange-600">{omr(p.cogsTotal)}</TableCell>
-                        <TableCell className={`text-center font-mono font-bold ${parseFloat(p.grossProfit) >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                          {omr(p.grossProfit)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant={parseFloat(p.margin) >= 0 ? "default" : "destructive"} className={parseFloat(p.margin) >= 0 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : ""}>
-                            {p.margin}%
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow className="border-t-2 bg-muted/30 font-bold">
-                      <TableCell>المجموع</TableCell>
-                      <TableCell className="text-center font-mono">{prodTotals.qtySold}</TableCell>
-                      <TableCell className="text-center font-mono text-emerald-600">{omr(prodTotals.salesTotal)}</TableCell>
-                      <TableCell className="text-center font-mono text-orange-600">{omr(prodTotals.cogsTotal)}</TableCell>
-                      <TableCell className={`text-center font-mono ${prodTotals.grossProfit >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                        {omr(prodTotals.grossProfit)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
-                          {prodTotals.salesTotal > 0 ? ((prodTotals.grossProfit / prodTotals.salesTotal) * 100).toFixed(1) : "0.0"}%
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {((section === "branches" && branchData.length === 0) ||
-        (section === "employees" && employeeData.length === 0) ||
-        (section === "products" && productData.length === 0)) && (
-        <div className="text-center py-12 text-muted-foreground">لا توجد بيانات في الفترة المحددة</div>
+      {report && report.methods.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("reports.payment_methods_summary")}</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("reports.pm_method")}</TableHead>
+                  <TableHead className="text-center">{t("reports.pm_count")}</TableHead>
+                  <TableHead className="text-center">{t("reports.pm_total")}</TableHead>
+                  <TableHead className="text-center">{t("reports.pm_percentage")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {report.methods.map((m: any) => (
+                  <TableRow key={m.method} data-testid={`row-payment-${m.method}`}>
+                    <TableCell className="font-medium">
+                      {m.method === "cash" ? t("payment_methods.cash") :
+                       m.method === "card" ? t("payment_methods.card") :
+                       m.method === "bank_transfer" ? t("payment_methods.bank_transfer") : m.method}
+                    </TableCell>
+                    <TableCell className="text-center">{m.count}</TableCell>
+                    <TableCell className="text-center font-mono">{omr(m.total)}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="outline">{m.percentage}%</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : report ? (
+        <div className="text-center py-12 text-muted-foreground">{t("reports.no_data_date")}</div>
+      ) : (
+        <div className="text-center py-12 text-muted-foreground">{t("reports.select_date")}</div>
       )}
     </div>
   );
 }
 
 export default function Reports() {
+  const { t } = useI18n();
+  const { user } = useAuth();
+
+  if (user?.role !== "owner" && user?.role !== "admin") {
+    return (
+      <div className="h-[60vh] flex flex-col items-center justify-center space-y-4">
+        <Clock className="w-16 h-16 text-muted-foreground/40" />
+        <h2 className="text-xl font-bold">{t("executive.unauthorized")}</h2>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold" data-testid="text-reports-title">التقارير المالية</h1>
-        <p className="text-muted-foreground mt-1">تقارير الشفتات والتقارير اليومية مع تحليل الربحية ومقارنة الفروع.</p>
+        <h1 className="text-3xl font-bold tracking-tight">{t("reports.title")}</h1>
+        <p className="text-muted-foreground">{t("reports.subtitle")}</p>
       </div>
 
-      <Tabs defaultValue="shift" dir="rtl">
-        <TabsList className="grid w-full grid-cols-4 max-w-2xl">
-          <TabsTrigger value="shift" className="gap-1">
-            <Clock className="w-4 h-4" />
-            تقرير الشفت
-          </TabsTrigger>
-          <TabsTrigger value="daily" className="gap-1">
-            <Calendar className="w-4 h-4" />
-            التقرير اليومي
-          </TabsTrigger>
-          <TabsTrigger value="branches" className="gap-1" data-testid="tab-branch-comparison">
-            <ArrowLeftRight className="w-4 h-4" />
-            مقارنة الفروع
-          </TabsTrigger>
-          <TabsTrigger value="profit" className="gap-1" data-testid="tab-profit">
+      <Tabs defaultValue="daily" className="space-y-4">
+        <TabsList className="bg-muted/50 p-1">
+          <TabsTrigger value="daily" className="gap-2" data-testid="tab-daily">
             <BarChart3 className="w-4 h-4" />
-            الأرباح
+            {t("reports.daily_sales")}
+          </TabsTrigger>
+          <TabsTrigger value="shift" className="gap-2" data-testid="tab-shift">
+            <Clock className="w-4 h-4" />
+            {t("reports.shift_reports")}
+          </TabsTrigger>
+          <TabsTrigger value="product" className="gap-2" data-testid="tab-product">
+            <Package className="w-4 h-4" />
+            {t("reports.product_reports")}
+          </TabsTrigger>
+          <TabsTrigger value="category" className="gap-2" data-testid="tab-category">
+            <FileSpreadsheet className="w-4 h-4" />
+            {t("reports.category_reports")}
+          </TabsTrigger>
+          <TabsTrigger value="branches" className="gap-2" data-testid="tab-branches">
+            <Building2 className="w-4 h-4" />
+            {t("reports.branch_compare")}
+          </TabsTrigger>
+          <TabsTrigger value="payments" className="gap-2" data-testid="tab-payments">
+            <CreditCard className="w-4 h-4" />
+            {t("reports.payment_reports")}
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="shift">
-          <ShiftReport />
-        </TabsContent>
-        <TabsContent value="daily">
-          <DailyReport />
-        </TabsContent>
-        <TabsContent value="branches">
-          <BranchComparison />
-        </TabsContent>
-        <TabsContent value="profit">
-          <ProfitReport />
-        </TabsContent>
+        <TabsContent value="daily" className="space-y-4"><DailyReport /></TabsContent>
+        <TabsContent value="shift" className="space-y-4"><ShiftReport /></TabsContent>
+        <TabsContent value="product" className="space-y-4"><ProductReport /></TabsContent>
+        <TabsContent value="category" className="space-y-4"><CategoryReport /></TabsContent>
+        <TabsContent value="branches" className="space-y-4"><BranchComparison /></TabsContent>
+        <TabsContent value="payments" className="space-y-4"><PaymentReport /></TabsContent>
       </Tabs>
     </div>
   );

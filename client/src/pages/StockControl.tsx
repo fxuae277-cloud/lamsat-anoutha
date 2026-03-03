@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/lib/i18n";
 import type { Branch } from "@shared/schema";
 
 function fmt(v: string | number | null | undefined) {
@@ -19,6 +20,7 @@ function fmt(v: string | number | null | undefined) {
 
 export default function StockControl() {
   const { toast } = useToast();
+  const { t } = useI18n();
 
   const { data: branchesList = [] } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
@@ -32,23 +34,23 @@ export default function StockControl() {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div>
-        <h1 className="text-2xl font-bold" data-testid="text-stock-control-title">الجرد والتسويات</h1>
-        <p className="text-muted-foreground mt-1">جرد المخزون، تسويات الكميات، وتقارير الفروقات</p>
+        <h1 className="text-2xl font-bold" data-testid="text-stock-control-title">{t("stock_control.title")}</h1>
+        <p className="text-muted-foreground mt-1">{t("stock_control.subtitle")}</p>
       </div>
 
-      <Tabs defaultValue="stocktakes" dir="rtl">
+      <Tabs defaultValue="stocktakes" dir={t("dir")}>
         <TabsList className="grid w-full grid-cols-3 max-w-lg">
           <TabsTrigger value="stocktakes" className="gap-1 text-xs">
             <ClipboardCheck className="w-4 h-4" />
-            عمليات الجرد
+            {t("stock_control.tab_stocktakes")}
           </TabsTrigger>
           <TabsTrigger value="adjustments" className="gap-1 text-xs">
             <ArrowUpDown className="w-4 h-4" />
-            تسويات يدوية
+            {t("stock_control.tab_adjustments")}
           </TabsTrigger>
           <TabsTrigger value="report" className="gap-1 text-xs">
             <BarChart3 className="w-4 h-4" />
-            تقرير الفروقات
+            {t("stock_control.tab_report")}
           </TabsTrigger>
         </TabsList>
 
@@ -70,6 +72,7 @@ export default function StockControl() {
 
 function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; locationsList: any[] }) {
   const { toast } = useToast();
+  const { t } = useI18n();
   const [createOpen, setCreateOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedSt, setSelectedSt] = useState<any>(null);
@@ -100,13 +103,13 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
       });
     },
     onSuccess: () => {
-      toast({ title: "تم إنشاء عملية الجرد" });
+      toast({ title: t("stock_control.stocktake_created_success") });
       queryClient.invalidateQueries({ queryKey: ["/api/stocktakes"] });
       setCreateOpen(false);
       setNewBranch(""); setNewLocation(""); setNewNote("");
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -119,7 +122,7 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
       queryClient.invalidateQueries({ queryKey: ["/api/stocktakes"] });
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -128,41 +131,41 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
       await apiRequest("POST", `/api/stocktakes/${id}/approve`, {});
     },
     onSuccess: () => {
-      toast({ title: "تم اعتماد الجرد وتطبيق التسويات" });
+      toast({ title: t("stock_control.stocktake_approved_success") });
       queryClient.invalidateQueries({ queryKey: ["/api/stocktakes"] });
       setDetailsOpen(false);
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
   const filteredItems = items.filter((it: any) => {
     if (!itemSearch) return true;
-    return (it.product_name || "").includes(itemSearch) || (it.barcode || "").includes(itemSearch);
+    return (it.product_name || "").toLowerCase().includes(itemSearch.toLowerCase()) || (it.barcode || "").includes(itemSearch);
   });
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold">عمليات الجرد</h3>
+        <h3 className="text-lg font-bold">{t("stock_control.tab_stocktakes")}</h3>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2" data-testid="button-create-stocktake">
               <Plus className="w-4 h-4" />
-              جرد جديد
+              {t("stock_control.new_stocktake")}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[400px]">
             <DialogHeader>
-              <DialogTitle>إنشاء عملية جرد</DialogTitle>
-              <DialogDescription>اختر الفرع والموقع لبدء الجرد</DialogDescription>
+              <DialogTitle>{t("stock_control.create_stocktake_title")}</DialogTitle>
+              <DialogDescription>{t("stock_control.create_stocktake_desc")}</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">الفرع *</label>
+                <label className="text-sm font-medium">{t("stock_control.branch_label")}</label>
                 <Select value={newBranch} onValueChange={v => { setNewBranch(v); setNewLocation(""); }}>
-                  <SelectTrigger data-testid="select-st-branch"><SelectValue placeholder="اختر الفرع" /></SelectTrigger>
+                  <SelectTrigger data-testid="select-st-branch"><SelectValue placeholder={t("stock_control.select_branch_placeholder")} /></SelectTrigger>
                   <SelectContent>
                     {branchesList.map(b => (
                       <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
@@ -171,9 +174,9 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">الموقع *</label>
+                <label className="text-sm font-medium">{t("stock_control.location_label")}</label>
                 <Select value={newLocation} onValueChange={setNewLocation}>
-                  <SelectTrigger data-testid="select-st-location"><SelectValue placeholder="اختر الموقع" /></SelectTrigger>
+                  <SelectTrigger data-testid="select-st-location"><SelectValue placeholder={t("stock_control.select_location_placeholder")} /></SelectTrigger>
                   <SelectContent>
                     {branchLocations.map((l: any) => (
                       <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>
@@ -182,13 +185,13 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">ملاحظات</label>
-                <Input placeholder="ملاحظات اختيارية" value={newNote} onChange={e => setNewNote(e.target.value)} data-testid="input-st-note" />
+                <label className="text-sm font-medium">{t("stock_control.notes_label")}</label>
+                <Input placeholder={t("stock_control.optional_notes")} value={newNote} onChange={e => setNewNote(e.target.value)} data-testid="input-st-note" />
               </div>
             </div>
             <DialogFooter>
               <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !newBranch || !newLocation} data-testid="button-save-stocktake">
-                {createMutation.isPending ? "جارِ الإنشاء..." : "بدء الجرد"}
+                {createMutation.isPending ? t("stock_control.creating_stocktake") : t("stock_control.start_stocktake_btn")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -199,22 +202,22 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead>#</TableHead>
-              <TableHead>الفرع</TableHead>
-              <TableHead>الموقع</TableHead>
-              <TableHead>الحالة</TableHead>
-              <TableHead>عدد الأصناف</TableHead>
-              <TableHead>مطابق</TableHead>
-              <TableHead>زيادة</TableHead>
-              <TableHead>نقص</TableHead>
-              <TableHead>أُنشئ بواسطة</TableHead>
-              <TableHead>التاريخ</TableHead>
-              <TableHead className="w-[100px]">إجراءات</TableHead>
+              <TableHead>{t("stock_control.table_id")}</TableHead>
+              <TableHead>{t("stock_control.table_branch")}</TableHead>
+              <TableHead>{t("stock_control.table_location")}</TableHead>
+              <TableHead>{t("stock_control.table_status")}</TableHead>
+              <TableHead>{t("stock_control.table_items_count")}</TableHead>
+              <TableHead>{t("stock_control.table_matched")}</TableHead>
+              <TableHead>{t("stock_control.table_surplus")}</TableHead>
+              <TableHead>{t("stock_control.table_shortage")}</TableHead>
+              <TableHead>{t("stock_control.table_created_by")}</TableHead>
+              <TableHead>{t("stock_control.table_date")}</TableHead>
+              <TableHead className="w-[100px]">{t("stock_control.table_actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {stocktakes.length === 0 ? (
-              <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">لا توجد عمليات جرد</TableCell></TableRow>
+              <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">{t("stock_control.no_stocktakes")}</TableCell></TableRow>
             ) : stocktakes.map((st: any) => (
               <TableRow key={st.id} data-testid={`row-stocktake-${st.id}`}>
                 <TableCell className="font-mono text-sm">#{st.id}</TableCell>
@@ -222,9 +225,9 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
                 <TableCell className="text-sm">{st.location_name}</TableCell>
                 <TableCell>
                   {st.status === "draft" ? (
-                    <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs">جاري</Badge>
+                    <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs">{t("common.open")}</Badge>
                   ) : (
-                    <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">مكتمل</Badge>
+                    <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">{t("common.completed")}</Badge>
                   )}
                 </TableCell>
                 <TableCell className="font-medium">{st.total_items}</TableCell>
@@ -232,7 +235,7 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
                 <TableCell className="text-blue-600">{st.surplus_items}</TableCell>
                 <TableCell className="text-red-600">{st.shortage_items}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{st.creator_name || "—"}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">{st.created_at ? new Date(st.created_at).toLocaleDateString("ar-OM") : "—"}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{st.created_at ? new Date(st.created_at).toLocaleDateString(t("lang") === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
                 <TableCell>
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setSelectedSt(st); setDetailsOpen(true); }} data-testid={`button-st-details-${st.id}`}>
                     <Eye className="w-3.5 h-3.5" />
@@ -249,12 +252,12 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ClipboardCheck className="w-5 h-5 text-primary" />
-              جرد #{selectedSt?.id} - {selectedSt?.location_name}
+              {t("stock_control.stocktake_details_title", [selectedSt?.id, selectedSt?.location_name])}
               {selectedSt?.status === "draft" && (
-                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs mr-2">جاري</Badge>
+                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs mr-2">{t("common.open")}</Badge>
               )}
               {selectedSt?.status === "completed" && (
-                <Badge className="bg-green-100 text-green-700 border-green-200 text-xs mr-2">مكتمل</Badge>
+                <Badge className="bg-green-100 text-green-700 border-green-200 text-xs mr-2">{t("common.completed")}</Badge>
               )}
             </DialogTitle>
             <DialogDescription>{selectedSt?.branch_name}</DialogDescription>
@@ -263,19 +266,19 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
           {selectedSt?.status === "draft" && (
             <div className="grid grid-cols-4 gap-3">
               <Card><CardContent className="p-3 text-center">
-                <p className="text-xs text-muted-foreground">إجمالي الأصناف</p>
+                <p className="text-xs text-muted-foreground">{t("stock_control.total_items")}</p>
                 <p className="text-lg font-bold">{selectedSt?.total_items}</p>
               </CardContent></Card>
               <Card><CardContent className="p-3 text-center">
-                <p className="text-xs text-muted-foreground">مطابق</p>
+                <p className="text-xs text-muted-foreground">{t("stock_control.table_matched")}</p>
                 <p className="text-lg font-bold text-green-600">{selectedSt?.matched_items}</p>
               </CardContent></Card>
               <Card><CardContent className="p-3 text-center">
-                <p className="text-xs text-muted-foreground">زيادة</p>
+                <p className="text-xs text-muted-foreground">{t("stock_control.table_surplus")}</p>
                 <p className="text-lg font-bold text-blue-600">{selectedSt?.surplus_items}</p>
               </CardContent></Card>
               <Card><CardContent className="p-3 text-center">
-                <p className="text-xs text-muted-foreground">نقص</p>
+                <p className="text-xs text-muted-foreground">{t("stock_control.table_shortage")}</p>
                 <p className="text-lg font-bold text-red-600">{selectedSt?.shortage_items}</p>
               </CardContent></Card>
             </div>
@@ -284,12 +287,12 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
           <div className="flex items-center gap-3">
             <div className="relative flex-1">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="بحث بالاسم أو الباركود..." className="pr-9" value={itemSearch} onChange={e => setItemSearch(e.target.value)} data-testid="input-st-item-search" />
+              <Input placeholder={t("stock_control.search_items_placeholder")} className="pr-9" value={itemSearch} onChange={e => setItemSearch(e.target.value)} data-testid="input-st-item-search" />
             </div>
             {selectedSt?.status === "draft" && (
               <Button className="gap-2 bg-green-600 hover:bg-green-700" onClick={() => approveMutation.mutate(selectedSt.id)} disabled={approveMutation.isPending} data-testid="button-approve-stocktake">
                 <CheckCircle2 className="w-4 h-4" />
-                {approveMutation.isPending ? "جارِ الاعتماد..." : "اعتماد الجرد"}
+                {approveMutation.isPending ? t("stock_control.approving_stocktake") : t("stock_control.approve_stocktake_btn")}
               </Button>
             )}
           </div>
@@ -297,17 +300,17 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
-                <TableHead>المنتج</TableHead>
-                <TableHead>الباركود</TableHead>
-                <TableHead>كمية النظام</TableHead>
-                <TableHead>الكمية المعدودة</TableHead>
-                <TableHead>الفرق</TableHead>
-                <TableHead>ملاحظة</TableHead>
+                <TableHead>{t("stock_control.table_product")}</TableHead>
+                <TableHead>{t("stock_control.table_barcode")}</TableHead>
+                <TableHead>{t("stock_control.table_system_qty")}</TableHead>
+                <TableHead>{t("stock_control.table_counted_qty")}</TableHead>
+                <TableHead>{t("stock_control.table_difference")}</TableHead>
+                <TableHead>{t("stock_control.table_note")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredItems.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">لا توجد أصناف</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">{t("stock_control.no_items_found")}</TableCell></TableRow>
               ) : filteredItems.map((it: any) => (
                 <StocktakeItemRow
                   key={it.id}
@@ -327,6 +330,7 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
 }
 
 function StocktakeItemRow({ item, isDraft, onUpdate }: { item: any; isDraft: boolean; onUpdate: (qty: number, note?: string) => void }) {
+  const { t } = useI18n();
   const [qty, setQty] = useState(item.counted_qty !== null ? String(item.counted_qty) : "");
   const [note, setNote] = useState(item.note || "");
   const diff = item.counted_qty !== null ? item.counted_qty - item.system_qty : null;
@@ -367,7 +371,7 @@ function StocktakeItemRow({ item, isDraft, onUpdate }: { item: any; isDraft: boo
         {isDraft ? (
           <Input
             className="w-32 h-8 text-xs"
-            placeholder="ملاحظة"
+            placeholder={t("stock_control.note_placeholder")}
             value={note}
             onChange={e => setNote(e.target.value)}
             onBlur={() => {
@@ -386,6 +390,7 @@ function StocktakeItemRow({ item, isDraft, onUpdate }: { item: any; isDraft: boo
 
 function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; locationsList: any[] }) {
   const { toast } = useToast();
+  const { t } = useI18n();
   const [addOpen, setAddOpen] = useState(false);
   const [adjBranch, setAdjBranch] = useState("");
   const [adjLocation, setAdjLocation] = useState("");
@@ -420,26 +425,26 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
       });
     },
     onSuccess: () => {
-      toast({ title: "تم تسجيل التسوية بنجاح" });
+      toast({ title: t("stock_control.adjustment_success") });
       queryClient.invalidateQueries({ queryKey: [adjUrl] });
       queryClient.invalidateQueries({ queryKey: ["/api/inventory-adjustments"] });
       setAddOpen(false);
       setAdjBranch(""); setAdjLocation(""); setAdjProduct(""); setAdjQty(""); setAdjReason("");
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold">تسويات يدوية (+/-)</h3>
+        <h3 className="text-lg font-bold">{t("stock_control.manual_adjustments_title")}</h3>
         <div className="flex gap-2">
           <Select value={filterBranch} onValueChange={setFilterBranch}>
-            <SelectTrigger className="w-48"><SelectValue placeholder="كل الفروع" /></SelectTrigger>
+            <SelectTrigger className="w-48"><SelectValue placeholder={t("stock_control.all_branches")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">كل الفروع</SelectItem>
+              <SelectItem value="__all__">{t("stock_control.all_branches")}</SelectItem>
               {branchesList.map(b => (
                 <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
               ))}
@@ -449,29 +454,29 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
             <DialogTrigger asChild>
               <Button className="gap-2" data-testid="button-add-adjustment">
                 <Plus className="w-4 h-4" />
-                تسوية جديدة
+                {t("stock_control.new_adjustment")}
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[450px]">
               <DialogHeader>
-                <DialogTitle>تسوية مخزون</DialogTitle>
-                <DialogDescription>تعديل كمية منتج في موقع معين (+ زيادة / - نقص)</DialogDescription>
+                <DialogTitle>{t("stock_control.adjustment_dialog_title")}</DialogTitle>
+                <DialogDescription>{t("stock_control.adjustment_dialog_desc")}</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">الفرع *</label>
+                    <label className="text-sm font-medium">{t("stock_control.branch_field")}</label>
                     <Select value={adjBranch} onValueChange={v => { setAdjBranch(v); setAdjLocation(""); }}>
-                      <SelectTrigger data-testid="select-adj-branch"><SelectValue placeholder="اختر" /></SelectTrigger>
+                      <SelectTrigger data-testid="select-adj-branch"><SelectValue placeholder={t("stock_control.select_placeholder")} /></SelectTrigger>
                       <SelectContent>
                         {branchesList.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">الموقع *</label>
+                    <label className="text-sm font-medium">{t("stock_control.location_field")}</label>
                     <Select value={adjLocation} onValueChange={setAdjLocation}>
-                      <SelectTrigger data-testid="select-adj-location"><SelectValue placeholder="اختر" /></SelectTrigger>
+                      <SelectTrigger data-testid="select-adj-location"><SelectValue placeholder={t("stock_control.select_placeholder")} /></SelectTrigger>
                       <SelectContent>
                         {adjBranchLocations.map((l: any) => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
                       </SelectContent>
@@ -479,9 +484,9 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">المنتج *</label>
+                  <label className="text-sm font-medium">{t("stock_control.product_field")}</label>
                   <Select value={adjProduct} onValueChange={setAdjProduct}>
-                    <SelectTrigger data-testid="select-adj-product"><SelectValue placeholder="اختر المنتج" /></SelectTrigger>
+                    <SelectTrigger data-testid="select-adj-product"><SelectValue placeholder={t("stock_control.select_product_placeholder")} /></SelectTrigger>
                     <SelectContent>
                       {products.map((p: any) => <SelectItem key={p.id} value={String(p.id)}>{p.name} {p.barcode ? `(${p.barcode})` : ""}</SelectItem>)}
                     </SelectContent>
@@ -489,18 +494,18 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">الكمية (+/-) *</label>
-                    <Input type="number" placeholder="5 أو -3" value={adjQty} onChange={e => setAdjQty(e.target.value)} data-testid="input-adj-qty" />
+                    <label className="text-sm font-medium">{t("stock_control.qty_change_field")}</label>
+                    <Input type="number" placeholder={t("stock_control.qty_change_placeholder")} value={adjQty} onChange={e => setAdjQty(e.target.value)} data-testid="input-adj-qty" />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">السبب *</label>
-                  <Input placeholder="سبب التسوية" value={adjReason} onChange={e => setAdjReason(e.target.value)} data-testid="input-adj-reason" />
+                  <label className="text-sm font-medium">{t("stock_control.reason_field")}</label>
+                  <Input placeholder={t("stock_control.reason_placeholder")} value={adjReason} onChange={e => setAdjReason(e.target.value)} data-testid="input-adj-reason" />
                 </div>
               </div>
               <DialogFooter>
                 <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !adjBranch || !adjLocation || !adjProduct || !adjQty || !adjReason} data-testid="button-save-adjustment">
-                  {createMutation.isPending ? "جارِ الحفظ..." : "تنفيذ التسوية"}
+                  {createMutation.isPending ? t("stock_control.saving_adjustment") : t("stock_control.save_adjustment_btn")}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -512,45 +517,31 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead>المنتج</TableHead>
-              <TableHead>الفرع</TableHead>
-              <TableHead>الموقع</TableHead>
-              <TableHead>النوع</TableHead>
-              <TableHead>قبل</TableHead>
-              <TableHead>التغيير</TableHead>
-              <TableHead>بعد</TableHead>
-              <TableHead>السبب</TableHead>
-              <TableHead>بواسطة</TableHead>
-              <TableHead>التاريخ</TableHead>
+              <TableHead>{t("stock_control.table_id")}</TableHead>
+              <TableHead>{t("stock_control.table_date")}</TableHead>
+              <TableHead>{t("stock_control.table_branch")}</TableHead>
+              <TableHead>{t("stock_control.table_location")}</TableHead>
+              <TableHead>{t("stock_control.table_product")}</TableHead>
+              <TableHead>{t("stock_control.table_qty_change")}</TableHead>
+              <TableHead>{t("stock_control.table_reason")}</TableHead>
+              <TableHead>{t("stock_control.table_created_by")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {adjustments.length === 0 ? (
-              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">لا توجد تسويات</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">{t("stock_control.no_adjustments")}</TableCell></TableRow>
             ) : adjustments.map((adj: any) => (
               <TableRow key={adj.id} data-testid={`row-adj-${adj.id}`}>
-                <TableCell className="font-medium text-sm">{adj.product_name}</TableCell>
-                <TableCell className="text-sm">{adj.branch_name}</TableCell>
-                <TableCell className="text-sm">{adj.location_name}</TableCell>
-                <TableCell>
-                  {adj.type === "increase" || adj.type === "surplus" ? (
-                    <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-xs gap-1">
-                      <TrendingUp className="w-3 h-3" /> زيادة
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-red-100 text-red-700 border-red-200 text-xs gap-1">
-                      <TrendingDown className="w-3 h-3" /> نقص
-                    </Badge>
-                  )}
+                <TableCell className="font-mono text-sm">#{adj.id}</TableCell>
+                <TableCell className="text-sm">{adj.createdAt ? new Date(adj.createdAt).toLocaleDateString(t("lang") === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
+                <TableCell className="text-sm">{adj.branchName}</TableCell>
+                <TableCell className="text-sm">{adj.locationName}</TableCell>
+                <TableCell className="text-sm font-medium">{adj.productName}</TableCell>
+                <TableCell className={Number(adj.qtyChange) > 0 ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                  {Number(adj.qtyChange) > 0 ? `+${adj.qtyChange}` : adj.qtyChange}
                 </TableCell>
-                <TableCell>{adj.qty_before}</TableCell>
-                <TableCell className={`font-bold ${adj.qty_change > 0 ? "text-blue-600" : "text-red-600"}`}>
-                  {adj.qty_change > 0 ? `+${adj.qty_change}` : adj.qty_change}
-                </TableCell>
-                <TableCell className="font-medium">{adj.qty_after}</TableCell>
-                <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={adj.reason}>{adj.reason}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">{adj.creator_name || "—"}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">{adj.created_at ? new Date(adj.created_at).toLocaleDateString("ar-OM") : "—"}</TableCell>
+                <TableCell className="text-sm">{adj.reason}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{adj.creatorName || "—"}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -561,44 +552,26 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
 }
 
 function ReportTab({ branchesList }: { branchesList: any[] }) {
-  const [filterBranch, setFilterBranch] = useState("__all__");
+  const { t } = useI18n();
+  const [selectedBranch, setSelectedBranch] = useState("__all__");
 
-  const adjUrl = filterBranch !== "__all__" ? `/api/inventory-adjustments?branchId=${filterBranch}` : "/api/inventory-adjustments";
-  const { data: adjustments = [] } = useQuery<any[]>({
-    queryKey: [adjUrl],
+  const reportUrl = selectedBranch !== "__all__" ? `/api/inventory-discrepancy-report?branchId=${selectedBranch}` : "/api/inventory-discrepancy-report";
+  const { data: report = [] } = useQuery<any[]>({
+    queryKey: [reportUrl],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const stUrl = filterBranch !== "__all__" ? `/api/stocktakes?branchId=${filterBranch}` : "/api/stocktakes";
-  const { data: stocktakes = [] } = useQuery<any[]>({
-    queryKey: [stUrl],
-    queryFn: getQueryFn({ on401: "throw" }),
-  });
-
-  const completedStocktakes = stocktakes.filter((st: any) => st.status === "completed");
-  const totalSurplus = adjustments.filter((a: any) => a.qty_change > 0).reduce((s: number, a: any) => s + a.qty_change, 0);
-  const totalShortage = adjustments.filter((a: any) => a.qty_change < 0).reduce((s: number, a: any) => s + Math.abs(a.qty_change), 0);
-
-  const productSummary: Record<string, { name: string; surplus: number; shortage: number; net: number }> = {};
-  adjustments.forEach((a: any) => {
-    if (!productSummary[a.product_id]) {
-      productSummary[a.product_id] = { name: a.product_name, surplus: 0, shortage: 0, net: 0 };
-    }
-    if (a.qty_change > 0) productSummary[a.product_id].surplus += a.qty_change;
-    else productSummary[a.product_id].shortage += Math.abs(a.qty_change);
-    productSummary[a.product_id].net += a.qty_change;
-  });
-
-  const sortedProducts = Object.entries(productSummary).sort((a, b) => Math.abs(b[1].net) - Math.abs(a[1].net));
+  const totalDiscrepancies = report.length;
+  const netAdjustmentValue = report.reduce((sum, item) => sum + parseFloat(item.estimated_value_impact || "0"), 0);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold">تقرير فروقات الجرد</h3>
-        <Select value={filterBranch} onValueChange={setFilterBranch}>
-          <SelectTrigger className="w-48"><SelectValue placeholder="كل الفروع" /></SelectTrigger>
+        <h3 className="text-lg font-bold">{t("stock_control.discrepancy_report_title")}</h3>
+        <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+          <SelectTrigger className="w-48"><SelectValue placeholder={t("stock_control.all_branches")} /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="__all__">كل الفروع</SelectItem>
+            <SelectItem value="__all__">{t("stock_control.all_branches")}</SelectItem>
             {branchesList.map(b => (
               <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
             ))}
@@ -606,61 +579,62 @@ function ReportTab({ branchesList }: { branchesList: any[] }) {
         </Select>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <ClipboardCheck className="w-6 h-6 text-primary mx-auto mb-1" />
-            <p className="text-xs text-muted-foreground">عمليات جرد مكتملة</p>
-            <p className="text-2xl font-bold">{completedStocktakes.length}</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="bg-primary/5 border-primary/20">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-2 bg-primary/10 rounded-lg"><AlertTriangle className="w-5 h-5 text-primary" /></div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase font-semibold">{t("stock_control.total_discrepancies")}</p>
+              <p className="text-xl font-bold">{totalDiscrepancies}</p>
+            </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <ArrowUpDown className="w-6 h-6 text-amber-600 mx-auto mb-1" />
-            <p className="text-xs text-muted-foreground">إجمالي التسويات</p>
-            <p className="text-2xl font-bold">{adjustments.length}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <TrendingUp className="w-6 h-6 text-blue-600 mx-auto mb-1" />
-            <p className="text-xs text-muted-foreground">إجمالي الزيادات</p>
-            <p className="text-2xl font-bold text-blue-600">+{totalSurplus}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <TrendingDown className="w-6 h-6 text-red-600 mx-auto mb-1" />
-            <p className="text-xs text-muted-foreground">إجمالي النقص</p>
-            <p className="text-2xl font-bold text-red-600">-{totalShortage}</p>
+        <Card className={netAdjustmentValue < 0 ? "bg-red-50 border-red-100" : "bg-green-50 border-green-100"}>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className={`p-2 rounded-lg ${netAdjustmentValue < 0 ? "bg-red-100" : "bg-green-100"}`}>
+              {netAdjustmentValue < 0 ? <TrendingDown className="w-5 h-5 text-red-600" /> : <TrendingUp className="w-5 h-5 text-green-600" />}
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase font-semibold">{t("stock_control.net_adjustment_value")}</p>
+              <p className={`text-xl font-bold ${netAdjustmentValue < 0 ? "text-red-600" : "text-green-600"}`}>
+                {netAdjustmentValue.toFixed(3)} OMR
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       <div className="bg-card border shadow-sm rounded-xl overflow-hidden">
-        <div className="p-3 border-b bg-muted/20">
-          <h4 className="text-sm font-bold">ملخص الفروقات حسب المنتج</h4>
-        </div>
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead>المنتج</TableHead>
-              <TableHead>زيادة</TableHead>
-              <TableHead>نقص</TableHead>
-              <TableHead>الصافي</TableHead>
+              <TableHead>{t("stock_control.table_date")}</TableHead>
+              <TableHead>{t("stock_control.table_branch")}</TableHead>
+              <TableHead>{t("stock_control.table_product")}</TableHead>
+              <TableHead>{t("stock_control.table_type")}</TableHead>
+              <TableHead>{t("stock_control.table_qty_change")}</TableHead>
+              <TableHead>{t("stock_control.table_value")}</TableHead>
+              <TableHead>{t("stock_control.table_reason")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedProducts.length === 0 ? (
-              <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">لا توجد فروقات مسجلة</TableCell></TableRow>
-            ) : sortedProducts.map(([pid, data]) => (
-              <TableRow key={pid}>
-                <TableCell className="font-medium">{data.name}</TableCell>
-                <TableCell className="text-blue-600 font-medium">{data.surplus > 0 ? `+${data.surplus}` : "0"}</TableCell>
-                <TableCell className="text-red-600 font-medium">{data.shortage > 0 ? `-${data.shortage}` : "0"}</TableCell>
-                <TableCell className={`font-bold ${data.net > 0 ? "text-blue-600" : data.net < 0 ? "text-red-600" : "text-green-600"}`}>
-                  {data.net > 0 ? `+${data.net}` : data.net}
+            {report.length === 0 ? (
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{t("stock_control.no_adjustments")}</TableCell></TableRow>
+            ) : report.map((item: any, idx: number) => (
+              <TableRow key={idx}>
+                <TableCell className="text-sm">{item.date ? new Date(item.date).toLocaleDateString(t("lang") === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
+                <TableCell className="text-sm">{item.branch_name}</TableCell>
+                <TableCell className="text-sm font-medium">{item.product_name}</TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="text-[10px] uppercase">
+                    {item.adjustment_type === "stocktake" ? t("stock_control.tab_stocktakes") : t("stock_control.tab_adjustments")}
+                  </Badge>
                 </TableCell>
+                <TableCell className={Number(item.qty_change) > 0 ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                  {Number(item.qty_change) > 0 ? `+${item.qty_change}` : item.qty_change}
+                </TableCell>
+                <TableCell className="text-sm font-mono">{parseFloat(item.estimated_value_impact || "0").toFixed(3)}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{item.reason || "—"}</TableCell>
               </TableRow>
             ))}
           </TableBody>

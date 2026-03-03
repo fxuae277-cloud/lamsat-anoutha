@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import type { Branch, User } from "@shared/schema";
+import { useI18n } from "@/lib/i18n";
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -25,40 +26,31 @@ function omr(val: string | number | null) {
   return parseFloat(String(val)).toFixed(3);
 }
 
-const PM_LABELS: Record<string, string> = {
-  cash: "نقدي",
-  card: "بطاقة",
-  bank_transfer: "تحويل بنكي",
-};
-
-const PM_ICONS: Record<string, any> = {
-  cash: Banknote,
-  card: CreditCard,
-  bank_transfer: Building2,
-};
-
-const PM_COLORS: Record<string, string> = {
-  cash: "bg-green-100 text-green-700 border-green-200",
-  card: "bg-blue-100 text-blue-700 border-blue-200",
-  bank_transfer: "bg-purple-100 text-purple-700 border-purple-200",
-};
-
 function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; open: boolean; onClose: () => void }) {
+  const { t, lang } = useI18n();
+  const PM_LABELS: Record<string, string> = {
+    cash: t("payment_methods.cash"),
+    card: t("payment_methods.card"),
+    bank_transfer: t("payment_methods.bank_transfer"),
+  };
+
   const { data: detail, isLoading } = useQuery<any>({
     queryKey: ["/api/sales", saleId],
     queryFn: async () => {
       const res = await fetch(`/api/sales/${saleId}`, { credentials: "include" });
-      if (!res.ok) throw new Error("فشل تحميل الفاتورة");
+      if (!res.ok) throw new Error(t("common.error"));
       return res.json();
     },
     enabled: !!saleId && open,
   });
 
+  const locale = lang === "ar" ? "ar-OM" : "en-US";
+
   function handleThermalPrint() {
     if (!detail) return;
     const pmText = PM_LABELS[detail.paymentMethod] || detail.paymentMethod;
     const dateStr = detail.createdAt
-      ? new Date(detail.createdAt).toLocaleDateString("ar-OM") + " " + new Date(detail.createdAt).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" })
+      ? new Date(detail.createdAt).toLocaleDateString(locale) + " " + new Date(detail.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
       : "";
     const itemsHtml = (detail.items || []).map((item: any) => `
       <tr>
@@ -68,14 +60,14 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
       </tr>
     `).join("");
     const discountLine = parseFloat(detail.discount || "0") > 0
-      ? `<div style="display:flex;justify-content:space-between"><span>الخصم</span><span>-${omr(detail.discount)} OMR</span></div>` : "";
-    const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
-      <title>إيصال</title>
+      ? `<div style="display:flex;justify-content:space-between"><span>${t("invoices.table_discount")}</span><span>-${omr(detail.discount)} OMR</span></div>` : "";
+    const html = `<!DOCTYPE html><html dir="${lang === "ar" ? "rtl" : "ltr"}" lang="${lang}"><head><meta charset="utf-8">
+      <title>${t("invoices.print_thermal")}</title>
       <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
       <style>
         @page { size: 80mm auto; margin: 0; }
         * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family:'Cairo',sans-serif; width:80mm; padding:6mm 4mm; color:#000; direction:rtl; font-size:12px; }
+        body { font-family:'Cairo',sans-serif; width:80mm; padding:6mm 4mm; color:#000; direction:${lang === "ar" ? "rtl" : "ltr"}; font-size:12px; }
         .center { text-align:center; }
         .brand { font-size:18px; font-weight:700; color:#8b5a7a; }
         .sep { border-bottom:1px dashed #999; margin:4px 0; }
@@ -86,24 +78,24 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
         @media print { body { width:80mm; } }
       </style>
     </head><body>
-      <div class="center brand">لمسة أنوثة</div>
-      <div class="center" style="font-size:10px;color:#888">إيصال بيع</div>
+      <div class="center brand">${t("app.name")}</div>
+      <div class="center" style="font-size:10px;color:#888">${t("pos.receipt_title")}</div>
       <div class="sep"></div>
-      <div class="row"><span>الفاتورة:</span><span>${detail.invoiceNumber || "#" + detail.id}</span></div>
-      <div class="row"><span>التاريخ:</span><span>${dateStr}</span></div>
-      <div class="row"><span>الفرع:</span><span>${detail.branchName || "—"}</span></div>
-      <div class="row"><span>الكاشير:</span><span>${detail.cashierName || "—"}</span></div>
-      <div class="row"><span>الدفع:</span><span>${pmText}</span></div>
+      <div class="row"><span>${t("invoices.table_invoice_no")}:</span><span>${detail.invoiceNumber || "#" + detail.id}</span></div>
+      <div class="row"><span>${t("common.date")}:</span><span>${dateStr}</span></div>
+      <div class="row"><span>${t("common.branch")}:</span><span>${detail.branchName || "—"}</span></div>
+      <div class="row"><span>${t("invoices.table_cashier")}:</span><span>${detail.cashierName || "—"}</span></div>
+      <div class="row"><span>${t("invoices.table_payment")}:</span><span>${pmText}</span></div>
       <div class="sep"></div>
       <table>${itemsHtml}</table>
       <div class="sep"></div>
-      <div class="row"><span>المجموع الفرعي</span><span>${omr(detail.subtotal)} OMR</span></div>
+      <div class="row"><span>${t("invoices.table_subtotal")}</span><span>${omr(detail.subtotal)} OMR</span></div>
       ${discountLine}
-      ${parseFloat(detail.vat || "0") > 0 ? `<div class="row"><span>الضريبة</span><span>${omr(detail.vat)} OMR</span></div>` : ""}
-      <div class="total-row"><span>الإجمالي</span><span>${omr(detail.total)} OMR</span></div>
+      ${parseFloat(detail.vat || "0") > 0 ? `<div class="row"><span>${t("invoices.table_vat")}</span><span>${omr(detail.vat)} OMR</span></div>` : ""}
+      <div class="total-row"><span>${t("invoices.table_total")}</span><span>${omr(detail.total)} OMR</span></div>
       <div class="sep" style="margin-top:6px"></div>
-      <div class="footer">شكراً لتسوقكم معنا</div>
-      <div class="footer" style="margin-top:2px">لمسة أنوثة - سلطنة عمان</div>
+      <div class="footer">${t("pos.receipt_thanks")}</div>
+      <div class="footer" style="margin-top:2px">${t("pos.receipt_brand")}</div>
       <script>window.onload=function(){window.print();}</script>
     </body></html>`;
     const w = window.open("", "_blank", "width=320,height=600");
@@ -114,7 +106,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
     if (!detail) return;
     const pmText = PM_LABELS[detail.paymentMethod] || detail.paymentMethod;
     const dateStr = detail.createdAt
-      ? new Date(detail.createdAt).toLocaleDateString("ar-OM") + " " + new Date(detail.createdAt).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" })
+      ? new Date(detail.createdAt).toLocaleDateString(locale) + " " + new Date(detail.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
       : "";
 
     const itemsHtml = (detail.items || []).map((item: any, i: number) =>
@@ -128,14 +120,14 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
     ).join("");
 
     const html = `<!DOCTYPE html>
-<html dir="rtl" lang="ar">
+<html dir="${lang === "ar" ? "rtl" : "ltr"}" lang="${lang}">
 <head>
   <meta charset="utf-8">
-  <title>فاتورة ${detail.invoiceNumber || detail.id}</title>
+  <title>${t("invoices.a4_title")} ${detail.invoiceNumber || detail.id}</title>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Cairo', sans-serif; padding: 30px; max-width: 800px; margin: 0 auto; color: #333; direction: rtl; }
+    body { font-family: 'Cairo', sans-serif; padding: 30px; max-width: 800px; margin: 0 auto; color: #333; direction: ${lang === "ar" ? "rtl" : "ltr"}; }
     .header { text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #e8d5e0; }
     .header h1 { color: #8b5a7a; font-size: 22px; margin-bottom: 4px; }
     .header p { color: #888; font-size: 13px; }
@@ -146,8 +138,8 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
     table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
     thead { background: #f4e8f0; }
     th { padding: 8px 10px; text-align: center; font-size: 13px; color: #666; }
-    .totals { margin-top: 16px; text-align: left; }
-    .totals div { display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px; max-width: 300px; margin-right: auto; }
+    .totals { margin-top: 16px; text-align: ${lang === "ar" ? "left" : "right"}; }
+    .totals div { display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px; max-width: 300px; ${lang === "ar" ? "margin-right: auto" : "margin-left: auto"}; }
     .totals .grand { font-size: 18px; font-weight: 700; color: #8b5a7a; border-top: 2px solid #e8d5e0; padding-top: 8px; margin-top: 8px; }
     .footer { text-align: center; margin-top: 30px; padding-top: 16px; border-top: 1px dashed #ddd; font-size: 12px; color: #aaa; }
     @media print { body { padding: 10px; } }
@@ -155,29 +147,29 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
 </head>
 <body>
   <div class="header">
-    <h1>لمسة أنوثة</h1>
-    <p>فاتورة بيع</p>
+    <h1>${t("app.name")}</h1>
+    <p>${t("invoices.a4_title")}</p>
   </div>
   <div class="info">
-    <div><label>رقم الفاتورة</label><span>${detail.invoiceNumber || "#" + detail.id}</span></div>
-    <div><label>التاريخ</label><span>${dateStr}</span></div>
-    <div><label>الفرع</label><span>${detail.branchName || "—"}</span></div>
-    <div><label>الكاشير</label><span>${detail.cashierName || "—"}</span></div>
-    <div><label>طريقة الدفع</label><span>${pmText}</span></div>
+    <div><label>${t("invoices.table_invoice_no")}</label><span>${detail.invoiceNumber || "#" + detail.id}</span></div>
+    <div><label>${t("common.date")}</label><span>${dateStr}</span></div>
+    <div><label>${t("common.branch")}</label><span>${detail.branchName || "—"}</span></div>
+    <div><label>${t("invoices.table_cashier")}</label><span>${detail.cashierName || "—"}</span></div>
+    <div><label>${t("invoices.table_payment")}</label><span>${pmText}</span></div>
   </div>
   <table>
     <thead>
-      <tr><th>#</th><th>المنتج</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr>
+      <tr><th>#</th><th>${t("invoices.a4_table_item")}</th><th>${t("invoices.a4_table_qty")}</th><th>${t("invoices.a4_table_price")}</th><th>${t("invoices.a4_table_total")}</th></tr>
     </thead>
     <tbody>${itemsHtml}</tbody>
   </table>
   <div class="totals">
-    <div><span>المجموع الفرعي</span><span>${omr(detail.subtotal)} OMR</span></div>
-    ${parseFloat(detail.discount || "0") > 0 ? `<div><span>الخصم</span><span>-${omr(detail.discount)} OMR</span></div>` : ""}
-    ${parseFloat(detail.vat || "0") > 0 ? `<div><span>الضريبة</span><span>${omr(detail.vat)} OMR</span></div>` : ""}
-    <div class="grand"><span>الإجمالي</span><span>${omr(detail.total)} OMR</span></div>
+    <div><span>${t("invoices.table_subtotal")}</span><span>${omr(detail.subtotal)} OMR</span></div>
+    ${parseFloat(detail.discount || "0") > 0 ? `<div><span>${t("invoices.table_discount")}</span><span>-${omr(detail.discount)} OMR</span></div>` : ""}
+    ${parseFloat(detail.vat || "0") > 0 ? `<div><span>${t("invoices.table_vat")}</span><span>${omr(detail.vat)} OMR</span></div>` : ""}
+    <div class="grand"><span>${t("invoices.table_total")}</span><span>${omr(detail.total)} OMR</span></div>
   </div>
-  <div class="footer">شكراً لتسوقكم معنا - لمسة أنوثة</div>
+  <div class="footer">${t("pos.receipt_thanks")} - ${t("app.name")}</div>
   <script>window.onload = function() { window.print(); }</script>
 </body>
 </html>`;
@@ -189,12 +181,18 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
     }
   }
 
+  const PM_COLORS: Record<string, string> = {
+    cash: "bg-green-100 text-green-700 border-green-200",
+    card: "bg-blue-100 text-blue-700 border-blue-200",
+    bank_transfer: "bg-purple-100 text-purple-700 border-purple-200",
+  };
+
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir={lang === "ar" ? "rtl" : "ltr"}>
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
-            <span>تفاصيل الفاتورة {detail?.invoiceNumber || ""}</span>
+            <span>{t("invoices.invoice_label")} {detail?.invoiceNumber || ""}</span>
             <div className="flex gap-2">
               {detail && (
                 <>
@@ -204,11 +202,11 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
                   </Button>
                   <Button size="sm" variant="outline" className="gap-1" onClick={handleThermalPrint} data-testid="button-thermal-invoice">
                     <Printer className="w-4 h-4" />
-                    إيصال 80mm
+                    {t("invoices.print_thermal")} 80mm
                   </Button>
                   <Button size="sm" variant="outline" className="gap-1" onClick={handlePrint} data-testid="button-print-invoice">
                     <Download className="w-4 h-4" />
-                    طباعة A4
+                    {t("invoices.print_a4")}
                   </Button>
                 </>
               )}
@@ -216,36 +214,36 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
           </DialogTitle>
         </DialogHeader>
 
-        {isLoading && <div className="py-8 text-center text-muted-foreground">جارٍ التحميل...</div>}
+        {isLoading && <div className="py-8 text-center text-muted-foreground">{t("app.loading")}</div>}
 
         {detail && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
               <div className="p-3 bg-muted/30 rounded-lg border">
-                <p className="text-xs text-muted-foreground">رقم الفاتورة</p>
+                <p className="text-xs text-muted-foreground">{t("invoices.table_invoice_no")}</p>
                 <p className="font-bold mt-1">{detail.invoiceNumber || `#${detail.id}`}</p>
               </div>
               <div className="p-3 bg-muted/30 rounded-lg border">
-                <p className="text-xs text-muted-foreground">التاريخ</p>
+                <p className="text-xs text-muted-foreground">{t("common.date")}</p>
                 <p className="font-bold mt-1">
-                  {detail.createdAt ? new Date(detail.createdAt).toLocaleDateString("ar-OM") : "—"}
+                  {detail.createdAt ? new Date(detail.createdAt).toLocaleDateString(locale) : "—"}
                   <span className="text-xs font-normal text-muted-foreground mr-1">
-                    {detail.createdAt ? new Date(detail.createdAt).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" }) : ""}
+                    {detail.createdAt ? new Date(detail.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}
                   </span>
                 </p>
               </div>
               <div className="p-3 bg-muted/30 rounded-lg border">
-                <p className="text-xs text-muted-foreground">الفرع</p>
+                <p className="text-xs text-muted-foreground">{t("common.branch")}</p>
                 <p className="font-bold mt-1">{detail.branchName || "—"}</p>
               </div>
               <div className="p-3 bg-muted/30 rounded-lg border">
-                <p className="text-xs text-muted-foreground">الكاشير</p>
+                <p className="text-xs text-muted-foreground">{t("invoices.table_cashier")}</p>
                 <p className="font-bold mt-1">{detail.cashierName || "—"}</p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">طريقة الدفع:</span>
+              <span className="text-sm text-muted-foreground">{t("invoices.table_payment")}:</span>
               <Badge className={PM_COLORS[detail.paymentMethod] || ""}>
                 {PM_LABELS[detail.paymentMethod] || detail.paymentMethod}
               </Badge>
@@ -253,17 +251,17 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
 
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">المنتجات</CardTitle>
+                <CardTitle className="text-sm">{t("common.items")}</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
                   <TableHeader className="bg-muted/50">
                     <TableRow>
                       <TableHead className="text-center w-12">#</TableHead>
-                      <TableHead>المنتج</TableHead>
-                      <TableHead className="text-center">الكمية</TableHead>
-                      <TableHead className="text-center">السعر</TableHead>
-                      <TableHead className="text-center">الإجمالي</TableHead>
+                      <TableHead>{t("invoices.a4_table_item")}</TableHead>
+                      <TableHead className="text-center">{t("invoices.a4_table_qty")}</TableHead>
+                      <TableHead className="text-center">{t("invoices.a4_table_price")}</TableHead>
+                      <TableHead className="text-center">{t("invoices.a4_table_total")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -284,23 +282,23 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
             <div className="flex justify-end">
               <div className="w-72 space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">المجموع الفرعي</span>
+                  <span className="text-muted-foreground">{t("invoices.table_subtotal")}</span>
                   <span className="font-mono">{omr(detail.subtotal)} OMR</span>
                 </div>
                 {parseFloat(detail.discount || "0") > 0 && (
                   <div className="flex justify-between text-red-600">
-                    <span>الخصم</span>
+                    <span>{t("invoices.table_discount")}</span>
                     <span className="font-mono">-{omr(detail.discount)} OMR</span>
                   </div>
                 )}
                 {parseFloat(detail.vat || "0") > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">الضريبة</span>
+                    <span className="text-muted-foreground">{t("invoices.table_vat")}</span>
                     <span className="font-mono">{omr(detail.vat)} OMR</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t-2 pt-2 font-bold text-base text-primary">
-                  <span>الإجمالي</span>
+                  <span>{t("invoices.table_total")}</span>
                   <span className="font-mono">{omr(detail.total)} OMR</span>
                 </div>
               </div>
@@ -313,6 +311,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
 }
 
 export default function Invoices() {
+  const { t, lang } = useI18n();
   const { user } = useAuth();
   const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
 
@@ -347,7 +346,7 @@ export default function Invoices() {
     queryKey: ["sales-invoices", fromDate, toDate, paymentMethod, selectedBranch, selectedEmployee],
     queryFn: async () => {
       const res = await fetch(queryUrl, { credentials: "include" });
-      if (!res.ok) throw new Error("فشل تحميل الفواتير");
+      if (!res.ok) throw new Error(t("common.error"));
       return res.json();
     },
     enabled: !!fromDate && !!toDate,
@@ -369,16 +368,22 @@ export default function Invoices() {
     window.open(url, "_blank");
   }
 
+  const PM_COLORS: Record<string, string> = {
+    cash: "bg-green-100 text-green-700 border-green-200",
+    card: "bg-blue-100 text-blue-700 border-blue-200",
+    bank_transfer: "bg-purple-100 text-purple-700 border-purple-200",
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-invoices-title">فواتير نقطة البيع</h1>
-          <p className="text-muted-foreground mt-1">استعراض وطباعة وتصدير فواتير المبيعات</p>
+          <h1 className="text-2xl font-bold" data-testid="text-invoices-title">{t("invoices.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("invoices.subtitle")}</p>
         </div>
         <Button variant="outline" className="gap-2" onClick={exportExcel} data-testid="button-export-sales-xlsx">
           <FileSpreadsheet className="w-4 h-4" />
-          تصدير Excel
+          {t("common.export")} Excel
         </Button>
       </div>
 
@@ -386,42 +391,42 @@ export default function Invoices() {
         <CardContent className="p-4">
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-1">
-              <label className="text-sm font-medium">من</label>
+              <label className="text-sm font-medium">{t("common.from")}</label>
               <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-40" data-testid="input-invoices-from" />
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">إلى</label>
+              <label className="text-sm font-medium">{t("common.to")}</label>
               <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-40" data-testid="input-invoices-to" />
             </div>
             <div className="space-y-1 min-w-[160px]">
-              <label className="text-sm font-medium">طريقة الدفع</label>
+              <label className="text-sm font-medium">{t("invoices.table_payment")}</label>
               <Select value={paymentMethod} onValueChange={setPaymentMethod}>
                 <SelectTrigger data-testid="select-invoices-payment"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  <SelectItem value="cash">نقدي</SelectItem>
-                  <SelectItem value="card">بطاقة</SelectItem>
-                  <SelectItem value="bank_transfer">تحويل بنكي</SelectItem>
+                  <SelectItem value="all">{t("common.all")}</SelectItem>
+                  <SelectItem value="cash">{t("payment_methods.cash")}</SelectItem>
+                  <SelectItem value="card">{t("payment_methods.card")}</SelectItem>
+                  <SelectItem value="bank_transfer">{t("payment_methods.bank_transfer")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1 min-w-[160px]">
-              <label className="text-sm font-medium">الموظف</label>
+              <label className="text-sm font-medium">{t("common.employee")}</label>
               <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
                 <SelectTrigger data-testid="select-invoices-employee"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
+                  <SelectItem value="all">{t("common.all")}</SelectItem>
                   {allUsers.map((u: any) => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             {isOwnerOrAdmin && (
               <div className="space-y-1 min-w-[180px]">
-                <label className="text-sm font-medium">الفرع</label>
+                <label className="text-sm font-medium">{t("common.branch")}</label>
                 <Select value={selectedBranch} onValueChange={setSelectedBranch}>
                   <SelectTrigger data-testid="select-invoices-branch"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">جميع الفروع</SelectItem>
+                    <SelectItem value="all">{t("common.all_branches")}</SelectItem>
                     {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -434,27 +439,27 @@ export default function Invoices() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground">عدد الفواتير</p>
+            <p className="text-xs text-muted-foreground">{t("invoices.total_invoices")}</p>
             <p className="text-2xl font-bold text-primary mt-1" data-testid="stat-invoices-count">{totals.count}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground">إجمالي المبيعات</p>
+            <p className="text-xs text-muted-foreground">{t("invoices.total_sales")}</p>
             <p className="text-2xl font-bold text-emerald-600 mt-1" data-testid="stat-invoices-total">{omr(totals.total)}</p>
             <p className="text-[10px] text-muted-foreground">OMR</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground">التكلفة (COGS)</p>
+            <p className="text-xs text-muted-foreground">{t("reports.product_cost")} (COGS)</p>
             <p className="text-2xl font-bold text-orange-600 mt-1" data-testid="stat-invoices-cogs">{omr(totals.cogs)}</p>
             <p className="text-[10px] text-muted-foreground">OMR</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground">إجمالي الربح</p>
+            <p className="text-xs text-muted-foreground">{t("reports.total_profit")}</p>
             <p className={`text-2xl font-bold mt-1 ${totals.profit >= 0 ? "text-blue-600" : "text-red-600"}`} data-testid="stat-invoices-profit">{omr(totals.profit)}</p>
             <p className="text-[10px] text-muted-foreground">OMR</p>
           </CardContent>
@@ -464,67 +469,52 @@ export default function Invoices() {
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="py-12 text-center text-muted-foreground">جارٍ التحميل...</div>
+            <div className="py-12 text-center text-muted-foreground">{t("app.loading")}</div>
           ) : salesData.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground">لا توجد فواتير في الفترة المحددة</div>
+            <div className="py-12 text-center text-muted-foreground">{t("invoices.no_invoices")}</div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow>
-                    <TableHead>رقم الفاتورة</TableHead>
-                    <TableHead>التاريخ</TableHead>
-                    <TableHead>الفرع</TableHead>
-                    <TableHead>الكاشير</TableHead>
-                    <TableHead className="text-center">طريقة الدفع</TableHead>
-                    <TableHead className="text-center">الإجمالي</TableHead>
-                    <TableHead className="text-center">الربح</TableHead>
-                    <TableHead className="text-center w-20">عرض</TableHead>
+                    <TableHead className="w-[120px]">{t("invoices.table_invoice_no")}</TableHead>
+                    {isOwnerOrAdmin && <TableHead>{t("invoices.table_branch")}</TableHead>}
+                    <TableHead>{t("invoices.table_cashier")}</TableHead>
+                    <TableHead className="text-center">{t("invoices.table_payment")}</TableHead>
+                    <TableHead className="text-center font-mono">{t("invoices.table_total")}</TableHead>
+                    <TableHead className="text-center">{t("invoices.table_date")}</TableHead>
+                    <TableHead className="w-[100px] text-center">{t("common.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {salesData.map((s: any) => {
-                    const PmIcon = PM_ICONS[s.paymentMethod] || Banknote;
-                    return (
-                      <TableRow
-                        key={s.id}
-                        className="cursor-pointer hover:bg-muted/30"
-                        onClick={() => { setDetailSaleId(s.id); setDetailOpen(true); }}
-                        data-testid={`row-invoice-${s.id}`}
-                      >
-                        <TableCell className="font-mono font-medium">{s.invoiceNumber || `#${s.id}`}</TableCell>
-                        <TableCell className="text-sm">
-                          {s.createdAt ? new Date(s.createdAt).toLocaleDateString("ar-OM") : "—"}
-                          <span className="text-xs text-muted-foreground mr-1">
-                            {s.createdAt ? new Date(s.createdAt).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" }) : ""}
-                          </span>
-                        </TableCell>
-                        <TableCell>{s.branchName || "—"}</TableCell>
-                        <TableCell>{s.cashierName || "—"}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge className={`gap-1 ${PM_COLORS[s.paymentMethod] || ""}`}>
-                            <PmIcon className="w-3 h-3" />
-                            {PM_LABELS[s.paymentMethod] || s.paymentMethod}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center font-mono font-bold text-emerald-600">{omr(s.total)}</TableCell>
-                        <TableCell className={`text-center font-mono ${parseFloat(s.grossProfit || "0") >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                          {omr(s.grossProfit)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="w-8 h-8 p-0"
-                            onClick={e => { e.stopPropagation(); setDetailSaleId(s.id); setDetailOpen(true); }}
-                            data-testid={`button-view-invoice-${s.id}`}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {salesData.map((s: any) => (
+                    <TableRow key={s.id} data-testid={`row-invoice-${s.id}`}>
+                      <TableCell className="font-mono font-bold">{s.invoiceNumber || `#${s.id}`}</TableCell>
+                      {isOwnerOrAdmin && <TableCell>{s.branchName || "—"}</TableCell>}
+                      <TableCell>{s.cashierName || "—"}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge className={PM_COLORS[s.paymentMethod] || ""}>
+                          {t(`payment_methods.${s.paymentMethod}`) || s.paymentMethod}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center font-mono font-bold">{omr(s.total)}</TableCell>
+                      <TableCell className="text-center text-xs text-muted-foreground">
+                        {s.createdAt ? new Date(s.createdAt).toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : ""}
+                        <br />
+                        {s.createdAt ? new Date(s.createdAt).toLocaleTimeString(lang === "ar" ? "ar-OM" : "en-US", { hour: "2-digit", minute: "2-digit" }) : ""}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => { setDetailSaleId(s.id); setDetailOpen(true); }}
+                          data-testid={`button-view-invoice-${s.id}`}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </div>
@@ -532,7 +522,11 @@ export default function Invoices() {
         </CardContent>
       </Card>
 
-      <InvoiceDetailModal saleId={detailSaleId} open={detailOpen} onClose={() => setDetailOpen(false)} />
+      <InvoiceDetailModal
+        saleId={detailSaleId}
+        open={detailOpen}
+        onClose={() => { setDetailOpen(false); setDetailSaleId(null); }}
+      />
     </div>
   );
 }

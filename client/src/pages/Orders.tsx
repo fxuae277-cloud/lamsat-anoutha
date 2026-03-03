@@ -9,20 +9,23 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Order, Branch, City } from "@shared/schema";
-
-const STATUS_MAP: Record<string, {label: string, color: string}> = {
-  new: { label: "جديد", color: "bg-blue-100 text-blue-700" },
-  preparing: { label: "تم التجهيز", color: "bg-orange-100 text-orange-700" },
-  ready: { label: "جاهز للاستلام", color: "bg-emerald-100 text-emerald-700" },
-  delivering: { label: "خرج للتوصيل", color: "bg-purple-100 text-purple-700" },
-  completed: { label: "مكتمل", color: "bg-green-100 text-green-700" },
-  cancelled: { label: "ملغي", color: "bg-red-100 text-red-700" },
-};
-
-const ORDER_STATUSES = Object.entries(STATUS_MAP);
+import { useI18n } from "@/lib/i18n";
 
 export default function Orders() {
+  const { t } = useI18n();
   const { toast } = useToast();
+
+  const STATUS_MAP: Record<string, {label: string, color: string}> = {
+    new: { label: t("status_labels.new"), color: "bg-blue-100 text-blue-700" },
+    preparing: { label: t("status_labels.preparing"), color: "bg-orange-100 text-orange-700" },
+    ready: { label: t("status_labels.ready"), color: "bg-emerald-100 text-emerald-700" },
+    delivering: { label: t("status_labels.delivering"), color: "bg-purple-100 text-purple-700" },
+    completed: { label: t("status_labels.completed"), color: "bg-green-100 text-green-700" },
+    cancelled: { label: t("status_labels.cancelled"), color: "bg-red-100 text-red-700" },
+  };
+
+  const ORDER_STATUSES = Object.entries(STATUS_MAP);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
@@ -54,14 +57,14 @@ export default function Orders() {
       });
     },
     onSuccess: () => {
-      toast({ title: "تم إنشاء الطلب" });
+      toast({ title: t("orders.order_created") });
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       setAddOpen(false);
       setNewOrder({ customerName: "", customerPhone: "", city: "", address: "", deliveryType: "pickup", total: "", notes: "" });
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -79,67 +82,67 @@ export default function Orders() {
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-orders-title">طلبات السوشيال ميديا</h1>
-          <p className="text-muted-foreground mt-1">إدارة طلبات واتساب وانستجرام وتوجيهها للفروع.</p>
+          <h1 className="text-2xl font-bold" data-testid="text-orders-title">{t("orders.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("orders.subtitle")}</p>
         </div>
         
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2" data-testid="button-add-order">
               <Plus className="w-4 h-4" />
-              إدخال طلب جديد
+              {t("orders.add_order")}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader><DialogTitle>طلب جديد</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{t("orders.new_order")}</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">اسم العميل</label>
+                  <label className="text-sm font-medium">{t("orders.customer_name")}</label>
                   <Input value={newOrder.customerName} onChange={e => setNewOrder({...newOrder, customerName: e.target.value})} data-testid="input-order-customer" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">رقم الجوال</label>
+                  <label className="text-sm font-medium">{t("orders.phone")}</label>
                   <Input value={newOrder.customerPhone} onChange={e => setNewOrder({...newOrder, customerPhone: e.target.value})} data-testid="input-order-phone" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">المدينة</label>
+                  <label className="text-sm font-medium">{t("orders.city")}</label>
                   <Select value={newOrder.city} onValueChange={v => setNewOrder({...newOrder, city: v})}>
-                    <SelectTrigger><SelectValue placeholder="اختر المدينة" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={t("orders.select_city")} /></SelectTrigger>
                     <SelectContent>
                       {citiesList.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">نوع التسليم</label>
+                  <label className="text-sm font-medium">{t("orders.delivery_type")}</label>
                   <Select value={newOrder.deliveryType} onValueChange={v => setNewOrder({...newOrder, deliveryType: v})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="pickup">استلام من الفرع</SelectItem>
-                      <SelectItem value="delivery">توصيل</SelectItem>
+                      <SelectItem value="pickup">{t("orders.pickup")}</SelectItem>
+                      <SelectItem value="delivery">{t("orders.delivery")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">العنوان</label>
+                <label className="text-sm font-medium">{t("orders.address")}</label>
                 <Input value={newOrder.address} onChange={e => setNewOrder({...newOrder, address: e.target.value})} />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">المبلغ (OMR)</label>
+                <label className="text-sm font-medium">{t("orders.amount_omr")}</label>
                 <Input type="number" step="0.001" value={newOrder.total} onChange={e => setNewOrder({...newOrder, total: e.target.value})} data-testid="input-order-total" />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">ملاحظات</label>
+                <label className="text-sm font-medium">{t("orders.notes")}</label>
                 <Input value={newOrder.notes} onChange={e => setNewOrder({...newOrder, notes: e.target.value})} />
               </div>
             </div>
             <DialogFooter>
               <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !newOrder.customerName} data-testid="button-save-order">
-                {createMutation.isPending ? "جارِ الحفظ..." : "حفظ الطلب"}
+                {createMutation.isPending ? t("orders.saving_order") : t("orders.save_order")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -150,12 +153,12 @@ export default function Orders() {
         <div className="p-4 border-b flex flex-wrap gap-4 items-center bg-muted/20">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="بحث برقم الطلب، اسم العميل، جوال..." className="pr-9 bg-background" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-orders" />
+            <Input placeholder={t("orders.search_placeholder")} className="pr-9 bg-background" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-orders" />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-40 bg-background"><SelectValue placeholder="الحالة" /></SelectTrigger>
+            <SelectTrigger className="w-40 bg-background"><SelectValue placeholder={t("orders.status_filter")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">كل الحالات</SelectItem>
+              <SelectItem value="all">{t("orders.all_statuses")}</SelectItem>
               {ORDER_STATUSES.map(([key, val]) => (
                 <SelectItem key={key} value={key}>{val.label}</SelectItem>
               ))}
@@ -165,7 +168,7 @@ export default function Orders() {
         
         <div className="divide-y">
           {filtered.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">لا توجد طلبات</div>
+            <div className="p-8 text-center text-muted-foreground">{t("orders.no_orders")}</div>
           ) : filtered.map((order) => {
             const s = STATUS_MAP[order.status || "new"] || STATUS_MAP["new"];
             return (
@@ -189,16 +192,16 @@ export default function Orders() {
                 
                 <div className="flex items-center gap-6 md:justify-end">
                   <div className="text-left">
-                    <p className="text-xs text-muted-foreground">الفرع:</p>
+                    <p className="text-xs text-muted-foreground">{t("orders.branch_label")}</p>
                     <p className="font-medium text-sm">{order.branchId ? branchMap[order.branchId] || "-" : "-"}</p>
                   </div>
                   <div className="text-left">
-                    <p className="text-xs text-muted-foreground">التسليم:</p>
-                    <p className="font-medium text-sm">{order.deliveryType === "delivery" ? "توصيل" : "استلام"}</p>
+                    <p className="text-xs text-muted-foreground">{t("orders.delivery_label")}</p>
+                    <p className="font-medium text-sm">{order.deliveryType === "delivery" ? t("orders.delivery") : t("orders.pickup")}</p>
                   </div>
                   <div className="text-left border-r pr-4 border-border">
-                    <p className="text-xs text-muted-foreground">القيمة:</p>
-                    <p className="font-bold text-lg text-primary">{parseFloat(order.total || "0").toFixed(3)} OMR</p>
+                    <p className="text-xs text-muted-foreground">{t("orders.value_label")}</p>
+                    <p className="font-bold text-lg text-primary">{parseFloat(order.total || "0").toFixed(3)} {t("common.omr")}</p>
                   </div>
                   <div>
                     <Select value={order.status || "new"} onValueChange={v => updateStatusMutation.mutate({ id: order.id, status: v })}>

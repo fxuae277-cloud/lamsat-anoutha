@@ -14,12 +14,21 @@ Currency: Omani Rial (OMR) | VAT: 5% | Unified pricing across branches.
 - **State Management**: TanStack Query
 - **Auth**: express-session + connect-pg-simple (HttpOnly cookie)
 - **Export**: xlsx (Excel export)
-- **i18n**: Custom lightweight i18n system (ar/en) with JSON locale files
+- **i18n**: Custom lightweight i18n system (ar/en) with JSON locale files — fully internationalized across all 19 page files
+
+## i18n System
+- Provider: `I18nProvider` in `client/src/lib/i18n.tsx` wraps app, stores lang in localStorage
+- Hook: `useI18n()` returns `{ t, lang, setLang, dir }` — `t("key.path")` resolves nested JSON keys
+- Locale files: `client/src/locales/en.json` and `ar.json` — 1,434 keys each, perfectly matched
+- Key namespaces: `app`, `nav`, `sidebar`, `settings`, `login`, `dashboard`, `products`, `orders`, `pos`, `hr`, `invoices`, `purchases`, `reports`, `inventory`, `inventory_page`, `stock_control`, `returns`, `expenses`, `expenses_page`, `finance`, `finance_page`, `audit_log`, `operations`, `executive`, `executive_plus`, `common`, `payment_methods`, `status_labels`, `day_names`, `month_names`
+- Date formatting uses `lang === "ar" ? "ar-OM" : "en-US"` pattern throughout
+- All pages import `useI18n` and use `t()` for all user-facing strings
+- Language switcher in Settings page persists to localStorage
 
 ## Project Structure
 ```
 client/src/
-  locales/              → ar.json, en.json (translation files)
+  locales/              → ar.json, en.json (1,434 translation keys each)
   components/layout/    → Sidebar, AppLayout
   components/ui/        → shadcn/ui components
   pages/                → Login, Dashboard, POS, Products, Inventory, Orders, Expenses, Settings, Reports, Purchases

@@ -4,8 +4,10 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Lock, User, Eye, EyeOff } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 export default function Login() {
+  const { t } = useI18n();
   const { login } = useAuth();
   const { toast } = useToast();
   const [username, setUsername] = useState("");
@@ -20,9 +22,9 @@ export default function Login() {
     try {
       await login(username, password);
     } catch (err: any) {
-      const msg = err.message || "خطأ في تسجيل الدخول";
+      const msg = err.message || t("login.error");
       const cleaned = msg.replace(/^\d+:\s*/, "").replace(/^{.*"message":"/, "").replace(/".*$/, "");
-      toast({ title: "خطأ", description: cleaned, variant: "destructive" });
+      toast({ title: t("common.error"), description: cleaned, variant: "destructive" });
     }
     setLoading(false);
   };
@@ -32,22 +34,22 @@ export default function Login() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="w-24 h-24 flex items-center justify-center mx-auto mb-4">
-            <img src="/logo.png" alt="شعار" className="w-full h-full object-contain" />
+            <img src="/logo.png" alt={t("app.name")} className="w-full h-full object-contain" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground" data-testid="text-login-title">لمسة أنوثة</h1>
-          <p className="text-muted-foreground mt-1">نظام نقاط البيع والإدارة</p>
+          <h1 className="text-2xl font-bold text-foreground" data-testid="text-login-title">{t("app.name")}</h1>
+          <p className="text-muted-foreground mt-1">{t("login.subtitle")}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-card border border-border rounded-2xl shadow-lg p-6 space-y-5">
           <div className="space-y-2">
             <label className="text-sm font-medium flex items-center gap-2">
               <User className="w-4 h-4 text-muted-foreground" />
-              اسم المستخدم
+              {t("login.username")}
             </label>
             <Input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="أدخل اسم المستخدم"
+              placeholder={t("login.username_placeholder")}
               autoFocus
               data-testid="input-username"
             />
@@ -56,14 +58,14 @@ export default function Login() {
           <div className="space-y-2">
             <label className="text-sm font-medium flex items-center gap-2">
               <Lock className="w-4 h-4 text-muted-foreground" />
-              كلمة المرور
+              {t("login.password")}
             </label>
             <div className="relative">
               <Input
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="أدخل كلمة المرور"
+                placeholder={t("login.password_placeholder")}
                 className="pl-10"
                 data-testid="input-password"
               />
@@ -87,10 +89,10 @@ export default function Login() {
             {loading ? (
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                جارٍ الدخول...
+                {t("login.logging_in")}
               </div>
             ) : (
-              "تسجيل الدخول"
+              t("login.submit")
             )}
           </Button>
         </form>

@@ -212,7 +212,7 @@ export default function Settings() {
     setBackupLoading(true);
     try {
       const res = await fetch("/api/exports/backup.json", { credentials: "include" });
-      if (!res.ok) throw new Error("فشل التحميل");
+      if (!res.ok) throw new Error(t("settings.upload_error"));
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -221,9 +221,9 @@ export default function Settings() {
       a.download = `backup-${dateStr}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      toast({ title: "تم تحميل النسخة الاحتياطية" });
+      toast({ title: t("settings.backup_uploaded") });
     } catch (err: any) {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("settings.error_generic"), description: err.message, variant: "destructive" });
     } finally {
       setBackupLoading(false);
     }
@@ -573,7 +573,7 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Banknote className="w-5 h-5" />
-                إعدادات المنشأة والعملة
+                {t("settings.business_currency_title")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -583,36 +583,36 @@ export default function Settings() {
                   <Input value={currentSettings.businessName} onChange={e => updateSetting("businessName", e.target.value)} data-testid="input-business-name" />
                 </div>
                 <div className="space-y-2">
-                  <Label>العملة الافتراضية</Label>
+                  <Label>{t("settings.default_currency")}</Label>
                   <Select value={currentSettings.currency} onValueChange={v => updateSetting("currency", v)}>
                     <SelectTrigger data-testid="select-currency"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="OMR">ريال عماني (OMR)</SelectItem>
-                      <SelectItem value="SAR">ريال سعودي (SAR)</SelectItem>
-                      <SelectItem value="AED">درهم إماراتي (AED)</SelectItem>
-                      <SelectItem value="USD">دولار أمريكي (USD)</SelectItem>
+                      <SelectItem value="OMR">{t("settings.currency_omr")}</SelectItem>
+                      <SelectItem value="SAR">{t("settings.currency_sar")}</SelectItem>
+                      <SelectItem value="AED">{t("settings.currency_aed")}</SelectItem>
+                      <SelectItem value="USD">{t("settings.currency_usd")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>عدد المنازل العشرية</Label>
+                  <Label>{t("settings.decimal_places")}</Label>
                   <Select value={currentSettings.decimalPlaces} onValueChange={v => updateSetting("decimalPlaces", v)}>
                     <SelectTrigger data-testid="select-decimal-places"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="2">2 منازل عشرية (0.00)</SelectItem>
-                      <SelectItem value="3">3 منازل عشرية (0.000)</SelectItem>
+                      <SelectItem value="2">{t("settings.decimal_2")}</SelectItem>
+                      <SelectItem value="3">{t("settings.decimal_3")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>تنسيق الأرقام</Label>
+                  <Label>{t("settings.number_format")}</Label>
                   <Select value={currentSettings.numberFormat} onValueChange={v => updateSetting("numberFormat", v)}>
                     <SelectTrigger data-testid="select-number-format"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ar-OM">عربي (١٬٢٣٤٫٥٠٠)</SelectItem>
-                      <SelectItem value="en-US">إنجليزي (1,234.500)</SelectItem>
+                      <SelectItem value="ar-OM">{t("settings.format_ar")}</SelectItem>
+                      <SelectItem value="en-US">{t("settings.format_en")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -625,7 +625,7 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Percent className="w-5 h-5" />
-                إعدادات الضريبة
+                {t("settings.tax_settings")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -646,20 +646,20 @@ export default function Settings() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
-                    <Label className="text-base">السعر شامل الضريبة؟</Label>
-                    <p className="text-sm text-muted-foreground">هل أسعار المنتجات تشمل الضريبة ضمنياً</p>
+                    <Label className="text-base">{t("settings.price_includes_tax")}</Label>
+                    <p className="text-sm text-muted-foreground">{t("settings.price_includes_tax_desc")}</p>
                   </div>
                   <Switch checked={currentSettings.vatInclusive === "true"} onCheckedChange={v => updateSetting("vatInclusive", v ? "true" : "false")} data-testid="switch-vat-inclusive" />
                 </div>
                 <div className="space-y-2">
-                  <Label>اسم الضريبة</Label>
-                  <Input value={currentSettings.taxName} onChange={e => updateSetting("taxName", e.target.value)} placeholder="ضريبة القيمة المضافة" data-testid="input-tax-name" />
+                  <Label>{t("settings.tax_name")}</Label>
+                  <Input value={currentSettings.taxName} onChange={e => updateSetting("taxName", e.target.value)} placeholder={t("settings.tax_name_placeholder")} data-testid="input-tax-name" />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>رقم التسجيل الضريبي</Label>
-                <Input value={currentSettings.taxRegistrationNumber} onChange={e => updateSetting("taxRegistrationNumber", e.target.value)} placeholder="أدخل رقم التسجيل الضريبي للمنشأة (اختياري)" dir="ltr" className="text-left" data-testid="input-tax-reg-number" />
+                <Label>{t("settings.tax_reg_number")}</Label>
+                <Input value={currentSettings.taxRegistrationNumber} onChange={e => updateSetting("taxRegistrationNumber", e.target.value)} placeholder={t("settings.tax_reg_placeholder")} dir="ltr" className="text-left" data-testid="input-tax-reg-number" />
               </div>
             </CardContent>
           </Card>
@@ -669,14 +669,14 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Receipt className="w-5 h-5" />
-                إعدادات الخصومات
+                {t("settings.discount_settings")}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div>
-                  <Label className="text-base">السماح للموظف بتطبيق خصم</Label>
-                  <p className="text-sm text-muted-foreground">يمكن للكاشير تطبيق خصم أثناء البيع في نقطة البيع</p>
+                  <Label className="text-base">{t("settings.allow_employee_discount")}</Label>
+                  <p className="text-sm text-muted-foreground">{t("settings.allow_employee_discount_desc")}</p>
                 </div>
                 <Switch checked={currentSettings.allowEmployeeDiscount === "true"} onCheckedChange={v => updateSetting("allowEmployeeDiscount", v ? "true" : "false")} data-testid="switch-employee-discount" />
               </div>
@@ -688,24 +688,24 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <FileText className="w-5 h-5" />
-                إعدادات الفاتورة
+                {t("settings.invoice_settings")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>بادئة رقم الفاتورة (لكل فرع)</Label>
+                  <Label>{t("settings.invoice_prefix")}</Label>
                   <Input value={currentSettings.invoicePrefix} onChange={e => updateSetting("invoicePrefix", e.target.value)} placeholder="LO" dir="ltr" className="text-left" data-testid="input-invoice-prefix" />
-                  <p className="text-xs text-muted-foreground">مثال: {currentSettings.invoicePrefix}-{"0".repeat(parseInt(currentSettings.invoiceNumberDigits || "5") - 1)}1</p>
+                  <p className="text-xs text-muted-foreground">{t("settings.invoice_prefix_example")} {currentSettings.invoicePrefix}-{"0".repeat(parseInt(currentSettings.invoiceNumberDigits || "5") - 1)}1</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>عدد أرقام الفاتورة</Label>
+                  <Label>{t("settings.invoice_digits")}</Label>
                   <Select value={currentSettings.invoiceNumberDigits} onValueChange={v => updateSetting("invoiceNumberDigits", v)}>
                     <SelectTrigger data-testid="select-invoice-digits"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="4">4 أرقام (0001)</SelectItem>
-                      <SelectItem value="5">5 أرقام (00001)</SelectItem>
-                      <SelectItem value="6">6 أرقام (000001)</SelectItem>
+                      <SelectItem value="4">{t("settings.digits_4")}</SelectItem>
+                      <SelectItem value="5">{t("settings.digits_5")}</SelectItem>
+                      <SelectItem value="6">{t("settings.digits_6")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -714,24 +714,24 @@ export default function Settings() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
-                    <Label className="text-base">تعديل الفاتورة بعد الدفع</Label>
-                    <p className="text-sm text-muted-foreground">السماح بتعديل فاتورة مدفوعة</p>
+                    <Label className="text-base">{t("settings.edit_after_payment")}</Label>
+                    <p className="text-sm text-muted-foreground">{t("settings.edit_after_payment_desc")}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`text-xs font-medium ${currentSettings.allowEditAfterPayment === "true" ? "text-green-600" : "text-red-500"}`}>
-                      {currentSettings.allowEditAfterPayment === "true" ? "مسموح" : "غير مسموح"}
+                      {currentSettings.allowEditAfterPayment === "true" ? t("settings.allowed") : t("settings.not_allowed")}
                     </span>
                     <Switch checked={currentSettings.allowEditAfterPayment === "true"} onCheckedChange={v => updateSetting("allowEditAfterPayment", v ? "true" : "false")} data-testid="switch-edit-after-payment" />
                   </div>
                 </div>
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
-                    <Label className="text-base">إلغاء الفاتورة بعد الإغلاق</Label>
-                    <p className="text-sm text-muted-foreground">السماح بإلغاء فاتورة بعد إغلاق الشفت</p>
+                    <Label className="text-base">{t("settings.cancel_after_close")}</Label>
+                    <p className="text-sm text-muted-foreground">{t("settings.cancel_after_close_desc")}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`text-xs font-medium ${currentSettings.allowCancelAfterClose === "true" ? "text-green-600" : "text-red-500"}`}>
-                      {currentSettings.allowCancelAfterClose === "true" ? "مسموح" : "غير مسموح"}
+                      {currentSettings.allowCancelAfterClose === "true" ? t("settings.allowed") : t("settings.not_allowed")}
                     </span>
                     <Switch checked={currentSettings.allowCancelAfterClose === "true"} onCheckedChange={v => updateSetting("allowCancelAfterClose", v ? "true" : "false")} data-testid="switch-cancel-after-close" />
                   </div>
@@ -745,34 +745,34 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Printer className="w-5 h-5" />
-                إعدادات الطباعة
+                {t("settings.print_settings")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>حجم الإيصال</Label>
+                  <Label>{t("settings.receipt_size")}</Label>
                   <Select value={currentSettings.receiptSize} onValueChange={v => updateSetting("receiptSize", v)}>
                     <SelectTrigger data-testid="select-receipt-size"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="58mm">58mm (حراري صغير)</SelectItem>
-                      <SelectItem value="80mm">80mm (حراري قياسي)</SelectItem>
-                      <SelectItem value="A4">A4 (ورق عادي)</SelectItem>
+                      <SelectItem value="58mm">{t("settings.size_58mm")}</SelectItem>
+                      <SelectItem value="80mm">{t("settings.size_80mm")}</SelectItem>
+                      <SelectItem value="A4">{t("settings.size_a4")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
-                    <Label className="text-base">طابعة حرارية</Label>
-                    <p className="text-sm text-muted-foreground">طباعة الإيصال تلقائياً بعد كل عملية بيع</p>
+                    <Label className="text-base">{t("settings.thermal_printer")}</Label>
+                    <p className="text-sm text-muted-foreground">{t("settings.thermal_printer_desc")}</p>
                   </div>
                   <Switch checked={currentSettings.thermalPrinter === "true"} onCheckedChange={v => updateSetting("thermalPrinter", v ? "true" : "false")} data-testid="switch-thermal-printer" />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>شعار المنشأة (رابط الصورة)</Label>
+                <Label>{t("settings.business_logo")}</Label>
                 <Input value={currentSettings.businessLogo} onChange={e => updateSetting("businessLogo", e.target.value)} placeholder="https://example.com/logo.png" dir="ltr" className="text-left" data-testid="input-business-logo" />
-                <p className="text-xs text-muted-foreground">سيظهر في أعلى الفاتورة المطبوعة والإيصال الحراري</p>
+                <p className="text-xs text-muted-foreground">{t("settings.business_logo_desc")}</p>
               </div>
             </CardContent>
           </Card>
@@ -782,25 +782,25 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Database className="w-5 h-5" />
-                النسخ الاحتياطي
+                {t("settings.backup_settings")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div>
-                  <Label className="text-base">نسخ احتياطي تلقائي يومي</Label>
-                  <p className="text-sm text-muted-foreground">يتم حفظ نسخة من البيانات تلقائياً كل يوم</p>
+                  <Label className="text-base">{t("settings.auto_backup")}</Label>
+                  <p className="text-sm text-muted-foreground">{t("settings.auto_backup_desc")}</p>
                 </div>
                 <Switch checked={currentSettings.autoBackup === "true"} onCheckedChange={v => updateSetting("autoBackup", v ? "true" : "false")} data-testid="switch-auto-backup" />
               </div>
               <div className="flex items-center justify-between p-4 bg-muted/30 border rounded-lg">
                 <div>
-                  <Label className="text-base">تحميل نسخة احتياطية الآن</Label>
-                  <p className="text-sm text-muted-foreground">تصدير جميع بيانات النظام كملف JSON</p>
+                  <Label className="text-base">{t("settings.download_backup")}</Label>
+                  <p className="text-sm text-muted-foreground">{t("settings.download_backup_desc")}</p>
                 </div>
                 <Button variant="outline" className="gap-2" onClick={handleBackup} disabled={backupLoading} data-testid="button-download-backup">
                   {backupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                  {backupLoading ? "جارٍ التحميل..." : "تحميل النسخة"}
+                  {backupLoading ? t("settings.downloading") : t("settings.download_backup_btn")}
                 </Button>
               </div>
             </CardContent>
@@ -821,7 +821,7 @@ export default function Settings() {
                   <div>
                     <Label className="text-base">{t("settings.system_language")}</Label>
                     <p className="text-sm text-muted-foreground">
-                      {lang === "ar" ? "اختر لغة واجهة البرنامج" : "Choose the interface language"}
+                      {t("settings.choose_language")}
                     </p>
                   </div>
                 </div>

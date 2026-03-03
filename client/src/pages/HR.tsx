@@ -12,33 +12,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import type { Branch } from "@shared/schema";
-
-const ROLE_LABELS: Record<string, string> = {
-  owner: "مالك",
-  admin: "مدير",
-  manager: "مدير فرع",
-  cashier: "كاشير",
-  employee: "موظف",
-};
-
-const ROLE_OPTIONS = [
-  { value: "admin", label: "مدير" },
-  { value: "manager", label: "مدير فرع" },
-  { value: "cashier", label: "كاشير" },
-  { value: "employee", label: "موظف" },
-];
-
-const SALARY_TYPE_LABELS: Record<string, string> = {
-  monthly: "شهري",
-  daily: "يومي",
-  commission: "نسبة مبيعات",
-};
-
-const MONTH_NAMES = [
-  "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
-  "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
-];
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -53,9 +28,36 @@ function fmt(v: string | number | null | undefined) {
 }
 
 export default function HR() {
+  const { t, lang } = useI18n();
   const { toast } = useToast();
   const { user } = useAuth();
   const isOwnerAdmin = user?.role === "owner" || user?.role === "admin";
+
+  const ROLE_LABELS: Record<string, string> = {
+    owner: t("hr.role_labels.owner"),
+    admin: t("hr.role_labels.admin"),
+    manager: t("hr.role_labels.manager"),
+    cashier: t("hr.role_labels.cashier"),
+    employee: t("hr.role_labels.employee"),
+  };
+
+  const ROLE_OPTIONS = [
+    { value: "admin", label: t("hr.role_labels.admin") },
+    { value: "manager", label: t("hr.role_labels.manager") },
+    { value: "cashier", label: t("hr.role_labels.cashier") },
+    { value: "employee", label: t("hr.role_labels.employee") },
+  ];
+
+  const SALARY_TYPE_LABELS: Record<string, string> = {
+    monthly: t("hr.monthly"),
+    daily: t("hr.salary_daily") || "Daily",
+    commission: t("hr.salary_commission"),
+  };
+
+  const MONTH_NAMES = [
+    t("month_names.jan"), t("month_names.feb"), t("month_names.mar"), t("month_names.apr"), t("month_names.may"), t("month_names.jun"),
+    t("month_names.jul"), t("month_names.aug"), t("month_names.sep"), t("month_names.oct"), t("month_names.nov"), t("month_names.dec"),
+  ];
 
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -100,13 +102,13 @@ export default function HR() {
       });
     },
     onSuccess: () => {
-      toast({ title: "تم إضافة الموظف بنجاح" });
+      toast({ title: t("hr.employee_added") });
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setAddOpen(false);
       setNewUser({ name: "", username: "", password: "", role: "cashier", branchId: "1", terminalName: "T1", pin: "", phone: "", salary: "", salaryType: "monthly", commissionRate: "" });
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -127,12 +129,12 @@ export default function HR() {
       });
     },
     onSuccess: () => {
-      toast({ title: "تم تحديث بيانات الموظف" });
+      toast({ title: t("hr.employee_updated") });
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setEditOpen(false);
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -148,8 +150,8 @@ export default function HR() {
     return (
       <div className="p-8 text-center text-muted-foreground">
         <Shield className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
-        <p className="text-lg font-medium">صلاحية محدودة</p>
-        <p className="text-sm mt-1">هذه الصفحة متاحة فقط للمالك والمدير</p>
+        <p className="text-lg font-medium">{t("common.limited_access")}</p>
+        <p className="text-sm mt-1">{t("common.admin_only")}</p>
       </div>
     );
   }
@@ -158,8 +160,8 @@ export default function HR() {
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-hr-title">الموظفين والرواتب</h1>
-          <p className="text-muted-foreground mt-1">إدارة الموظفين، الرواتب، السلف والخصومات</p>
+          <h1 className="text-2xl font-bold" data-testid="text-hr-title">{t("hr.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("hr.subtitle")}</p>
         </div>
       </div>
 
@@ -170,7 +172,7 @@ export default function HR() {
               <Users className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">إجمالي الموظفين</p>
+              <p className="text-xs text-muted-foreground">{t("hr.total_employees")}</p>
               <p className="text-xl font-bold" data-testid="text-total-employees">{usersList.length}</p>
             </div>
           </CardContent>
@@ -181,7 +183,7 @@ export default function HR() {
               <UserCheck className="w-5 h-5 text-green-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">نشط</p>
+              <p className="text-xs text-muted-foreground">{t("hr.active_employees")}</p>
               <p className="text-xl font-bold text-green-600">{activeCount}</p>
             </div>
           </CardContent>
@@ -192,7 +194,7 @@ export default function HR() {
               <KeyRound className="w-5 h-5 text-blue-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">لديهم PIN</p>
+              <p className="text-xs text-muted-foreground">{t("hr.have_pin")}</p>
               <p className="text-xl font-bold text-blue-600">{usersList.filter(u => u.pin).length}</p>
             </div>
           </CardContent>
@@ -203,34 +205,34 @@ export default function HR() {
               <Wallet className="w-5 h-5 text-amber-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">إجمالي الرواتب</p>
-              <p className="text-lg font-bold text-amber-600">{totalSalary.toFixed(3)} <span className="text-xs font-normal">ر.ع</span></p>
+              <p className="text-xs text-muted-foreground">{t("hr.total_salary_budget")}</p>
+              <p className="text-lg font-bold text-amber-600">{totalSalary.toFixed(3)} <span className="text-xs font-normal">{t("common.omr")}</span></p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Tabs defaultValue="employees" dir="rtl">
+      <Tabs defaultValue="employees" dir={lang === "ar" ? "rtl" : "ltr"}>
         <TabsList className="grid w-full grid-cols-5 max-w-3xl">
           <TabsTrigger value="employees" className="gap-1 text-xs">
             <Users className="w-4 h-4" />
-            الموظفين
+            {t("hr.tab_employees")}
           </TabsTrigger>
           <TabsTrigger value="payroll" className="gap-1 text-xs">
             <FileText className="w-4 h-4" />
-            كشوف الرواتب
+            {t("hr.tab_payroll")}
           </TabsTrigger>
           <TabsTrigger value="advances" className="gap-1 text-xs">
             <Banknote className="w-4 h-4" />
-            السلف
+            {t("hr.tab_advances")}
           </TabsTrigger>
           <TabsTrigger value="deductions" className="gap-1 text-xs">
             <MinusCircle className="w-4 h-4" />
-            الخصومات
+            {t("hr.tab_deductions")}
           </TabsTrigger>
           <TabsTrigger value="performance" className="gap-1 text-xs">
             <BarChart3 className="w-4 h-4" />
-            الأداء
+            {t("hr.tab_performance")}
           </TabsTrigger>
         </TabsList>
 
@@ -271,36 +273,36 @@ export default function HR() {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
-            <DialogTitle>إضافة موظف جديد</DialogTitle>
-            <DialogDescription>أدخل بيانات الموظف الأساسية</DialogDescription>
+            <DialogTitle>{t("hr.add_employee_title")}</DialogTitle>
+            <DialogDescription>{t("hr.add_employee_desc")}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">الاسم الكامل *</label>
-                <Input placeholder="أحمد محمد" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} data-testid="input-emp-name" />
+                <label className="text-sm font-medium">{t("hr.full_name")} *</label>
+                <Input placeholder={t("hr.full_name_placeholder")} value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} data-testid="input-emp-name" />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">اسم المستخدم *</label>
+                <label className="text-sm font-medium">{t("settings.username_login")} *</label>
                 <Input placeholder="ahmed" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} data-testid="input-emp-username" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">كلمة المرور *</label>
-                <Input type="password" placeholder="6 أحرف على الأقل" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} data-testid="input-emp-password" />
+                <label className="text-sm font-medium">{t("settings.password")} *</label>
+                <Input type="password" placeholder={t("settings.min_6_chars")} value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} data-testid="input-emp-password" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-1">
                   <KeyRound className="w-3.5 h-3.5" />
-                  رقم PIN
+                  {t("hr.pin")}
                 </label>
                 <Input placeholder="1234" maxLength={6} value={newUser.pin} onChange={e => setNewUser({...newUser, pin: e.target.value.replace(/\D/g, "")})} data-testid="input-emp-pin" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">الدور</label>
+                <label className="text-sm font-medium">{t("settings.role_label")}</label>
                 <Select value={newUser.role} onValueChange={v => setNewUser({...newUser, role: v})}>
                   <SelectTrigger data-testid="select-emp-role"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -309,7 +311,7 @@ export default function HR() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">الفرع</label>
+                <label className="text-sm font-medium">{t("settings.branch_label")}</label>
                 <Select value={newUser.branchId} onValueChange={v => setNewUser({...newUser, branchId: v})}>
                   <SelectTrigger data-testid="select-emp-branch"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -320,40 +322,40 @@ export default function HR() {
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">نوع الراتب</label>
+                <label className="text-sm font-medium">{t("hr.salary_type")}</label>
                 <Select value={newUser.salaryType} onValueChange={v => setNewUser({...newUser, salaryType: v})}>
                   <SelectTrigger data-testid="select-emp-salary-type"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="monthly">شهري</SelectItem>
-                    <SelectItem value="daily">يومي</SelectItem>
-                    <SelectItem value="commission">نسبة مبيعات</SelectItem>
+                    <SelectItem value="monthly">{t("hr.monthly")}</SelectItem>
+                    <SelectItem value="daily">{t("hr.salary_daily")}</SelectItem>
+                    <SelectItem value="commission">{t("hr.salary_commission")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-1">
                   <Wallet className="w-3.5 h-3.5" />
-                  الراتب (OMR)
+                  {t("hr.base_salary")}
                 </label>
                 <Input type="number" step="0.001" placeholder="0.000" value={newUser.salary} onChange={e => setNewUser({...newUser, salary: e.target.value})} data-testid="input-emp-salary" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-1">
                   <Percent className="w-3.5 h-3.5" />
-                  نسبة العمولة %
+                  {t("hr.commission_rate")}
                 </label>
                 <Input type="number" step="0.01" placeholder="0.00" value={newUser.commissionRate} onChange={e => setNewUser({...newUser, commissionRate: e.target.value})} data-testid="input-emp-commission" disabled={newUser.salaryType !== "commission"} />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">الجهاز</label>
+                <label className="text-sm font-medium">{t("settings.terminal_name")}</label>
                 <Input placeholder="POS-1" value={newUser.terminalName} onChange={e => setNewUser({...newUser, terminalName: e.target.value})} data-testid="input-emp-terminal" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-1">
                   <Phone className="w-3.5 h-3.5" />
-                  الهاتف
+                  {t("hr.phone")}
                 </label>
                 <Input placeholder="9XXXXXXX" value={newUser.phone} onChange={e => setNewUser({...newUser, phone: e.target.value})} data-testid="input-emp-phone" />
               </div>
@@ -361,7 +363,7 @@ export default function HR() {
           </div>
           <DialogFooter>
             <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !newUser.name || !newUser.username || !newUser.password} data-testid="button-save-employee">
-              {createMutation.isPending ? "جارِ الحفظ..." : "حفظ الموظف"}
+              {createMutation.isPending ? t("common.saving") : t("hr.save_employee")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -370,18 +372,18 @@ export default function HR() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
-            <DialogTitle>تعديل بيانات الموظف</DialogTitle>
-            <DialogDescription>تعديل البيانات الشخصية والوظيفية</DialogDescription>
+            <DialogTitle>{t("hr.edit_employee")}</DialogTitle>
+            <DialogDescription>{t("hr.edit_employee_desc")}</DialogDescription>
           </DialogHeader>
           {selectedUser && (
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">الاسم</label>
+                  <label className="text-sm font-medium">{t("hr.full_name")}</label>
                   <Input value={selectedUser.name} onChange={e => setSelectedUser({...selectedUser, name: e.target.value})} data-testid="input-edit-name" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">الدور</label>
+                  <label className="text-sm font-medium">{t("settings.role_label")}</label>
                   <Select value={selectedUser.role} onValueChange={v => setSelectedUser({...selectedUser, role: v})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -392,7 +394,7 @@ export default function HR() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">الفرع</label>
+                  <label className="text-sm font-medium">{t("settings.branch_label")}</label>
                   <Select value={String(selectedUser.branchId)} onValueChange={v => setSelectedUser({...selectedUser, branchId: Number(v)})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -401,28 +403,28 @@ export default function HR() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">الجهاز</label>
+                  <label className="text-sm font-medium">{t("settings.terminal_name")}</label>
                   <Input value={selectedUser.terminalName || ""} onChange={e => setSelectedUser({...selectedUser, terminalName: e.target.value})} />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">نوع الراتب</label>
+                  <label className="text-sm font-medium">{t("hr.salary_type")}</label>
                   <Select value={selectedUser.salaryType || "monthly"} onValueChange={v => setSelectedUser({...selectedUser, salaryType: v})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="monthly">شهري</SelectItem>
-                      <SelectItem value="daily">يومي</SelectItem>
-                      <SelectItem value="commission">نسبة مبيعات</SelectItem>
+                      <SelectItem value="monthly">{t("hr.monthly")}</SelectItem>
+                      <SelectItem value="daily">{t("hr.salary_daily")}</SelectItem>
+                      <SelectItem value="commission">{t("hr.salary_commission")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">الراتب (OMR)</label>
+                  <label className="text-sm font-medium">{t("hr.base_salary")}</label>
                   <Input type="number" step="0.001" value={selectedUser.salary || ""} onChange={e => setSelectedUser({...selectedUser, salary: e.target.value})} data-testid="input-edit-salary" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">نسبة العمولة %</label>
+                  <label className="text-sm font-medium">{t("hr.commission_rate")}</label>
                   <Input type="number" step="0.01" value={selectedUser.commissionRate || ""} onChange={e => setSelectedUser({...selectedUser, commissionRate: e.target.value})} data-testid="input-edit-commission" disabled={selectedUser.salaryType !== "commission"} />
                 </div>
               </div>
@@ -430,38 +432,38 @@ export default function HR() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium flex items-center gap-1">
                     <KeyRound className="w-3.5 h-3.5" />
-                    PIN
+                    {t("hr.pin") || "PIN"}
                   </label>
                   <Input placeholder="1234" maxLength={6} value={selectedUser.pin || ""} onChange={e => setSelectedUser({...selectedUser, pin: e.target.value.replace(/\D/g, "")})} data-testid="input-edit-pin" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">الهاتف</label>
+                  <label className="text-sm font-medium">{t("hr.phone")}</label>
                   <Input value={selectedUser.phone || ""} onChange={e => setSelectedUser({...selectedUser, phone: e.target.value})} data-testid="input-edit-phone" />
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <label className="text-sm font-medium">الحالة:</label>
+                <label className="text-sm font-medium">{t("common.status")}:</label>
                 <Button
                   variant={selectedUser.isActive ? "default" : "outline"}
                   size="sm"
                   onClick={() => setSelectedUser({...selectedUser, isActive: true})}
                   className={selectedUser.isActive ? "bg-green-600 hover:bg-green-700" : ""}
                 >
-                  نشط
+                  {t("status_labels.active")}
                 </Button>
                 <Button
                   variant={!selectedUser.isActive ? "destructive" : "outline"}
                   size="sm"
                   onClick={() => setSelectedUser({...selectedUser, isActive: false})}
                 >
-                  متوقف
+                  {t("status_labels.inactive")}
                 </Button>
               </div>
             </div>
           )}
           <DialogFooter>
             <Button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending} data-testid="button-update-employee">
-              {updateMutation.isPending ? "جارِ الحفظ..." : "حفظ التعديلات"}
+              {updateMutation.isPending ? t("common.saving") : t("common.save_changes")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -472,18 +474,18 @@ export default function HR() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-primary" />
-              تقرير أداء: {selectedUser?.name}
+              {t("hr.performance_report")}: {selectedUser?.name}
             </DialogTitle>
-            <DialogDescription>عرض تفصيلي لأداء الموظف خلال الفترة المحددة</DialogDescription>
+            <DialogDescription>{t("hr.performance_desc")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="flex gap-3 items-end">
               <div className="space-y-1 flex-1">
-                <label className="text-xs font-medium">من</label>
+                <label className="text-xs font-medium">{t("common.from")}</label>
                 <Input type="date" value={perfFrom} onChange={e => setPerfFrom(e.target.value)} />
               </div>
               <div className="space-y-1 flex-1">
-                <label className="text-xs font-medium">إلى</label>
+                <label className="text-xs font-medium">{t("common.to")}</label>
                 <Input type="date" value={perfTo} onChange={e => setPerfTo(e.target.value)} />
               </div>
             </div>
@@ -493,17 +495,17 @@ export default function HR() {
                   <Card>
                     <CardContent className="p-3 text-center">
                       <ShoppingBag className="w-5 h-5 text-primary mx-auto mb-1" />
-                      <p className="text-xs text-muted-foreground">إجمالي المبيعات</p>
+                      <p className="text-xs text-muted-foreground">{t("hr.total_sales")}</p>
                       <p className="text-lg font-bold text-primary">{fmt(perfData.performance.salesTotal)}</p>
-                      <p className="text-xs text-muted-foreground">{perfData.performance.salesCount} عملية</p>
+                      <p className="text-xs text-muted-foreground">{perfData.performance.salesCount} {t("common.transaction")}</p>
                     </CardContent>
                   </Card>
                   <Card>
                     <CardContent className="p-3 text-center">
                       <TrendingUp className="w-5 h-5 text-green-600 mx-auto mb-1" />
-                      <p className="text-xs text-muted-foreground">الربح الإجمالي</p>
+                      <p className="text-xs text-muted-foreground">{t("reports.total_profit")}</p>
                       <p className="text-lg font-bold text-green-600">{fmt(perfData.performance.grossProfit)}</p>
-                      <p className="text-xs text-muted-foreground">هامش {perfData.performance.margin}%</p>
+                      <p className="text-xs text-muted-foreground">{t("reports.product_margin")} {perfData.performance.margin}%</p>
                     </CardContent>
                   </Card>
                 </div>
@@ -517,35 +519,36 @@ export default function HR() {
 }
 
 function EmployeesTab({ usersList, branchMap, branchesList, search, setSearch, onAdd, onEdit, onPerf }: any) {
+  const { t } = useI18n();
   return (
     <div className="bg-card border shadow-sm rounded-xl overflow-hidden">
       <div className="p-4 border-b flex items-center gap-4 bg-muted/20">
         <div className="relative w-72">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="بحث بالاسم أو الهاتف أو PIN..." className="pr-9 bg-background" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-hr" />
+          <Input placeholder={t("hr.search_placeholder")} className="pr-9 bg-background" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-hr" />
         </div>
         <Button className="gap-2 mr-auto" onClick={onAdd} data-testid="button-add-employee">
           <Plus className="w-4 h-4" />
-          إضافة موظف
+          {t("hr.add_employee")}
         </Button>
       </div>
 
       <Table>
         <TableHeader className="bg-muted/50">
           <TableRow>
-            <TableHead>الموظف</TableHead>
-            <TableHead>الدور</TableHead>
-            <TableHead>الفرع</TableHead>
-            <TableHead>نوع الراتب</TableHead>
-            <TableHead>الراتب (OMR)</TableHead>
-            <TableHead>العمولة %</TableHead>
-            <TableHead>الحالة</TableHead>
-            <TableHead className="w-[100px]">إجراءات</TableHead>
+            <TableHead>{t("hr.table_name")}</TableHead>
+            <TableHead>{t("settings.role_header")}</TableHead>
+            <TableHead>{t("common.branch")}</TableHead>
+            <TableHead>{t("hr.salary_type")}</TableHead>
+            <TableHead>{t("hr.base_salary")}</TableHead>
+            <TableHead>{t("hr.commission_rate_header")}</TableHead>
+            <TableHead>{t("common.status")}</TableHead>
+            <TableHead className="w-[100px]">{t("common.actions")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {usersList.length === 0 ? (
-            <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">لا يوجد موظفين</TableCell></TableRow>
+            <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">{t("hr.no_employees")}</TableCell></TableRow>
           ) : usersList.map((u: any) => (
             <TableRow key={u.id} data-testid={`row-employee-${u.id}`}>
               <TableCell>
@@ -561,13 +564,13 @@ function EmployeesTab({ usersList, branchMap, branchesList, search, setSearch, o
               </TableCell>
               <TableCell>
                 <Badge variant={u.role === "owner" ? "default" : u.role === "admin" ? "secondary" : "outline"} className="text-xs">
-                  {ROLE_LABELS[u.role] || u.role}
+                  {u.role === "owner" ? t("hr.role_labels.owner") : u.role === "admin" ? t("hr.role_labels.admin") : u.role === "manager" ? t("hr.role_labels.manager") : u.role === "cashier" ? t("hr.role_labels.cashier") : t("hr.role_labels.employee")}
                 </Badge>
               </TableCell>
               <TableCell className="text-sm">{branchMap[u.branchId] || "-"}</TableCell>
               <TableCell>
                 <Badge variant="outline" className="text-xs">
-                  {SALARY_TYPE_LABELS[u.salaryType || "monthly"] || "شهري"}
+                  {u.salaryType === "monthly" ? t("hr.monthly") : u.salaryType === "daily" ? (t("hr.salary_daily")) : t("hr.salary_commission")}
                 </Badge>
               </TableCell>
               <TableCell className="font-medium">{parseFloat(u.salary || "0").toFixed(3)}</TableCell>
@@ -576,9 +579,9 @@ function EmployeesTab({ usersList, branchMap, branchesList, search, setSearch, o
               </TableCell>
               <TableCell>
                 {u.isActive ? (
-                  <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">نشط</Badge>
+                  <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">{t("status_labels.active")}</Badge>
                 ) : (
-                  <Badge variant="destructive" className="text-xs">متوقف</Badge>
+                  <Badge variant="destructive" className="text-xs">{t("status_labels.inactive")}</Badge>
                 )}
               </TableCell>
               <TableCell>
@@ -598,9 +601,9 @@ function EmployeesTab({ usersList, branchMap, branchesList, search, setSearch, o
 
       {usersList.length > 0 && (
         <div className="p-3 border-t bg-muted/30 flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">{usersList.length} موظف</span>
+          <span className="text-muted-foreground">{usersList.length} {t("common.employee")}</span>
           <span className="font-bold text-amber-600">
-            إجمالي الرواتب: {usersList.reduce((s: number, u: any) => s + parseFloat(u.salary || "0"), 0).toFixed(3)} ر.ع
+            {t("hr.total_salary_budget")}: {usersList.reduce((s: number, u: any) => s + parseFloat(u.salary || "0"), 0).toFixed(3)} {t("common.omr")}
           </span>
         </div>
       )}
@@ -609,6 +612,7 @@ function EmployeesTab({ usersList, branchMap, branchesList, search, setSearch, o
 }
 
 function PayrollTab({ usersList }: { usersList: any[] }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [createOpen, setCreateOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -618,6 +622,10 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
   const [newYear, setNewYear] = useState(String(now.getFullYear()));
   const [newNote, setNewNote] = useState("");
 
+  const MONTH_NAMES = [
+    t("month_names.jan"), t("month_names.feb"), t("month_names.mar"), t("month_names.apr"), t("month_names.may"), t("month_names.jun"),
+    t("month_names.jul"), t("month_names.aug"), t("month_names.sep"), t("month_names.oct"), t("month_names.nov"), t("month_names.dec"),
+  ];
   const { data: payrollRuns = [] } = useQuery<any[]>({
     queryKey: ["/api/payroll-runs"],
     queryFn: getQueryFn({ on401: "throw" }),
@@ -636,13 +644,13 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
       });
     },
     onSuccess: () => {
-      toast({ title: "تم إنشاء كشف الرواتب بنجاح" });
+      toast({ title: t("hr.payroll_generated") });
       queryClient.invalidateQueries({ queryKey: ["/api/payroll-runs"] });
       setCreateOpen(false);
       setNewNote("");
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -651,12 +659,12 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
       await apiRequest("POST", `/api/payroll-runs/${id}/regenerate`, {});
     },
     onSuccess: () => {
-      toast({ title: "تم إعادة احتساب الكشف" });
+      toast({ title: t("hr.payroll_recalculated") });
       queryClient.invalidateQueries({ queryKey: ["/api/payroll-runs"] });
       if (selectedRun) queryClient.invalidateQueries({ queryKey: [`/api/payroll-runs/${selectedRun.id}/details`] });
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -665,34 +673,34 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
       await apiRequest("POST", `/api/payroll-runs/${id}/approve`, {});
     },
     onSuccess: () => {
-      toast({ title: "تم اعتماد كشف الرواتب" });
+      toast({ title: t("hr.payroll_approved") });
       queryClient.invalidateQueries({ queryKey: ["/api/payroll-runs"] });
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold">كشوف الرواتب</h3>
+        <h3 className="text-lg font-bold">{t("hr.payroll_title")}</h3>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2" data-testid="button-create-payroll">
               <Plus className="w-4 h-4" />
-              كشف رواتب جديد
+              {t("hr.generate_payroll")}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[400px]">
             <DialogHeader>
-              <DialogTitle>إنشاء كشف رواتب</DialogTitle>
-              <DialogDescription>اختر الشهر والسنة وسيتم احتساب الرواتب تلقائياً</DialogDescription>
+              <DialogTitle>{t("hr.generate_payroll_title")}</DialogTitle>
+              <DialogDescription>{t("hr.generate_payroll_desc")}</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">الشهر</label>
+                  <label className="text-sm font-medium">{t("hr.select_month")}</label>
                   <Select value={newMonth} onValueChange={setNewMonth}>
                     <SelectTrigger data-testid="select-payroll-month"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -703,18 +711,18 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">السنة</label>
+                  <label className="text-sm font-medium">{t("hr.select_year")}</label>
                   <Input type="number" value={newYear} onChange={e => setNewYear(e.target.value)} data-testid="input-payroll-year" />
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">ملاحظات</label>
-                <Input placeholder="ملاحظات اختيارية" value={newNote} onChange={e => setNewNote(e.target.value)} data-testid="input-payroll-note" />
+                <label className="text-sm font-medium">{t("common.notes")}</label>
+                <Input placeholder={t("hr.notes_placeholder")} value={newNote} onChange={e => setNewNote(e.target.value)} data-testid="input-payroll-note" />
               </div>
             </div>
             <DialogFooter>
               <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending} data-testid="button-save-payroll">
-                {createMutation.isPending ? "جارِ الإنشاء..." : "إنشاء واحتساب"}
+                {createMutation.isPending ? t("hr.generating") : t("hr.generate_btn")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -725,20 +733,20 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead>الشهر</TableHead>
-              <TableHead>الحالة</TableHead>
-              <TableHead>إجمالي الأساسي</TableHead>
-              <TableHead>العمولات</TableHead>
-              <TableHead>الخصومات</TableHead>
-              <TableHead>السلف</TableHead>
-              <TableHead>صافي الرواتب</TableHead>
-              <TableHead>أُنشئ بواسطة</TableHead>
-              <TableHead className="w-[150px]">إجراءات</TableHead>
+              <TableHead>{t("hr.table_month")}</TableHead>
+              <TableHead>{t("common.status")}</TableHead>
+              <TableHead>{t("hr.table_base_salary")}</TableHead>
+              <TableHead>{t("hr.table_commissions")}</TableHead>
+              <TableHead>{t("hr.table_deductions")}</TableHead>
+              <TableHead>{t("hr.table_advances")}</TableHead>
+              <TableHead>{t("hr.table_net")}</TableHead>
+              <TableHead>{t("hr.created_by")}</TableHead>
+              <TableHead className="w-[150px]">{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {payrollRuns.length === 0 ? (
-              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">لا توجد كشوف رواتب بعد</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">{t("hr.no_payroll")}</TableCell></TableRow>
             ) : payrollRuns.map((run: any) => (
               <TableRow key={run.id} data-testid={`row-payroll-${run.id}`}>
                 <TableCell className="font-medium">
@@ -746,9 +754,9 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
                 </TableCell>
                 <TableCell>
                   {run.status === "draft" ? (
-                    <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">مسودة</Badge>
+                    <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">{t("status_labels.draft")}</Badge>
                   ) : (
-                    <Badge className="bg-green-100 text-green-700 border-green-200">معتمد</Badge>
+                    <Badge className="bg-green-100 text-green-700 border-green-200">{t("status_labels.approved")}</Badge>
                   )}
                 </TableCell>
                 <TableCell>{fmt(run.total_basic)}</TableCell>
@@ -785,27 +793,27 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" />
-              تفاصيل كشف الرواتب - {selectedRun && `${MONTH_NAMES[parseInt(selectedRun.month) - 1]} ${selectedRun.year}`}
+              {t("hr.payroll_details")} - {selectedRun && `${MONTH_NAMES[parseInt(selectedRun.month) - 1]} ${selectedRun.year}`}
             </DialogTitle>
             <DialogDescription>
-              {selectedRun?.status === "draft" ? "مسودة - لم يُعتمد بعد" : "معتمد"}
+              {selectedRun?.status === "draft" ? (t("status_labels.draft_desc")) : t("status_labels.approved")}
             </DialogDescription>
           </DialogHeader>
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
-                <TableHead>الموظف</TableHead>
-                <TableHead>الفرع</TableHead>
-                <TableHead>الراتب الأساسي</TableHead>
-                <TableHead>العمولة</TableHead>
-                <TableHead>الخصومات</TableHead>
-                <TableHead>السلف</TableHead>
-                <TableHead>صافي الراتب</TableHead>
+                <TableHead>{t("hr.table_employee")}</TableHead>
+                <TableHead>{t("common.branch")}</TableHead>
+                <TableHead>{t("hr.table_base_salary")}</TableHead>
+                <TableHead>{t("hr.table_commissions")}</TableHead>
+                <TableHead>{t("hr.table_deductions")}</TableHead>
+                <TableHead>{t("hr.table_advances")}</TableHead>
+                <TableHead>{t("hr.table_net")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {details.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-6 text-muted-foreground">لا توجد تفاصيل</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-6 text-muted-foreground">{t("common.no_details")}</TableCell></TableRow>
               ) : details.map((d: any) => (
                 <TableRow key={d.id}>
                   <TableCell className="font-medium">{d.employee_name}</TableCell>
@@ -821,9 +829,9 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
           </Table>
           {details.length > 0 && (
             <div className="p-3 bg-muted/30 rounded-lg flex items-center justify-between text-sm font-bold">
-              <span>{details.length} موظف</span>
+              <span>{details.length} {t("common.employee")}</span>
               <span className="text-primary">
-                إجمالي الصافي: {details.reduce((s: number, d: any) => s + parseFloat(d.net_salary || "0"), 0).toFixed(3)} ر.ع
+                {t("hr.total_net")}: {details.reduce((s: number, d: any) => s + parseFloat(d.net_salary || "0"), 0).toFixed(3)} {t("common.omr")}
               </span>
             </div>
           )}
@@ -834,6 +842,7 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
 }
 
 function AdvancesTab({ usersList }: { usersList: any[] }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [empId, setEmpId] = useState("");
@@ -855,14 +864,14 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
       });
     },
     onSuccess: () => {
-      toast({ title: "تم تسجيل السلفة بنجاح" });
+      toast({ title: t("hr.advance_recorded") });
       queryClient.invalidateQueries({ queryKey: [url] });
       queryClient.invalidateQueries({ queryKey: ["/api/employee-advances"] });
       setAddOpen(false);
       setEmpId(""); setAmount(""); setNote("");
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -872,14 +881,14 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-bold">سلف الموظفين</h3>
-          <p className="text-sm text-muted-foreground">إجمالي السلف غير المسددة: <span className="font-bold text-red-600">{totalUnsettled.toFixed(3)} ر.ع</span></p>
+          <h3 className="text-lg font-bold">{t("hr.advances_title")}</h3>
+          <p className="text-sm text-muted-foreground">{t("hr.total_unsettled")}: <span className="font-bold text-red-600">{totalUnsettled.toFixed(3)} {t("common.omr")}</span></p>
         </div>
         <div className="flex gap-2">
           <Select value={filterEmp} onValueChange={setFilterEmp}>
-            <SelectTrigger className="w-48" data-testid="select-filter-advance-emp"><SelectValue placeholder="كل الموظفين" /></SelectTrigger>
+            <SelectTrigger className="w-48" data-testid="select-filter-advance-emp"><SelectValue placeholder={t("hr.all_employees")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">كل الموظفين</SelectItem>
+              <SelectItem value="__all__">{t("hr.all_employees")}</SelectItem>
               {usersList.filter(u => u.role !== "owner").map(u => (
                 <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
               ))}
@@ -889,19 +898,19 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
             <DialogTrigger asChild>
               <Button className="gap-2" data-testid="button-add-advance">
                 <Plus className="w-4 h-4" />
-                سلفة جديدة
+                {t("hr.new_advance")}
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[400px]">
               <DialogHeader>
-                <DialogTitle>تسجيل سلفة</DialogTitle>
-                <DialogDescription>تسجيل سلفة جديدة لموظف</DialogDescription>
+                <DialogTitle>{t("hr.record_advance")}</DialogTitle>
+                <DialogDescription>{t("hr.record_advance_desc")}</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">الموظف *</label>
+                  <label className="text-sm font-medium">{t("common.employee")} *</label>
                   <Select value={empId} onValueChange={setEmpId}>
-                    <SelectTrigger data-testid="select-advance-emp"><SelectValue placeholder="اختر الموظف" /></SelectTrigger>
+                    <SelectTrigger data-testid="select-advance-emp"><SelectValue placeholder={t("hr.select_employee")} /></SelectTrigger>
                     <SelectContent>
                       {usersList.filter(u => u.role !== "owner").map(u => (
                         <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
@@ -911,22 +920,22 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">المبلغ (OMR) *</label>
+                    <label className="text-sm font-medium">{t("hr.amount_omr")} *</label>
                     <Input type="number" step="0.001" placeholder="0.000" value={amount} onChange={e => setAmount(e.target.value)} data-testid="input-advance-amount" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">التاريخ *</label>
+                    <label className="text-sm font-medium">{t("common.date")} *</label>
                     <Input type="date" value={date} onChange={e => setDate(e.target.value)} data-testid="input-advance-date" />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">ملاحظات</label>
-                  <Input placeholder="سبب السلفة" value={note} onChange={e => setNote(e.target.value)} data-testid="input-advance-note" />
+                  <label className="text-sm font-medium">{t("common.notes")}</label>
+                  <Input placeholder={t("hr.advance_note_placeholder")} value={note} onChange={e => setNote(e.target.value)} data-testid="input-advance-note" />
                 </div>
               </div>
               <DialogFooter>
                 <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !empId || !amount} data-testid="button-save-advance">
-                  {createMutation.isPending ? "جارِ الحفظ..." : "حفظ السلفة"}
+                  {createMutation.isPending ? t("common.saving") : t("common.save")}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -938,28 +947,28 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead>الموظف</TableHead>
-              <TableHead>المبلغ</TableHead>
-              <TableHead>التاريخ</TableHead>
-              <TableHead>الملاحظات</TableHead>
-              <TableHead>الحالة</TableHead>
-              <TableHead>أُنشئ بواسطة</TableHead>
+              <TableHead>{t("common.employee")}</TableHead>
+              <TableHead>{t("common.amount")}</TableHead>
+              <TableHead>{t("common.date")}</TableHead>
+              <TableHead>{t("common.notes")}</TableHead>
+              <TableHead>{t("common.status")}</TableHead>
+              <TableHead>{t("hr.created_by")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {advances.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">لا توجد سلف مسجلة</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t("hr.no_advances")}</TableCell></TableRow>
             ) : advances.map((a: any) => (
               <TableRow key={a.id} data-testid={`row-advance-${a.id}`}>
                 <TableCell className="font-medium">{a.employee_name}</TableCell>
-                <TableCell className="font-bold">{fmt(a.amount)} ر.ع</TableCell>
+                <TableCell className="font-bold">{fmt(a.amount)} {t("common.omr")}</TableCell>
                 <TableCell className="text-sm">{a.date}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{a.note || "—"}</TableCell>
                 <TableCell>
                   {a.settled ? (
-                    <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">مسددة</Badge>
+                    <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">{t("hr.settled")}</Badge>
                   ) : (
-                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs">غير مسددة</Badge>
+                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs">{t("hr.unsettled")}</Badge>
                   )}
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">{a.created_by_name || "—"}</TableCell>
@@ -973,6 +982,7 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
 }
 
 function DeductionsTab({ usersList }: { usersList: any[] }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [empId, setEmpId] = useState("");
@@ -994,26 +1004,26 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
       });
     },
     onSuccess: () => {
-      toast({ title: "تم تسجيل الخصم بنجاح" });
+      toast({ title: t("hr.deduction_recorded") });
       queryClient.invalidateQueries({ queryKey: [url] });
       queryClient.invalidateQueries({ queryKey: ["/api/employee-deductions"] });
       setAddOpen(false);
       setEmpId(""); setAmount(""); setReason("");
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold">خصومات الموظفين</h3>
+        <h3 className="text-lg font-bold">{t("hr.deductions_title")}</h3>
         <div className="flex gap-2">
           <Select value={filterEmp} onValueChange={setFilterEmp}>
-            <SelectTrigger className="w-48" data-testid="select-filter-deduction-emp"><SelectValue placeholder="كل الموظفين" /></SelectTrigger>
+            <SelectTrigger className="w-48" data-testid="select-filter-deduction-emp"><SelectValue placeholder={t("hr.all_employees")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">كل الموظفين</SelectItem>
+              <SelectItem value="__all__">{t("hr.all_employees")}</SelectItem>
               {usersList.filter(u => u.role !== "owner").map(u => (
                 <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
               ))}
@@ -1023,19 +1033,19 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
             <DialogTrigger asChild>
               <Button className="gap-2" data-testid="button-add-deduction">
                 <Plus className="w-4 h-4" />
-                خصم جديد
+                {t("hr.new_deduction")}
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[400px]">
               <DialogHeader>
-                <DialogTitle>تسجيل خصم</DialogTitle>
-                <DialogDescription>تسجيل خصم جديد على موظف</DialogDescription>
+                <DialogTitle>{t("hr.record_deduction")}</DialogTitle>
+                <DialogDescription>{t("hr.record_deduction_desc")}</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">الموظف *</label>
+                  <label className="text-sm font-medium">{t("common.employee")} *</label>
                   <Select value={empId} onValueChange={setEmpId}>
-                    <SelectTrigger data-testid="select-deduction-emp"><SelectValue placeholder="اختر الموظف" /></SelectTrigger>
+                    <SelectTrigger data-testid="select-deduction-emp"><SelectValue placeholder={t("hr.select_employee")} /></SelectTrigger>
                     <SelectContent>
                       {usersList.filter(u => u.role !== "owner").map(u => (
                         <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
@@ -1045,22 +1055,22 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">المبلغ (OMR) *</label>
+                    <label className="text-sm font-medium">{t("hr.amount_omr")} *</label>
                     <Input type="number" step="0.001" placeholder="0.000" value={amount} onChange={e => setAmount(e.target.value)} data-testid="input-deduction-amount" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">التاريخ *</label>
+                    <label className="text-sm font-medium">{t("common.date")} *</label>
                     <Input type="date" value={date} onChange={e => setDate(e.target.value)} data-testid="input-deduction-date" />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">السبب *</label>
-                  <Input placeholder="سبب الخصم" value={reason} onChange={e => setReason(e.target.value)} data-testid="input-deduction-reason" />
+                  <label className="text-sm font-medium">{t("hr.reason")} *</label>
+                  <Input placeholder={t("hr.deduction_reason_placeholder")} value={reason} onChange={e => setReason(e.target.value)} data-testid="input-deduction-reason" />
                 </div>
               </div>
               <DialogFooter>
                 <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !empId || !amount || !reason} data-testid="button-save-deduction">
-                  {createMutation.isPending ? "جارِ الحفظ..." : "حفظ الخصم"}
+                  {createMutation.isPending ? t("common.saving") : t("common.save")}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -1072,28 +1082,28 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead>الموظف</TableHead>
-              <TableHead>المبلغ</TableHead>
-              <TableHead>السبب</TableHead>
-              <TableHead>التاريخ</TableHead>
-              <TableHead>الحالة</TableHead>
-              <TableHead>أُنشئ بواسطة</TableHead>
+              <TableHead>{t("common.employee")}</TableHead>
+              <TableHead>{t("common.amount")}</TableHead>
+              <TableHead>{t("hr.reason")}</TableHead>
+              <TableHead>{t("common.date")}</TableHead>
+              <TableHead>{t("common.status")}</TableHead>
+              <TableHead>{t("hr.created_by")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {deductions.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">لا توجد خصومات مسجلة</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t("hr.no_deductions")}</TableCell></TableRow>
             ) : deductions.map((d: any) => (
               <TableRow key={d.id} data-testid={`row-deduction-${d.id}`}>
                 <TableCell className="font-medium">{d.employee_name}</TableCell>
-                <TableCell className="font-bold text-red-600">{fmt(d.amount)} ر.ع</TableCell>
+                <TableCell className="font-bold text-red-600">{fmt(d.amount)} {t("common.omr")}</TableCell>
                 <TableCell className="text-sm">{d.reason}</TableCell>
                 <TableCell className="text-sm">{d.date}</TableCell>
                 <TableCell>
                   {d.applied_in_payroll_id ? (
-                    <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">مُطبّق</Badge>
+                    <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">{t("hr.applied")}</Badge>
                   ) : (
-                    <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">غير مُطبّق</Badge>
+                    <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">{t("hr.not_applied")}</Badge>
                   )}
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">{d.created_by_name || "—"}</TableCell>
@@ -1107,6 +1117,7 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
 }
 
 function PerformanceTab({ usersList, branchMap, branchesList }: any) {
+  const { t } = useI18n();
   const [selectedBranch, setSelectedBranch] = useState("__all__");
   const [from, setFrom] = useState(monthAgoStr());
   const [to, setTo] = useState(todayStr());
@@ -1120,19 +1131,19 @@ function PerformanceTab({ usersList, branchMap, branchesList }: any) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
-          <label className="text-xs font-medium">من</label>
+          <label className="text-xs font-medium">{t("reports.from")}</label>
           <Input type="date" className="w-40" value={from} onChange={e => setFrom(e.target.value)} />
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-medium">إلى</label>
+          <label className="text-xs font-medium">{t("reports.to")}</label>
           <Input type="date" className="w-40" value={to} onChange={e => setTo(e.target.value)} />
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-medium">الفرع</label>
+          <label className="text-xs font-medium">{t("common.branch")}</label>
           <Select value={selectedBranch} onValueChange={setSelectedBranch}>
-            <SelectTrigger className="w-48"><SelectValue placeholder="كل الفروع" /></SelectTrigger>
+            <SelectTrigger className="w-48"><SelectValue placeholder={t("common.all_branches")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">كل الفروع</SelectItem>
+              <SelectItem value="__all__">{t("common.all_branches")}</SelectItem>
               {branchesList.map((b: any) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -1142,17 +1153,17 @@ function PerformanceTab({ usersList, branchMap, branchesList }: any) {
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead>الموظف</TableHead>
-              <TableHead>عدد المبيعات</TableHead>
-              <TableHead>إجمالي المبيعات</TableHead>
-              <TableHead>التكلفة</TableHead>
-              <TableHead>الربح</TableHead>
-              <TableHead>الهامش %</TableHead>
+              <TableHead>{t("hr.table_employee")}</TableHead>
+              <TableHead>{t("hr.table_orders_count")}</TableHead>
+              <TableHead>{t("hr.table_total_sales")}</TableHead>
+              <TableHead>{t("hr.table_cogs")}</TableHead>
+              <TableHead>{t("hr.table_profit")}</TableHead>
+              <TableHead>{t("hr.table_margin")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {empReport.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">لا توجد بيانات</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t("common.no_data")}</TableCell></TableRow>
             ) : empReport.map((e: any, i: number) => (
               <TableRow key={i}>
                 <TableCell className="font-medium">{e.name || e.cashier_name || "—"}</TableCell>
