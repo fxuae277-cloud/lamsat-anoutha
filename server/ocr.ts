@@ -3,66 +3,79 @@ import { promisify } from "util";
 import path from "path";
 import fs from "fs/promises";
 import sharp from "sharp";
+import crypto from "crypto";
 
 const execFileP = promisify(execFile);
 
-export interface OcrInvoiceLine {
-  lineNo: number;
-  description: string;
-  productCode: string;
+const UPLOADS_ORIGINAL = path.resolve("uploads/original");
+const UPLOADS_PROCESSED = path.resolve("uploads/processed");
+
+export interface OcrParsedItem {
+  code: string;
   color: string;
   size: string;
   qty: number;
-  price: number;
+  unitCost: number;
   amount: number;
 }
 
-export interface OcrInvoiceResult {
-  rawText: string;
-  lines: OcrInvoiceLine[];
-  invoiceNumber: string | null;
-  invoiceDate: string | null;
-  totalAmount: number | null;
+export interface OcrParseResult {
+  ok: true;
+  parsed: {
+    items: OcrParsedItem[];
+    invoiceNo: string | null;
+    date: string | null;
+    totalQty: number;
+    totalAmount: number;
+    rawText: string;
+  };
 }
 
-async function preprocessVariant(inputPath: string, variant: string): Promise<string> {
-  const dir = path.dirname(inputPath);
-  const baseName = path.basename(inputPath, path.extname(inputPath));
-  const outputPath = path.join(dir, `${baseName}_${variant}_${Date.now()}.png`);
+export interface OcrError {
+  ok: false;
+  stage: "upload" | "preprocess" | "ocr" | "parse";
+  error: string;
+}
 
-  const img = sharp(inputPath);
-  const metadata = await img.metadata();
+export type OcrResult = OcrParseResult | OcrError;
+
+async function ensureDirs() {
+  await fs.mkdir(UPLOADS_ORIGINAL, { recursive: true });
+  await fs.mkdir(UPLOADS_PROCESSED, { recursive: true });
+}
+
+export function generateFileId(): string {
+  return crypto.randomUUID();
+}
+
+export async function saveUploadedFile(fileBuffer: Buffer, originalName: string): Promise<{ fileId: string; filePath: string }> {
+  await ensureDirs();
+  const fileId = generateFileId();
+  const ext = path.extname(originalName).toLowerCase() || ".png";
+  const filePath = path.join(UPLOADS_ORIGINAL, `${fileId}${ext}`);
+  await fs.writeFile(filePath, fileBuffer);
+  return { fileId, filePath };
+}
+
+async function preprocessImage(inputPath: string, fileId: string, variant: string): Promise<string> {
+  const outputPath = path.join(UPLOADS_PROCESSED, `${fileId}_${variant}_${Date.now()}.png`);
+
+  if (path.resolve(inputPath) === path.resolve(outputPath)) {
+    throw new Error("Input and output paths must differ");
+  }
 
   let pipeline = sharp(inputPath);
+  const metadata = await sharp(inputPath).metadata();
 
   if (variant === "clean") {
-    pipeline = pipeline
-      .greyscale()
-      .normalize()
-      .sharpen({ sigma: 1.0 })
-      .png();
+    pipeline = pipeline.greyscale().normalize().sharpen({ sigma: 1.0 }).png();
   } else if (variant === "contrast") {
-    pipeline = pipeline
-      .greyscale()
-      .normalize()
-      .linear(1.5, -30)
-      .sharpen({ sigma: 1.2 })
-      .png();
+    pipeline = pipeline.greyscale().normalize().linear(1.5, -30).sharpen({ sigma: 1.2 }).png();
   } else if (variant === "threshold") {
-    pipeline = pipeline
-      .greyscale()
-      .normalize()
-      .sharpen({ sigma: 1.5 })
-      .threshold(160)
-      .png();
+    pipeline = pipeline.greyscale().normalize().sharpen({ sigma: 1.5 }).threshold(160).png();
   } else if (variant === "upscale") {
     const w = metadata.width || 1000;
-    pipeline = pipeline
-      .resize({ width: Math.min(w * 2, 4000) })
-      .greyscale()
-      .normalize()
-      .sharpen({ sigma: 1.2 })
-      .png();
+    pipeline = pipeline.resize({ width: Math.min(w * 2, 4000) }).greyscale().normalize().sharpen({ sigma: 1.2 }).png();
   }
 
   await pipeline.toFile(outputPath);
@@ -72,11 +85,7 @@ async function preprocessVariant(inputPath: string, variant: string): Promise<st
 async function runTesseract(imagePath: string, lang: string = "eng+ara", psm: string = "6"): Promise<string> {
   try {
     const { stdout } = await execFileP("tesseract", [
-      imagePath,
-      "stdout",
-      "-l", lang,
-      "--psm", psm,
-      "--oem", "3",
+      imagePath, "stdout", "-l", lang, "--psm", psm, "--oem", "3",
     ], { maxBuffer: 10 * 1024 * 1024, timeout: 30000 });
     return stdout;
   } catch (err: any) {
@@ -121,21 +130,6 @@ function parseInvoiceDate(text: string): string | null {
   return null;
 }
 
-function parseTotalAmount(text: string): number | null {
-  const patterns = [
-    /(?:Total|TOTAL|الإجمالي|المجموع|Grand\s*Total)[:\s]*([0-9,]+\.?\d*)/i,
-    /(?:AMOUNT|Amount|Net)[:\s]*([0-9,]+\.?\d*)\s*$/im,
-  ];
-  for (const p of patterns) {
-    const m = text.match(p);
-    if (m) {
-      const val = parseFloat(m[1].replace(/,/g, ""));
-      if (!isNaN(val) && val > 0) return val;
-    }
-  }
-  return null;
-}
-
 const COLOR_KEYWORDS = [
   "BLACK", "WHITE", "RED", "BLUE", "GREEN", "YELLOW", "PINK", "PURPLE",
   "ORANGE", "BROWN", "GREY", "GRAY", "SILVER", "GOLD", "MAROON", "NAVY",
@@ -150,11 +144,9 @@ const COLOR_KEYWORDS = [
 function fuzzyMatchColor(word: string): string {
   const upper = word.toUpperCase().replace(/[^A-Z\u0600-\u06FF]/g, "");
   if (upper.length < 3) return "";
-
   for (const c of COLOR_KEYWORDS) {
     if (c.toUpperCase() === upper) return c;
   }
-
   for (const c of COLOR_KEYWORDS) {
     const cu = c.toUpperCase();
     if (cu.length >= 4 && upper.length >= 4) {
@@ -169,11 +161,11 @@ function fuzzyMatchColor(word: string): string {
   return "";
 }
 
-function parseDescription(desc: string): { productCode: string; color: string; size: string } {
+function parseItemDescription(desc: string): { code: string; color: string; size: string } {
   const parts = desc.trim().split(/\s+/);
-  if (parts.length === 0) return { productCode: desc, color: "", size: "" };
+  if (parts.length === 0) return { code: desc, color: "", size: "" };
 
-  const productCode = parts[0];
+  const code = parts[0];
   let color = "";
   let size = "";
 
@@ -191,13 +183,12 @@ function parseDescription(desc: string): { productCode: string; color: string; s
     color = parts[1];
   }
 
-  return { productCode, color, size };
+  return { code, color, size };
 }
 
-function extractTableLines(text: string): OcrInvoiceLine[] {
-  const lines: OcrInvoiceLine[] = [];
+function extractItems(text: string): OcrParsedItem[] {
+  const items: OcrParsedItem[] = [];
   const textLines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
-  let lineNo = 0;
 
   const skipPatterns = /^(total|subtotal|الإجمالي|المجموع|amount|header|no\s+desc|sr|s\.?n|item|description|qty|price|unit|الصنف|الكمية|السعر|الوصف|البيان|#)/i;
 
@@ -221,38 +212,31 @@ function extractTableLines(text: string): OcrInvoiceLine[] {
       }
 
       if (numbers.length >= 2) {
-        lineNo++;
-        const description = texts.join(" ") || `Item ${lineNo}`;
-        const { productCode, color, size } = parseDescription(description);
+        const description = texts.join(" ") || `Item ${items.length + 1}`;
+        const { code, color, size } = parseItemDescription(description);
 
-        let qty: number, price: number, amount: number;
-
+        let qty: number, unitCost: number, amount: number;
         if (numbers.length >= 3) {
           qty = Math.round(numbers[numbers.length - 3]);
-          price = numbers[numbers.length - 2];
+          unitCost = numbers[numbers.length - 2];
           amount = numbers[numbers.length - 1];
-
-          if (Math.abs(qty * price - amount) > amount * 0.2 && numbers.length >= 4) {
+          if (Math.abs(qty * unitCost - amount) > amount * 0.2 && numbers.length >= 4) {
             qty = Math.round(numbers[numbers.length - 4]);
-            price = numbers[numbers.length - 2];
+            unitCost = numbers[numbers.length - 2];
             amount = numbers[numbers.length - 1];
           }
         } else {
           qty = Math.round(numbers[0]);
-          price = numbers[1];
-          amount = qty * price;
+          unitCost = numbers[1];
+          amount = qty * unitCost;
         }
 
-        if (qty > 0 && qty < 100000 && (price > 0 || amount > 0)) {
-          lines.push({
-            lineNo,
-            description,
-            productCode,
-            color,
-            size,
+        if (qty > 0 && qty < 100000 && (unitCost > 0 || amount > 0)) {
+          items.push({
+            code, color, size,
             qty,
-            price: price || (amount / qty),
-            amount: amount || (price * qty),
+            unitCost: unitCost || (amount / qty),
+            amount: amount || (unitCost * qty),
           });
         }
       }
@@ -263,29 +247,22 @@ function extractTableLines(text: string): OcrInvoiceLine[] {
       /^(\d+)\s+(.+?)\s+(\d+)\s+(?:PCS|pcs|Pcs|قطعة)?\s*(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$/,
       /^(\d+)\s+(.+?)\s+(\d+)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$/,
       /^(\d+)[.\s]+(.+?)\s{2,}(\d+)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$/,
-      /^(\d+)\s+(.+?)\s+(\d+)\s+\d+\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$/,
     ];
 
     for (const pattern of tablePatterns) {
       const m = line.match(pattern);
       if (m) {
-        lineNo++;
         const description = m[2].trim();
         const qty = parseInt(m[3]) || 0;
-        const price = parseFloat(m[4]) || 0;
+        const unitCost = parseFloat(m[4]) || 0;
         const amount = parseFloat(m[5]) || 0;
-        const { productCode, color, size } = parseDescription(description);
+        const { code, color, size } = parseItemDescription(description);
 
-        if (qty > 0 && (price > 0 || amount > 0)) {
-          lines.push({
-            lineNo,
-            description,
-            productCode,
-            color,
-            size,
-            qty,
-            price: price || (amount / qty),
-            amount: amount || (price * qty),
+        if (qty > 0 && (unitCost > 0 || amount > 0)) {
+          items.push({
+            code, color, size, qty,
+            unitCost: unitCost || (amount / qty),
+            amount: amount || (unitCost * qty),
           });
         }
         break;
@@ -293,86 +270,75 @@ function extractTableLines(text: string): OcrInvoiceLine[] {
     }
   }
 
-  if (lines.length === 0) {
-    lineNo = 0;
+  if (items.length === 0) {
     for (const line of textLines) {
       if (skipPatterns.test(line.trim())) continue;
       const m = line.match(/(.+?)\s+(\d+)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$/);
       if (m) {
         const description = m[1].trim();
         if (description.length < 2) continue;
-        lineNo++;
         const qty = parseInt(m[2]) || 0;
-        const price = parseFloat(m[3]) || 0;
+        const unitCost = parseFloat(m[3]) || 0;
         const amount = parseFloat(m[4]) || 0;
-        const { productCode, color, size } = parseDescription(description);
+        const { code, color, size } = parseItemDescription(description);
 
-        if (qty > 0 && price > 0) {
-          lines.push({
-            lineNo,
-            description,
-            productCode,
-            color,
-            size,
-            qty,
-            price,
-            amount: amount || (price * qty),
+        if (qty > 0 && unitCost > 0) {
+          items.push({
+            code, color, size, qty, unitCost,
+            amount: amount || (unitCost * qty),
           });
         }
       }
     }
   }
 
-  if (lines.length === 0) {
-    lineNo = 0;
-    const allNumbers: Array<{ line: string; nums: number[] }> = [];
+  if (items.length === 0) {
     for (const line of textLines) {
       if (skipPatterns.test(line.trim())) continue;
       const nums = line.match(/\d+(?:\.\d+)?/g);
       if (nums && nums.length >= 2) {
-        allNumbers.push({ line, nums: nums.map(Number) });
-      }
-    }
-
-    for (const { line, nums } of allNumbers) {
-      if (nums.length >= 2) {
-        lineNo++;
+        const numArr = nums.map(Number);
         const textPart = line.replace(/[\d.]+/g, " ").replace(/[|│\[\]]/g, " ").trim();
-        const description = textPart.length >= 2 ? textPart : `Item ${lineNo}`;
-        const { productCode, color, size } = parseDescription(description);
+        const description = textPart.length >= 2 ? textPart : `Item ${items.length + 1}`;
+        const { code, color, size } = parseItemDescription(description);
 
-        let qty: number, price: number, amount: number;
-        if (nums.length >= 3) {
-          qty = Math.round(nums[nums.length - 3]);
-          price = nums[nums.length - 2];
-          amount = nums[nums.length - 1];
+        let qty: number, unitCost: number, amount: number;
+        if (numArr.length >= 3) {
+          qty = Math.round(numArr[numArr.length - 3]);
+          unitCost = numArr[numArr.length - 2];
+          amount = numArr[numArr.length - 1];
         } else {
-          qty = Math.round(nums[0]);
-          price = nums[1];
-          amount = qty * price;
+          qty = Math.round(numArr[0]);
+          unitCost = numArr[1];
+          amount = qty * unitCost;
         }
 
-        if (qty > 0 && qty <= 10000 && price > 0 && price <= 100000) {
-          lines.push({
-            lineNo,
-            description,
-            productCode,
-            color,
-            size,
-            qty,
-            price: price || (amount / qty),
-            amount: amount || (price * qty),
+        if (qty > 0 && qty <= 10000 && unitCost > 0 && unitCost <= 100000) {
+          items.push({
+            code, color, size, qty,
+            unitCost: unitCost || (amount / qty),
+            amount: amount || (unitCost * qty),
           });
         }
       }
     }
   }
 
-  return lines;
+  return items;
 }
 
-async function tryOcrWithSettings(inputPath: string): Promise<{ text: string; lines: OcrInvoiceLine[] }> {
-  const variants: Array<{ preprocess: string; lang: string; psm: string }> = [
+export async function parseInvoiceFile(fileId: string): Promise<OcrResult> {
+  await ensureDirs();
+
+  const files = await fs.readdir(UPLOADS_ORIGINAL);
+  const originalFile = files.find(f => f.startsWith(fileId));
+  if (!originalFile) {
+    return { ok: false, stage: "upload", error: `File not found: ${fileId}` };
+  }
+
+  const inputPath = path.join(UPLOADS_ORIGINAL, originalFile);
+
+  const ocrVariants: Array<{ preprocess: string; lang: string; psm: string }> = [
     { preprocess: "clean", lang: "eng+ara", psm: "6" },
     { preprocess: "upscale", lang: "eng+ara", psm: "6" },
     { preprocess: "contrast", lang: "eng", psm: "6" },
@@ -381,59 +347,59 @@ async function tryOcrWithSettings(inputPath: string): Promise<{ text: string; li
   ];
 
   let bestText = "";
-  let bestLines: OcrInvoiceLine[] = [];
+  let bestItems: OcrParsedItem[] = [];
 
-  for (const v of variants) {
+  for (const v of ocrVariants) {
     let processedPath = "";
     try {
-      processedPath = await preprocessVariant(inputPath, v.preprocess);
+      processedPath = await preprocessImage(inputPath, fileId, v.preprocess);
       const text = await runTesseract(processedPath, v.lang, v.psm);
-      const lines = extractTableLines(text);
+      const parsedItems = extractItems(text);
 
-      if (lines.length > bestLines.length) {
+      if (parsedItems.length > bestItems.length) {
         bestText = text;
-        bestLines = lines;
+        bestItems = parsedItems;
       }
-
-      if (!bestText && text.length > bestText.length) {
+      if (!bestText && text.length > 0) {
         bestText = text;
       }
-
-      if (bestLines.length >= 3) break;
-    } catch (e) {
+      if (bestItems.length >= 3) break;
+    } catch (e: any) {
+      console.error(`OCR variant ${v.preprocess}/${v.lang} failed:`, e.message);
     } finally {
       if (processedPath) await safeUnlink(processedPath);
     }
   }
 
-  if (bestLines.length === 0) {
+  if (bestItems.length === 0) {
     try {
       const rawText = await runTesseract(inputPath, "eng+ara", "6");
-      const rawLines = extractTableLines(rawText);
-      if (rawLines.length > 0) {
+      const rawItems = extractItems(rawText);
+      if (rawItems.length > 0) {
         bestText = rawText;
-        bestLines = rawLines;
+        bestItems = rawItems;
       } else if (rawText.length > bestText.length) {
         bestText = rawText;
       }
     } catch {}
   }
 
-  return { text: bestText, lines: bestLines };
-}
+  try { await safeUnlink(inputPath); } catch {}
 
-export async function processInvoiceImage(filePath: string): Promise<OcrInvoiceResult> {
-  const { text: rawText, lines } = await tryOcrWithSettings(filePath);
-
-  const invoiceNumber = parseInvoiceNumber(rawText);
-  const invoiceDate = parseInvoiceDate(rawText);
-  const totalAmount = parseTotalAmount(rawText);
+  const invoiceNo = parseInvoiceNumber(bestText);
+  const date = parseInvoiceDate(bestText);
+  const totalQty = bestItems.reduce((s, i) => s + i.qty, 0);
+  const totalAmount = bestItems.reduce((s, i) => s + i.amount, 0);
 
   return {
-    rawText,
-    lines,
-    invoiceNumber,
-    invoiceDate,
-    totalAmount,
+    ok: true,
+    parsed: {
+      items: bestItems,
+      invoiceNo,
+      date,
+      totalQty,
+      totalAmount,
+      rawText: bestText,
+    },
   };
 }

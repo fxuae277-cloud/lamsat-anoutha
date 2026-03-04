@@ -429,7 +429,12 @@
     "ocr_review_title": "Review Invoice Items",
     "ocr_create_variant": "Create Variant",
     "ocr_imported": "Items imported",
-    "ocr_drop_hint": "Drop invoice image or click to upload"
+    "ocr_drop_hint": "Drop invoice image or click to upload",
+    "ocr_uploading": "Uploading invoice image...",
+    "ocr_parsing": "Analyzing invoice with AI...",
+    "ocr_summary": "Invoice Import Summary",
+    "ocr_items_count": "Items Imported",
+    "ocr_total_qty": "Total Quantity"
   },
   "orders": {
     "title": "Social Media Orders",

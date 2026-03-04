@@ -18,20 +18,13 @@ import {
   insertPayrollRunSchema, insertEmployeeAdvanceSchema, insertEmployeeDeductionSchema,
 } from "@shared/schema";
 import { registerExportRoutes } from "./exports";
-import { processInvoiceImage } from "./ocr";
+import { saveUploadedFile, parseInvoiceFile } from "./ocr";
 
-const ocrStorage = multer.diskStorage({
-  destination: "uploads/",
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase() || ".png";
-    cb(null, `inv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`);
-  },
-});
 const upload = multer({
-  storage: ocrStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowed = [".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"];
+    const allowed = [".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".pdf"];
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, allowed.includes(ext));
   },
@@ -1867,40 +1860,30 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/ocr/invoice", requireAuth, upload.single("invoice"), async (req: any, res) => {
+  app.post("/api/purchases/:purchaseId/invoice-image", requireAuth, upload.single("file"), async (req: any, res) => {
     try {
       if (!req.file) {
-        return res.status(400).json({ message: "لم يتم رفع صورة" });
+        return res.json({ ok: false, stage: "upload", error: "لم يتم رفع صورة" });
       }
-      const result = await processInvoiceImage(req.file.path);
-
-      const matchedLines = [];
-      for (const line of result.lines) {
-        let variant = null;
-        if (line.productCode) {
-          variant = await storage.getVariantBySku(line.productCode);
-          if (!variant && line.productCode) {
-            variant = await storage.getVariantByBarcode(line.productCode);
-          }
-        }
-        matchedLines.push({
-          ...line,
-          variantId: variant?.id || null,
-          productId: variant?.productId || null,
-          variantBarcode: variant?.barcode || null,
-          matched: !!variant,
-        });
-      }
-
-      try { await fs.unlink(req.file.path); } catch {}
-
-      res.json({
-        ...result,
-        lines: matchedLines,
-      });
+      const { fileId } = await saveUploadedFile(req.file.buffer, req.file.originalname);
+      res.json({ ok: true, fileId });
     } catch (err: any) {
-      if (req.file) { try { await fs.unlink(req.file.path); } catch {} }
-      res.status(500).json({ message: err?.message ?? "فشل قراءة الفاتورة" });
+      console.error("Upload error:", err);
+      res.json({ ok: false, stage: "upload", error: err?.message ?? "فشل رفع الملف" });
+    }
+  });
+
+  app.post("/api/purchases/:purchaseId/parse-invoice", requireAuth, async (req, res) => {
+    try {
+      const { fileId } = req.body;
+      if (!fileId) {
+        return res.json({ ok: false, stage: "parse", error: "fileId مطلوب" });
+      }
+      const result = await parseInvoiceFile(fileId);
+      res.json(result);
+    } catch (err: any) {
+      console.error("Parse error:", err);
+      res.json({ ok: false, stage: "parse", error: err?.message ?? "فشل قراءة الفاتورة" });
     }
   });
 
