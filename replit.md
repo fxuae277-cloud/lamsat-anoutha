@@ -15,6 +15,7 @@ Currency: Omani Rial (OMR) | VAT: 5% | Unified pricing across branches.
 - **Auth**: express-session + connect-pg-simple (HttpOnly cookie)
 - **Export**: xlsx (Excel export)
 - **i18n**: Custom lightweight i18n system (ar/en) with JSON locale files — fully internationalized across all 19 page files
+- **Charts**: Recharts (AreaChart, BarChart, PieChart) used in Executive Dashboard
 
 ## i18n System
 - Provider: `I18nProvider` in `client/src/lib/i18n.tsx` wraps app, stores lang in localStorage

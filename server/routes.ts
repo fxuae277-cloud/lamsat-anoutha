@@ -324,46 +324,97 @@ export async function registerRoutes(
   app.get("/api/dashboard/executive", requireOwnerOrAdmin, async (req, res) => {
     try {
       const branchId = req.query.branch_id ? Number(req.query.branch_id) : null;
-      const branchFilter = branchId ? `AND branch_id = ${branchId}` : "";
-      const locBranchFilter = branchId ? `AND l.branch_id = ${branchId}` : "";
+      const from = (req.query.from as string) || new Date().toISOString().slice(0, 10);
+      const to = (req.query.to as string) || new Date().toISOString().slice(0, 10);
+      const bf = branchId ? `AND branch_id = ${branchId}` : "";
+      const sbf = branchId ? `AND s.branch_id = ${branchId}` : "";
+      const lbf = branchId ? `AND l.branch_id = ${branchId}` : "";
+      const ebf = branchId ? `AND e.branch_id = ${branchId}` : "";
 
-      const todayKpi = await pool.query(`
+      const kpiQ = await pool.query(`
         SELECT
           COALESCE(SUM(total),0) AS revenue,
           COALESCE(SUM(cogs_total),0) AS cogs,
-          COALESCE(SUM(total - cogs_total),0) AS profit,
+          COALESCE(SUM(total - cogs_total),0) AS gross_profit,
           ROUND(CASE WHEN COALESCE(SUM(total),0)=0 THEN 0
                ELSE (COALESCE(SUM(total - cogs_total),0)/SUM(total))*100 END, 2) AS margin_percent,
           ROUND(COALESCE(AVG(total),0),3) AS avg_invoice,
           COUNT(*)::int AS invoice_count
         FROM sales
-        WHERE DATE(created_at)=CURRENT_DATE ${branchFilter}
+        WHERE DATE(created_at) >= '${from}' AND DATE(created_at) <= '${to}' ${bf}
       `);
 
-      const vsYesterday = await pool.query(`
+      const expQ = await pool.query(`
         SELECT
-          COALESCE(SUM(CASE WHEN DATE(created_at)=CURRENT_DATE THEN total ELSE 0 END),0) AS today_sales,
-          COALESCE(SUM(CASE WHEN DATE(created_at)=CURRENT_DATE-1 THEN total ELSE 0 END),0) AS yesterday_sales
-        FROM sales
-        WHERE DATE(created_at) >= CURRENT_DATE-1 ${branchFilter}
+          COALESCE(SUM(amount::numeric),0) AS total_expenses,
+          COALESCE(SUM(CASE WHEN source='cash' THEN amount::numeric ELSE 0 END),0) AS cash_expenses
+        FROM expenses e
+        WHERE e.date >= '${from}' AND e.date <= '${to}' ${ebf}
       `);
 
-      const monthRes = await pool.query(`
-        SELECT
-          COALESCE(SUM(total),0) AS revenue,
-          COALESCE(SUM(total - cogs_total),0) AS profit
+      const cashSalesQ = await pool.query(`
+        SELECT COALESCE(SUM(total),0) AS cash_sales
         FROM sales
-        WHERE DATE_TRUNC('month', created_at)=DATE_TRUNC('month', CURRENT_DATE) ${branchFilter}
+        WHERE payment_method='cash' AND DATE(created_at) >= '${from}' AND DATE(created_at) <= '${to}' ${bf}
       `);
 
-      const paymentRes = await pool.query(`
-        SELECT payment_method, COALESCE(SUM(total),0) AS amount
+      const paymentQ = await pool.query(`
+        SELECT payment_method, COALESCE(SUM(total),0) AS amount, COUNT(*)::int AS cnt
         FROM sales
-        WHERE DATE(created_at)=CURRENT_DATE ${branchFilter}
+        WHERE DATE(created_at) >= '${from}' AND DATE(created_at) <= '${to}' ${bf}
         GROUP BY payment_method ORDER BY amount DESC
       `);
 
-      const topProducts = await pool.query(`
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const yd = new Date(); yd.setDate(yd.getDate() - 1);
+      const yesterdayStr = yd.toISOString().slice(0, 10);
+
+      const todayVsQ = await pool.query(`
+        SELECT
+          COALESCE(SUM(CASE WHEN DATE(created_at)='${todayStr}' THEN total ELSE 0 END),0) AS today_sales,
+          COALESCE(SUM(CASE WHEN DATE(created_at)='${todayStr}' THEN cogs_total ELSE 0 END),0) AS today_cogs,
+          COALESCE(SUM(CASE WHEN DATE(created_at)='${yesterdayStr}' THEN total ELSE 0 END),0) AS yesterday_sales,
+          COALESCE(SUM(CASE WHEN DATE(created_at)='${yesterdayStr}' THEN cogs_total ELSE 0 END),0) AS yesterday_cogs
+        FROM sales
+        WHERE DATE(created_at) >= '${yesterdayStr}' ${bf}
+      `);
+
+      const todayExpQ = await pool.query(`
+        SELECT
+          COALESCE(SUM(CASE WHEN e.date='${todayStr}' THEN amount::numeric ELSE 0 END),0) AS today_exp,
+          COALESCE(SUM(CASE WHEN e.date='${yesterdayStr}' THEN amount::numeric ELSE 0 END),0) AS yesterday_exp
+        FROM expenses e
+        WHERE e.date >= '${yesterdayStr}' AND e.date <= '${todayStr}' ${ebf}
+      `);
+
+      const timeseriesQ = await pool.query(`
+        WITH dates AS (
+          SELECT generate_series('${from}'::date, '${to}'::date, '1 day'::interval)::date AS d
+        ),
+        daily_sales AS (
+          SELECT DATE(created_at) AS d, COALESCE(SUM(total),0) AS sales, COALESCE(SUM(cogs_total),0) AS cogs
+          FROM sales
+          WHERE DATE(created_at) >= '${from}' AND DATE(created_at) <= '${to}' ${bf}
+          GROUP BY DATE(created_at)
+        ),
+        daily_exp AS (
+          SELECT e.date::date AS d, COALESCE(SUM(amount::numeric),0) AS expenses
+          FROM expenses e
+          WHERE e.date >= '${from}' AND e.date <= '${to}' ${ebf}
+          GROUP BY e.date
+        )
+        SELECT dates.d::text AS date,
+          COALESCE(ds.sales,0) AS sales,
+          COALESCE(ds.cogs,0) AS cogs,
+          COALESCE(de.expenses,0) AS expenses,
+          COALESCE(ds.sales,0) - COALESCE(ds.cogs,0) - COALESCE(de.expenses,0) AS net
+        FROM dates
+        LEFT JOIN daily_sales ds ON ds.d=dates.d
+        LEFT JOIN daily_exp de ON de.d=dates.d
+        ORDER BY dates.d
+      `);
+
+      const topProductsQ = await pool.query(`
         SELECT si.product_id, p.name,
           COALESCE(SUM(si.quantity),0)::int AS qty_sold,
           COALESCE(SUM(si.total),0) AS revenue,
@@ -372,37 +423,57 @@ export async function registerRoutes(
         FROM sale_items si
         JOIN sales s ON s.id=si.sale_id
         JOIN products p ON p.id=si.product_id
-        WHERE DATE(s.created_at)=CURRENT_DATE ${branchFilter ? branchFilter.replace("branch_id", "s.branch_id") : ""}
+        WHERE DATE(s.created_at) >= '${from}' AND DATE(s.created_at) <= '${to}' ${sbf}
         GROUP BY si.product_id, p.name
-        ORDER BY revenue DESC LIMIT 5
+        ORDER BY revenue DESC LIMIT 10
       `);
 
-      const cashiers = await pool.query(`
-        SELECT s.cashier_id, u.name AS cashier_name,
-          COUNT(DISTINCT s.id)::int AS invoices_count,
+      const branchPerfQ = await pool.query(`
+        SELECT s.branch_id, b.name AS branch_name,
           COALESCE(SUM(s.total),0) AS revenue,
           COALESCE(SUM(s.cogs_total),0) AS cogs,
-          COALESCE(SUM(s.total - s.cogs_total),0) AS profit
+          COALESCE(SUM(s.total - s.cogs_total),0) AS gross_profit,
+          COUNT(s.id)::int AS invoice_count,
+          ROUND(COALESCE(AVG(s.total),0),3) AS avg_invoice
         FROM sales s
-        LEFT JOIN users u ON u.id=s.cashier_id
-        WHERE DATE(s.created_at)=CURRENT_DATE ${branchFilter ? branchFilter.replace("branch_id", "s.branch_id") : ""}
-        GROUP BY s.cashier_id, u.name ORDER BY revenue DESC
+        JOIN branches b ON b.id=s.branch_id
+        WHERE DATE(s.created_at) >= '${from}' AND DATE(s.created_at) <= '${to}' ${sbf}
+        GROUP BY s.branch_id, b.name ORDER BY revenue DESC
       `);
 
-      const lowStock = await pool.query(`
+      const branchExpQ = await pool.query(`
+        SELECT e.branch_id, COALESCE(SUM(e.amount::numeric),0) AS expenses
+        FROM expenses e
+        WHERE e.date >= '${from}' AND e.date <= '${to}' ${ebf}
+        GROUP BY e.branch_id
+      `);
+      const branchExpMap: Record<number, number> = {};
+      branchExpQ.rows.forEach((r: any) => { branchExpMap[r.branch_id] = parseFloat(r.expenses); });
+
+      const recentExpQ = await pool.query(`
+        SELECT e.id, e.branch_id, b.name AS branch_name, e.category, e.amount, e.source, e.notes, e.date,
+          e.created_at, u.name AS created_by_name
+        FROM expenses e
+        LEFT JOIN branches b ON b.id=e.branch_id
+        LEFT JOIN users u ON u.id=e.created_by
+        WHERE e.date >= '${from}' AND e.date <= '${to}' ${ebf}
+        ORDER BY e.created_at DESC LIMIT 20
+      `);
+
+      const lowStockQ = await pool.query(`
         SELECT li.product_id, p.name,
           SUM(li.qty_on_hand)::int AS total_qty,
           MAX(li.reorder_level)::int AS reorder_level
         FROM location_inventory li
         JOIN products p ON p.id=li.product_id
         JOIN locations l ON l.id=li.location_id
-        WHERE 1=1 ${locBranchFilter}
+        WHERE 1=1 ${lbf}
         GROUP BY li.product_id, p.name
         HAVING SUM(li.qty_on_hand) <= MAX(li.reorder_level)
         ORDER BY total_qty ASC LIMIT 50
       `);
 
-      const invValue = await pool.query(`
+      const invValueQ = await pool.query(`
         WITH last_cost AS (
           SELECT DISTINCT ON (pi.product_id)
             pi.product_id, pi.unit_cost_final AS unit_cost
@@ -415,7 +486,7 @@ export async function registerRoutes(
           SELECT li.product_id, SUM(li.qty_on_hand) AS qty_on_hand
           FROM location_inventory li
           JOIN locations l ON l.id=li.location_id
-          WHERE 1=1 ${locBranchFilter}
+          WHERE 1=1 ${lbf}
           GROUP BY li.product_id
         )
         SELECT COALESCE(SUM(qty.qty_on_hand * COALESCE(last_cost.unit_cost,0)),0) AS value
@@ -423,43 +494,70 @@ export async function registerRoutes(
         LEFT JOIN last_cost ON last_cost.product_id=qty.product_id
       `);
 
-      const t = todayKpi.rows[0];
-      const vs = vsYesterday.rows[0];
-      const todaySales = parseFloat(vs.today_sales);
-      const yesterdaySales = parseFloat(vs.yesterday_sales);
-      const changePercent = yesterdaySales === 0 ? null : ((todaySales - yesterdaySales) / yesterdaySales) * 100;
+      const k = kpiQ.rows[0];
+      const ex = expQ.rows[0];
+      const grossProfit = parseFloat(k.gross_profit);
+      const totalExpenses = parseFloat(ex.total_expenses);
+      const netProfit = grossProfit - totalExpenses;
+      const cashSales = parseFloat(cashSalesQ.rows[0].cash_sales);
+      const cashExp = parseFloat(ex.cash_expenses);
+      const netCash = cashSales - cashExp;
+
+      const tv = todayVsQ.rows[0];
+      const te = todayExpQ.rows[0];
+      const todaySalesVal = parseFloat(tv.today_sales);
+      const todayCogsVal = parseFloat(tv.today_cogs);
+      const todayExpVal = parseFloat(te.today_exp);
+      const todayNet = todaySalesVal - todayCogsVal - todayExpVal;
+      const yestSalesVal = parseFloat(tv.yesterday_sales);
+      const yestCogsVal = parseFloat(tv.yesterday_cogs);
+      const yestExpVal = parseFloat(te.yesterday_exp);
+      const yestNet = yestSalesVal - yestCogsVal - yestExpVal;
 
       res.json({
-        today: {
-          revenue: parseFloat(t.revenue),
-          cogs: parseFloat(t.cogs),
-          profit: parseFloat(t.profit),
-          margin_percent: parseFloat(t.margin_percent),
-          avg_invoice: parseFloat(t.avg_invoice),
-          invoice_count: t.invoice_count,
+        kpi: {
+          revenue: parseFloat(k.revenue),
+          cogs: parseFloat(k.cogs),
+          grossProfit,
+          marginPercent: parseFloat(k.margin_percent),
+          avgInvoice: parseFloat(k.avg_invoice),
+          invoiceCount: k.invoice_count,
+          totalExpenses,
+          netProfit,
+          netCash,
+          inventoryValue: parseFloat(invValueQ.rows[0].value),
+          lowStockCount: lowStockQ.rows.length,
         },
         todayVsYesterday: {
-          today_sales: todaySales,
-          yesterday_sales: yesterdaySales,
-          change_percent: changePercent !== null ? Math.round(changePercent * 100) / 100 : null,
+          today: { sales: todaySalesVal, expenses: todayExpVal, net: todayNet },
+          yesterday: { sales: yestSalesVal, expenses: yestExpVal, net: yestNet },
         },
-        month: {
-          revenue: parseFloat(monthRes.rows[0].revenue),
-          profit: parseFloat(monthRes.rows[0].profit),
-        },
-        paymentSplit: paymentRes.rows.map(r => ({ payment_method: r.payment_method, amount: parseFloat(r.amount) })),
-        topProducts: topProducts.rows.map(r => ({
-          product_id: r.product_id, name: r.name, qty_sold: r.qty_sold,
+        paymentSplit: paymentQ.rows.map(r => ({ method: r.payment_method, amount: parseFloat(r.amount), count: r.cnt })),
+        timeseries: timeseriesQ.rows.map(r => ({
+          date: r.date, sales: parseFloat(r.sales), expenses: parseFloat(r.expenses), net: parseFloat(r.net),
+        })),
+        topProducts: topProductsQ.rows.map(r => ({
+          productId: r.product_id, name: r.name, qtySold: r.qty_sold,
           revenue: parseFloat(r.revenue), cogs: parseFloat(r.cogs), profit: parseFloat(r.profit),
         })),
-        cashiers: cashiers.rows.map(r => ({
-          cashier_id: r.cashier_id, cashier_name: r.cashier_name, invoices_count: r.invoices_count,
-          revenue: parseFloat(r.revenue), cogs: parseFloat(r.cogs), profit: parseFloat(r.profit),
+        branchPerformance: branchPerfQ.rows.map(r => {
+          const bExp = branchExpMap[r.branch_id] || 0;
+          return {
+            branchId: r.branch_id, branchName: r.branch_name,
+            revenue: parseFloat(r.revenue), cogs: parseFloat(r.cogs),
+            grossProfit: parseFloat(r.gross_profit), expenses: bExp,
+            netProfit: parseFloat(r.gross_profit) - bExp,
+            invoiceCount: r.invoice_count, avgInvoice: parseFloat(r.avg_invoice),
+          };
+        }),
+        recentExpenses: recentExpQ.rows.map(r => ({
+          id: r.id, branchName: r.branch_name, category: r.category,
+          amount: parseFloat(r.amount), source: r.source, notes: r.notes,
+          date: r.date, createdAt: r.created_at, createdByName: r.created_by_name,
         })),
-        lowStock: lowStock.rows.map(r => ({
-          product_id: r.product_id, name: r.name, total_qty: r.total_qty, reorder_level: r.reorder_level,
+        lowStock: lowStockQ.rows.map(r => ({
+          productId: r.product_id, name: r.name, totalQty: r.total_qty, reorderLevel: r.reorder_level,
         })),
-        inventoryValue: { value: parseFloat(invValue.rows[0].value) },
       });
     } catch (e: any) {
       res.status(500).json({ message: e.message || "خطأ في جلب البيانات" });
