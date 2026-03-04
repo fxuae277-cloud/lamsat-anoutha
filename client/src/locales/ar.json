@@ -365,7 +365,16 @@
     "no_orders": "لا توجد طلبات",
     "branch_label": "الفرع:",
     "delivery_label": "التسليم:",
-    "value_label": "القيمة:"
+    "value_label": "القيمة:",
+    "details": "التفاصيل",
+    "order_details": "تفاصيل الطلب",
+    "order_time": "وقت الطلب",
+    "order_items": "عناصر الطلب",
+    "total_amount": "إجمالي المبلغ",
+    "whatsapp": "واتساب",
+    "all_branches": "كل الفروع",
+    "stats_today": "طلبات اليوم",
+    "new_order_desc": "أدخل بيانات الطلب الجديد"
   },
   "customers": {
     "page_title": "العملاء",

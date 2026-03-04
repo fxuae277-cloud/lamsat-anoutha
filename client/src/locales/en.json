@@ -365,7 +365,16 @@
     "no_orders": "No orders found",
     "branch_label": "Branch:",
     "delivery_label": "Delivery:",
-    "value_label": "Value:"
+    "value_label": "Value:",
+    "details": "Details",
+    "order_details": "Order Details",
+    "order_time": "Order Time",
+    "order_items": "Order Items",
+    "total_amount": "Total Amount",
+    "whatsapp": "WhatsApp",
+    "all_branches": "All Branches",
+    "stats_today": "Today's Orders",
+    "new_order_desc": "Enter new order details"
   },
   "customers": {
     "page_title": "Customers",

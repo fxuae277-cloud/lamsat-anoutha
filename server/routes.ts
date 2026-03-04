@@ -1071,8 +1071,19 @@ export async function registerRoutes(
     res.json(await storage.getDailySalesTotal());
   });
 
-  app.get("/api/orders", requireAuth, async (_req, res) => {
-    res.json(await storage.getOrders());
+  app.get("/api/orders", requireAuth, async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    const isManager = ["owner", "admin", "manager"].includes(user.role);
+    const branchFilter = req.query.branchId ? parseInt(req.query.branchId as string) : undefined;
+    const allOrders = await storage.getOrders();
+    let filtered = allOrders;
+    if (!isManager) {
+      filtered = filtered.filter(o => o.branchId === user.branchId);
+    } else if (branchFilter) {
+      filtered = filtered.filter(o => o.branchId === branchFilter);
+    }
+    res.json(filtered);
   });
   app.get("/api/orders/:id", requireAuth, async (req, res) => {
     const order = await storage.getOrder(Number(req.params.id));
