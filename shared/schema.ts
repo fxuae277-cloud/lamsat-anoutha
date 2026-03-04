@@ -648,3 +648,17 @@ export const purchaseExtraCosts = pgTable("purchase_extra_costs", {
 export const insertPurchaseExtraCostSchema = createInsertSchema(purchaseExtraCosts).omit({ id: true });
 export type InsertPurchaseExtraCost = z.infer<typeof insertPurchaseExtraCostSchema>;
 export type PurchaseExtraCost = typeof purchaseExtraCosts.$inferSelect;
+
+export const supplierOcrTemplates = pgTable("supplier_ocr_templates", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  supplierId: integer("supplier_id").references(() => suppliers.id).notNull(),
+  invoiceNoPattern: text("invoice_no_pattern"),
+  datePattern: text("date_pattern"),
+  tableStartKeyword: text("table_start_keyword"),
+  columnOrder: text("column_order"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export const insertSupplierOcrTemplateSchema = createInsertSchema(supplierOcrTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSupplierOcrTemplate = z.infer<typeof insertSupplierOcrTemplateSchema>;
+export type SupplierOcrTemplate = typeof supplierOcrTemplates.$inferSelect;

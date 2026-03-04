@@ -43,6 +43,7 @@ import {
   stockTransferLines, type InsertStockTransferLine, type StockTransferLine,
   inventoryLedger, type InsertInventoryLedger, type InventoryLedger,
   purchaseExtraCosts, type InsertPurchaseExtraCost, type PurchaseExtraCost,
+  supplierOcrTemplates, type InsertSupplierOcrTemplate, type SupplierOcrTemplate,
   type PaymentMethod, PAYMENT_METHODS,
 } from "@shared/schema";
 
@@ -204,6 +205,10 @@ export interface IStorage {
   // Inventory Ledger
   createLedgerEntry(data: InsertInventoryLedger): Promise<InventoryLedger>;
   getInventoryLedgerEntries(filters?: { variantId?: number; locationId?: number; limit?: number }): Promise<any[]>;
+
+  // Supplier OCR Templates
+  getSupplierOcrTemplate(supplierId: number): Promise<SupplierOcrTemplate | undefined>;
+  upsertSupplierOcrTemplate(supplierId: number, data: { tableStartKeyword?: string | null; columnOrder?: string | null }): Promise<SupplierOcrTemplate>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3483,6 +3488,26 @@ export class DatabaseStorage implements IStorage {
     params.push(filters?.limit || 500);
     const result = await pool.query(query, params);
     return result.rows;
+  }
+
+  async getSupplierOcrTemplate(supplierId: number): Promise<SupplierOcrTemplate | undefined> {
+    const [row] = await db.select().from(supplierOcrTemplates).where(eq(supplierOcrTemplates.supplierId, supplierId));
+    return row;
+  }
+
+  async upsertSupplierOcrTemplate(supplierId: number, data: { tableStartKeyword?: string | null; columnOrder?: string | null }): Promise<SupplierOcrTemplate> {
+    const existing = await this.getSupplierOcrTemplate(supplierId);
+    if (existing) {
+      const [row] = await db.update(supplierOcrTemplates)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(supplierOcrTemplates.id, existing.id))
+        .returning();
+      return row;
+    }
+    const [row] = await db.insert(supplierOcrTemplates)
+      .values({ supplierId, ...data })
+      .returning();
+    return row;
   }
 }
 

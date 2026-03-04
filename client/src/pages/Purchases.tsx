@@ -258,9 +258,12 @@ function PurchasesTab() {
   const [editBarcode, setEditBarcode] = useState("");
   const [editColor, setEditColor] = useState("");
   const [editSize, setEditSize] = useState("");
-  const [ocrStage, setOcrStage] = useState<"idle" | "uploading" | "parsing" | "done">("idle");
+  const [ocrStage, setOcrStage] = useState<"idle" | "uploading" | "parsing" | "review" | "importing" | "done">("idle");
   const [ocrError, setOcrError] = useState<{ stage: string; error: string } | null>(null);
-  const [ocrSummary, setOcrSummary] = useState<{ itemCount: number; totalQty: number; totalAmount: number; invoiceNo: string | null; date: string | null } | null>(null);
+  const [ocrItems, setOcrItems] = useState<any[]>([]);
+  const [ocrValidation, setOcrValidation] = useState<any>(null);
+  const [ocrMeta, setOcrMeta] = useState<{ invoiceNo: string | null; date: string | null; totalQty: number; totalAmount: number; rawText: string } | null>(null);
+  const [showOcrRawText, setShowOcrRawText] = useState(false);
 
   const [newSupplierId, setNewSupplierId] = useState("");
   const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
@@ -494,7 +497,10 @@ function PurchasesTab() {
   async function handleOcrUpload(file: File) {
     if (!selectedInvoice) return;
     setOcrError(null);
-    setOcrSummary(null);
+    setOcrItems([]);
+    setOcrValidation(null);
+    setOcrMeta(null);
+    setShowOcrRawText(false);
 
     setOcrStage("uploading");
     let fileId: string;
@@ -506,14 +512,12 @@ function PurchasesTab() {
       if (!uploadData.ok) {
         setOcrError({ stage: uploadData.stage || "upload", error: uploadData.error || "فشل الرفع" });
         setOcrStage("idle");
-        console.error("OCR upload failed:", uploadData);
         return;
       }
       fileId = uploadData.fileId;
     } catch (err: any) {
       setOcrError({ stage: "upload", error: err.message });
       setOcrStage("idle");
-      console.error("OCR upload error:", err);
       return;
     }
 
@@ -524,11 +528,10 @@ function PurchasesTab() {
       if (!parseData.ok) {
         setOcrError({ stage: parseData.stage || "parse", error: parseData.error || "فشل القراءة" });
         setOcrStage("idle");
-        console.error("OCR parse failed:", parseData);
         return;
       }
 
-      const { items, invoiceNo, date, totalQty, totalAmount } = parseData.parsed;
+      const { items, invoiceNo, date, totalQty, totalAmount, rawText, validation } = parseData.parsed;
 
       if (!items || items.length === 0) {
         setOcrError({ stage: "parse", error: "لم يتم العثور على أصناف في الصورة" });
@@ -536,85 +539,139 @@ function PurchasesTab() {
         return;
       }
 
-      let imported = 0;
-      let errors = 0;
-      for (const item of items) {
-        if (!item.qty || item.qty <= 0) continue;
-
-        let variantId: number | null = null;
-        let productId: number | null = null;
-
-        if (item.code) {
-          try {
-            const skuRes = await fetch(`/api/variants/barcode/${encodeURIComponent(item.code)}`, { credentials: "include" });
-            if (skuRes.ok) {
-              const v = await skuRes.json();
-              variantId = v.id;
-              productId = v.productId;
-            }
-          } catch {}
-        }
-
-        if (!variantId) {
-          try {
-            const itemName = (item.code || `صنف ${imported + 1}`).substring(0, 100);
-            const qcRes = await apiRequest("POST", "/api/variants/quick-create", {
-              productName: itemName,
-              barcode: null,
-              sku: null,
-              color: item.color || null,
-              size: item.size || null,
-              price: item.unitCost || 0,
-              costDefault: item.unitCost || 0,
-            });
-            const qcData = await qcRes.json();
-            variantId = qcData.variant.id;
-            productId = qcData.product.id;
-          } catch (e) {
-            console.error("Quick create failed:", e);
-            errors++;
-            continue;
-          }
-        }
-
-        try {
-          await apiRequest("POST", `/api/purchases/${selectedInvoice}/items`, {
-            productId,
-            variantId,
-            qty: item.qty,
-            unitCostBase: item.unitCost || 0,
-          });
-          imported++;
-        } catch (e) {
-          console.error("Add item failed:", e);
-          errors++;
-        }
-      }
-
-      qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
-      qc.invalidateQueries({ queryKey: ["/api/products"] });
-
-      setOcrSummary({
-        itemCount: imported,
-        totalQty,
-        totalAmount,
-        invoiceNo,
-        date,
-      });
-      setOcrStage("done");
-
-      if (errors > 0) {
-        toast({ title: t("purchases_v2.ocr_imported"), description: `${imported} / ${items.length} (${errors} ${t("common.error")})`, variant: "destructive" });
-      } else {
-        toast({ title: t("purchases_v2.ocr_imported"), description: `${imported} ${t("purchases.items")}` });
-      }
-
-      setTimeout(() => { setOcrStage("idle"); }, 5000);
+      setOcrItems(items);
+      setOcrValidation(validation);
+      setOcrMeta({ invoiceNo, date, totalQty, totalAmount, rawText });
+      setOcrStage("review");
     } catch (err: any) {
       setOcrError({ stage: "parse", error: err.message });
       setOcrStage("idle");
-      console.error("OCR parse error:", err);
     }
+  }
+
+  function updateOcrItem(index: number, field: string, value: any) {
+    setOcrItems(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      const item = updated[index];
+      item.computedAmount = (item.qty || 0) * (item.unitCost || 0);
+      if (field === "qty" || field === "unitCost") {
+        item.amount = item.computedAmount;
+      }
+      const tolerance = 0.05;
+      item.reviewReasons = [];
+      item.needsReview = false;
+      if (item.qty <= 0) { item.reviewReasons.push("qty_zero"); item.needsReview = true; }
+      if (item.unitCost <= 0) { item.reviewReasons.push("price_zero"); item.needsReview = true; }
+      if (item.amount > 0 && Math.abs(item.computedAmount - item.amount) > item.amount * tolerance) {
+        item.reviewReasons.push("amount_mismatch"); item.needsReview = true;
+      }
+      if (!item.code || item.code.length < 1) { item.reviewReasons.push("no_description"); item.needsReview = true; }
+      return updated;
+    });
+    revalidateOcrTotals();
+  }
+
+  function removeOcrItem(index: number) {
+    setOcrItems(prev => prev.filter((_, i) => i !== index));
+    revalidateOcrTotals();
+  }
+
+  function fixOcrItem(index: number) {
+    setOcrItems(prev => {
+      const updated = [...prev];
+      const item = { ...updated[index] };
+      item.amount = item.qty * item.unitCost;
+      item.computedAmount = item.amount;
+      item.needsReview = false;
+      item.reviewReasons = [];
+      if (item.qty <= 0) { item.reviewReasons.push("qty_zero"); item.needsReview = true; }
+      if (item.unitCost <= 0) { item.reviewReasons.push("price_zero"); item.needsReview = true; }
+      if (!item.code || item.code.length < 1) { item.reviewReasons.push("no_description"); item.needsReview = true; }
+      updated[index] = item;
+      return updated;
+    });
+    revalidateOcrTotals();
+  }
+
+  function revalidateOcrTotals() {
+    setTimeout(() => {
+      setOcrValidation((prev: any) => {
+        if (!prev) return prev;
+        const actualQty = ocrItems.reduce((s, i) => s + (i.qty || 0), 0);
+        const actualAmount = ocrItems.reduce((s, i) => s + (i.amount || 0), 0);
+        const lineErrors = ocrItems.filter(i => i.needsReview).length;
+        const qtyMatch = prev.expectedTotalQty === null || Math.abs(actualQty - prev.expectedTotalQty) <= 1;
+        const amtMatch = prev.expectedTotalAmount === null || Math.abs(actualAmount - prev.expectedTotalAmount) <= prev.expectedTotalAmount * 0.05;
+        return { ...prev, lineErrors, totalQtyMatch: qtyMatch, totalAmountMatch: amtMatch, actualTotalQty: actualQty, actualTotalAmount: actualAmount, allPass: lineErrors === 0 && qtyMatch && amtMatch };
+      });
+    }, 0);
+  }
+
+  const ocrAllValid = ocrValidation?.allPass || (ocrItems.length > 0 && ocrItems.every((i: any) => !i.needsReview));
+
+  async function importOcrItems() {
+    if (!selectedInvoice || ocrItems.length === 0) return;
+    setOcrStage("importing");
+    let imported = 0;
+    let errors = 0;
+
+    for (const item of ocrItems) {
+      if (!item.qty || item.qty <= 0) continue;
+
+      let variantId: number | null = null;
+      let productId: number | null = null;
+
+      if (item.code) {
+        try {
+          const skuRes = await fetch(`/api/variants/barcode/${encodeURIComponent(item.code)}`, { credentials: "include" });
+          if (skuRes.ok) {
+            const v = await skuRes.json();
+            variantId = v.id;
+            productId = v.productId;
+          }
+        } catch {}
+      }
+
+      if (!variantId) {
+        try {
+          const itemName = (item.code || `صنف ${imported + 1}`).substring(0, 100);
+          const qcRes = await apiRequest("POST", "/api/variants/quick-create", {
+            productName: itemName,
+            barcode: null, sku: null,
+            color: item.color || null,
+            size: item.size || null,
+            price: item.unitCost || 0,
+            costDefault: item.unitCost || 0,
+          });
+          const qcData = await qcRes.json();
+          variantId = qcData.variant.id;
+          productId = qcData.product.id;
+        } catch (e) {
+          errors++;
+          continue;
+        }
+      }
+
+      try {
+        await apiRequest("POST", `/api/purchases/${selectedInvoice}/items`, {
+          productId, variantId,
+          qty: item.qty,
+          unitCostBase: item.unitCost || 0,
+        });
+        imported++;
+      } catch { errors++; }
+    }
+
+    qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
+    qc.invalidateQueries({ queryKey: ["/api/products"] });
+    setOcrStage("done");
+    toast({
+      title: t("purchases_v2.ocr_imported"),
+      description: `${imported} ${t("purchases.items")}` + (errors > 0 ? ` (${errors} ${t("common.error")})` : ""),
+      variant: errors > 0 && imported === 0 ? "destructive" : "default",
+    });
+    setTimeout(() => { setOcrStage("idle"); setOcrItems([]); setOcrValidation(null); setOcrMeta(null); }, 3000);
   }
 
   const items = invoiceDetail?.items || [];
@@ -745,7 +802,7 @@ function PurchasesTab() {
           </Card>
         )}
 
-        {ocrStage !== "idle" && ocrStage !== "done" && (
+        {(ocrStage === "uploading" || ocrStage === "parsing" || ocrStage === "importing") && (
           <Card className="border-blue-200 bg-blue-50">
             <CardContent className="py-4">
               <div className="flex items-center gap-3">
@@ -754,6 +811,7 @@ function PurchasesTab() {
                   <p className="font-medium text-blue-800">
                     {ocrStage === "uploading" && t("purchases_v2.ocr_uploading")}
                     {ocrStage === "parsing" && t("purchases_v2.ocr_parsing")}
+                    {ocrStage === "importing" && t("purchases_v2.ocr_importing")}
                   </p>
                 </div>
               </div>
@@ -771,45 +829,6 @@ function PurchasesTab() {
                   <p className="text-sm text-red-700 mt-1">{ocrError.error}</p>
                 </div>
                 <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => setOcrError(null)}>
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {ocrSummary && (
-          <Card className="border-green-300 bg-green-50">
-            <CardContent className="py-4">
-              <div className="flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="font-medium text-green-800">{t("purchases_v2.ocr_summary")}</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
-                    <div>
-                      <p className="text-xs text-green-600">{t("purchases_v2.ocr_items_count")}</p>
-                      <p className="font-bold text-green-800">{ocrSummary.itemCount}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-green-600">{t("purchases_v2.ocr_total_qty")}</p>
-                      <p className="font-bold text-green-800">{ocrSummary.totalQty}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-green-600">{t("purchases.table_total")}</p>
-                      <p className="font-bold text-green-800">{omr(ocrSummary.totalAmount)}</p>
-                    </div>
-                    {ocrSummary.invoiceNo && (
-                      <div>
-                        <p className="text-xs text-green-600">{t("purchases.invoice_number")}</p>
-                        <p className="font-bold text-green-800">{ocrSummary.invoiceNo}</p>
-                      </div>
-                    )}
-                  </div>
-                  {ocrSummary.date && (
-                    <p className="text-xs text-green-600 mt-1">{t("purchases.date")}: {ocrSummary.date}</p>
-                  )}
-                </div>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-green-500" onClick={() => setOcrSummary(null)}>
                   <X className="w-4 h-4" />
                 </Button>
               </div>
@@ -1165,6 +1184,199 @@ function PurchasesTab() {
             <Button onClick={() => quickSupplierMutation.mutate()} disabled={!quickName.trim() || quickSupplierMutation.isPending}>
               {quickSupplierMutation.isPending ? t("common.loading") : t("common.add")}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={ocrStage === "review"} onOpenChange={(open) => { if (!open) { setOcrStage("idle"); setOcrItems([]); setOcrValidation(null); setOcrMeta(null); } }}>
+        <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              {t("purchases_v2.ocr_review_title")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("purchases_v2.ocr_review_desc")}
+            </DialogDescription>
+          </DialogHeader>
+
+          {ocrMeta && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-muted/50 rounded-lg border">
+              {ocrMeta.invoiceNo && (
+                <div>
+                  <p className="text-xs text-muted-foreground">{t("purchases.invoice_number")}</p>
+                  <p className="font-bold">{ocrMeta.invoiceNo}</p>
+                </div>
+              )}
+              {ocrMeta.date && (
+                <div>
+                  <p className="text-xs text-muted-foreground">{t("purchases.date")}</p>
+                  <p className="font-bold">{ocrMeta.date}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-xs text-muted-foreground">{t("purchases_v2.ocr_items_count")}</p>
+                <p className="font-bold">{ocrItems.length}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{t("purchases_v2.ocr_total_qty")}</p>
+                <p className="font-bold">{ocrItems.reduce((s: number, i: any) => s + (i.qty || 0), 0)}</p>
+              </div>
+            </div>
+          )}
+
+          {ocrValidation && (
+            <div className={`p-3 rounded-lg border flex items-start gap-3 ${ocrValidation.allPass ? "bg-green-50 border-green-300" : "bg-red-50 border-red-300"}`}>
+              {ocrValidation.allPass ? (
+                <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+              ) : (
+                <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+              )}
+              <div className="flex-1 text-sm">
+                <p className={`font-medium ${ocrValidation.allPass ? "text-green-800" : "text-red-800"}`}>
+                  {ocrValidation.allPass ? t("purchases_v2.ocr_validation_pass") : t("purchases_v2.ocr_validation_fail")}
+                </p>
+                <div className="flex flex-wrap gap-3 mt-1">
+                  {ocrValidation.lineErrors > 0 && (
+                    <span className="text-red-700">{t("purchases_v2.ocr_line_errors")}: {ocrValidation.lineErrors}</span>
+                  )}
+                  {!ocrValidation.totalQtyMatch && ocrValidation.expectedTotalQty !== null && (
+                    <span className="text-red-700">
+                      {t("purchases_v2.ocr_qty_mismatch")}: {ocrValidation.actualTotalQty} ≠ {ocrValidation.expectedTotalQty}
+                    </span>
+                  )}
+                  {!ocrValidation.totalAmountMatch && ocrValidation.expectedTotalAmount !== null && (
+                    <span className="text-red-700">
+                      {t("purchases_v2.ocr_amount_mismatch")}: {omr(ocrValidation.actualTotalAmount)} ≠ {omr(ocrValidation.expectedTotalAmount)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="border rounded-lg overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead className="w-8">#</TableHead>
+                  <TableHead className="min-w-[140px]">{t("purchases_v2.ocr_description")}</TableHead>
+                  <TableHead className="min-w-[80px]">{t("products.variant_color")}</TableHead>
+                  <TableHead className="min-w-[60px]">{t("products.variant_size")}</TableHead>
+                  <TableHead className="min-w-[70px]">{t("purchases.table_qty")}</TableHead>
+                  <TableHead className="min-w-[90px]">{t("purchases.table_unit_price")}</TableHead>
+                  <TableHead className="min-w-[90px]">{t("purchases.table_total")}</TableHead>
+                  <TableHead className="min-w-[80px]">{t("common.status")}</TableHead>
+                  <TableHead className="w-20"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {ocrItems.map((item: any, idx: number) => (
+                  <TableRow key={idx} className={item.needsReview ? "bg-red-50" : "bg-green-50/30"} data-testid={`row-ocr-item-${idx}`}>
+                    <TableCell className="text-xs text-muted-foreground font-mono">{idx + 1}</TableCell>
+                    <TableCell>
+                      <Input value={item.code || ""} onChange={e => updateOcrItem(idx, "code", e.target.value)}
+                        className={`h-8 text-sm ${item.reviewReasons?.includes("no_description") ? "border-red-400" : ""}`}
+                        data-testid={`input-ocr-code-${idx}`} />
+                    </TableCell>
+                    <TableCell>
+                      <Input value={item.color || ""} onChange={e => updateOcrItem(idx, "color", e.target.value)}
+                        className="h-8 text-sm" data-testid={`input-ocr-color-${idx}`} />
+                    </TableCell>
+                    <TableCell>
+                      <Input value={item.size || ""} onChange={e => updateOcrItem(idx, "size", e.target.value)}
+                        className="h-8 text-sm" data-testid={`input-ocr-size-${idx}`} />
+                    </TableCell>
+                    <TableCell>
+                      <Input type="number" min={0} value={item.qty || 0}
+                        onChange={e => updateOcrItem(idx, "qty", parseInt(e.target.value) || 0)}
+                        className={`h-8 text-sm w-20 font-mono ${item.reviewReasons?.includes("qty_zero") ? "border-red-400" : ""}`}
+                        data-testid={`input-ocr-qty-${idx}`} />
+                    </TableCell>
+                    <TableCell>
+                      <Input type="number" min={0} step="0.001" value={item.unitCost || 0}
+                        onChange={e => updateOcrItem(idx, "unitCost", parseFloat(e.target.value) || 0)}
+                        className={`h-8 text-sm w-24 font-mono ${item.reviewReasons?.includes("price_zero") ? "border-red-400" : ""}`}
+                        data-testid={`input-ocr-price-${idx}`} />
+                    </TableCell>
+                    <TableCell>
+                      <span className={`font-mono text-sm ${item.reviewReasons?.includes("amount_mismatch") ? "text-red-600 font-bold" : ""}`}>
+                        {omr(item.amount || 0)}
+                        {item.reviewReasons?.includes("amount_mismatch") && (
+                          <span className="text-xs block text-red-500">≠ {omr(item.computedAmount)}</span>
+                        )}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {item.needsReview ? (
+                        <div className="space-y-0.5">
+                          {item.reviewReasons?.map((r: string, ri: number) => (
+                            <Badge key={ri} variant="destructive" className="text-[10px] block w-fit">
+                              {t(`purchases_v2.ocr_err_${r}`) || r}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <Badge className="bg-green-600 text-white text-[10px]">{t("purchases_v2.ocr_status_ok")}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        {item.needsReview && (
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-blue-600"
+                            onClick={() => fixOcrItem(idx)} data-testid={`button-ocr-fix-${idx}`}
+                            title={t("purchases_v2.ocr_fix")}>
+                            <FileCheck className="w-4 h-4" />
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500"
+                          onClick={() => removeOcrItem(idx)} data-testid={`button-ocr-remove-${idx}`}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="font-bold bg-muted/30 border-t-2">
+                  <TableCell></TableCell>
+                  <TableCell>{t("common.total")}</TableCell>
+                  <TableCell></TableCell>
+                  <TableCell></TableCell>
+                  <TableCell className="font-mono">{ocrItems.reduce((s: number, i: any) => s + (i.qty || 0), 0)}</TableCell>
+                  <TableCell></TableCell>
+                  <TableCell className="font-mono">{omr(ocrItems.reduce((s: number, i: any) => s + (i.amount || 0), 0))}</TableCell>
+                  <TableCell></TableCell>
+                  <TableCell></TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowOcrRawText(!showOcrRawText)}>
+              {t("purchases_v2.ocr_raw_text")}
+            </Button>
+          </div>
+
+          {showOcrRawText && (
+            <pre className="bg-muted p-4 rounded-lg text-xs max-h-48 overflow-auto whitespace-pre-wrap font-mono" dir="ltr">
+              {ocrMeta?.rawText || ""}
+            </pre>
+          )}
+
+          <DialogFooter className="flex gap-2 sm:justify-between">
+            <Button variant="outline" onClick={() => { setOcrStage("idle"); setOcrItems([]); setOcrValidation(null); setOcrMeta(null); }}>
+              {t("common.cancel")}
+            </Button>
+            <div className="flex gap-2">
+              {!ocrAllValid && (
+                <p className="text-sm text-red-600 self-center">{t("purchases_v2.ocr_fix_before_import")}</p>
+              )}
+              <Button onClick={importOcrItems} disabled={!ocrAllValid || ocrItems.length === 0}
+                className="bg-green-600 hover:bg-green-700 gap-2" data-testid="button-ocr-confirm-import">
+                <FileCheck className="w-4 h-4" /> {t("purchases_v2.ocr_confirm_import")} ({ocrItems.length})
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

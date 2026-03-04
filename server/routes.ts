@@ -1910,7 +1910,37 @@ export async function registerRoutes(
       if (!fileId) {
         return res.json({ ok: false, stage: "parse", error: "fileId مطلوب" });
       }
-      const result = await parseInvoiceFile(fileId);
+
+      const purchaseId = Number(req.params.purchaseId);
+      const invoice = await storage.getPurchaseInvoice(purchaseId);
+      let template: { tableStartKeyword?: string | null; columnOrder?: string | null } | undefined;
+
+      if (invoice?.supplierId) {
+        const saved = await storage.getSupplierOcrTemplate(invoice.supplierId);
+        if (saved) {
+          template = {
+            tableStartKeyword: saved.tableStartKeyword,
+            columnOrder: saved.columnOrder,
+          };
+        }
+      }
+
+      const result = await parseInvoiceFile(fileId, template);
+
+      if (result.ok && result.parsed.detectedTemplate && invoice?.supplierId) {
+        const dt = result.parsed.detectedTemplate;
+        if (dt.tableStartKeyword || dt.columnOrder) {
+          try {
+            await storage.upsertSupplierOcrTemplate(invoice.supplierId, {
+              tableStartKeyword: dt.tableStartKeyword,
+              columnOrder: dt.columnOrder,
+            });
+          } catch (e) {
+            console.error("Failed to save OCR template:", e);
+          }
+        }
+      }
+
       res.json(result);
     } catch (err: any) {
       console.error("Parse error:", err);

@@ -21,7 +21,7 @@ Currency: Omani Rial (OMR) | VAT: 5% | Unified pricing across branches.
 - Provider: `I18nProvider` in `client/src/lib/i18n.tsx` wraps app, stores lang in localStorage
 - Hook: `useI18n()` returns `{ t, lang, setLang, dir }` — `t("key.path")` resolves nested JSON keys
 - Locale files: `client/src/locales/en.json` and `ar.json` — 1,434 keys each, perfectly matched
-- Key namespaces: `app`, `nav`, `sidebar`, `settings`, `login`, `dashboard`, `products`, `orders`, `pos`, `hr`, `invoices`, `purchases`, `reports`, `inventory`, `inventory_page`, `stock_control`, `returns`, `expenses`, `expenses_page`, `finance`, `finance_page`, `audit_log`, `operations`, `executive`, `executive_plus`, `common`, `payment_methods`, `status_labels`, `day_names`, `month_names`
+- Key namespaces: `app`, `nav`, `sidebar`, `settings`, `login`, `dashboard`, `products`, `orders`, `pos`, `hr`, `invoices`, `purchases`, `purchases_v2`, `reports`, `inventory`, `inventory_page`, `stock_control`, `returns`, `expenses`, `expenses_page`, `finance`, `finance_page`, `audit_log`, `operations`, `executive`, `executive_plus`, `common`, `payment_methods`, `status_labels`, `day_names`, `month_names`, `inv_balances`, `transfers`, `ledger`
 - Date formatting uses `lang === "ar" ? "ar-OM" : "en-US"` pattern throughout
 - All pages import `useI18n` and use `t()` for all user-facing strings
 - Language switcher in Settings page persists to localStorage
@@ -97,8 +97,9 @@ shared/
 - **audit_log** (action, entity_type, entity_id, branch_id, user_id, user_name, details, old_value, new_value, ip_address)
 - **cash_ledger** (date, branch_id, shift_id, type, amount_in, amount_out, category, note, created_by)
 - **bank_ledger** (date, branch_id, shift_id, method[card/bank_transfer], amount_in, amount_out, ref_id, category, note, created_by)
-- **purchase_invoices** (invoice_number, supplier_id, branch_id, invoice_date, shipping/customs/clearance/other costs, subtotal, total_extra_cost, grand_total, status[draft/posted])
-- **purchase_items** (purchase_id, product_id, qty, unit_cost_base, line_subtotal, allocated_extra_cost, unit_cost_final)
+- **purchase_invoices** (invoice_number, supplier_id, branch_id, invoice_date, shipping/customs/clearance/other costs, subtotal, total_extra_cost, grand_total, status[pending/approved])
+- **purchase_items** (purchase_id, product_id, variant_id, qty, unit_cost_base, line_subtotal, allocated_extra_cost, unit_cost_final)
+- **supplier_ocr_templates** (supplier_id FK, invoice_no_pattern, date_pattern, table_start_keyword, column_order)
 - **payroll_runs** (month, year, status[draft/approved], total_basic, total_commission, total_deductions, total_advances, total_net, created_by, approved_by, approved_at)
 - **payroll_details** (payroll_id, employee_id, basic_salary, commission, deductions, advances, bonus, net_salary, note)
 - **employee_advances** (employee_id, amount, date, note, settled, settled_in_payroll_id, created_by)
