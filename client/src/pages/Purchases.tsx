@@ -547,7 +547,12 @@ function PurchasesTab() {
                 {addProductId && productVariants.length === 0 && (
                   <div className="space-y-1">
                     <label className="text-sm font-medium">&nbsp;</label>
-                    <Button variant="outline" size="sm" onClick={() => { setQpBarcode(""); setShowQuickProduct(true); }} data-testid="button-quick-create-variant">
+                    <Button variant="outline" size="sm" onClick={() => {
+                      setQpBarcode("");
+                      const prod = allProducts.find(p => String(p.id) === addProductId);
+                      if (prod) { setQpName(prod.name); setQpCategoryId(prod.categoryId ? String(prod.categoryId) : ""); setQpPrice(String(prod.price)); }
+                      setShowQuickProduct(true);
+                    }} data-testid="button-quick-create-variant">
                       <Plus className="w-3 h-3 ml-1" /> {t("purchases_v2.quick_create")}
                     </Button>
                   </div>
