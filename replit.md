@@ -135,17 +135,19 @@ shared/
 - **Daily Report** (/api/reports/daily): includes cogsTotal, grossProfit, netProfit (= grossProfit - expenses)
 - **Branch Comparison** (/api/reports/branch-comparison): sales, cogs, gross, expenses, net per branch with margin %
 
-## Multi-Location Inventory System (Central Warehouse Model)
+## Multi-Location Inventory System (Unified Dual-Track)
 - **Central Warehouse** (المخزن المركزي): One company-wide location, `is_central=true`, `branch_id=NULL`
 - **Branch Default Store** (مخزن الفرع): One per branch, `is_branch_default=true` — receives stock from central
-- Each branch may also have showroom/backstore locations (legacy)
-- **Purchase Approval** → stock enters Central Warehouse automatically (no location selection needed)
-- **Transfer** (POST /api/inventory-transfers): central → branch default store; body = `{branchId, items:[{productId,qty}]}`
-- **addStock(branchId, ...)**: adds to branch default store + logs transaction
-- **removeStock(branchId, ...)**: deducts from branch default store, throws error if insufficient qty (used by POS sales)
-- **GET /api/central-inventory**: returns all items in central warehouse with qty_on_hand
-- Transaction types: PURCHASE, TRANSFER_OUT, TRANSFER_IN, sale, sale_return, internal_transfer, manual_receipt, adjustment
-- Frontend tabs: مخزون الفروع, تحويل من المركزي, حركات المخزون
+- **Dual inventory tracking** (kept in sync by all operations):
+  - `inventory_balances` + `inventory_ledger`: Variant-level tracking (modern system) — used by Inventory page, balances API, transfers
+  - `location_inventory` + `inventory_transactions`: Product-level tracking (legacy) — used by POS stock checks, dashboard KPIs, low stock alerts
+- **Full flow**: Purchase → approve → Central WH (`inventory_balances` + `location_inventory`) → Transfer → Branch → POS Sale → deducts both systems → Return → adds back both
+- **Purchase Approval** → stock enters Central Warehouse; auto-creates default variant if missing; updates both systems + `inventory_ledger`
+- **Stock Transfers** (variant-level): draft → add lines → approve; deducts source, adds destination in both systems + logs ledger
+- **POS Sales**: looks up product's default variant → deducts from `inventory_balances` at branch default location + deducts `location_inventory`
+- **Sale Returns**: adds back to `inventory_balances` + `location_inventory` + logs ledger
+- **Stocktake Adjustments**: syncs both systems + logs to ledger
+- Frontend Inventory tabs: أرصدة المخزون, التحويلات, سجل الحركات
 - Permissions: cashier sees own branch only; owner/admin can select any branch
 
 ## Ledger System

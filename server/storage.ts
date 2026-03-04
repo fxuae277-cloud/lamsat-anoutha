@@ -532,32 +532,42 @@ export class DatabaseStorage implements IStorage {
       const sale = saleRes.rows[0];
       const saleId = sale.id;
 
-      const existingTx = await client.query(
-        `SELECT id FROM inventory_transactions WHERE ref_table='sales' AND ref_id=$1 AND type='SALE' LIMIT 1`,
-        [saleId]
-      );
-      if (existingTx.rows.length > 0) {
-        await client.query("COMMIT");
-        const [existing] = await db.select().from(sales).where(eq(sales.id, saleId));
-        return existing;
-      }
-
       let cogsTotal = 0;
 
       for (const item of items) {
-        const invRow = await client.query(
-          `SELECT qty_on_hand FROM location_inventory
-           WHERE location_id = $1 AND product_id = $2
-           FOR UPDATE`,
-          [branchLocationId, item.productId]
+        const variantRes = await client.query(
+          `SELECT pv.id as variant_id FROM product_variants pv WHERE pv.product_id = $1 ORDER BY pv.id LIMIT 1`,
+          [item.productId]
         );
-        const available = invRow.rows.length > 0 ? invRow.rows[0].qty_on_hand : 0;
-        if (available < item.quantity) {
-          const prodRes = await client.query(`SELECT name FROM products WHERE id = $1`, [item.productId]);
-          const pName = prodRes.rows[0]?.name || `#${item.productId}`;
-          throw new Error(`المخزون غير كاف للمنتج "${pName}" — المتوفر: ${available}، المطلوب: ${item.quantity}`);
+        const variantId = variantRes.rows[0]?.variant_id;
+
+        if (variantId) {
+          const invRow = await client.query(
+            `SELECT qty_on_hand FROM inventory_balances
+             WHERE location_id = $1 AND variant_id = $2
+             FOR UPDATE`,
+            [branchLocationId, variantId]
+          );
+          const available = invRow.rows.length > 0 ? Number(invRow.rows[0].qty_on_hand) : 0;
+          if (available < item.quantity) {
+            const prodRes = await client.query(`SELECT name FROM products WHERE id = $1`, [item.productId]);
+            const pName = prodRes.rows[0]?.name || `#${item.productId}`;
+            throw new Error(`المخزون غير كاف للمنتج "${pName}" — المتوفر: ${available}، المطلوب: ${item.quantity}`);
+          }
+
+          await client.query(
+            `UPDATE inventory_balances SET qty_on_hand = qty_on_hand - $1
+             WHERE location_id = $2 AND variant_id = $3`,
+            [item.quantity, branchLocationId, variantId]
+          );
+
+          await client.query(`
+            INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by)
+            VALUES ($1, $2, $3, 'sale', 'sales', $4, $5)
+          `, [variantId, branchLocationId, -item.quantity, saleId, data.cashierId || null]);
         }
 
+        // Also sync old location_inventory for backward compatibility
         await client.query(
           `UPDATE location_inventory SET qty_on_hand = qty_on_hand - $1, updated_at = now()
            WHERE location_id = $2 AND product_id = $3`,
@@ -2708,6 +2718,26 @@ export class DatabaseStorage implements IStorage {
           [returnId, item.saleItemId, item.productId, item.quantity, item.unitPrice, unitCost.toFixed(3), item.lineTotal, lineCogs.toFixed(3)]
         );
 
+        // Update variant-based inventory_balances
+        const variantRes = await client.query(
+          `SELECT pv.id as variant_id FROM product_variants pv WHERE pv.product_id = $1 ORDER BY pv.id LIMIT 1`,
+          [item.productId]
+        );
+        const variantId = variantRes.rows[0]?.variant_id;
+        if (variantId) {
+          await client.query(`
+            INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
+            VALUES ($1, $2, $3, 0)
+            ON CONFLICT (location_id, variant_id) DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + $3
+          `, [branchLocationId, variantId, item.quantity]);
+
+          await client.query(`
+            INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by)
+            VALUES ($1, $2, $3, 'return', 'sale_returns', $4, $5)
+          `, [variantId, branchLocationId, item.quantity, returnId, data.createdBy || null]);
+        }
+
+        // Also sync old location_inventory for backward compatibility
         await client.query(
           `UPDATE location_inventory SET qty_on_hand = qty_on_hand + $1, updated_at = now()
            WHERE location_id = $2 AND product_id = $3`,
@@ -3249,6 +3279,25 @@ export class DatabaseStorage implements IStorage {
         [item.counted_qty, st.locationId, item.product_id]
       );
 
+      // Sync inventory_balances (variant system)
+      const varRes = await pool.query(
+        `SELECT id FROM product_variants WHERE product_id = $1 ORDER BY id LIMIT 1`,
+        [item.product_id]
+      );
+      const variantId = varRes.rows[0]?.id;
+      if (variantId) {
+        await pool.query(`
+          INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
+          VALUES ($1, $2, $3, 0)
+          ON CONFLICT (location_id, variant_id) DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + $3
+        `, [st.locationId, variantId, diff]);
+
+        await pool.query(`
+          INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by)
+          VALUES ($1, $2, $3, 'stocktake_adjustment', 'stocktakes', $4, $5)
+        `, [variantId, st.locationId, diff, id, userId]);
+      }
+
       await this.createInventoryAdjustment({
         branchId: st.branchId,
         locationId: st.locationId,
@@ -3478,6 +3527,24 @@ export class DatabaseStorage implements IStorage {
           VALUES ($1, $2, $3, 0)
           ON CONFLICT (location_id, variant_id) DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + $3
         `, [transfer.toLocationId, line.variant_id, line.qty]);
+
+        // Sync location_inventory for POS compatibility
+        const prodRes = await client.query(
+          `SELECT product_id FROM product_variants WHERE id = $1`, [line.variant_id]
+        );
+        const productId = prodRes.rows[0]?.product_id;
+        if (productId) {
+          await client.query(
+            `UPDATE location_inventory SET qty_on_hand = GREATEST(0, qty_on_hand - $1), updated_at = now()
+             WHERE location_id = $2 AND product_id = $3`,
+            [line.qty, transfer.fromLocationId, productId]
+          );
+          await client.query(`
+            INSERT INTO location_inventory (location_id, product_id, qty_on_hand, updated_at)
+            VALUES ($1, $2, $3, now())
+            ON CONFLICT (location_id, product_id) DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand + $3, updated_at = now()
+          `, [transfer.toLocationId, productId, line.qty]);
+        }
         await client.query(`
           INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by)
           VALUES ($1, $2, $3, 'transfer_out', 'stock_transfers', $4, $5)
