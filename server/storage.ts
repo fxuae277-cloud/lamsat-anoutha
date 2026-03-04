@@ -140,6 +140,7 @@ export interface IStorage {
   updatePurchaseInvoice(id: number, data: Partial<InsertPurchaseInvoice>): Promise<PurchaseInvoice | undefined>;
   getPurchaseItems(purchaseId: number): Promise<PurchaseItem[]>;
   addPurchaseItem(data: InsertPurchaseItem): Promise<PurchaseItem>;
+  updatePurchaseItem(id: number, data: { qty?: number; unitCostBase?: number; variantId?: number; productId?: number }): Promise<PurchaseItem | undefined>;
   deletePurchaseItem(id: number): Promise<void>;
   approvePurchaseInvoice(id: number): Promise<PurchaseInvoice>;
   receivePurchaseInvoice(id: number): Promise<PurchaseInvoice>;
@@ -1350,6 +1351,26 @@ export class DatabaseStorage implements IStorage {
 
   async addPurchaseItem(data: InsertPurchaseItem) {
     const [row] = await db.insert(purchaseItems).values(data).returning();
+    return row;
+  }
+
+  async updatePurchaseItem(id: number, data: { qty?: number; unitCostBase?: number; variantId?: number; productId?: number }) {
+    const updates: any = {};
+    if (data.qty !== undefined) updates.qty = data.qty;
+    if (data.unitCostBase !== undefined) {
+      updates.unitCostBase = String(data.unitCostBase);
+    }
+    if (data.variantId !== undefined) updates.variantId = data.variantId;
+    if (data.productId !== undefined) updates.productId = data.productId;
+    if (data.qty !== undefined || data.unitCostBase !== undefined) {
+      const current = await db.select().from(purchaseItems).where(eq(purchaseItems.id, id)).then(r => r[0]);
+      if (current) {
+        const qty = data.qty ?? current.qty;
+        const cost = data.unitCostBase !== undefined ? data.unitCostBase : parseFloat(current.unitCostBase || "0");
+        updates.lineSubtotal = String(qty * cost);
+      }
+    }
+    const [row] = await db.update(purchaseItems).set(updates).where(eq(purchaseItems.id, id)).returning();
     return row;
   }
 

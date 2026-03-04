@@ -1840,6 +1840,23 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/purchases/:purchaseId/items/:itemId", requireAuth, async (req, res) => {
+    const purchaseId = Number(req.params.purchaseId);
+    const invoice = await storage.getPurchaseInvoice(purchaseId);
+    if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
+    if (invoice.status !== "pending") {
+      return res.status(400).json({ message: "لا يمكن تعديل أصناف فاتورة معتمدة أو ملغاة" });
+    }
+    const itemId = Number(req.params.itemId);
+    const { qty, unitCostBase } = req.body;
+    const updated = await storage.updatePurchaseItem(itemId, {
+      qty: qty !== undefined ? Number(qty) : undefined,
+      unitCostBase: unitCostBase !== undefined ? Number(unitCostBase) : undefined,
+    });
+    if (!updated) return res.status(404).json({ message: "الصنف غير موجود" });
+    res.json(updated);
+  });
+
   app.delete("/api/purchases/:purchaseId/items/:itemId", requireAuth, async (req, res) => {
     const purchaseId = Number(req.params.purchaseId);
     const invoice = await storage.getPurchaseInvoice(purchaseId);

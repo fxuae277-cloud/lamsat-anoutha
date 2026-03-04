@@ -251,6 +251,9 @@ function PurchasesTab() {
   const [showPostConfirm, setShowPostConfirm] = useState(false);
   const [showQuickSupplier, setShowQuickSupplier] = useState(false);
   const [showQuickProduct, setShowQuickProduct] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [editQty, setEditQty] = useState("");
+  const [editPrice, setEditPrice] = useState("");
   const [ocrStage, setOcrStage] = useState<"idle" | "uploading" | "parsing" | "done">("idle");
   const [ocrError, setOcrError] = useState<{ stage: string; error: string } | null>(null);
   const [ocrSummary, setOcrSummary] = useState<{ itemCount: number; totalQty: number; totalAmount: number; invoiceNo: string | null; date: string | null } | null>(null);
@@ -428,6 +431,22 @@ function PurchasesTab() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
       toast({ title: t("purchases.item_deleted") });
+    },
+  });
+
+  const updateItemMutation = useMutation({
+    mutationFn: async ({ itemId, qty, unitCostBase }: { itemId: number; qty: number; unitCostBase: number }) => {
+      const res = await apiRequest("PATCH", `/api/purchases/${selectedInvoice}/items/${itemId}`, { qty, unitCostBase });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
+      qc.invalidateQueries({ queryKey: ["/api/purchases"] });
+      setEditingItemId(null);
+      toast({ title: t("common.saved") });
+    },
+    onError: (e: any) => {
+      toast({ title: t("common.error"), description: e.message, variant: "destructive" });
     },
   });
 
@@ -814,7 +833,9 @@ function PurchasesTab() {
                     </TableCell>
                   </TableRow>
                 )}
-                {items.map((it: any) => (
+                {items.map((it: any) => {
+                  const isEditing = editingItemId === it.id;
+                  return (
                   <TableRow key={it.id} data-testid={`row-purchase-item-${it.id}`}>
                     <TableCell>
                       <div className="font-medium">{it.productName || productMap[it.productId] || it.productId}</div>
@@ -823,20 +844,58 @@ function PurchasesTab() {
                     <TableCell className="font-mono text-xs">{it.barcode || "—"}</TableCell>
                     <TableCell>{it.color || "—"}</TableCell>
                     <TableCell>{it.size || "—"}</TableCell>
-                    <TableCell className="font-mono">{it.qty}</TableCell>
-                    <TableCell className="font-mono">{omr(it.unitCostBase)}</TableCell>
-                    <TableCell className="font-mono">{omr(it.lineSubtotal)}</TableCell>
+                    <TableCell className="font-mono">
+                      {isEditing ? (
+                        <Input type="number" min={1} className="h-8 w-20 font-mono" value={editQty}
+                          onChange={e => setEditQty(e.target.value)} data-testid={`input-edit-qty-${it.id}`} />
+                      ) : it.qty}
+                    </TableCell>
+                    <TableCell className="font-mono">
+                      {isEditing ? (
+                        <Input type="number" min={0} step="0.001" className="h-8 w-24 font-mono" value={editPrice}
+                          onChange={e => setEditPrice(e.target.value)} data-testid={`input-edit-price-${it.id}`} />
+                      ) : omr(it.unitCostBase)}
+                    </TableCell>
+                    <TableCell className="font-mono">
+                      {isEditing ? omr((parseFloat(editQty) || 0) * (parseFloat(editPrice) || 0)) : omr(it.lineSubtotal)}
+                    </TableCell>
                     {!isPending && <TableCell className="font-mono text-amber-600">{omr(it.allocatedExtraCost)}</TableCell>}
                     {!isPending && <TableCell className="font-mono font-bold text-emerald-600">{omr(it.unitCostFinal)}</TableCell>}
                     {isPending && (
                       <TableCell>
-                        <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700" onClick={() => deleteItemMutation.mutate(it.id)} data-testid={`button-delete-item-${it.id}`}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          {isEditing ? (
+                            <>
+                              <Button variant="ghost" size="sm" className="text-green-600 hover:text-green-700 h-8 w-8 p-0"
+                                disabled={updateItemMutation.isPending}
+                                onClick={() => updateItemMutation.mutate({ itemId: it.id, qty: parseInt(editQty) || 1, unitCostBase: parseFloat(editPrice) || 0 })}
+                                data-testid={`button-save-item-${it.id}`}>
+                                <FileCheck className="w-4 h-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="text-muted-foreground h-8 w-8 p-0"
+                                onClick={() => setEditingItemId(null)} data-testid={`button-cancel-edit-${it.id}`}>
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button variant="ghost" size="sm" className="text-blue-500 hover:text-blue-700 h-8 w-8 p-0"
+                                onClick={() => { setEditingItemId(it.id); setEditQty(String(it.qty)); setEditPrice(String(parseFloat(it.unitCostBase))); }}
+                                data-testid={`button-edit-item-${it.id}`}>
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 h-8 w-8 p-0"
+                                onClick={() => deleteItemMutation.mutate(it.id)} data-testid={`button-delete-item-${it.id}`}>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </TableCell>
                     )}
                   </TableRow>
-                ))}
+                  );
+                })}
                 <TableRow className="border-t-2 font-bold bg-muted/30">
                   <TableCell colSpan={4}>{t("common.total")}</TableCell>
                   <TableCell className="font-mono">{items.reduce((s: number, it: any) => s + it.qty, 0)}</TableCell>

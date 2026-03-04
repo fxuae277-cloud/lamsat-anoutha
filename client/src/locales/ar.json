@@ -195,6 +195,7 @@
   "common": {
     "error": "خطأ",
     "success": "تم بنجاح",
+    "saved": "تم الحفظ",
     "save": "حفظ",
     "cancel": "إلغاء",
     "delete": "حذف",

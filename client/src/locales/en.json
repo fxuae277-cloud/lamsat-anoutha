@@ -195,6 +195,7 @@
   "common": {
     "error": "Error",
     "success": "Success",
+    "saved": "Saved",
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",
