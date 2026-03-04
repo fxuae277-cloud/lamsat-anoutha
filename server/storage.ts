@@ -1332,7 +1332,11 @@ export class DatabaseStorage implements IStorage {
       id: purchaseItems.id,
       purchaseId: purchaseItems.purchaseId,
       productId: purchaseItems.productId,
+      variantId: purchaseItems.variantId,
       productName: products.name,
+      barcode: productVariants.barcode,
+      color: productVariants.color,
+      size: productVariants.size,
       qty: purchaseItems.qty,
       unitCostBase: purchaseItems.unitCostBase,
       lineSubtotal: purchaseItems.lineSubtotal,
@@ -1340,6 +1344,7 @@ export class DatabaseStorage implements IStorage {
       unitCostFinal: purchaseItems.unitCostFinal,
     }).from(purchaseItems)
       .leftJoin(products, eq(purchaseItems.productId, products.id))
+      .leftJoin(productVariants, eq(purchaseItems.variantId, productVariants.id))
       .where(eq(purchaseItems.purchaseId, purchaseId));
   }
 

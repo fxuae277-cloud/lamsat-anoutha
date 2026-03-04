@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
-import type { Supplier, Product, PurchaseInvoice } from "@shared/schema";
+import type { Supplier, Product, PurchaseInvoice, ProductVariant } from "@shared/schema";
 
 function omr(val: string | number | null) {
   if (val === null || val === undefined) return "0.000";
@@ -307,6 +307,16 @@ function PurchasesTab() {
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
+  const { data: productVariants = [] } = useQuery<ProductVariant[]>({
+    queryKey: ["/api/products", addProductId, "variants"],
+    queryFn: async () => {
+      const res = await fetch(`/api/products/${addProductId}/variants`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!addProductId,
+  });
+
   const { data: invoiceDetail } = useQuery<any>({
     queryKey: ["/api/purchases", selectedInvoice],
     queryFn: async () => {
@@ -483,14 +493,14 @@ function PurchasesTab() {
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap items-end gap-3">
-                <div className="space-y-1 min-w-[200px] flex-1">
+                <div className="space-y-1 min-w-[180px] flex-1">
                   <label className="text-sm font-medium">{t("purchases.product")}</label>
                   <div className="flex gap-2">
-                    <Select value={addProductId} onValueChange={setAddProductId}>
+                    <Select value={addProductId} onValueChange={(v) => { setAddProductId(v); setAddVariantId(null); }}>
                       <SelectTrigger data-testid="select-add-product" className="flex-1"><SelectValue placeholder={t("purchases.select_product")} /></SelectTrigger>
                       <SelectContent>
                         {allProducts.map(p => (
-                          <SelectItem key={p.id} value={String(p.id)}>{p.name} ({omr(p.price)} {t("common.omr")})</SelectItem>
+                          <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -502,7 +512,7 @@ function PurchasesTab() {
                           setAddProductId(String(variant.productId));
                           setAddVariantId(variant.id);
                           setAddUnitCost(String(variant.costDefault || 0));
-                          toast({ title: t("common.success") });
+                          toast({ title: t("common.success"), description: `${variant.color || ""} ${variant.size || ""} - ${variant.barcode}` });
                         } else {
                           setQpBarcode(barcode);
                           setShowQuickProduct(true);
@@ -513,6 +523,35 @@ function PurchasesTab() {
                     }} />
                   </div>
                 </div>
+                {addProductId && productVariants.length > 0 && (
+                  <div className="space-y-1 min-w-[180px] flex-1">
+                    <label className="text-sm font-medium">{t("products.variants")}</label>
+                    <Select value={addVariantId ? String(addVariantId) : ""} onValueChange={(v) => {
+                      const vid = Number(v);
+                      setAddVariantId(vid);
+                      const vr = productVariants.find(pv => pv.id === vid);
+                      if (vr?.costDefault) setAddUnitCost(String(vr.costDefault));
+                    }}>
+                      <SelectTrigger data-testid="select-add-variant"><SelectValue placeholder={t("transfers.select_variant")} /></SelectTrigger>
+                      <SelectContent>
+                        {productVariants.map(v => (
+                          <SelectItem key={v.id} value={String(v.id)}>
+                            {[v.color, v.size].filter(Boolean).join(" / ") || v.barcode || v.sku || `#${v.id}`}
+                            {v.barcode ? ` (${v.barcode})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {addProductId && productVariants.length === 0 && (
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">&nbsp;</label>
+                    <Button variant="outline" size="sm" onClick={() => { setQpBarcode(""); setShowQuickProduct(true); }} data-testid="button-quick-create-variant">
+                      <Plus className="w-3 h-3 ml-1" /> {t("purchases_v2.quick_create")}
+                    </Button>
+                  </div>
+                )}
                 <div className="space-y-1 w-28">
                   <label className="text-sm font-medium">{t("purchases.qty")}</label>
                   <Input type="number" min="1" value={addQty} onChange={e => setAddQty(e.target.value)} placeholder="0" data-testid="input-add-qty" />
@@ -521,7 +560,7 @@ function PurchasesTab() {
                   <label className="text-sm font-medium">{t("purchases.unit_cost")}</label>
                   <Input type="number" step="0.001" min="0" value={addUnitCost} onChange={e => setAddUnitCost(e.target.value)} placeholder="0.000" data-testid="input-add-unit-cost" />
                 </div>
-                <Button onClick={() => addItemMutation.mutate()} disabled={!addProductId || !addQty || !addUnitCost || addItemMutation.isPending} data-testid="button-add-item">
+                <Button onClick={() => addItemMutation.mutate()} disabled={!addProductId || !addVariantId || !addQty || !addUnitCost || addItemMutation.isPending} data-testid="button-add-item">
                   <Plus className="w-4 h-4 ml-1" /> {t("purchases.add")}
                 </Button>
               </div>
