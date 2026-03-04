@@ -277,6 +277,9 @@ function PurchasesTab() {
   const [addVariantId, setAddVariantId] = useState<number | null>(null);
   const [addQty, setAddQty] = useState("");
   const [addUnitCost, setAddUnitCost] = useState("");
+  const [addColor, setAddColor] = useState("");
+  const [addSize, setAddSize] = useState("");
+  const [addProductName, setAddProductName] = useState("");
 
   const [quickName, setQuickName] = useState("");
   const [quickPhone, setQuickPhone] = useState("");
@@ -387,9 +390,28 @@ function PurchasesTab() {
 
   const addItemMutation = useMutation({
     mutationFn: async () => {
+      let productId = addProductId ? Number(addProductId) : null;
+      let variantId = addVariantId;
+
+      if (!productId && addProductName.trim()) {
+        const qcRes = await apiRequest("POST", "/api/variants/quick-create", {
+          productName: addProductName.trim(),
+          barcode: null, sku: null,
+          color: addColor || null,
+          size: addSize || null,
+          price: Number(addUnitCost) || 0,
+          costDefault: Number(addUnitCost) || 0,
+        });
+        const qcData = await qcRes.json();
+        productId = qcData.product.id;
+        variantId = qcData.variant.id;
+      }
+
+      if (!productId) throw new Error(t("purchases.select_product"));
+
       const res = await apiRequest("POST", `/api/purchases/${selectedInvoice}/items`, {
-        productId: Number(addProductId),
-        variantId: addVariantId,
+        productId,
+        variantId,
         qty: Number(addQty),
         unitCostBase: Number(addUnitCost),
       });
@@ -397,10 +419,14 @@ function PurchasesTab() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
+      qc.invalidateQueries({ queryKey: ["/api/products"] });
       setAddProductId("");
       setAddVariantId(null);
       setAddQty("");
       setAddUnitCost("");
+      setAddColor("");
+      setAddSize("");
+      setAddProductName("");
       toast({ title: t("purchases.item_added") });
     },
     onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
@@ -740,7 +766,14 @@ function PurchasesTab() {
                 <div className="space-y-1 min-w-[180px] flex-1">
                   <label className="text-sm font-medium">{t("purchases.product")}</label>
                   <div className="flex gap-2">
-                    <Select value={addProductId} onValueChange={(v) => { setAddProductId(v); setAddVariantId(null); }}>
+                    <Select value={addProductId} onValueChange={(v) => {
+                      setAddProductId(v);
+                      setAddVariantId(null);
+                      setAddColor("");
+                      setAddSize("");
+                      const prod = allProducts.find(p => String(p.id) === v);
+                      if (prod) setAddProductName(prod.name);
+                    }}>
                       <SelectTrigger data-testid="select-add-product" className="flex-1"><SelectValue placeholder={t("purchases.select_product")} /></SelectTrigger>
                       <SelectContent>
                         {allProducts.map(p => (
@@ -756,6 +789,10 @@ function PurchasesTab() {
                           setAddProductId(String(variant.productId));
                           setAddVariantId(variant.id);
                           setAddUnitCost(String(variant.costDefault || 0));
+                          setAddColor(variant.color || "");
+                          setAddSize(variant.size || "");
+                          const prod = allProducts.find(p => p.id === variant.productId);
+                          if (prod) setAddProductName(prod.name);
                           toast({ title: t("common.success"), description: `${variant.color || ""} ${variant.size || ""} - ${variant.barcode}` });
                         } else {
                           setQpBarcode(barcode);
@@ -767,6 +804,21 @@ function PurchasesTab() {
                     }} />
                   </div>
                 </div>
+                <div className="space-y-1 min-w-[140px] flex-1">
+                  <label className="text-sm font-medium">{t("products.name")}</label>
+                  <Input value={addProductName} onChange={e => { setAddProductName(e.target.value); if (addProductId) { setAddProductId(""); setAddVariantId(null); } }}
+                    placeholder={t("products.name")} data-testid="input-add-product-name" />
+                </div>
+                <div className="space-y-1 w-28">
+                  <label className="text-sm font-medium">{t("products.variant_color")}</label>
+                  <Input value={addColor} onChange={e => setAddColor(e.target.value)} placeholder={t("products.variant_color")} data-testid="input-add-color" />
+                </div>
+                <div className="space-y-1 w-28">
+                  <label className="text-sm font-medium">{t("products.variant_size")}</label>
+                  <Input value={addSize} onChange={e => setAddSize(e.target.value)} placeholder={t("products.variant_size")} data-testid="input-add-size" />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-end gap-3 mt-3">
                 {addProductId && productVariants.length > 0 && (
                   <div className="space-y-1 min-w-[180px] flex-1">
                     <label className="text-sm font-medium">{t("products.variants")}</label>
@@ -774,7 +826,11 @@ function PurchasesTab() {
                       const vid = Number(v);
                       setAddVariantId(vid);
                       const vr = productVariants.find(pv => pv.id === vid);
-                      if (vr?.costDefault) setAddUnitCost(String(vr.costDefault));
+                      if (vr) {
+                        if (vr.costDefault) setAddUnitCost(String(vr.costDefault));
+                        setAddColor(vr.color || "");
+                        setAddSize(vr.size || "");
+                      }
                     }}>
                       <SelectTrigger data-testid="select-add-variant"><SelectValue placeholder={t("transfers.select_variant")} /></SelectTrigger>
                       <SelectContent>
@@ -809,7 +865,8 @@ function PurchasesTab() {
                   <label className="text-sm font-medium">{t("purchases.unit_cost")}</label>
                   <Input type="number" step="0.001" min="0" value={addUnitCost} onChange={e => setAddUnitCost(e.target.value)} placeholder="0.000" data-testid="input-add-unit-cost" />
                 </div>
-                <Button onClick={() => addItemMutation.mutate()} disabled={!addProductId || !addVariantId || !addQty || !addUnitCost || addItemMutation.isPending} data-testid="button-add-item">
+                <Button onClick={() => addItemMutation.mutate()} disabled={(!addProductId && !addProductName.trim()) || !addQty || !addUnitCost || addItemMutation.isPending} data-testid="button-add-item"
+                  className="bg-pink-500 hover:bg-pink-600 text-white">
                   <Plus className="w-4 h-4 ml-1" /> {t("purchases.add")}
                 </Button>
               </div>
