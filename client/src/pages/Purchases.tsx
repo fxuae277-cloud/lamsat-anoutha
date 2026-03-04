@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
-import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle, Search, Edit, Building, UserPlus, FileSpreadsheet } from "lucide-react";
+import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle, Search, Edit, Building, UserPlus, FileSpreadsheet, X } from "lucide-react";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -479,20 +479,37 @@ function PurchasesTab() {
     }
   }
 
+  function updateOcrLine(index: number, field: string, value: any) {
+    if (!ocrResult) return;
+    const updated = { ...ocrResult, lines: [...ocrResult.lines] };
+    updated.lines[index] = { ...updated.lines[index], [field]: value };
+    setOcrResult(updated);
+  }
+
+  function removeOcrLine(index: number) {
+    if (!ocrResult) return;
+    const updated = { ...ocrResult, lines: ocrResult.lines.filter((_: any, i: number) => i !== index) };
+    setOcrResult(updated);
+  }
+
   async function importOcrLines(onlyMatched: boolean) {
     if (!ocrResult?.lines || !selectedInvoice) return;
     const linesToImport = onlyMatched ? ocrResult.lines.filter((l: any) => l.matched) : ocrResult.lines;
     let imported = 0;
+    let errors = 0;
     for (const line of linesToImport) {
+      if (!line.qty || line.qty <= 0 || !line.price || line.price <= 0) continue;
+
       let variantId = line.variantId;
       let productId = line.productId;
 
       if (!variantId) {
         try {
+          const itemName = (line.description || line.productCode || `صنف ${line.lineNo}`).substring(0, 100);
           const res = await apiRequest("POST", "/api/variants/quick-create", {
-            productName: line.productCode || line.description,
+            productName: itemName,
             barcode: null,
-            sku: line.productCode || null,
+            sku: null,
             color: line.color || null,
             size: line.size || null,
             price: line.price || 0,
@@ -501,7 +518,10 @@ function PurchasesTab() {
           const data = await res.json();
           variantId = data.variant.id;
           productId = data.product.id;
-        } catch { continue; }
+        } catch (e) {
+          errors++;
+          continue;
+        }
       }
 
       try {
@@ -512,13 +532,19 @@ function PurchasesTab() {
           unitCostBase: line.price,
         });
         imported++;
-      } catch {}
+      } catch {
+        errors++;
+      }
     }
     qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
     qc.invalidateQueries({ queryKey: ["/api/products"] });
     setShowOcrReview(false);
     setOcrResult(null);
-    toast({ title: t("purchases_v2.ocr_imported"), description: `${imported} / ${linesToImport.length}` });
+    toast({
+      title: t("purchases_v2.ocr_imported"),
+      description: `${imported} / ${linesToImport.length}` + (errors > 0 ? ` (${errors} ${t("common.error")})` : ""),
+      variant: errors > 0 && imported === 0 ? "destructive" : "default",
+    });
   }
 
   const items = invoiceDetail?.items || [];
@@ -987,55 +1013,101 @@ function PurchasesTab() {
       </Dialog>
 
       <Dialog open={showOcrReview} onOpenChange={setShowOcrReview}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t("purchases_v2.ocr_review_title")}</DialogTitle>
             <DialogDescription>
               {ocrResult?.lines?.length > 0
-                ? t("purchases_v2.ocr_lines_found").replace("{0}", ocrResult.lines.length)
+                ? t("purchases_v2.ocr_lines_found").replace("{0}", String(ocrResult.lines.length))
                 : t("purchases_v2.ocr_no_lines")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             {ocrResult?.lines?.length > 0 ? (
-              <Table>
-                <TableHeader className="bg-muted/50">
-                  <TableRow>
-                    <TableHead>#</TableHead>
-                    <TableHead>{t("purchases_v2.ocr_code")}</TableHead>
-                    <TableHead>{t("products.variant_color")}</TableHead>
-                    <TableHead>{t("products.variant_size")}</TableHead>
-                    <TableHead>{t("purchases.table_qty")}</TableHead>
-                    <TableHead>{t("purchases.table_unit_price")}</TableHead>
-                    <TableHead>{t("purchases.table_total")}</TableHead>
-                    <TableHead>{t("common.status")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {ocrResult.lines.map((line: any, i: number) => (
-                    <TableRow key={i} className={line.matched ? "" : "bg-amber-50"}>
-                      <TableCell>{line.lineNo}</TableCell>
-                      <TableCell>
-                        <div className="font-mono text-sm font-bold">{line.productCode}</div>
-                        <div className="text-xs text-muted-foreground">{line.description}</div>
-                      </TableCell>
-                      <TableCell>{line.color || "—"}</TableCell>
-                      <TableCell>{line.size || "—"}</TableCell>
-                      <TableCell className="font-mono">{line.qty}</TableCell>
-                      <TableCell className="font-mono">{omr(line.price)}</TableCell>
-                      <TableCell className="font-mono">{omr(line.amount)}</TableCell>
-                      <TableCell>
-                        {line.matched ? (
-                          <Badge className="bg-green-600 text-white">{t("purchases_v2.ocr_matched")}</Badge>
-                        ) : (
-                          <Badge variant="outline" className="border-amber-400 text-amber-600">{t("purchases_v2.ocr_not_matched")}</Badge>
-                        )}
-                      </TableCell>
+              <div className="border rounded-lg overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead className="w-8">#</TableHead>
+                      <TableHead className="min-w-[160px]">{t("purchases_v2.ocr_description")}</TableHead>
+                      <TableHead className="min-w-[90px]">{t("products.variant_color")}</TableHead>
+                      <TableHead className="min-w-[70px]">{t("products.variant_size")}</TableHead>
+                      <TableHead className="min-w-[70px]">{t("purchases.table_qty")}</TableHead>
+                      <TableHead className="min-w-[90px]">{t("purchases.table_unit_price")}</TableHead>
+                      <TableHead className="min-w-[90px]">{t("purchases.table_total")}</TableHead>
+                      <TableHead className="w-10"></TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {ocrResult.lines.map((line: any, i: number) => (
+                      <TableRow key={i} className={line.matched ? "bg-green-50" : ""}>
+                        <TableCell className="text-xs text-muted-foreground">{i + 1}</TableCell>
+                        <TableCell>
+                          <Input
+                            value={line.description || ""}
+                            onChange={(e) => updateOcrLine(i, "description", e.target.value)}
+                            className="h-8 text-sm"
+                            data-testid={`input-ocr-desc-${i}`}
+                          />
+                          {line.matched && (
+                            <Badge className="bg-green-600 text-white text-[10px] mt-1">{t("purchases_v2.ocr_matched")}</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={line.color || ""}
+                            onChange={(e) => updateOcrLine(i, "color", e.target.value)}
+                            className="h-8 text-sm"
+                            data-testid={`input-ocr-color-${i}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={line.size || ""}
+                            onChange={(e) => updateOcrLine(i, "size", e.target.value)}
+                            className="h-8 text-sm"
+                            data-testid={`input-ocr-size-${i}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={line.qty || 0}
+                            onChange={(e) => updateOcrLine(i, "qty", parseInt(e.target.value) || 0)}
+                            className="h-8 text-sm w-20 font-mono"
+                            data-testid={`input-ocr-qty-${i}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.001"
+                            value={line.price || 0}
+                            onChange={(e) => {
+                              const price = parseFloat(e.target.value) || 0;
+                              updateOcrLine(i, "price", price);
+                              updateOcrLine(i, "amount", price * (line.qty || 0));
+                            }}
+                            className="h-8 text-sm w-24 font-mono"
+                            data-testid={`input-ocr-price-${i}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-mono text-sm">{omr((line.qty || 0) * (line.price || 0))}</span>
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => removeOcrLine(i)} data-testid={`button-ocr-remove-${i}`}>
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <FileText className="w-12 h-12 mx-auto mb-3 opacity-40" />

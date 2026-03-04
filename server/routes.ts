@@ -880,7 +880,7 @@ export async function registerRoutes(
   app.post("/api/variants/quick-create", requireAuth, async (req, res) => {
     try {
       const { productName, categoryId, barcode, sku, color, size, price, costDefault } = req.body;
-      if (!productName || !price) return res.status(400).json({ message: "اسم المنتج والسعر مطلوبان" });
+      if (!productName) return res.status(400).json({ message: "اسم المنتج مطلوب" });
       if (barcode) {
         const existing = await storage.getVariantByBarcode(barcode);
         if (existing) return res.status(400).json({ message: "الباركود مستخدم بالفعل" });
@@ -888,7 +888,7 @@ export async function registerRoutes(
       const product = await storage.createProduct({
         name: productName,
         categoryId: categoryId || null,
-        price: price,
+        price: price || 0,
         active: true,
         barcode: null,
         branchId: null,
@@ -897,10 +897,10 @@ export async function registerRoutes(
       const variant = await storage.createVariant({
         productId: product.id,
         barcode: barcode || null,
-        sku: sku || null,
+        sku: null,
         color: color || null,
         size: size || null,
-        price: price,
+        price: price || 0,
         costDefault: costDefault || null,
         active: true,
       });
