@@ -301,7 +301,10 @@ export default function POS() {
   const heldIdCounter = useRef(1);
   const [customerPhone, setCustomerPhone] = useState("");
   const [sendWhatsApp, setSendWhatsApp] = useState(false);
+  const [printReceipt, setPrintReceipt] = useState(true);
   const [foundCustomerId, setFoundCustomerId] = useState<number | null>(null);
+  const [cardTxnRef, setCardTxnRef] = useState("");
+  const [paymentError, setPaymentError] = useState("");
 
   const isOwner = user?.role === "owner" || user?.role === "admin";
 
@@ -389,6 +392,26 @@ export default function POS() {
     if (w) { w.document.write(html); w.document.close(); }
   }
 
+  const validatePayment = (): string | null => {
+    if (paymentMethod === "card") {
+      const ref = cardTxnRef.replace(/\D/g, "");
+      if (!ref) return t("pos.card_txn_required");
+      if (ref.length < 6 || ref.length > 20) return t("pos.card_txn_length");
+    }
+    if (sendWhatsApp && !customerPhone.trim()) return t("pos.whatsapp_needs_phone");
+    return null;
+  };
+
+  const handleConfirmPayment = () => {
+    const err = validatePayment();
+    if (err) {
+      setPaymentError(err);
+      return;
+    }
+    setPaymentError("");
+    saleMutation.mutate();
+  };
+
   const saleMutation = useMutation({
     mutationFn: async () => {
       let customerId = null;
@@ -397,6 +420,9 @@ export default function POS() {
         const customer = await custRes.json();
         customerId = customer.id;
       }
+
+      const txnRef = paymentMethod === "card" ? cardTxnRef.replace(/\D/g, "") : 
+                      paymentMethod === "bank_transfer" ? bankTxnId : null;
 
       const invoiceNumber = `INV-${Date.now()}`;
       const saleData = {
@@ -410,7 +436,7 @@ export default function POS() {
         vat: vat.toFixed(3),
         total: total.toFixed(3),
         paymentMethod,
-        bankTxnId: paymentMethod === "bank_transfer" ? bankTxnId : null,
+        bankTxnId: txnRef,
         bankReceiptImage: null,
         items: cart.map(item => ({
           productId: item.product.id,
@@ -427,11 +453,12 @@ export default function POS() {
 
       if (sendWhatsApp && customerPhone) {
         const itemsList = cart.map(it => `${it.qty}x ${it.product.name}`).join("\n");
-        const message = `مرحبا 🌸 شكراً لتسوقك من لمسة أنوثة\n\n` +
-          `${t("pos.receipt_invoice")}: ${result.invoiceNumber}\n` +
+        const message = `مرحبا 🌸\nشكراً لتسوقك من لمسة أنوثة\n\n` +
+          `${t("pos.receipt_invoice")}: ${result.invoiceNumber}\n\n` +
+          `${itemsList}\n\n` +
           `${t("pos.receipt_total")}: ${result.saleData.total} ${t("common.omr")}\n` +
           `${t("pos.receipt_branch")}: ${branchName}\n\n` +
-          `${itemsList}`;
+          `نتمنى زيارتك مرة أخرى 🌸`;
         
         const encoded = encodeURIComponent(message);
         const phone = customerPhone.replace(/\D/g, "");
@@ -439,30 +466,35 @@ export default function POS() {
         window.open(`https://wa.me/${finalPhone}?text=${encoded}`, "_blank");
       }
 
-      printThermalReceipt({
-        invoiceNumber: result.invoiceNumber,
-        branchName: branchName,
-        cashierName: user?.name || "",
-        paymentMethod: result.saleData.paymentMethod,
-        subtotal: result.saleData.subtotal,
-        discount: result.saleData.discount,
-        vat: result.saleData.vat,
-        total: result.saleData.total,
-        items: cart.map(item => ({
-          name: item.product.name,
-          qty: item.qty,
-          price: parseFloat(item.product.price).toFixed(3),
-          lineTotal: (parseFloat(item.product.price) * item.qty).toFixed(3),
-        })),
-      });
+      if (printReceipt) {
+        printThermalReceipt({
+          invoiceNumber: result.invoiceNumber,
+          branchName: branchName,
+          cashierName: user?.name || "",
+          paymentMethod: result.saleData.paymentMethod,
+          subtotal: result.saleData.subtotal,
+          discount: result.saleData.discount,
+          vat: result.saleData.vat,
+          total: result.saleData.total,
+          items: cart.map(item => ({
+            name: item.product.name,
+            qty: item.qty,
+            price: parseFloat(item.product.price).toFixed(3),
+            lineTotal: (parseFloat(item.product.price) * item.qty).toFixed(3),
+          })),
+        });
+      }
 
       setCart([]);
       setDiscountValue(0);
       setBankTxnId("");
+      setCardTxnRef("");
       setPaymentMethod("cash");
       setCustomerPhone("");
       setSendWhatsApp(false);
+      setPrintReceipt(true);
       setFoundCustomerId(null);
+      setPaymentError("");
       setPayDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
@@ -886,40 +918,76 @@ export default function POS() {
                   {t("pos.checkout")}
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
+              <DialogContent className="sm:max-w-[460px]">
                 <DialogHeader>
                   <DialogTitle>{t("pos.payment_title")}</DialogTitle>
                   <DialogDescription>{t("pos.payment_desc")}</DialogDescription>
                 </DialogHeader>
-                <div className="py-4 space-y-6">
+                <div className="py-3 space-y-5 max-h-[70vh] overflow-y-auto">
                   <div className="text-center p-4 bg-primary/5 rounded-xl border border-primary/20">
                     <p className="text-sm text-muted-foreground mb-1">{t("pos.amount_due")}</p>
                     <p className="text-3xl font-bold text-primary">{total.toFixed(3)} {t("common.omr")}</p>
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3">
+                    <label className="text-sm font-medium">{t("pos.payment_method")}</label>
+                    <div className="grid grid-cols-3 gap-3">
+                      <Button variant={paymentMethod === "cash" ? "default" : "outline"} onClick={() => { setPaymentMethod("cash"); setPaymentError(""); }} className="h-12" data-testid="button-pay-cash">{t("pos.pay_cash")}</Button>
+                      <Button variant={paymentMethod === "card" ? "default" : "outline"} onClick={() => { setPaymentMethod("card"); setPaymentError(""); }} className="h-12" data-testid="button-pay-card">{t("pos.pay_card")}</Button>
+                      <Button variant={paymentMethod === "bank_transfer" ? "default" : "outline"} onClick={() => { setPaymentMethod("bank_transfer"); setPaymentError(""); }} className="h-12 text-xs" data-testid="button-pay-bank">{t("pos.pay_bank")}</Button>
+                    </div>
+                  </div>
+
+                  {paymentMethod === "card" && (
+                    <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                      <label className="text-sm font-medium">
+                        {t("pos.card_txn_ref")} <span className="text-red-500">*</span>
+                      </label>
+                      <Input
+                        placeholder={t("pos.card_txn_ref_placeholder")}
+                        value={cardTxnRef}
+                        onChange={(e) => { setCardTxnRef(e.target.value.replace(/\D/g, "")); setPaymentError(""); }}
+                        maxLength={20}
+                        className="text-center text-lg tracking-wider font-mono"
+                        data-testid="input-card-txn-ref"
+                      />
+                      <p className="text-xs text-muted-foreground">{t("pos.card_txn_ref_hint")}</p>
+                    </div>
+                  )}
+
+                  {paymentMethod === "bank_transfer" && (
+                    <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                      <label className="text-sm font-medium">{t("pos.txn_id")}</label>
+                      <Input placeholder={t("pos.txn_id_placeholder")} value={bankTxnId} onChange={(e) => setBankTxnId(e.target.value)} data-testid="input-txn-id" />
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
                     <div className="space-y-2">
                       <Label htmlFor="customer-phone" className="text-sm font-medium">{t("pos.customer_phone")}</Label>
                       <Input
                         id="customer-phone"
                         placeholder={t("pos.customer_phone_placeholder")}
                         value={customerPhone}
-                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        onChange={(e) => { setCustomerPhone(e.target.value); setPaymentError(""); }}
                         data-testid="input-customer-phone"
                       />
                     </div>
+                  </div>
 
+                  <div className="bg-muted/30 rounded-lg p-3 space-y-3 border">
+                    <label className="text-sm font-medium">{t("pos.receipt_delivery")}</label>
                     <div className="flex items-center space-x-2 rtl:space-x-reverse">
                       <Checkbox
                         id="send-whatsapp"
                         checked={sendWhatsApp}
-                        onCheckedChange={(checked) => setSendWhatsApp(!!checked)}
-                        disabled={!customerPhone}
+                        onCheckedChange={(checked) => { setSendWhatsApp(!!checked); setPaymentError(""); }}
+                        disabled={!customerPhone.trim()}
                         data-testid="checkbox-send-whatsapp"
                       />
                       <Label
                         htmlFor="send-whatsapp"
-                        className={`text-sm font-medium ${!customerPhone ? "text-muted-foreground cursor-not-allowed" : "cursor-pointer"}`}
+                        className={`text-sm font-medium ${!customerPhone.trim() ? "text-muted-foreground cursor-not-allowed" : "cursor-pointer"}`}
                       >
                         <div className="flex items-center gap-2">
                           <MessageSquare className="w-4 h-4 text-green-600" />
@@ -927,28 +995,31 @@ export default function POS() {
                         </div>
                       </Label>
                     </div>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <label className="text-sm font-medium">{t("pos.payment_method")}</label>
-                    <div className="grid grid-cols-3 gap-3">
-                      <Button variant={paymentMethod === "cash" ? "default" : "outline"} onClick={() => setPaymentMethod("cash")} className="h-12" data-testid="button-pay-cash">{t("pos.pay_cash")}</Button>
-                      <Button variant={paymentMethod === "card" ? "default" : "outline"} onClick={() => setPaymentMethod("card")} className="h-12" data-testid="button-pay-card">{t("pos.pay_card")}</Button>
-                      <Button variant={paymentMethod === "bank_transfer" ? "default" : "outline"} onClick={() => setPaymentMethod("bank_transfer")} className="h-12 text-xs" data-testid="button-pay-bank">{t("pos.pay_bank")}</Button>
+                    <div className="flex items-center space-x-2 rtl:space-x-reverse">
+                      <Checkbox
+                        id="print-receipt"
+                        checked={printReceipt}
+                        onCheckedChange={(checked) => setPrintReceipt(!!checked)}
+                        data-testid="checkbox-print-receipt"
+                      />
+                      <Label htmlFor="print-receipt" className="text-sm font-medium cursor-pointer">
+                        <div className="flex items-center gap-2">
+                          <Printer className="w-4 h-4 text-blue-600" />
+                          {t("pos.print_invoice")}
+                        </div>
+                      </Label>
                     </div>
                   </div>
 
-                  {paymentMethod === "bank_transfer" && (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">{t("pos.txn_id")}</label>
-                        <Input placeholder={t("pos.txn_id_placeholder")} value={bankTxnId} onChange={(e) => setBankTxnId(e.target.value)} data-testid="input-txn-id" />
-                      </div>
+                  {paymentError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2 animate-in fade-in">
+                      <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                      <p className="text-sm text-red-700 font-medium" data-testid="text-payment-error">{paymentError}</p>
                     </div>
                   )}
                 </div>
                 <DialogFooter>
-                  <Button className="w-full h-12 gap-2 text-lg" onClick={() => saleMutation.mutate()} disabled={saleMutation.isPending} data-testid="button-confirm-pay">
+                  <Button className="w-full h-12 gap-2 text-lg" onClick={handleConfirmPayment} disabled={saleMutation.isPending} data-testid="button-confirm-pay">
                     <CheckCircle2 className="w-5 h-5" />
                     {saleMutation.isPending ? t("pos.confirming") : t("pos.confirm_payment")}
                   </Button>
