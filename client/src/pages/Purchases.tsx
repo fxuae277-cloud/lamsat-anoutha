@@ -254,6 +254,10 @@ function PurchasesTab() {
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [editQty, setEditQty] = useState("");
   const [editPrice, setEditPrice] = useState("");
+  const [editProductName, setEditProductName] = useState("");
+  const [editBarcode, setEditBarcode] = useState("");
+  const [editColor, setEditColor] = useState("");
+  const [editSize, setEditSize] = useState("");
   const [ocrStage, setOcrStage] = useState<"idle" | "uploading" | "parsing" | "done">("idle");
   const [ocrError, setOcrError] = useState<{ stage: string; error: string } | null>(null);
   const [ocrSummary, setOcrSummary] = useState<{ itemCount: number; totalQty: number; totalAmount: number; invoiceNo: string | null; date: string | null } | null>(null);
@@ -435,13 +439,21 @@ function PurchasesTab() {
   });
 
   const updateItemMutation = useMutation({
-    mutationFn: async ({ itemId, qty, unitCostBase }: { itemId: number; qty: number; unitCostBase: number }) => {
-      const res = await apiRequest("PATCH", `/api/purchases/${selectedInvoice}/items/${itemId}`, { qty, unitCostBase });
+    mutationFn: async (data: { itemId: number; qty: number; unitCostBase: number; productName: string; barcode: string; color: string; size: string }) => {
+      const res = await apiRequest("PATCH", `/api/purchases/${selectedInvoice}/items/${data.itemId}`, {
+        qty: data.qty,
+        unitCostBase: data.unitCostBase,
+        productName: data.productName,
+        barcode: data.barcode,
+        color: data.color,
+        size: data.size,
+      });
       return res.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
       qc.invalidateQueries({ queryKey: ["/api/purchases"] });
+      qc.invalidateQueries({ queryKey: ["/api/products"] });
       setEditingItemId(null);
       toast({ title: t("common.saved") });
     },
@@ -838,12 +850,34 @@ function PurchasesTab() {
                   return (
                   <TableRow key={it.id} data-testid={`row-purchase-item-${it.id}`}>
                     <TableCell>
-                      <div className="font-medium">{it.productName || productMap[it.productId] || it.productId}</div>
-                      {it.variantId && <div className="text-xs text-muted-foreground">{t("purchases_v2.variant_info")}</div>}
+                      {isEditing ? (
+                        <Input className="h-8 min-w-[120px]" value={editProductName}
+                          onChange={e => setEditProductName(e.target.value)} data-testid={`input-edit-name-${it.id}`} />
+                      ) : (
+                        <>
+                          <div className="font-medium">{it.productName || productMap[it.productId] || it.productId}</div>
+                          {it.variantId && <div className="text-xs text-muted-foreground">{t("purchases_v2.variant_info")}</div>}
+                        </>
+                      )}
                     </TableCell>
-                    <TableCell className="font-mono text-xs">{it.barcode || "—"}</TableCell>
-                    <TableCell>{it.color || "—"}</TableCell>
-                    <TableCell>{it.size || "—"}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {isEditing ? (
+                        <Input className="h-8 w-28 font-mono text-xs" value={editBarcode}
+                          onChange={e => setEditBarcode(e.target.value)} data-testid={`input-edit-barcode-${it.id}`} />
+                      ) : (it.barcode || "—")}
+                    </TableCell>
+                    <TableCell>
+                      {isEditing ? (
+                        <Input className="h-8 w-24" value={editColor}
+                          onChange={e => setEditColor(e.target.value)} data-testid={`input-edit-color-${it.id}`} />
+                      ) : (it.color || "—")}
+                    </TableCell>
+                    <TableCell>
+                      {isEditing ? (
+                        <Input className="h-8 w-20" value={editSize}
+                          onChange={e => setEditSize(e.target.value)} data-testid={`input-edit-size-${it.id}`} />
+                      ) : (it.size || "—")}
+                    </TableCell>
                     <TableCell className="font-mono">
                       {isEditing ? (
                         <Input type="number" min={1} className="h-8 w-20 font-mono" value={editQty}
@@ -868,7 +902,15 @@ function PurchasesTab() {
                             <>
                               <Button variant="ghost" size="sm" className="text-green-600 hover:text-green-700 h-8 w-8 p-0"
                                 disabled={updateItemMutation.isPending}
-                                onClick={() => updateItemMutation.mutate({ itemId: it.id, qty: parseInt(editQty) || 1, unitCostBase: parseFloat(editPrice) || 0 })}
+                                onClick={() => updateItemMutation.mutate({
+                                  itemId: it.id,
+                                  qty: parseInt(editQty) || 1,
+                                  unitCostBase: parseFloat(editPrice) || 0,
+                                  productName: editProductName,
+                                  barcode: editBarcode,
+                                  color: editColor,
+                                  size: editSize,
+                                })}
                                 data-testid={`button-save-item-${it.id}`}>
                                 <FileCheck className="w-4 h-4" />
                               </Button>
@@ -880,7 +922,15 @@ function PurchasesTab() {
                           ) : (
                             <>
                               <Button variant="ghost" size="sm" className="text-blue-500 hover:text-blue-700 h-8 w-8 p-0"
-                                onClick={() => { setEditingItemId(it.id); setEditQty(String(it.qty)); setEditPrice(String(parseFloat(it.unitCostBase))); }}
+                                onClick={() => {
+                                  setEditingItemId(it.id);
+                                  setEditProductName(it.productName || productMap[it.productId] || "");
+                                  setEditBarcode(it.barcode || "");
+                                  setEditColor(it.color || "");
+                                  setEditSize(it.size || "");
+                                  setEditQty(String(it.qty));
+                                  setEditPrice(String(parseFloat(it.unitCostBase)));
+                                }}
                                 data-testid={`button-edit-item-${it.id}`}>
                                 <Edit className="w-4 h-4" />
                               </Button>

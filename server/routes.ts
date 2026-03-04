@@ -1848,12 +1848,26 @@ export async function registerRoutes(
       return res.status(400).json({ message: "لا يمكن تعديل أصناف فاتورة معتمدة أو ملغاة" });
     }
     const itemId = Number(req.params.itemId);
-    const { qty, unitCostBase } = req.body;
+    const { qty, unitCostBase, barcode, color, size, productName } = req.body;
+
     const updated = await storage.updatePurchaseItem(itemId, {
       qty: qty !== undefined ? Number(qty) : undefined,
       unitCostBase: unitCostBase !== undefined ? Number(unitCostBase) : undefined,
     });
     if (!updated) return res.status(404).json({ message: "الصنف غير موجود" });
+
+    if (updated.variantId && (barcode !== undefined || color !== undefined || size !== undefined)) {
+      const variantUpdates: any = {};
+      if (barcode !== undefined) variantUpdates.barcode = barcode || null;
+      if (color !== undefined) variantUpdates.color = color || null;
+      if (size !== undefined) variantUpdates.size = size || null;
+      await storage.updateVariant(updated.variantId, variantUpdates);
+    }
+
+    if (productName !== undefined && updated.productId) {
+      await storage.updateProduct(updated.productId, { name: productName });
+    }
+
     res.json(updated);
   });
 
