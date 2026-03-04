@@ -864,35 +864,11 @@ export default function POS() {
           </div>
 
           <div className="p-4 bg-muted/10 border-t border-border space-y-3">
-            <div className="flex items-center gap-2 pb-2">
-              <Input 
-                type="number" 
-                placeholder={t("pos.discount")} 
-                className="w-24 text-center" 
-                value={discountValue || ""}
-                onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
-                data-testid="input-discount"
-              />
-              <Select value={discountType} onValueChange={(v: any) => setDiscountType(v)}>
-                <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="value">{t("common.omr")}</SelectItem>
-                  <SelectItem value="percentage">%</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t("pos.subtotal")}</span>
                 <span className="font-medium">{subtotal.toFixed(3)} {t("common.omr")}</span>
               </div>
-              {discountAmount > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">{t("pos.discount_label")}</span>
-                  <span className="text-green-600">-{discountAmount.toFixed(3)} {t("common.omr")}</span>
-                </div>
-              )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t("pos.vat_label")}</span>
                 <span>{vat.toFixed(3)} {t("common.omr")}</span>
