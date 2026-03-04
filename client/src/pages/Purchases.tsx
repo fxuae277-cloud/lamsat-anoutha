@@ -251,6 +251,10 @@ function PurchasesTab() {
   const [showPostConfirm, setShowPostConfirm] = useState(false);
   const [showQuickSupplier, setShowQuickSupplier] = useState(false);
   const [showQuickProduct, setShowQuickProduct] = useState(false);
+  const [ocrScanning, setOcrScanning] = useState(false);
+  const [ocrResult, setOcrResult] = useState<any>(null);
+  const [showOcrReview, setShowOcrReview] = useState(false);
+  const [showRawText, setShowRawText] = useState(false);
 
   const [newSupplierId, setNewSupplierId] = useState("");
   const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
@@ -457,6 +461,66 @@ function PurchasesTab() {
     },
   });
 
+  async function handleOcrUpload(file: File) {
+    if (!selectedInvoice) return;
+    setOcrScanning(true);
+    try {
+      const formData = new FormData();
+      formData.append("invoice", file);
+      const res = await fetch("/api/ocr/invoice", { method: "POST", body: formData, credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setOcrResult(data);
+      setShowOcrReview(true);
+    } catch (err: any) {
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
+    } finally {
+      setOcrScanning(false);
+    }
+  }
+
+  async function importOcrLines(onlyMatched: boolean) {
+    if (!ocrResult?.lines || !selectedInvoice) return;
+    const linesToImport = onlyMatched ? ocrResult.lines.filter((l: any) => l.matched) : ocrResult.lines;
+    let imported = 0;
+    for (const line of linesToImport) {
+      let variantId = line.variantId;
+      let productId = line.productId;
+
+      if (!variantId) {
+        try {
+          const res = await apiRequest("POST", "/api/variants/quick-create", {
+            productName: line.productCode || line.description,
+            barcode: null,
+            sku: line.productCode || null,
+            color: line.color || null,
+            size: line.size || null,
+            price: line.price || 0,
+            costDefault: line.price || 0,
+          });
+          const data = await res.json();
+          variantId = data.variant.id;
+          productId = data.product.id;
+        } catch { continue; }
+      }
+
+      try {
+        await apiRequest("POST", `/api/purchases/${selectedInvoice}/items`, {
+          productId,
+          variantId,
+          qty: line.qty,
+          unitCostBase: line.price,
+        });
+        imported++;
+      } catch {}
+    }
+    qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
+    qc.invalidateQueries({ queryKey: ["/api/products"] });
+    setShowOcrReview(false);
+    setOcrResult(null);
+    toast({ title: t("purchases_v2.ocr_imported"), description: `${imported} / ${linesToImport.length}` });
+  }
+
   const items = invoiceDetail?.items || [];
   const isPending = invoiceDetail?.status === "pending";
   const statusLabel = invoiceDetail?.status === "pending" ? t("purchases.pending") : invoiceDetail?.status === "approved" ? t("purchases.approved") : t("purchases.cancelled");
@@ -479,6 +543,22 @@ function PurchasesTab() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {isPending && (
+              <label className="cursor-pointer">
+                <input type="file" accept="image/*" className="hidden" data-testid="input-ocr-upload"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleOcrUpload(f); e.target.value = ""; }}
+                  disabled={ocrScanning} />
+                <Button variant="outline" asChild disabled={ocrScanning} data-testid="button-ocr-upload">
+                  <span>
+                    {ocrScanning ? (
+                      <><FileText className="w-4 h-4 ml-1 animate-pulse" /> {t("purchases_v2.ocr_scanning")}</>
+                    ) : (
+                      <><FileText className="w-4 h-4 ml-1" /> {t("purchases_v2.ocr_upload")}</>
+                    )}
+                  </span>
+                </Button>
+              </label>
+            )}
             <Badge variant={isPending ? "outline" : "default"} className={isPending ? "border-amber-400 text-amber-600" : invoiceDetail?.status === "approved" ? "bg-green-600" : "bg-red-500"}>
               {statusLabel}
             </Badge>
@@ -902,6 +982,89 @@ function PurchasesTab() {
             <Button onClick={() => quickProductMutation.mutate()} disabled={!qpName || quickProductMutation.isPending} data-testid="button-save-qp">
               {quickProductMutation.isPending ? t("common.loading") : t("common.save")}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showOcrReview} onOpenChange={setShowOcrReview}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t("purchases_v2.ocr_review_title")}</DialogTitle>
+            <DialogDescription>
+              {ocrResult?.lines?.length > 0
+                ? t("purchases_v2.ocr_lines_found").replace("{0}", ocrResult.lines.length)
+                : t("purchases_v2.ocr_no_lines")}
+            </DialogDescription>
+          </DialogHeader>
+
+          {ocrResult?.lines?.length > 0 && (
+            <div className="space-y-4">
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead>#</TableHead>
+                    <TableHead>{t("purchases_v2.ocr_code")}</TableHead>
+                    <TableHead>{t("products.variant_color")}</TableHead>
+                    <TableHead>{t("products.variant_size")}</TableHead>
+                    <TableHead>{t("purchases.table_qty")}</TableHead>
+                    <TableHead>{t("purchases.table_unit_price")}</TableHead>
+                    <TableHead>{t("purchases.table_total")}</TableHead>
+                    <TableHead>{t("common.status")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ocrResult.lines.map((line: any, i: number) => (
+                    <TableRow key={i} className={line.matched ? "" : "bg-amber-50"}>
+                      <TableCell>{line.lineNo}</TableCell>
+                      <TableCell>
+                        <div className="font-mono text-sm font-bold">{line.productCode}</div>
+                        <div className="text-xs text-muted-foreground">{line.description}</div>
+                      </TableCell>
+                      <TableCell>{line.color || "—"}</TableCell>
+                      <TableCell>{line.size || "—"}</TableCell>
+                      <TableCell className="font-mono">{line.qty}</TableCell>
+                      <TableCell className="font-mono">{omr(line.price)}</TableCell>
+                      <TableCell className="font-mono">{omr(line.amount)}</TableCell>
+                      <TableCell>
+                        {line.matched ? (
+                          <Badge className="bg-green-600 text-white">{t("purchases_v2.ocr_matched")}</Badge>
+                        ) : (
+                          <Badge variant="outline" className="border-amber-400 text-amber-600">{t("purchases_v2.ocr_not_matched")}</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setShowRawText(!showRawText)}>
+                  {t("purchases_v2.ocr_raw_text")}
+                </Button>
+              </div>
+
+              {showRawText && (
+                <pre className="bg-muted p-4 rounded-lg text-xs max-h-40 overflow-auto whitespace-pre-wrap font-mono" dir="ltr">
+                  {ocrResult.rawText}
+                </pre>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => { setShowOcrReview(false); setOcrResult(null); }}>
+              {t("common.cancel")}
+            </Button>
+            {ocrResult?.lines?.some((l: any) => l.matched) && (
+              <Button variant="outline" onClick={() => importOcrLines(true)} data-testid="button-ocr-import-matched">
+                {t("purchases_v2.ocr_import_matched")}
+              </Button>
+            )}
+            {ocrResult?.lines?.length > 0 && (
+              <Button onClick={() => importOcrLines(false)} data-testid="button-ocr-import-all">
+                {t("purchases_v2.ocr_import_all")}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

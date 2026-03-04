@@ -193,7 +193,7 @@ shared/
 8. **Shift Reports**: GET /api/reports/shift?shiftId=... → cash/card/bank sales, expenses, expected vs actual cash
 9. **Settings**: Tabbed interface - account (change password), users (owner/admin), general settings, branches & cities
 10. **Reports**: Shift report + Daily report (with COGS/Profit analysis) + Branch comparison report + Profit reports (by branch/employee/product)
-11. **Purchases**: Full purchase invoice system with Average Cost calculation, extra cost allocation, posting workflow
+11. **Purchases**: Full purchase invoice system with Average Cost calculation, extra cost allocation, posting workflow, OCR invoice image scanning (Tesseract + sharp preprocessing)
 12. **COGS/Profit**: Automatic cost tracking on sales and order payments with profit analysis
 13. **Export**: Daily report Excel/PDF export, multi-branch profit Excel export (date range), sales invoices Excel export, inventory Excel export, purchases Excel export, individual invoice PDF export
 14. **Invoices (فواتير نقطة البيع)**: POS sales invoice browser with filters (date, payment method, employee, branch), detail modal with PDF download + thermal 80mm receipt print + A4 print, Excel export
