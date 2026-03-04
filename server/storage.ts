@@ -1586,10 +1586,31 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getLocations(branchId?: number) {
+    let query = `
+      SELECT l.*, b.name as branch_name
+      FROM locations l
+      LEFT JOIN branches b ON b.id = l.branch_id
+    `;
+    const params: any[] = [];
     if (branchId) {
-      return db.select().from(locations).where(eq(locations.branchId, branchId));
+      query += ` WHERE l.branch_id = $1`;
+      params.push(branchId);
     }
-    return db.select().from(locations);
+    query += ` ORDER BY l.is_central DESC, b.name, l.name`;
+    const result = await pool.query(query, params);
+    return result.rows.map((r: any) => ({
+      id: r.id,
+      branchId: r.branch_id,
+      code: r.code,
+      name: r.name,
+      type: r.type,
+      isMain: r.is_main,
+      kind: r.kind,
+      isCentral: r.is_central,
+      isBranchDefault: r.is_branch_default,
+      active: r.active,
+      branchName: r.branch_name,
+    }));
   }
 
   async getLocationByCode(branchId: number, code: string) {
@@ -3345,12 +3366,15 @@ export class DatabaseStorage implements IStorage {
     let query = `
       SELECT ib.*, pv.barcode, pv.sku, pv.color, pv.size, pv.price,
              p.name as product_name, p.category_id, c.name as category_name,
-             l.name as location_name, l.type as location_type
+             l.name as location_name, l.type as location_type,
+             b.name as branch_name,
+             CASE WHEN l.is_central THEN l.name ELSE COALESCE(b.name || ' - ', '') || l.name END as full_location_name
       FROM inventory_balances ib
       JOIN product_variants pv ON pv.id = ib.variant_id
       JOIN products p ON p.id = pv.product_id
       LEFT JOIN categories c ON c.id = p.category_id
       JOIN locations l ON l.id = ib.location_id
+      LEFT JOIN branches b ON b.id = l.branch_id
       WHERE 1=1
     `;
     const params: any[] = [];
@@ -3391,11 +3415,14 @@ export class DatabaseStorage implements IStorage {
   async getStockTransfers() {
     const result = await pool.query(`
       SELECT st.*,
-             fl.name as from_location_name, tl.name as to_location_name,
+             CASE WHEN fl.is_central THEN fl.name ELSE COALESCE(fb.name || ' - ', '') || fl.name END as from_location_name,
+             CASE WHEN tl.is_central THEN tl.name ELSE COALESCE(tb.name || ' - ', '') || tl.name END as to_location_name,
              u.name as creator_name
       FROM stock_transfers st
       JOIN locations fl ON fl.id = st.from_location_id
+      LEFT JOIN branches fb ON fb.id = fl.branch_id
       JOIN locations tl ON tl.id = st.to_location_id
+      LEFT JOIN branches tb ON tb.id = tl.branch_id
       LEFT JOIN users u ON u.id = st.created_by
       ORDER BY st.created_at DESC
     `);
@@ -3482,12 +3509,14 @@ export class DatabaseStorage implements IStorage {
   async getInventoryLedgerEntries(filters?: { variantId?: number; locationId?: number; limit?: number }) {
     let query = `
       SELECT il.*, pv.barcode, pv.sku, pv.color, pv.size,
-             p.name as product_name, l.name as location_name,
+             p.name as product_name,
+             CASE WHEN l.is_central THEN l.name ELSE COALESCE(b.name || ' - ', '') || l.name END as location_name,
              u.name as creator_name
       FROM inventory_ledger il
       JOIN product_variants pv ON pv.id = il.variant_id
       JOIN products p ON p.id = pv.product_id
       JOIN locations l ON l.id = il.location_id
+      LEFT JOIN branches b ON b.id = l.branch_id
       LEFT JOIN users u ON u.id = il.created_by
       WHERE 1=1
     `;

@@ -14,7 +14,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 
-type Location = { id: number; name: string; type: string; code: string; branchId: number | null; isMain: boolean; isCentral: boolean; isBranchDefault: boolean; active: boolean; kind: string | null };
+type Location = { id: number; name: string; type: string; code: string; branchId: number | null; isMain: boolean; isCentral: boolean; isBranchDefault: boolean; active: boolean; kind: string | null; branchName: string | null };
+
+function locLabel(loc: Location) {
+  if (loc.isCentral) return loc.name;
+  return loc.branchName ? `${loc.branchName} - ${loc.name}` : loc.name;
+}
 
 function BalancesTab() {
   const { t, lang } = useI18n();
@@ -46,7 +51,7 @@ function BalancesTab() {
             <SelectContent>
               <SelectItem value="all">{t("inv_balances.all_locations")}</SelectItem>
               {locations.map(loc => (
-                <SelectItem key={loc.id} value={String(loc.id)}>{loc.name}</SelectItem>
+                <SelectItem key={loc.id} value={String(loc.id)}>{locLabel(loc)}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -88,7 +93,7 @@ function BalancesTab() {
                   {b.qtyOnHand < 5 && <Badge variant="destructive" className="ml-2 text-[10px] h-4">{t("inv_balances.low_stock")}</Badge>}
                 </TableCell>
                 <TableCell className="text-right font-mono">{Number(b.price).toFixed(3)}</TableCell>
-                <TableCell>{b.locationName}</TableCell>
+                <TableCell>{b.full_location_name || b.locationName}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -206,7 +211,7 @@ function TransfersTab() {
               <Select value={fromLoc} onValueChange={setFromLoc}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
+                  {locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{locLabel(l)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -215,7 +220,7 @@ function TransfersTab() {
               <Select value={toLoc} onValueChange={setToLoc}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {locations.filter(l => String(l.id) !== fromLoc).map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
+                  {locations.filter(l => String(l.id) !== fromLoc).map(l => <SelectItem key={l.id} value={String(l.id)}>{locLabel(l)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -335,7 +340,7 @@ function LedgerTab() {
           <SelectContent>
             <SelectItem value="all">{t("inv_balances.all_locations")}</SelectItem>
             {locations.map(loc => (
-              <SelectItem key={loc.id} value={String(loc.id)}>{loc.name}</SelectItem>
+              <SelectItem key={loc.id} value={String(loc.id)}>{locLabel(loc)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
