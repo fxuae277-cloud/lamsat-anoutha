@@ -997,8 +997,8 @@ function PurchasesTab() {
             </DialogDescription>
           </DialogHeader>
 
-          {ocrResult?.lines?.length > 0 && (
-            <div className="space-y-4">
+          <div className="space-y-4">
+            {ocrResult?.lines?.length > 0 ? (
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow>
@@ -1036,20 +1036,25 @@ function PurchasesTab() {
                   ))}
                 </TableBody>
               </Table>
-
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setShowRawText(!showRawText)}>
-                  {t("purchases_v2.ocr_raw_text")}
-                </Button>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <FileText className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                <p className="text-sm">{t("purchases_v2.ocr_no_lines")}</p>
               </div>
+            )}
 
-              {showRawText && (
-                <pre className="bg-muted p-4 rounded-lg text-xs max-h-40 overflow-auto whitespace-pre-wrap font-mono" dir="ltr">
-                  {ocrResult.rawText}
-                </pre>
-              )}
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowRawText(!showRawText)}>
+                {t("purchases_v2.ocr_raw_text")}
+              </Button>
             </div>
-          )}
+
+            {showRawText && (
+              <pre className="bg-muted p-4 rounded-lg text-xs max-h-60 overflow-auto whitespace-pre-wrap font-mono" dir="ltr">
+                {ocrResult?.rawText || ""}
+              </pre>
+            )}
+          </div>
 
           <DialogFooter className="flex gap-2">
             <Button variant="outline" onClick={() => { setShowOcrReview(false); setOcrResult(null); }}>
