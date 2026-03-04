@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Plus, Minus, Trash2, CheckCircle2, Image as ImageIcon, Store, Monitor, Banknote, LogOut, User as UserIcon, XCircle, Clock, AlertTriangle, Printer, ArrowLeft, Receipt, TrendingUp, TrendingDown, Camera } from "lucide-react";
+import { Search, Plus, Minus, Trash2, CheckCircle2, Image as ImageIcon, Store, Monitor, Banknote, LogOut, User as UserIcon, XCircle, Clock, AlertTriangle, Printer, ArrowLeft, Receipt, TrendingUp, TrendingDown, Camera, Pause, Play, ShoppingCart } from "lucide-react";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -260,6 +260,15 @@ function ShiftReceipt({ report, onNewShift }: { report: any; onNewShift: () => v
   );
 }
 
+interface HeldInvoice {
+  id: number;
+  cart: {product: Product, qty: number}[];
+  discountValue: number;
+  discountType: "percentage" | "value";
+  heldAt: Date;
+  note: string;
+}
+
 export default function POS() {
   const { toast } = useToast();
   const { user, logout } = useAuth();
@@ -282,6 +291,12 @@ export default function POS() {
   const [preCloseData, setPreCloseData] = useState<any>(null);
   const [pendingOrders, setPendingOrders] = useState<any[]>([]);
   const [scannerOpen, setScannerOpen] = useState(false);
+
+  const [heldInvoices, setHeldInvoices] = useState<HeldInvoice[]>([]);
+  const [holdNoteDialogOpen, setHoldNoteDialogOpen] = useState(false);
+  const [holdNote, setHoldNote] = useState("");
+  const [heldListDialogOpen, setHeldListDialogOpen] = useState(false);
+  const heldIdCounter = useRef(1);
 
   const isOwner = user?.role === "owner" || user?.role === "admin";
 
@@ -565,6 +580,57 @@ export default function POS() {
     setCart(prev => prev.filter(i => i.product.id !== productId));
   };
 
+  const holdCurrentInvoice = () => {
+    if (cart.length === 0) return;
+    setHoldNoteDialogOpen(true);
+  };
+
+  const confirmHoldInvoice = () => {
+    const held: HeldInvoice = {
+      id: heldIdCounter.current++,
+      cart: [...cart],
+      discountValue,
+      discountType,
+      heldAt: new Date(),
+      note: holdNote.trim(),
+    };
+    setHeldInvoices(prev => [...prev, held]);
+    setCart([]);
+    setDiscountValue(0);
+    setDiscountType("value");
+    setHoldNote("");
+    setHoldNoteDialogOpen(false);
+    toast({ title: t("pos.invoice_held"), description: t("pos.invoice_held_desc") });
+  };
+
+  const recallInvoice = (heldId: number) => {
+    const held = heldInvoices.find(h => h.id === heldId);
+    if (!held) return;
+    if (cart.length > 0) {
+      const currentHeld: HeldInvoice = {
+        id: heldIdCounter.current++,
+        cart: [...cart],
+        discountValue,
+        discountType,
+        heldAt: new Date(),
+        note: t("pos.auto_held"),
+      };
+      setHeldInvoices(prev => [...prev.filter(h => h.id !== heldId), currentHeld]);
+    } else {
+      setHeldInvoices(prev => prev.filter(h => h.id !== heldId));
+    }
+    setCart(held.cart);
+    setDiscountValue(held.discountValue);
+    setDiscountType(held.discountType);
+    setHeldListDialogOpen(false);
+    toast({ title: t("pos.invoice_recalled"), description: held.note || t("pos.invoice_recalled_desc") });
+  };
+
+  const deleteHeldInvoice = (heldId: number) => {
+    setHeldInvoices(prev => prev.filter(h => h.id !== heldId));
+    toast({ title: t("pos.held_deleted") });
+  };
+
   const handleBarcodeSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       const barcode = (e.target as HTMLInputElement).value.trim();
@@ -703,8 +769,37 @@ export default function POS() {
         </div>
 
         <div className="w-96 bg-card border border-border shadow-sm rounded-xl flex flex-col shrink-0 overflow-hidden">
-          <div className="p-4 border-b border-border bg-muted/30">
+          <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
             <h2 className="font-bold text-lg" data-testid="text-cart-title">{t("pos.cart_title")}</h2>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-orange-600 border-orange-200 hover:bg-orange-50 hover:text-orange-700"
+                disabled={cart.length === 0}
+                onClick={holdCurrentInvoice}
+                data-testid="button-hold-invoice"
+              >
+                <Pause className="w-3.5 h-3.5" />
+                {t("pos.hold")}
+              </Button>
+              <Button
+                variant={heldInvoices.length > 0 ? "default" : "outline"}
+                size="sm"
+                className={`gap-1.5 ${heldInvoices.length > 0 ? "bg-blue-600 hover:bg-blue-700" : ""}`}
+                onClick={() => setHeldListDialogOpen(true)}
+                disabled={heldInvoices.length === 0}
+                data-testid="button-recall-invoice"
+              >
+                <Play className="w-3.5 h-3.5" />
+                {t("pos.recall")}
+                {heldInvoices.length > 0 && (
+                  <span className="bg-white text-blue-700 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                    {heldInvoices.length}
+                  </span>
+                )}
+              </Button>
+            </div>
           </div>
           
           <div className="flex-1 overflow-y-auto p-2">
@@ -959,6 +1054,99 @@ export default function POS() {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={holdNoteDialogOpen} onOpenChange={setHoldNoteDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pause className="w-5 h-5 text-orange-500" />
+              {t("pos.hold_invoice_title")}
+            </DialogTitle>
+            <DialogDescription>{t("pos.hold_invoice_desc")}</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+              <p className="text-sm font-medium text-orange-800">
+                {t("pos.hold_items_count").replace("{0}", String(cart.length))} - {t("pos.total_label")} {total.toFixed(3)} {t("common.omr")}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("pos.hold_note_label")}</label>
+              <Input
+                placeholder={t("pos.hold_note_placeholder")}
+                value={holdNote}
+                onChange={(e) => setHoldNote(e.target.value)}
+                data-testid="input-hold-note"
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setHoldNoteDialogOpen(false); setHoldNote(""); }}>{t("common.cancel")}</Button>
+            <Button className="gap-2 bg-orange-600 hover:bg-orange-700" onClick={confirmHoldInvoice} data-testid="button-confirm-hold">
+              <Pause className="w-4 h-4" />
+              {t("pos.confirm_hold")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={heldListDialogOpen} onOpenChange={setHeldListDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5 text-blue-500" />
+              {t("pos.held_invoices_title")}
+            </DialogTitle>
+            <DialogDescription>{t("pos.held_invoices_desc").replace("{0}", String(heldInvoices.length))}</DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-3 max-h-[60vh] overflow-y-auto">
+            {heldInvoices.map((held) => {
+              const heldTotal = held.cart.reduce((sum, item) => {
+                const sub = parseFloat(item.product.price) * item.qty;
+                const disc = held.discountType === "percentage" ? sub * (held.discountValue / 100) : held.discountValue;
+                return sum + sub - disc;
+              }, 0) * 1.05;
+              return (
+                <div key={held.id} className="border rounded-lg p-3 hover:border-blue-300 transition-colors" data-testid={`held-invoice-${held.id}`}>
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <p className="font-bold text-sm">
+                        {held.note || `${t("pos.held_invoice")} #${held.id}`}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {held.heldAt.toLocaleTimeString(lang === "ar" ? "ar-OM" : "en-US", { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                    <span className="font-bold text-primary">{heldTotal.toFixed(3)} {t("common.omr")}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {held.cart.slice(0, 3).map((item, idx) => (
+                      <span key={idx} className="text-xs bg-muted px-2 py-0.5 rounded-full">
+                        {item.product.name} x{item.qty}
+                      </span>
+                    ))}
+                    {held.cart.length > 3 && (
+                      <span className="text-xs bg-muted px-2 py-0.5 rounded-full text-muted-foreground">
+                        +{held.cart.length - 3}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" className="flex-1 gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={() => recallInvoice(held.id)} data-testid={`button-recall-${held.id}`}>
+                      <Play className="w-3.5 h-3.5" />
+                      {t("pos.recall_this")}
+                    </Button>
+                    <Button size="sm" variant="outline" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => deleteHeldInvoice(held.id)} data-testid={`button-delete-held-${held.id}`}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </DialogContent>
       </Dialog>
 
