@@ -1035,6 +1035,199 @@ function PurchasesTab() {
           </div>
         )}
 
+        <Dialog open={ocrStage === "review"} onOpenChange={(open) => { if (!open) { setOcrStage("idle"); setOcrItems([]); setOcrValidation(null); setOcrMeta(null); } }}>
+          <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                {t("purchases_v2.ocr_review_title")}
+              </DialogTitle>
+              <DialogDescription>
+                {t("purchases_v2.ocr_review_desc")}
+              </DialogDescription>
+            </DialogHeader>
+
+            {ocrMeta && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-muted/50 rounded-lg border">
+                {ocrMeta.invoiceNo && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">{t("purchases.invoice_number")}</p>
+                    <p className="font-bold">{ocrMeta.invoiceNo}</p>
+                  </div>
+                )}
+                {ocrMeta.date && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">{t("purchases.date")}</p>
+                    <p className="font-bold">{ocrMeta.date}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-muted-foreground">{t("purchases_v2.ocr_items_count")}</p>
+                  <p className="font-bold">{ocrItems.length}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">{t("purchases_v2.ocr_total_qty")}</p>
+                  <p className="font-bold">{ocrItems.reduce((s: number, i: any) => s + (i.qty || 0), 0)}</p>
+                </div>
+              </div>
+            )}
+
+            {ocrValidation && (
+              <div className={`p-3 rounded-lg border flex items-start gap-3 ${ocrValidation.allPass ? "bg-green-50 border-green-300" : "bg-red-50 border-red-300"}`}>
+                {ocrValidation.allPass ? (
+                  <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                )}
+                <div className="flex-1 text-sm">
+                  <p className={`font-medium ${ocrValidation.allPass ? "text-green-800" : "text-red-800"}`}>
+                    {ocrValidation.allPass ? t("purchases_v2.ocr_validation_pass") : t("purchases_v2.ocr_validation_fail")}
+                  </p>
+                  <div className="flex flex-wrap gap-3 mt-1">
+                    {ocrValidation.lineErrors > 0 && (
+                      <span className="text-red-700">{t("purchases_v2.ocr_line_errors")}: {ocrValidation.lineErrors}</span>
+                    )}
+                    {!ocrValidation.totalQtyMatch && ocrValidation.expectedTotalQty !== null && (
+                      <span className="text-red-700">
+                        {t("purchases_v2.ocr_qty_mismatch")}: {ocrValidation.actualTotalQty} ≠ {ocrValidation.expectedTotalQty}
+                      </span>
+                    )}
+                    {!ocrValidation.totalAmountMatch && ocrValidation.expectedTotalAmount !== null && (
+                      <span className="text-red-700">
+                        {t("purchases_v2.ocr_amount_mismatch")}: {omr(ocrValidation.actualTotalAmount)} ≠ {omr(ocrValidation.expectedTotalAmount)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="border rounded-lg overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead className="w-8">#</TableHead>
+                    <TableHead className="min-w-[140px]">{t("purchases_v2.ocr_description")}</TableHead>
+                    <TableHead className="min-w-[80px]">{t("products.variant_color")}</TableHead>
+                    <TableHead className="min-w-[60px]">{t("products.variant_size")}</TableHead>
+                    <TableHead className="min-w-[70px]">{t("purchases.table_qty")}</TableHead>
+                    <TableHead className="min-w-[90px]">{t("purchases.table_unit_price")}</TableHead>
+                    <TableHead className="min-w-[90px]">{t("purchases.table_total")}</TableHead>
+                    <TableHead className="min-w-[80px]">{t("common.status")}</TableHead>
+                    <TableHead className="w-20"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ocrItems.map((item: any, idx: number) => (
+                    <TableRow key={idx} className={item.needsReview ? "bg-red-50" : "bg-green-50/30"} data-testid={`row-ocr-item-${idx}`}>
+                      <TableCell className="text-xs text-muted-foreground font-mono">{idx + 1}</TableCell>
+                      <TableCell>
+                        <Input value={item.code || ""} onChange={e => updateOcrItem(idx, "code", e.target.value)}
+                          className={`h-8 text-sm ${item.reviewReasons?.includes("no_description") ? "border-red-400" : ""}`}
+                          data-testid={`input-ocr-code-${idx}`} />
+                      </TableCell>
+                      <TableCell>
+                        <Input value={item.color || ""} onChange={e => updateOcrItem(idx, "color", e.target.value)}
+                          className="h-8 text-sm" data-testid={`input-ocr-color-${idx}`} />
+                      </TableCell>
+                      <TableCell>
+                        <Input value={item.size || ""} onChange={e => updateOcrItem(idx, "size", e.target.value)}
+                          className="h-8 text-sm" data-testid={`input-ocr-size-${idx}`} />
+                      </TableCell>
+                      <TableCell>
+                        <Input type="number" min={0} value={item.qty || 0}
+                          onChange={e => updateOcrItem(idx, "qty", parseInt(e.target.value) || 0)}
+                          className={`h-8 text-sm w-20 font-mono ${item.reviewReasons?.includes("qty_zero") ? "border-red-400" : ""}`}
+                          data-testid={`input-ocr-qty-${idx}`} />
+                      </TableCell>
+                      <TableCell>
+                        <Input type="number" min={0} step="0.001" value={item.unitCost || 0}
+                          onChange={e => updateOcrItem(idx, "unitCost", parseFloat(e.target.value) || 0)}
+                          className={`h-8 text-sm w-24 font-mono ${item.reviewReasons?.includes("price_zero") ? "border-red-400" : ""}`}
+                          data-testid={`input-ocr-price-${idx}`} />
+                      </TableCell>
+                      <TableCell>
+                        <span className={`font-mono text-sm ${item.reviewReasons?.includes("amount_mismatch") ? "text-red-600 font-bold" : ""}`}>
+                          {omr(item.amount || 0)}
+                          {item.reviewReasons?.includes("amount_mismatch") && (
+                            <span className="text-xs block text-red-500">≠ {omr(item.computedAmount)}</span>
+                          )}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {item.needsReview ? (
+                          <div className="space-y-0.5">
+                            {item.reviewReasons?.map((r: string, ri: number) => (
+                              <Badge key={ri} variant="destructive" className="text-[10px] block w-fit">
+                                {t(`purchases_v2.ocr_err_${r}`) || r}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <Badge className="bg-green-600 text-white text-[10px]">{t("purchases_v2.ocr_status_ok")}</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          {item.needsReview && (
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-blue-600"
+                              onClick={() => fixOcrItem(idx)} data-testid={`button-ocr-fix-${idx}`}
+                              title={t("purchases_v2.ocr_fix")}>
+                              <FileCheck className="w-4 h-4" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500"
+                            onClick={() => removeOcrItem(idx)} data-testid={`button-ocr-remove-${idx}`}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="font-bold bg-muted/30 border-t-2">
+                    <TableCell></TableCell>
+                    <TableCell>{t("common.total")}</TableCell>
+                    <TableCell></TableCell>
+                    <TableCell></TableCell>
+                    <TableCell className="font-mono">{ocrItems.reduce((s: number, i: any) => s + (i.qty || 0), 0)}</TableCell>
+                    <TableCell></TableCell>
+                    <TableCell className="font-mono">{omr(ocrItems.reduce((s: number, i: any) => s + (i.amount || 0), 0))}</TableCell>
+                    <TableCell></TableCell>
+                    <TableCell></TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowOcrRawText(!showOcrRawText)}>
+                {t("purchases_v2.ocr_raw_text")}
+              </Button>
+            </div>
+
+            {showOcrRawText && (
+              <pre className="bg-muted p-4 rounded-lg text-xs max-h-48 overflow-auto whitespace-pre-wrap font-mono" dir="ltr">
+                {ocrMeta?.rawText || ""}
+              </pre>
+            )}
+
+            <DialogFooter className="flex gap-2 sm:justify-between">
+              <Button variant="outline" onClick={() => { setOcrStage("idle"); setOcrItems([]); setOcrValidation(null); setOcrMeta(null); }}>
+                {t("common.cancel")}
+              </Button>
+              <div className="flex gap-2">
+                {!ocrAllValid && (
+                  <p className="text-sm text-red-600 self-center">{t("purchases_v2.ocr_fix_before_import")}</p>
+                )}
+                <Button onClick={importOcrItems} disabled={!ocrAllValid || ocrItems.length === 0}
+                  className="bg-green-600 hover:bg-green-700 gap-2" data-testid="button-ocr-confirm-import">
+                  <FileCheck className="w-4 h-4" /> {t("purchases_v2.ocr_confirm_import")} ({ocrItems.length})
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={showPostConfirm} onOpenChange={setShowPostConfirm}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
@@ -1184,199 +1377,6 @@ function PurchasesTab() {
             <Button onClick={() => quickSupplierMutation.mutate()} disabled={!quickName.trim() || quickSupplierMutation.isPending}>
               {quickSupplierMutation.isPending ? t("common.loading") : t("common.add")}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={ocrStage === "review"} onOpenChange={(open) => { if (!open) { setOcrStage("idle"); setOcrItems([]); setOcrValidation(null); setOcrMeta(null); } }}>
-        <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              {t("purchases_v2.ocr_review_title")}
-            </DialogTitle>
-            <DialogDescription>
-              {t("purchases_v2.ocr_review_desc")}
-            </DialogDescription>
-          </DialogHeader>
-
-          {ocrMeta && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-muted/50 rounded-lg border">
-              {ocrMeta.invoiceNo && (
-                <div>
-                  <p className="text-xs text-muted-foreground">{t("purchases.invoice_number")}</p>
-                  <p className="font-bold">{ocrMeta.invoiceNo}</p>
-                </div>
-              )}
-              {ocrMeta.date && (
-                <div>
-                  <p className="text-xs text-muted-foreground">{t("purchases.date")}</p>
-                  <p className="font-bold">{ocrMeta.date}</p>
-                </div>
-              )}
-              <div>
-                <p className="text-xs text-muted-foreground">{t("purchases_v2.ocr_items_count")}</p>
-                <p className="font-bold">{ocrItems.length}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">{t("purchases_v2.ocr_total_qty")}</p>
-                <p className="font-bold">{ocrItems.reduce((s: number, i: any) => s + (i.qty || 0), 0)}</p>
-              </div>
-            </div>
-          )}
-
-          {ocrValidation && (
-            <div className={`p-3 rounded-lg border flex items-start gap-3 ${ocrValidation.allPass ? "bg-green-50 border-green-300" : "bg-red-50 border-red-300"}`}>
-              {ocrValidation.allPass ? (
-                <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-              ) : (
-                <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
-              )}
-              <div className="flex-1 text-sm">
-                <p className={`font-medium ${ocrValidation.allPass ? "text-green-800" : "text-red-800"}`}>
-                  {ocrValidation.allPass ? t("purchases_v2.ocr_validation_pass") : t("purchases_v2.ocr_validation_fail")}
-                </p>
-                <div className="flex flex-wrap gap-3 mt-1">
-                  {ocrValidation.lineErrors > 0 && (
-                    <span className="text-red-700">{t("purchases_v2.ocr_line_errors")}: {ocrValidation.lineErrors}</span>
-                  )}
-                  {!ocrValidation.totalQtyMatch && ocrValidation.expectedTotalQty !== null && (
-                    <span className="text-red-700">
-                      {t("purchases_v2.ocr_qty_mismatch")}: {ocrValidation.actualTotalQty} ≠ {ocrValidation.expectedTotalQty}
-                    </span>
-                  )}
-                  {!ocrValidation.totalAmountMatch && ocrValidation.expectedTotalAmount !== null && (
-                    <span className="text-red-700">
-                      {t("purchases_v2.ocr_amount_mismatch")}: {omr(ocrValidation.actualTotalAmount)} ≠ {omr(ocrValidation.expectedTotalAmount)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="border rounded-lg overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-muted/50">
-                <TableRow>
-                  <TableHead className="w-8">#</TableHead>
-                  <TableHead className="min-w-[140px]">{t("purchases_v2.ocr_description")}</TableHead>
-                  <TableHead className="min-w-[80px]">{t("products.variant_color")}</TableHead>
-                  <TableHead className="min-w-[60px]">{t("products.variant_size")}</TableHead>
-                  <TableHead className="min-w-[70px]">{t("purchases.table_qty")}</TableHead>
-                  <TableHead className="min-w-[90px]">{t("purchases.table_unit_price")}</TableHead>
-                  <TableHead className="min-w-[90px]">{t("purchases.table_total")}</TableHead>
-                  <TableHead className="min-w-[80px]">{t("common.status")}</TableHead>
-                  <TableHead className="w-20"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ocrItems.map((item: any, idx: number) => (
-                  <TableRow key={idx} className={item.needsReview ? "bg-red-50" : "bg-green-50/30"} data-testid={`row-ocr-item-${idx}`}>
-                    <TableCell className="text-xs text-muted-foreground font-mono">{idx + 1}</TableCell>
-                    <TableCell>
-                      <Input value={item.code || ""} onChange={e => updateOcrItem(idx, "code", e.target.value)}
-                        className={`h-8 text-sm ${item.reviewReasons?.includes("no_description") ? "border-red-400" : ""}`}
-                        data-testid={`input-ocr-code-${idx}`} />
-                    </TableCell>
-                    <TableCell>
-                      <Input value={item.color || ""} onChange={e => updateOcrItem(idx, "color", e.target.value)}
-                        className="h-8 text-sm" data-testid={`input-ocr-color-${idx}`} />
-                    </TableCell>
-                    <TableCell>
-                      <Input value={item.size || ""} onChange={e => updateOcrItem(idx, "size", e.target.value)}
-                        className="h-8 text-sm" data-testid={`input-ocr-size-${idx}`} />
-                    </TableCell>
-                    <TableCell>
-                      <Input type="number" min={0} value={item.qty || 0}
-                        onChange={e => updateOcrItem(idx, "qty", parseInt(e.target.value) || 0)}
-                        className={`h-8 text-sm w-20 font-mono ${item.reviewReasons?.includes("qty_zero") ? "border-red-400" : ""}`}
-                        data-testid={`input-ocr-qty-${idx}`} />
-                    </TableCell>
-                    <TableCell>
-                      <Input type="number" min={0} step="0.001" value={item.unitCost || 0}
-                        onChange={e => updateOcrItem(idx, "unitCost", parseFloat(e.target.value) || 0)}
-                        className={`h-8 text-sm w-24 font-mono ${item.reviewReasons?.includes("price_zero") ? "border-red-400" : ""}`}
-                        data-testid={`input-ocr-price-${idx}`} />
-                    </TableCell>
-                    <TableCell>
-                      <span className={`font-mono text-sm ${item.reviewReasons?.includes("amount_mismatch") ? "text-red-600 font-bold" : ""}`}>
-                        {omr(item.amount || 0)}
-                        {item.reviewReasons?.includes("amount_mismatch") && (
-                          <span className="text-xs block text-red-500">≠ {omr(item.computedAmount)}</span>
-                        )}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {item.needsReview ? (
-                        <div className="space-y-0.5">
-                          {item.reviewReasons?.map((r: string, ri: number) => (
-                            <Badge key={ri} variant="destructive" className="text-[10px] block w-fit">
-                              {t(`purchases_v2.ocr_err_${r}`) || r}
-                            </Badge>
-                          ))}
-                        </div>
-                      ) : (
-                        <Badge className="bg-green-600 text-white text-[10px]">{t("purchases_v2.ocr_status_ok")}</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        {item.needsReview && (
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-blue-600"
-                            onClick={() => fixOcrItem(idx)} data-testid={`button-ocr-fix-${idx}`}
-                            title={t("purchases_v2.ocr_fix")}>
-                            <FileCheck className="w-4 h-4" />
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500"
-                          onClick={() => removeOcrItem(idx)} data-testid={`button-ocr-remove-${idx}`}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                <TableRow className="font-bold bg-muted/30 border-t-2">
-                  <TableCell></TableCell>
-                  <TableCell>{t("common.total")}</TableCell>
-                  <TableCell></TableCell>
-                  <TableCell></TableCell>
-                  <TableCell className="font-mono">{ocrItems.reduce((s: number, i: any) => s + (i.qty || 0), 0)}</TableCell>
-                  <TableCell></TableCell>
-                  <TableCell className="font-mono">{omr(ocrItems.reduce((s: number, i: any) => s + (i.amount || 0), 0))}</TableCell>
-                  <TableCell></TableCell>
-                  <TableCell></TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowOcrRawText(!showOcrRawText)}>
-              {t("purchases_v2.ocr_raw_text")}
-            </Button>
-          </div>
-
-          {showOcrRawText && (
-            <pre className="bg-muted p-4 rounded-lg text-xs max-h-48 overflow-auto whitespace-pre-wrap font-mono" dir="ltr">
-              {ocrMeta?.rawText || ""}
-            </pre>
-          )}
-
-          <DialogFooter className="flex gap-2 sm:justify-between">
-            <Button variant="outline" onClick={() => { setOcrStage("idle"); setOcrItems([]); setOcrValidation(null); setOcrMeta(null); }}>
-              {t("common.cancel")}
-            </Button>
-            <div className="flex gap-2">
-              {!ocrAllValid && (
-                <p className="text-sm text-red-600 self-center">{t("purchases_v2.ocr_fix_before_import")}</p>
-              )}
-              <Button onClick={importOcrItems} disabled={!ocrAllValid || ocrItems.length === 0}
-                className="bg-green-600 hover:bg-green-700 gap-2" data-testid="button-ocr-confirm-import">
-                <FileCheck className="w-4 h-4" /> {t("purchases_v2.ocr_confirm_import")} ({ocrItems.length})
-              </Button>
-            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
