@@ -1,181 +1,179 @@
 import { useState } from "react";
-import { Plus, Search, Edit, Trash, Image as ImageIcon } from "lucide-react";
-import { BarcodeScanButton } from "@/components/BarcodeScanButton";
+import { Plus, Search, Package, Palette, Ruler, Barcode, Edit2, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Product, Category } from "@shared/schema";
+import type { Product, Category, ProductVariant } from "@shared/schema";
 import { useI18n } from "@/lib/i18n";
+import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 
 export default function Products() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("all");
-  const [newProduct, setNewProduct] = useState({ barcode: "", name: "", categoryId: "", price: "", active: true });
   const [addOpen, setAddOpen] = useState(false);
+  const [manageVariantsOpen, setManageVariantsOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [variantDialogOpen, setVariantDialogOpen] = useState(false);
+  const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(null);
+
+  const [newProduct, setNewProduct] = useState({ name: "", categoryId: "", price: "", active: true });
+  const [variantForm, setVariantForm] = useState({ barcode: "", sku: "", color: "", size: "", price: "", cost: "" });
 
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"], queryFn: getQueryFn({ on401: "throw" }) });
   const { data: categories = [] } = useQuery<Category[]>({ queryKey: ["/api/categories"], queryFn: getQueryFn({ on401: "throw" }) });
+  const { data: variants = [] } = useQuery<ProductVariant[]>({ 
+    queryKey: [`/api/products/${selectedProduct?.id}/variants`], 
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: !!selectedProduct 
+  });
 
   const filteredProducts = products.filter(p => {
-    const matchSearch = !search || p.name.includes(search) || (p.barcode && p.barcode.includes(search));
+    const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
     const matchCat = filterCat === "all" || p.categoryId === parseInt(filterCat);
     return matchSearch && matchCat;
   });
 
-  const createMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/products", {
-        ...newProduct,
-        categoryId: newProduct.categoryId ? parseInt(newProduct.categoryId) : null,
-      });
-    },
+  const createProductMutation = useMutation({
+    mutationFn: async (data: any) => apiRequest("POST", "/api/products", data),
     onSuccess: () => {
-      toast({ title: t("products.added_success"), description: t("products.added_desc") });
+      toast({ title: t("products.added_success") });
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       setAddOpen(false);
-      setNewProduct({ barcode: "", name: "", categoryId: "", price: "", active: true });
-    },
-    onError: (err: Error) => {
-      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
-    },
+      setNewProduct({ name: "", categoryId: "", price: "", active: true });
+    }
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/products/${id}`);
-    },
+  const deleteProductMutation = useMutation({
+    mutationFn: async (id: number) => apiRequest("DELETE", `/api/products/${id}`),
     onSuccess: () => {
       toast({ title: t("products.deleted") });
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-    },
+    }
   });
 
-  const toggleActiveMutation = useMutation({
-    mutationFn: async ({ id, active }: { id: number; active: boolean }) => {
-      await apiRequest("PATCH", `/api/products/${id}`, { active });
+  const toggleProductActiveMutation = useMutation({
+    mutationFn: async ({ id, active }: { id: number; active: boolean }) => apiRequest("PATCH", `/api/products/${id}`, { active }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/products"] })
+  });
+
+  const openManageVariants = (product: Product) => {
+    setSelectedProduct(product);
+    setManageVariantsOpen(true);
+  };
+
+  const openVariantDialog = (variant?: ProductVariant) => {
+    if (variant) {
+      setEditingVariant(variant);
+      setVariantForm({ 
+        barcode: variant.barcode || "", sku: variant.sku || "", color: variant.color || "", 
+        size: variant.size || "", price: variant.price.toString(), cost: variant.costDefault?.toString() || "" 
+      });
+    } else {
+      setEditingVariant(null);
+      setVariantForm({ barcode: "", sku: "", color: "", size: "", price: selectedProduct?.price.toString() || "", cost: "" });
+    }
+    setVariantDialogOpen(true);
+  };
+
+  const upsertVariantMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const payload = {
+        ...data,
+        costDefault: data.cost || null,
+      };
+      delete payload.cost;
+
+      if (editingVariant) {
+        return apiRequest("PATCH", `/api/variants/${editingVariant.id}`, payload);
+      }
+      return apiRequest("POST", `/api/products/${selectedProduct?.id}/variants`, payload);
     },
     onSuccess: () => {
+      toast({ title: t("products.variant_saved") });
+      queryClient.invalidateQueries({ queryKey: [`/api/products/${selectedProduct?.id}/variants`] });
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      setVariantDialogOpen(false);
     },
+    onError: (err: Error) => {
+      if (err.message.includes("barcode")) toast({ title: t("products.barcode_duplicate"), variant: "destructive" });
+      else toast({ title: t("common.error"), description: err.message, variant: "destructive" });
+    }
   });
 
-  const getCategoryName = (catId: number | null) => categories.find(c => c.id === catId)?.name || "-";
+  const deleteVariantMutation = useMutation({
+    mutationFn: async (id: number) => apiRequest("DELETE", `/api/variants/${id}`),
+    onSuccess: () => {
+      toast({ title: t("products.variant_deleted") });
+      queryClient.invalidateQueries({ queryKey: [`/api/products/${selectedProduct?.id}/variants`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    }
+  });
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-products-title">{t("products.title")}</h1>
-          <p className="text-muted-foreground mt-1">{t("products.subtitle")}</p>
+          <p className="text-muted-foreground">{t("products.subtitle")}</p>
         </div>
-        
-        <Dialog open={addOpen} onOpenChange={setAddOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2" data-testid="button-add-product">
-              <Plus className="w-4 h-4" />
-              {t("products.add_product")}
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px]">
-            <DialogHeader>
-              <DialogTitle>{t("products.add_product_dialog_title")}</DialogTitle>
-            </DialogHeader>
-            <div className="grid grid-cols-2 gap-4 py-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t("products.barcode")}</label>
-                <div className="flex gap-2">
-                  <Input placeholder={t("products.barcode_placeholder")} value={newProduct.barcode} onChange={e => setNewProduct({...newProduct, barcode: e.target.value})} data-testid="input-product-barcode" className="flex-1" />
-                  <BarcodeScanButton onScan={(code) => setNewProduct({...newProduct, barcode: code})} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t("products.product_name")}</label>
-                <Input placeholder={t("products.product_name_placeholder")} value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} data-testid="input-product-name" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t("products.category")}</label>
-                <Select value={newProduct.categoryId} onValueChange={v => setNewProduct({...newProduct, categoryId: v})}>
-                  <SelectTrigger><SelectValue placeholder={t("products.select_category")} /></SelectTrigger>
-                  <SelectContent>
-                    {categories.map(c => (
-                      <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t("products.price_omr")}</label>
-                <Input type="number" step="0.001" placeholder="0.000" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} data-testid="input-product-price" />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !newProduct.name || !newProduct.price} data-testid="button-save-product">
-                {createMutation.isPending ? t("products.saving_product") : t("products.save_product")}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <Button onClick={() => setAddOpen(true)} data-testid="button-add-product" className="gap-2">
+          <Plus className="w-4 h-4" /> {t("products.add_product")}
+        </Button>
       </div>
 
-      <div className="bg-card border shadow-sm rounded-xl overflow-hidden">
-        <div className="p-4 border-b flex items-center gap-4">
-          <div className="relative w-72">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder={t("products.search_placeholder")} className="pr-9" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search-products" />
-          </div>
-          <Select value={filterCat} onValueChange={setFilterCat}>
-            <SelectTrigger className="w-40"><SelectValue placeholder={t("products.category")} /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("products.all_categories")}</SelectItem>
-              {categories.map(c => (
-                <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="flex gap-4 items-center bg-card p-4 border rounded-lg">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input className="pl-9" placeholder={t("products.search_placeholder")} value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search" />
         </div>
-        
+        <Select value={filterCat} onValueChange={setFilterCat}>
+          <SelectTrigger className="w-[200px]"><SelectValue placeholder={t("products.category")} /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("products.all_categories")}</SelectItem>
+            {categories.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="border rounded-lg bg-card">
         <Table>
-          <TableHeader className="bg-muted/50">
+          <TableHeader>
             <TableRow>
-              <TableHead>{t("products.table_barcode")}</TableHead>
               <TableHead>{t("products.table_name")}</TableHead>
               <TableHead>{t("products.table_category")}</TableHead>
-              <TableHead>{t("products.table_price")}</TableHead>
+              <TableHead>{t("products.default_price")}</TableHead>
+              <TableHead>{t("products.variants")}</TableHead>
               <TableHead>{t("products.table_status")}</TableHead>
-              <TableHead className="text-left">{t("products.table_actions")}</TableHead>
+              <TableHead className="text-right">{t("products.table_actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredProducts.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t("products.no_products")}</TableCell>
-              </TableRow>
-            ) : filteredProducts.map((p) => (
+            {filteredProducts.map(p => (
               <TableRow key={p.id}>
-                <TableCell className="font-mono text-muted-foreground">{p.barcode || "-"}</TableCell>
-                <TableCell className="font-bold">{p.name}</TableCell>
-                <TableCell>{getCategoryName(p.categoryId)}</TableCell>
-                <TableCell className="font-bold text-primary">{parseFloat(p.price).toFixed(3)}</TableCell>
+                <TableCell className="font-medium">{p.name}</TableCell>
+                <TableCell>{categories.find(c => c.id === p.categoryId)?.name || "-"}</TableCell>
+                <TableCell>{parseFloat(p.price).toFixed(3)}</TableCell>
+                <TableCell><Badge variant="outline">{(p as any).variantsCount || 0}</Badge></TableCell>
                 <TableCell>
-                  <button onClick={() => toggleActiveMutation.mutate({ id: p.id, active: !p.active })}>
-                    <Badge variant={p.active ? "default" : "secondary"} className={p.active ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 cursor-pointer" : "cursor-pointer"}>
-                      {p.active ? t("products.active") : t("products.inactive")}
-                    </Badge>
-                  </button>
+                  <Badge 
+                    variant={p.active ? "default" : "secondary"} className="cursor-pointer"
+                    onClick={() => toggleProductActiveMutation.mutate({ id: p.id, active: !p.active })}
+                  >
+                    {p.active ? t("products.active") : t("products.inactive")}
+                  </Badge>
                 </TableCell>
-                <TableCell className="text-left">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => deleteMutation.mutate(p.id)} data-testid={`button-delete-product-${p.id}`}>
-                      <Trash className="w-4 h-4" />
-                    </Button>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => openManageVariants(p)} data-testid={`button-manage-variants-${p.id}`}>{t("products.manage_variants")}</Button>
+                    <Button variant="ghost" size="icon" onClick={() => deleteProductMutation.mutate(p.id)} data-testid={`button-delete-product-${p.id}`}><Trash2 className="w-4 h-4 text-destructive" /></Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -183,6 +181,113 @@ export default function Products() {
           </TableBody>
         </Table>
       </div>
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{t("products.add_product")}</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("products.product_name")}</label>
+              <Input value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} data-testid="input-name" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("products.category")}</label>
+              <Select value={newProduct.categoryId} onValueChange={v => setNewProduct({...newProduct, categoryId: v})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("products.price_omr")}</label>
+              <Input type="number" step="0.001" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} data-testid="input-price" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => createProductMutation.mutate({...newProduct, categoryId: parseInt(newProduct.categoryId)})} data-testid="button-save-product">{t("common.save")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={manageVariantsOpen} onOpenChange={setManageVariantsOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{t("products.variants")} - {selectedProduct?.name}</DialogTitle>
+            <DialogDescription>{t("products.manage_variants")}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end mb-4">
+            <Button onClick={() => openVariantDialog()} size="sm" className="gap-2" data-testid="button-add-variant"><Plus className="w-4 h-4" /> {t("products.add_variant")}</Button>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("products.variant_barcode")}</TableHead>
+                <TableHead>{t("products.variant_sku")}</TableHead>
+                <TableHead>{t("products.variant_color")}</TableHead>
+                <TableHead>{t("products.variant_size")}</TableHead>
+                <TableHead>{t("products.variant_price")}</TableHead>
+                <TableHead className="text-right">{t("common.actions")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {variants.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-4">{t("products.no_variants")}</TableCell></TableRow>
+              ) : variants.map(v => (
+                <TableRow key={v.id}>
+                  <TableCell className="font-mono">{v.barcode || "-"}</TableCell>
+                  <TableCell>{v.sku || "-"}</TableCell>
+                  <TableCell>{v.color || "-"}</TableCell>
+                  <TableCell>{v.size || "-"}</TableCell>
+                  <TableCell>{parseFloat(v.price.toString()).toFixed(3)}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="icon" onClick={() => openVariantDialog(v)} data-testid={`button-edit-variant-${v.id}`}><Edit2 className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => deleteVariantMutation.mutate(v.id)} data-testid={`button-delete-variant-${v.id}`}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={variantDialogOpen} onOpenChange={setVariantDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editingVariant ? t("products.edit_variant") : t("products.add_variant")}</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="col-span-2 space-y-2">
+              <label className="text-sm font-medium">{t("products.variant_barcode")}</label>
+              <div className="flex gap-2">
+                <Input value={variantForm.barcode} onChange={e => setVariantForm({...variantForm, barcode: e.target.value})} data-testid="input-variant-barcode" />
+                <BarcodeScanButton onScan={code => setVariantForm({...variantForm, barcode: code})} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("products.variant_sku")}</label>
+              <Input value={variantForm.sku} onChange={e => setVariantForm({...variantForm, sku: e.target.value})} data-testid="input-variant-sku" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("products.variant_color")}</label>
+              <Input value={variantForm.color} onChange={e => setVariantForm({...variantForm, color: e.target.value})} data-testid="input-variant-color" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("products.variant_size")}</label>
+              <Input value={variantForm.size} onChange={e => setVariantForm({...variantForm, size: e.target.value})} data-testid="input-variant-size" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("products.variant_price")}</label>
+              <Input type="number" step="0.001" value={variantForm.price} onChange={e => setVariantForm({...variantForm, price: e.target.value})} data-testid="input-variant-price" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("products.variant_cost")}</label>
+              <Input type="number" step="0.001" value={variantForm.cost} onChange={e => setVariantForm({...variantForm, cost: e.target.value})} data-testid="input-variant-cost" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => upsertVariantMutation.mutate(variantForm)} disabled={upsertVariantMutation.isPending} data-testid="button-save-variant">{t("common.save")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -37,6 +37,12 @@ import {
   stocktakes, type InsertStocktake, type Stocktake,
   stocktakeItems, type InsertStocktakeItem, type StocktakeItem,
   inventoryAdjustments, type InsertInventoryAdjustment, type InventoryAdjustment,
+  productVariants, type InsertProductVariant, type ProductVariant,
+  inventoryBalances, type InsertInventoryBalance, type InventoryBalance,
+  stockTransfers, type InsertStockTransfer, type StockTransfer,
+  stockTransferLines, type InsertStockTransferLine, type StockTransferLine,
+  inventoryLedger, type InsertInventoryLedger, type InventoryLedger,
+  purchaseExtraCosts, type InsertPurchaseExtraCost, type PurchaseExtraCost,
   type PaymentMethod, PAYMENT_METHODS,
 } from "@shared/schema";
 
@@ -169,6 +175,34 @@ export interface IStorage {
   approveStocktake(id: number, userId: number): Promise<Stocktake | undefined>;
   createInventoryAdjustment(data: InsertInventoryAdjustment): Promise<InventoryAdjustment>;
   getInventoryAdjustments(branchId?: number, locationId?: number): Promise<any[]>;
+
+  // Variants
+  createVariant(data: InsertProductVariant): Promise<ProductVariant>;
+  getVariantsByProduct(productId: number): Promise<ProductVariant[]>;
+  getAllVariants(): Promise<any[]>;
+  getVariantByBarcode(barcode: string): Promise<any>;
+  getVariantBySku(sku: string): Promise<ProductVariant | undefined>;
+  getVariant(id: number): Promise<ProductVariant | undefined>;
+  updateVariant(id: number, data: Partial<InsertProductVariant>): Promise<ProductVariant | undefined>;
+  deleteVariant(id: number): Promise<void>;
+
+  // Inventory Balances
+  getInventoryBalances(locationId?: number): Promise<any[]>;
+  getBalanceByVariantLocation(variantId: number, locationId: number): Promise<InventoryBalance | undefined>;
+  upsertBalance(locationId: number, variantId: number, qtyChange: number): Promise<InventoryBalance>;
+
+  // Stock Transfers
+  createStockTransfer(data: InsertStockTransfer): Promise<StockTransfer>;
+  getStockTransfers(): Promise<any[]>;
+  getStockTransfer(id: number): Promise<StockTransfer | undefined>;
+  getStockTransferLines(transferId: number): Promise<any[]>;
+  addStockTransferLine(data: InsertStockTransferLine): Promise<StockTransferLine>;
+  deleteStockTransferLine(id: number): Promise<void>;
+  approveStockTransfer(id: number, userId: number): Promise<StockTransfer | undefined>;
+
+  // Inventory Ledger
+  createLedgerEntry(data: InsertInventoryLedger): Promise<InventoryLedger>;
+  getInventoryLedgerEntries(filters?: { variantId?: number; locationId?: number; limit?: number }): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1418,6 +1452,21 @@ export class DatabaseStorage implements IStorage {
            VALUES ($1, 0, $2, 'purchase', $3, now())`,
           [item.productId, item.qty, id]
         );
+
+        if (item.variantId) {
+          await client.query(
+            `INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
+             VALUES ($1, $2, $3, 0)
+             ON CONFLICT (location_id, variant_id)
+             DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + EXCLUDED.qty_on_hand`,
+            [centralLocationId, item.variantId, item.qty]
+          );
+          await client.query(
+            `INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by, created_at)
+             VALUES ($1, $2, $3, 'purchase_posted', 'purchase_invoices', $4, $5, now())`,
+            [item.variantId, centralLocationId, item.qty, id, invoice.createdBy]
+          );
+        }
       }
 
       const result = await client.query(
@@ -3194,6 +3243,218 @@ export class DatabaseStorage implements IStorage {
       params.push(locationId);
     }
     query += ` ORDER BY ia.created_at DESC LIMIT 500`;
+    const result = await pool.query(query, params);
+    return result.rows;
+  }
+
+  // ── Variants ──
+  async createVariant(data: InsertProductVariant) {
+    const [row] = await db.insert(productVariants).values(data).returning();
+    return row;
+  }
+  async getVariantsByProduct(productId: number) {
+    return db.select().from(productVariants).where(eq(productVariants.productId, productId)).orderBy(productVariants.id);
+  }
+  async getAllVariants() {
+    const result = await pool.query(`
+      SELECT pv.*, p.name as product_name, p.category_id, c.name as category_name
+      FROM product_variants pv
+      JOIN products p ON p.id = pv.product_id
+      LEFT JOIN categories c ON c.id = p.category_id
+      ORDER BY pv.id DESC
+    `);
+    return result.rows;
+  }
+  async getVariantByBarcode(barcode: string) {
+    const result = await pool.query(`
+      SELECT pv.*, p.name as product_name, p.category_id, c.name as category_name
+      FROM product_variants pv
+      JOIN products p ON p.id = pv.product_id
+      LEFT JOIN categories c ON c.id = p.category_id
+      WHERE pv.barcode = $1
+      LIMIT 1
+    `, [barcode]);
+    return result.rows[0] || undefined;
+  }
+  async getVariantBySku(sku: string) {
+    const [row] = await db.select().from(productVariants).where(eq(productVariants.sku, sku));
+    return row;
+  }
+  async getVariant(id: number) {
+    const [row] = await db.select().from(productVariants).where(eq(productVariants.id, id));
+    return row;
+  }
+  async updateVariant(id: number, data: Partial<InsertProductVariant>) {
+    const [row] = await db.update(productVariants).set(data).where(eq(productVariants.id, id)).returning();
+    return row;
+  }
+  async deleteVariant(id: number) {
+    await db.delete(productVariants).where(eq(productVariants.id, id));
+  }
+
+  // ── Inventory Balances ──
+  async getInventoryBalances(locationId?: number) {
+    let query = `
+      SELECT ib.*, pv.barcode, pv.sku, pv.color, pv.size, pv.price,
+             p.name as product_name, p.category_id, c.name as category_name,
+             l.name as location_name, l.type as location_type
+      FROM inventory_balances ib
+      JOIN product_variants pv ON pv.id = ib.variant_id
+      JOIN products p ON p.id = pv.product_id
+      LEFT JOIN categories c ON c.id = p.category_id
+      JOIN locations l ON l.id = ib.location_id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    if (locationId) {
+      query += ` AND ib.location_id = $1`;
+      params.push(locationId);
+    }
+    query += ` ORDER BY p.name, pv.color, pv.size`;
+    const result = await pool.query(query, params);
+    return result.rows;
+  }
+  async getBalanceByVariantLocation(variantId: number, locationId: number) {
+    const [row] = await db.select().from(inventoryBalances)
+      .where(and(eq(inventoryBalances.variantId, variantId), eq(inventoryBalances.locationId, locationId)));
+    return row;
+  }
+  async upsertBalance(locationId: number, variantId: number, qtyChange: number) {
+    const existing = await this.getBalanceByVariantLocation(variantId, locationId);
+    if (existing) {
+      const [row] = await db.update(inventoryBalances)
+        .set({ qtyOnHand: existing.qtyOnHand + qtyChange })
+        .where(eq(inventoryBalances.id, existing.id))
+        .returning();
+      return row;
+    } else {
+      const [row] = await db.insert(inventoryBalances)
+        .values({ locationId, variantId, qtyOnHand: qtyChange, qtyReserved: 0 })
+        .returning();
+      return row;
+    }
+  }
+
+  // ── Stock Transfers ──
+  async createStockTransfer(data: InsertStockTransfer) {
+    const [row] = await db.insert(stockTransfers).values(data).returning();
+    return row;
+  }
+  async getStockTransfers() {
+    const result = await pool.query(`
+      SELECT st.*,
+             fl.name as from_location_name, tl.name as to_location_name,
+             u.name as creator_name
+      FROM stock_transfers st
+      JOIN locations fl ON fl.id = st.from_location_id
+      JOIN locations tl ON tl.id = st.to_location_id
+      LEFT JOIN users u ON u.id = st.created_by
+      ORDER BY st.created_at DESC
+    `);
+    return result.rows;
+  }
+  async getStockTransfer(id: number) {
+    const [row] = await db.select().from(stockTransfers).where(eq(stockTransfers.id, id));
+    return row;
+  }
+  async getStockTransferLines(transferId: number) {
+    const result = await pool.query(`
+      SELECT stl.*, pv.barcode, pv.sku, pv.color, pv.size, pv.price,
+             p.name as product_name
+      FROM stock_transfer_lines stl
+      JOIN product_variants pv ON pv.id = stl.variant_id
+      JOIN products p ON p.id = pv.product_id
+      WHERE stl.transfer_id = $1
+      ORDER BY stl.id
+    `, [transferId]);
+    return result.rows;
+  }
+  async addStockTransferLine(data: InsertStockTransferLine) {
+    const [row] = await db.insert(stockTransferLines).values(data).returning();
+    return row;
+  }
+  async deleteStockTransferLine(id: number) {
+    await db.delete(stockTransferLines).where(eq(stockTransferLines.id, id));
+  }
+  async approveStockTransfer(id: number, userId: number) {
+    const transfer = await this.getStockTransfer(id);
+    if (!transfer || transfer.status !== "draft") return undefined;
+    const lines = await this.getStockTransferLines(id);
+    if (lines.length === 0) return undefined;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const line of lines) {
+        const balRes = await client.query(
+          `SELECT qty_on_hand FROM inventory_balances WHERE location_id=$1 AND variant_id=$2`,
+          [transfer.fromLocationId, line.variant_id]
+        );
+        const available = balRes.rows[0]?.qty_on_hand || 0;
+        if (available < line.qty) {
+          throw new Error(`الكمية غير كافية للصنف ${line.product_name || line.variant_id}`);
+        }
+        await client.query(
+          `UPDATE inventory_balances SET qty_on_hand = qty_on_hand - $1 WHERE location_id=$2 AND variant_id=$3`,
+          [line.qty, transfer.fromLocationId, line.variant_id]
+        );
+        await client.query(`
+          INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
+          VALUES ($1, $2, $3, 0)
+          ON CONFLICT (location_id, variant_id) DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + $3
+        `, [transfer.toLocationId, line.variant_id, line.qty]);
+        await client.query(`
+          INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by)
+          VALUES ($1, $2, $3, 'transfer_out', 'stock_transfers', $4, $5)
+        `, [line.variant_id, transfer.fromLocationId, -line.qty, id, userId]);
+        await client.query(`
+          INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by)
+          VALUES ($1, $2, $3, 'transfer_in', 'stock_transfers', $4, $5)
+        `, [line.variant_id, transfer.toLocationId, line.qty, id, userId]);
+      }
+      const result = await client.query(
+        `UPDATE stock_transfers SET status='approved', approved_at=now() WHERE id=$1 RETURNING *`,
+        [id]
+      );
+      await client.query("COMMIT");
+      return result.rows[0];
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  // ── Inventory Ledger ──
+  async createLedgerEntry(data: InsertInventoryLedger) {
+    const [row] = await db.insert(inventoryLedger).values(data).returning();
+    return row;
+  }
+  async getInventoryLedgerEntries(filters?: { variantId?: number; locationId?: number; limit?: number }) {
+    let query = `
+      SELECT il.*, pv.barcode, pv.sku, pv.color, pv.size,
+             p.name as product_name, l.name as location_name,
+             u.name as creator_name
+      FROM inventory_ledger il
+      JOIN product_variants pv ON pv.id = il.variant_id
+      JOIN products p ON p.id = pv.product_id
+      JOIN locations l ON l.id = il.location_id
+      LEFT JOIN users u ON u.id = il.created_by
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    let idx = 1;
+    if (filters?.variantId) {
+      query += ` AND il.variant_id = $${idx++}`;
+      params.push(filters.variantId);
+    }
+    if (filters?.locationId) {
+      query += ` AND il.location_id = $${idx++}`;
+      params.push(filters.locationId);
+    }
+    query += ` ORDER BY il.created_at DESC LIMIT $${idx++}`;
+    params.push(filters?.limit || 500);
     const result = await pool.query(query, params);
     return result.rows;
   }

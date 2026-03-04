@@ -326,6 +326,7 @@ export const purchaseItems = pgTable("purchase_items", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   purchaseId: integer("purchase_id").references(() => purchaseInvoices.id).notNull(),
   productId: integer("product_id").references(() => products.id).notNull(),
+  variantId: integer("variant_id"),
   qty: integer("qty").notNull(),
   unitCostBase: decimal("unit_cost_base", { precision: 10, scale: 3 }).notNull(),
   lineSubtotal: decimal("line_subtotal", { precision: 10, scale: 3 }).notNull(),
@@ -570,3 +571,80 @@ export const inventoryAdjustments = pgTable("inventory_adjustments", {
 export const insertInventoryAdjustmentSchema = createInsertSchema(inventoryAdjustments).omit({ id: true, createdAt: true });
 export type InsertInventoryAdjustment = z.infer<typeof insertInventoryAdjustmentSchema>;
 export type InventoryAdjustment = typeof inventoryAdjustments.$inferSelect;
+
+export const productVariants = pgTable("product_variants", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  productId: integer("product_id").references(() => products.id).notNull(),
+  sku: text("sku").unique(),
+  barcode: text("barcode").unique(),
+  color: text("color"),
+  size: text("size"),
+  costDefault: decimal("cost_default", { precision: 10, scale: 3 }),
+  price: decimal("price", { precision: 10, scale: 3 }).notNull(),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertProductVariantSchema = createInsertSchema(productVariants).omit({ id: true, createdAt: true });
+export type InsertProductVariant = z.infer<typeof insertProductVariantSchema>;
+export type ProductVariant = typeof productVariants.$inferSelect;
+
+export const inventoryBalances = pgTable("inventory_balances", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  locationId: integer("location_id").references(() => locations.id).notNull(),
+  variantId: integer("variant_id").references(() => productVariants.id).notNull(),
+  qtyOnHand: integer("qty_on_hand").notNull().default(0),
+  qtyReserved: integer("qty_reserved").notNull().default(0),
+});
+export const insertInventoryBalanceSchema = createInsertSchema(inventoryBalances).omit({ id: true });
+export type InsertInventoryBalance = z.infer<typeof insertInventoryBalanceSchema>;
+export type InventoryBalance = typeof inventoryBalances.$inferSelect;
+
+export const stockTransfers = pgTable("stock_transfers", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  fromLocationId: integer("from_location_id").references(() => locations.id).notNull(),
+  toLocationId: integer("to_location_id").references(() => locations.id).notNull(),
+  status: text("status").notNull().default("draft"),
+  notes: text("notes"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  approvedAt: timestamp("approved_at"),
+});
+export const insertStockTransferSchema = createInsertSchema(stockTransfers).omit({ id: true, createdAt: true, approvedAt: true });
+export type InsertStockTransfer = z.infer<typeof insertStockTransferSchema>;
+export type StockTransfer = typeof stockTransfers.$inferSelect;
+
+export const stockTransferLines = pgTable("stock_transfer_lines", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  transferId: integer("transfer_id").references(() => stockTransfers.id).notNull(),
+  variantId: integer("variant_id").references(() => productVariants.id).notNull(),
+  qty: integer("qty").notNull(),
+});
+export const insertStockTransferLineSchema = createInsertSchema(stockTransferLines).omit({ id: true });
+export type InsertStockTransferLine = z.infer<typeof insertStockTransferLineSchema>;
+export type StockTransferLine = typeof stockTransferLines.$inferSelect;
+
+export const inventoryLedger = pgTable("inventory_ledger", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  variantId: integer("variant_id").references(() => productVariants.id).notNull(),
+  locationId: integer("location_id").references(() => locations.id).notNull(),
+  qtyChange: integer("qty_change").notNull(),
+  reason: text("reason").notNull(),
+  refTable: text("ref_table"),
+  refId: integer("ref_id"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertInventoryLedgerSchema = createInsertSchema(inventoryLedger).omit({ id: true, createdAt: true });
+export type InsertInventoryLedger = z.infer<typeof insertInventoryLedgerSchema>;
+export type InventoryLedger = typeof inventoryLedger.$inferSelect;
+
+export const purchaseExtraCosts = pgTable("purchase_extra_costs", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  purchaseInvoiceId: integer("purchase_invoice_id").references(() => purchaseInvoices.id).notNull(),
+  type: text("type").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 3 }).notNull(),
+  notes: text("notes"),
+});
+export const insertPurchaseExtraCostSchema = createInsertSchema(purchaseExtraCosts).omit({ id: true });
+export type InsertPurchaseExtraCost = z.infer<typeof insertPurchaseExtraCostSchema>;
+export type PurchaseExtraCost = typeof purchaseExtraCosts.$inferSelect;

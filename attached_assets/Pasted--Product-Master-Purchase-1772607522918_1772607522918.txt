@@ -1,0 +1,371 @@
+مر واحد شامل للمساعد يضع لك الهيكل الاحترافي لقواعد البيانات + تدفق العمل (Product Master → Purchase → Receive → Transfer → Branch Stock) مع منع تكرار الباركود وربط المنتجات بالموردين بدون دمج الصفحات بشكل فوضوي.
+
+انسخه كما هو للمساعد:
+
+أمر للمساعد — هيكلة قاعدة البيانات + تدفق شراء/مخزن/تحويل احترافي مع Variants وباركود Unique
+
+أعد هيكلة نظام المنتجات/الموردين/المشتريات/المخزون ليعمل بتدفق احترافي مثل أنظمة الشركات:
+
+Product Master (تعريف المنتج مرة واحدة) → فاتورة شراء → استلام للمخزن الرئيسي (اعتماد) → تحويل للفروع → بيع
+
+الهدف
+
+المنتجات تُعرّف مرة واحدة فقط (بدون كميات داخل صفحة المنتجات)
+
+زيادة المخزون تتم فقط عبر اعتماد المشتريات أو التحويلات أو الجرد
+
+دعم ألوان/مقاسات عبر Variants لكل Variant باركود فريد لا يتكرر
+
+المشتريات تدخل بالتفاصيل (كما في فاتورة المورد) ثم عند “اعتماد” تتحول تلقائياً لمخزون المخزن الرئيسي
+
+التحويل للفروع يكون حسب الـVariant (لون/مقاس/باركود) مع سجل حركة كامل
+
+1) قاعدة البيانات المطلوبة (Tables)
+1.1 المنتجات (Product Master)
+
+أنشئ جدول:
+
+products
+
+id
+
+name
+
+category_id
+
+brand (اختياري)
+
+active default true
+
+created_at
+
+ملاحظة: لا يوجد quantity هنا.
+
+1.2 متغيرات المنتج (Variants) — إلزامي للألوان/المقاسات
+
+أنشئ جدول:
+
+product_variants
+
+id
+
+product_id FK
+
+sku (text unique) ✅
+
+barcode (text unique) ✅ (يسمح null فقط إذا النظام يولد باركود داخلي)
+
+color (text nullable)
+
+size (text nullable)
+
+cost_default decimal nullable
+
+price decimal not null
+
+active default true
+
+created_at
+
+✅ شرط صارم:
+
+barcode UNIQUE (لا تكرار نهائياً)
+
+sku UNIQUE
+
+1.3 الموردين
+
+suppliers
+
+id
+
+name
+
+phone
+
+address
+
+notes
+
+created_at
+
+1.4 مواقع التخزين (مخزن رئيسي + فروع)
+
+locations
+
+id
+
+name (WH-HQ / BR-Liwa / BR-Shinas ...)
+
+type ('warehouse'/'branch')
+
+branch_id nullable
+
+active
+
+1.5 رصيد المخزون حسب الموقع والـVariant
+
+inventory_balances
+
+id
+
+location_id FK
+
+variant_id FK
+
+qty_on_hand integer default 0
+
+qty_reserved integer default 0 (اختياري)
+
+UNIQUE(location_id, variant_id)
+
+1.6 فواتير الشراء (المشتريات)
+
+purchase_invoices
+
+id
+
+supplier_id FK
+
+invoice_no (رقم فاتورة المورد)
+
+invoice_date
+
+status ('draft','posted','cancelled') default 'draft'
+
+location_id (يكون دائماً WH-HQ كمخزن استلام افتراضي)
+
+notes
+
+subtotal
+
+extra_costs_total (شحن/جمارك/أخرى)
+
+total_cost
+
+created_by
+
+created_at
+
+posted_at nullable
+
+purchase_invoice_lines
+
+id
+
+purchase_invoice_id FK
+
+variant_id FK
+
+qty integer
+
+unit_cost decimal
+
+line_total decimal
+
+purchase_extra_costs
+
+id
+
+purchase_invoice_id FK
+
+type ('shipping','customs','other')
+
+amount decimal
+
+notes
+
+1.7 التحويلات بين المخازن/الفروع
+
+stock_transfers
+
+id
+
+from_location_id FK
+
+to_location_id FK
+
+status ('draft','approved','cancelled') default 'draft'
+
+notes
+
+created_by
+
+created_at
+
+approved_at
+
+stock_transfer_lines
+
+id
+
+transfer_id FK
+
+variant_id FK
+
+qty integer
+
+1.8 سجل حركة المخزون (Ledger) — مهم جداً
+
+inventory_ledger
+
+id
+
+variant_id
+
+location_id
+
+qty_change (+/-)
+
+reason ('purchase_posted','transfer_out','transfer_in','adjustment','sale','sale_return')
+
+ref_table (text)
+
+ref_id (integer)
+
+created_at
+
+created_by
+
+2) قواعد العمل (Workflow Rules)
+2.1 منع إدخال كميات من صفحة المنتجات
+
+صفحة المنتجات/الأسعار للتعريف والتسعير فقط.
+
+أي تعديل كميات يتم فقط عبر:
+
+اعتماد مشتريات (posted)
+
+اعتماد تحويلات (approved)
+
+الجرد/التسوية (adjustment)
+
+2.2 إدخال فاتورة الشراء بالتفاصيل ثم “اعتماد”
+
+داخل المشتريات:
+
+يتم إنشاء purchase_invoices بالحالة draft
+
+عند إضافة الأصناف، يجب أن تكون variant_id موجودة
+
+ميزة احترافية داخل المشتريات:
+
+إذا أدخل الموظف باركود غير موجود:
+
+اعرض نافذة “إنشاء منتج/Variant سريع” من داخل المشتريات:
+
+اسم المنتج
+
+الفئة
+
+اللون/المقاس
+
+الباركود (مع تحقق Unique)
+
+سعر البيع
+
+سعر الشراء (من سطر الفاتورة)
+ثم يعود تلقائياً لسطر الفاتورة ويكمل.
+
+2.3 عند اعتماد فاتورة الشراء (POST)
+
+عند الضغط “اعتماد/ترحيل” للفاتورة:
+
+يتحول status إلى posted
+
+يتم زيادة المخزون في inventory_balances للموقع WH-HQ (أو location_id في الفاتورة)
+
+لكل سطر:
+
+qty_on_hand += qty
+
+أضف قيد في inventory_ledger بسبب purchase_posted مع مرجع purchase_invoice_id
+
+لا يسمح بترحيل فاتورة بدون أصناف أو بكميات <=0
+
+2.4 التحويل للفروع
+
+إنشاء Transfer draft ثم “اعتماد”:
+
+عند اعتماد التحويل:
+
+تحقق من توفر الكمية في from_location (WH-HQ)
+
+أنقص من المخزن الرئيسي: qty_on_hand -= qty
+
+زد في الفرع: qty_on_hand += qty
+
+أضف قيود في ledger:
+
+transfer_out من from_location
+
+transfer_in إلى to_location
+
+3) واجهات المستخدم المطلوبة (Minimal UI)
+3.1 صفحة المنتجات
+
+إضافة Product + إضافة Variants (لون/مقاس/باركود/سعر)
+
+منع أي حقول quantity هنا
+
+3.2 صفحة الموردين
+
+CRUD للموردين
+
+3.3 صفحة المشتريات
+
+إنشاء فاتورة شراء (draft)
+
+إضافة الأصناف بالبحث أو الباركود
+
+إدخال الكمية وسعر الشراء
+
+إدخال تكاليف إضافية
+
+زر “اعتماد” (post)
+
+بعد الاعتماد تصبح Read-only
+
+3.4 صفحة المخزون
+
+عرض مخزون حسب:
+
+الموقع (WH-HQ أو فرع)
+
+الفئة
+
+اللون/المقاس
+
+الباركود
+
+تنبيه “مخزون منخفض” حسب حد أدنى
+
+3.5 صفحة التحويلات
+
+إنشاء تحويل من WH-HQ إلى فرع
+
+اعتماد التحويل
+
+طباعة/عرض مستند تحويل
+
+4) متطلبات منع تكرار الباركود
+
+enforce UNIQUE على product_variants.barcode
+
+في الـAPI والـUI: تحقق قبل الحفظ
+
+عند محاولة إدخال باركود مكرر: رسالة واضحة + منع الحفظ
+
+5) مخرجات نهائية مطلوبة (Acceptance Criteria)
+
+المنتج لا يحمل كميات داخل صفحة المنتجات
+
+فاتورة شراء draft لا تغيّر المخزون
+
+عند اعتماد شراء posted يزيد المخزون في WH-HQ فقط
+
+التحويل المعتمد ينقل كميات دقيقة حسب variant (لون/مقاس/باركود)
+
+لا يمكن إضافة باركود مكرر نهائياً
+
+يمكن إدخال منتجات جديدة من داخل شاشة المشتريات عند باركود غير معروف (Quick Create)

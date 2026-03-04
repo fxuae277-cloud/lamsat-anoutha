@@ -240,7 +240,7 @@ function SuppliersTab() {
 }
 
 function PurchasesTab() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -250,6 +250,7 @@ function PurchasesTab() {
   const [selectedInvoice, setSelectedInvoice] = useState<number | null>(null);
   const [showPostConfirm, setShowPostConfirm] = useState(false);
   const [showQuickSupplier, setShowQuickSupplier] = useState(false);
+  const [showQuickProduct, setShowQuickProduct] = useState(false);
 
   const [newSupplierId, setNewSupplierId] = useState("");
   const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
@@ -260,20 +261,35 @@ function PurchasesTab() {
   const [newNotes, setNewNotes] = useState("");
 
   const [addProductId, setAddProductId] = useState("");
+  const [addVariantId, setAddVariantId] = useState<number | null>(null);
   const [addQty, setAddQty] = useState("");
   const [addUnitCost, setAddUnitCost] = useState("");
 
   const [quickName, setQuickName] = useState("");
   const [quickPhone, setQuickPhone] = useState("");
 
+  // Quick Create Product Fields
+  const [qpName, setQpName] = useState("");
+  const [qpCategoryId, setQpCategoryId] = useState("");
+  const [qpBarcode, setQpBarcode] = useState("");
+  const [qpSku, setQpSku] = useState("");
+  const [qpColor, setQpColor] = useState("");
+  const [qpSize, setQpSize] = useState("");
+  const [qpPrice, setQpPrice] = useState("");
+  const [qpCost, setQpCost] = useState("");
+
   const { data: invoices = [] } = useQuery<PurchaseInvoice[]>({
     queryKey: ["/api/purchases"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-
   const { data: allSuppliers = [] } = useQuery<Supplier[]>({
     queryKey: ["/api/suppliers"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const { data: categories = [] } = useQuery<any[]>({
+    queryKey: ["/api/categories"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
@@ -350,6 +366,7 @@ function PurchasesTab() {
     mutationFn: async () => {
       const res = await apiRequest("POST", `/api/purchases/${selectedInvoice}/items`, {
         productId: Number(addProductId),
+        variantId: addVariantId,
         qty: Number(addQty),
         unitCostBase: Number(addUnitCost),
       });
@@ -357,8 +374,36 @@ function PurchasesTab() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
-      setAddProductId(""); setAddQty(""); setAddUnitCost("");
+      setAddProductId("");
+      setAddVariantId(null);
+      setAddQty("");
+      setAddUnitCost("");
       toast({ title: t("purchases.item_added") });
+    },
+    onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
+  });
+
+  const quickProductMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/variants/quick-create", {
+        productName: qpName,
+        categoryId: qpCategoryId ? Number(qpCategoryId) : null,
+        barcode: qpBarcode,
+        sku: qpSku,
+        color: qpColor,
+        size: qpSize,
+        price: Number(qpPrice) || 0,
+        costDefault: Number(qpCost) || 0,
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["/api/products"] });
+      setAddProductId(String(data.product.id));
+      setAddVariantId(data.variant.id);
+      setAddUnitCost(String(data.variant.costDefault || 0));
+      setShowQuickProduct(false);
+      toast({ title: t("common.success") });
     },
     onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
@@ -449,9 +494,22 @@ function PurchasesTab() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <BarcodeScanButton onScan={(barcode) => {
-                      const found = allProducts.find((p: any) => p.barcode === barcode);
-                      if (found) setAddProductId(String(found.id));
+                    <BarcodeScanButton onScan={async (barcode) => {
+                      try {
+                        const res = await fetch(`/api/variants/barcode/${barcode}`, { credentials: "include" });
+                        if (res.ok) {
+                          const variant = await res.json();
+                          setAddProductId(String(variant.productId));
+                          setAddVariantId(variant.id);
+                          setAddUnitCost(String(variant.costDefault || 0));
+                          toast({ title: t("common.success") });
+                        } else {
+                          setQpBarcode(barcode);
+                          setShowQuickProduct(true);
+                        }
+                      } catch (e) {
+                        toast({ title: t("common.error"), description: String(e), variant: "destructive" });
+                      }
                     }} />
                   </div>
                 </div>
@@ -480,6 +538,9 @@ function PurchasesTab() {
               <TableHeader className="bg-muted/50">
                 <TableRow>
                   <TableHead>{t("purchases.table_product")}</TableHead>
+                  <TableHead>{t("products.barcode")}</TableHead>
+                  <TableHead>{t("products.variant_color")}</TableHead>
+                  <TableHead>{t("products.variant_size")}</TableHead>
                   <TableHead>{t("purchases.table_qty")}</TableHead>
                   <TableHead>{t("purchases.table_unit_price")}</TableHead>
                   <TableHead>{t("purchases.table_total")}</TableHead>
@@ -491,14 +552,20 @@ function PurchasesTab() {
               <TableBody>
                 {items.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={isPending ? 5 : 6} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={isPending ? 8 : 9} className="text-center text-muted-foreground py-8">
                       {t("purchases.no_items")}
                     </TableCell>
                   </TableRow>
                 )}
                 {items.map((it: any) => (
                   <TableRow key={it.id} data-testid={`row-purchase-item-${it.id}`}>
-                    <TableCell>{it.productName || productMap[it.productId] || it.productId}</TableCell>
+                    <TableCell>
+                      <div className="font-medium">{it.productName || productMap[it.productId] || it.productId}</div>
+                      {it.variantId && <div className="text-xs text-muted-foreground">{t("purchases_v2.variant_info")}</div>}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{it.barcode || "—"}</TableCell>
+                    <TableCell>{it.color || "—"}</TableCell>
+                    <TableCell>{it.size || "—"}</TableCell>
                     <TableCell className="font-mono">{it.qty}</TableCell>
                     <TableCell className="font-mono">{omr(it.unitCostBase)}</TableCell>
                     <TableCell className="font-mono">{omr(it.lineSubtotal)}</TableCell>
@@ -514,7 +581,7 @@ function PurchasesTab() {
                   </TableRow>
                 ))}
                 <TableRow className="border-t-2 font-bold bg-muted/30">
-                  <TableCell>{t("common.total")}</TableCell>
+                  <TableCell colSpan={4}>{t("common.total")}</TableCell>
                   <TableCell className="font-mono">{items.reduce((s: number, it: any) => s + it.qty, 0)}</TableCell>
                   <TableCell></TableCell>
                   <TableCell className="font-mono">{omr(itemsSubtotal)}</TableCell>
@@ -731,6 +798,65 @@ function PurchasesTab() {
             <Button variant="outline" onClick={() => setShowQuickSupplier(false)}>{t("common.cancel")}</Button>
             <Button onClick={() => quickSupplierMutation.mutate()} disabled={!quickName.trim() || quickSupplierMutation.isPending}>
               {quickSupplierMutation.isPending ? t("common.loading") : t("common.add")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showQuickProduct} onOpenChange={setShowQuickProduct}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("purchases_v2.quick_create_title")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{t("products.product_name")} *</label>
+              <Input value={qpName} onChange={e => setQpName(e.target.value)} data-testid="input-qp-name" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{t("products.category")}</label>
+              <Select value={qpCategoryId} onValueChange={setQpCategoryId}>
+                <SelectTrigger data-testid="select-qp-category"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{t("products.barcode")}</label>
+                <Input value={qpBarcode} onChange={e => setQpBarcode(e.target.value)} data-testid="input-qp-barcode" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{t("products.variant_sku")}</label>
+                <Input value={qpSku} onChange={e => setQpSku(e.target.value)} data-testid="input-qp-sku" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{t("products.variant_color")}</label>
+                <Input value={qpColor} onChange={e => setQpColor(e.target.value)} data-testid="input-qp-color" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{t("products.variant_size")}</label>
+                <Input value={qpSize} onChange={e => setQpSize(e.target.value)} data-testid="input-qp-size" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{t("products.variant_price")}</label>
+                <Input type="number" step="0.001" value={qpPrice} onChange={e => setQpPrice(e.target.value)} data-testid="input-qp-price" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{t("products.variant_cost")}</label>
+                <Input type="number" step="0.001" value={qpCost} onChange={e => setQpCost(e.target.value)} data-testid="input-qp-cost" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowQuickProduct(false)}>{t("common.cancel")}</Button>
+            <Button onClick={() => quickProductMutation.mutate()} disabled={!qpName || quickProductMutation.isPending} data-testid="button-save-qp">
+              {quickProductMutation.isPending ? t("common.loading") : t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

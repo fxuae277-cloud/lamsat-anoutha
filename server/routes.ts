@@ -803,6 +803,159 @@ export async function registerRoutes(
     res.json({ message: "تم حذف المنتج" });
   });
 
+  // ── Product Variants ──
+  app.get("/api/products/:id/variants", requireAuth, async (req, res) => {
+    res.json(await storage.getVariantsByProduct(Number(req.params.id)));
+  });
+  app.post("/api/products/:id/variants", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const productId = Number(req.params.id);
+      const product = await storage.getProduct(productId);
+      if (!product) return res.status(404).json({ message: "المنتج غير موجود" });
+      if (req.body.barcode) {
+        const existing = await storage.getVariantByBarcode(req.body.barcode);
+        if (existing) return res.status(400).json({ message: "الباركود مستخدم بالفعل" });
+      }
+      if (req.body.sku) {
+        const existing = await storage.getVariantBySku(req.body.sku);
+        if (existing) return res.status(400).json({ message: "رمز SKU مستخدم بالفعل" });
+      }
+      const variant = await storage.createVariant({ ...req.body, productId });
+      res.status(201).json(variant);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ" });
+    }
+  });
+  app.get("/api/variants", requireAuth, async (_req, res) => {
+    res.json(await storage.getAllVariants());
+  });
+  app.get("/api/variants/barcode/:barcode", requireAuth, async (req, res) => {
+    const variant = await storage.getVariantByBarcode(req.params.barcode);
+    if (!variant) return res.status(404).json({ message: "الباركود غير موجود" });
+    res.json(variant);
+  });
+  app.patch("/api/variants/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (req.body.barcode) {
+        const existing = await storage.getVariantByBarcode(req.body.barcode);
+        if (existing && existing.id !== id) return res.status(400).json({ message: "الباركود مستخدم بالفعل" });
+      }
+      if (req.body.sku) {
+        const existing = await storage.getVariantBySku(req.body.sku);
+        if (existing && existing.id !== id) return res.status(400).json({ message: "رمز SKU مستخدم بالفعل" });
+      }
+      const variant = await storage.updateVariant(id, req.body);
+      if (!variant) return res.status(404).json({ message: "المتغير غير موجود" });
+      res.json(variant);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ" });
+    }
+  });
+  app.delete("/api/variants/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    await storage.deleteVariant(Number(req.params.id));
+    res.json({ message: "تم حذف المتغير" });
+  });
+  app.post("/api/variants/quick-create", requireAuth, async (req, res) => {
+    try {
+      const { productName, categoryId, barcode, sku, color, size, price, costDefault } = req.body;
+      if (!productName || !price) return res.status(400).json({ message: "اسم المنتج والسعر مطلوبان" });
+      if (barcode) {
+        const existing = await storage.getVariantByBarcode(barcode);
+        if (existing) return res.status(400).json({ message: "الباركود مستخدم بالفعل" });
+      }
+      const product = await storage.createProduct({
+        name: productName,
+        categoryId: categoryId || null,
+        price: price,
+        active: true,
+        barcode: null,
+        branchId: null,
+        image: null,
+      });
+      const variant = await storage.createVariant({
+        productId: product.id,
+        barcode: barcode || null,
+        sku: sku || null,
+        color: color || null,
+        size: size || null,
+        price: price,
+        costDefault: costDefault || null,
+        active: true,
+      });
+      res.status(201).json({ product, variant });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ" });
+    }
+  });
+
+  // ── Inventory Balances ──
+  app.get("/api/inventory-balances", requireAuth, async (req, res) => {
+    const locationId = req.query.locationId ? Number(req.query.locationId) : undefined;
+    res.json(await storage.getInventoryBalances(locationId));
+  });
+
+  // ── Stock Transfers ──
+  app.get("/api/stock-transfers", requireAuth, async (_req, res) => {
+    res.json(await storage.getStockTransfers());
+  });
+  app.get("/api/stock-transfers/:id", requireAuth, async (req, res) => {
+    const transfer = await storage.getStockTransfer(Number(req.params.id));
+    if (!transfer) return res.status(404).json({ message: "التحويل غير موجود" });
+    const lines = await storage.getStockTransferLines(transfer.id);
+    res.json({ ...transfer, lines });
+  });
+  app.post("/api/stock-transfers", requireAuth, async (req, res) => {
+    try {
+      const transfer = await storage.createStockTransfer({
+        fromLocationId: req.body.fromLocationId,
+        toLocationId: req.body.toLocationId,
+        status: "draft",
+        notes: req.body.notes || null,
+        createdBy: req.session.userId!,
+      });
+      res.status(201).json(transfer);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ" });
+    }
+  });
+  app.post("/api/stock-transfers/:id/lines", requireAuth, async (req, res) => {
+    try {
+      const transfer = await storage.getStockTransfer(Number(req.params.id));
+      if (!transfer || transfer.status !== "draft") return res.status(400).json({ message: "لا يمكن التعديل" });
+      const line = await storage.addStockTransferLine({
+        transferId: transfer.id,
+        variantId: req.body.variantId,
+        qty: req.body.qty,
+      });
+      res.status(201).json(line);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ" });
+    }
+  });
+  app.delete("/api/stock-transfer-lines/:id", requireAuth, async (req, res) => {
+    await storage.deleteStockTransferLine(Number(req.params.id));
+    res.json({ message: "تم الحذف" });
+  });
+  app.post("/api/stock-transfers/:id/approve", requireAuth, async (req, res) => {
+    try {
+      const result = await storage.approveStockTransfer(Number(req.params.id), req.session.userId!);
+      if (!result) return res.status(400).json({ message: "لا يمكن اعتماد التحويل" });
+      res.json(result);
+    } catch (err: any) {
+      res.status(400).json({ message: err?.message ?? "خطأ في اعتماد التحويل" });
+    }
+  });
+
+  // ── Inventory Ledger ──
+  app.get("/api/inventory-ledger", requireAuth, async (req, res) => {
+    const filters: any = {};
+    if (req.query.variantId) filters.variantId = Number(req.query.variantId);
+    if (req.query.locationId) filters.locationId = Number(req.query.locationId);
+    if (req.query.limit) filters.limit = Number(req.query.limit);
+    res.json(await storage.getInventoryLedgerEntries(filters));
+  });
+
   app.get("/api/warehouses", requireAuth, async (_req, res) => {
     res.json(await storage.getWarehouses());
   });

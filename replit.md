@@ -80,6 +80,12 @@ shared/
 - **locations** (branch_id, code[showroom/backstore], name, active) — auto-created for each branch
 - **location_inventory** (location_id, product_id, qty_on_hand, reorder_level, updated_at) — unique(location_id, product_id)
 - **inventory_transactions** (date, branch_id, from_location_id, to_location_id, product_id, type, qty, ref_table, ref_id, note, created_by)
+- **product_variants** (product_id FK, sku unique, barcode unique, color, size, cost_default, price, active) — each product has color/size variants with unique barcode
+- **inventory_balances** (location_id FK, variant_id FK, qty_on_hand, qty_reserved) — UNIQUE(location_id, variant_id), variant-level stock per location
+- **stock_transfers** (from_location_id, to_location_id, status[draft/approved/cancelled], notes, created_by, approved_at)
+- **stock_transfer_lines** (transfer_id FK, variant_id FK, qty) — items in a transfer
+- **inventory_ledger** (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by) — full movement history
+- **purchase_extra_costs** (purchase_invoice_id FK, type, amount, notes)
 - customers (name, phone[unique normalized], city, address, totalSpent, visits, lastVisit, createdAt) — auto-created via find-or-create by phone
 - suppliers
 - sales, sale_items (sales have shift_id + payment_method)
@@ -180,8 +186,8 @@ shared/
 1. **Login**: Username/password authentication, session-based
 2. **Dashboard**: Daily sales, VAT, order count, low-stock alerts, weekly chart
 3. **POS**: Session-based branch/cashier (read-only), barcode scan, cart, discount, VAT 5%, cash/card/bank payment, shift open/check
-4. **Products**: CRUD with barcode, category, unified price, active toggle, avg_cost + stock_qty display
-5. **Inventory**: Multi-location per branch (showroom + backstore), internal transfers, low-stock alerts, transaction log
+4. **Products**: Product Master with Variants (color/size/barcode unique per variant), category, unified price, active toggle
+5. **Inventory**: Variant-based inventory with 3 tabs: Balances by location, Stock Transfers (draft→approve with balance check), Movement Ledger
 6. **Orders**: WhatsApp/Instagram orders, auto-branch assignment by city, status tracking, payment recording
 7. **Expenses**: Categorized expenses per branch with source tracking + ledger integration (tabbed: expenses / cash ledger / bank ledger)
 8. **Shift Reports**: GET /api/reports/shift?shiftId=... → cash/card/bank sales, expenses, expected vs actual cash
@@ -216,6 +222,9 @@ All prefixed with `/api/`:
 - GET/POST `/stocktakes`, GET `/stocktakes/:id/items`, PATCH `/stocktake-items/:id`, POST `/stocktakes/:id/approve` (requireAuth + requireManager/requireOwnerOrAdmin)
 - GET/POST `/inventory-adjustments` (requireAuth + requireManager)
 - GET `/dashboard`
+- GET/POST `/products/:id/variants`, PATCH/DELETE `/variants/:id`, GET `/variants/barcode/:barcode`, POST `/variants/quick-create`
+- GET `/inventory-balances?locationId=`, GET/POST `/stock-transfers`, POST `/stock-transfers/:id/lines`, POST `/stock-transfers/:id/approve`
+- GET `/inventory-ledger?locationId=&variantId=`
 
 ## Design
 - Arabic-only RTL interface
