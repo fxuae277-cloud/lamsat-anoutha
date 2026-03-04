@@ -1111,6 +1111,9 @@ export async function registerRoutes(
         if (openShift) shiftId = openShift.id;
       }
       const order = await storage.createOrder({ ...parsed.data, shiftId, employeeId: req.session.userId }, items);
+      if (parsed.data.customerPhone) {
+        storage.findOrCreateCustomerByPhone(parsed.data.customerPhone, parsed.data.customerName || undefined).catch(() => {});
+      }
       res.status(201).json(order);
     } catch (err: any) {
       console.error(err);
