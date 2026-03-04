@@ -80,7 +80,8 @@ shared/
 - **locations** (branch_id, code[showroom/backstore], name, active) — auto-created for each branch
 - **location_inventory** (location_id, product_id, qty_on_hand, reorder_level, updated_at) — unique(location_id, product_id)
 - **inventory_transactions** (date, branch_id, from_location_id, to_location_id, product_id, type, qty, ref_table, ref_id, note, created_by)
-- customers, suppliers
+- customers (name, phone[unique normalized], city, address, totalSpent, visits, lastVisit, createdAt) — auto-created via find-or-create by phone
+- suppliers
 - sales, sale_items (sales have shift_id + payment_method)
 - orders, order_items (orders have shift_id + payment_method + paid_at)
 - expenses (with shift_id + source: cash/card/bank_transfer + created_by)

@@ -957,10 +957,29 @@ export async function registerRoutes(
   app.get("/api/customers", requireAuth, async (_req, res) => {
     res.json(await storage.getCustomers());
   });
+  app.get("/api/customers/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const result = await storage.getCustomerWithInvoices(id);
+    if (!result) return res.status(404).json({ message: "Customer not found" });
+    res.json(result);
+  });
   app.post("/api/customers", requireAuth, async (req, res) => {
     const parsed = insertCustomerSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     res.status(201).json(await storage.createCustomer(parsed.data));
+  });
+  app.post("/api/customers/find-or-create", requireAuth, async (req, res) => {
+    const { phone, name } = req.body;
+    if (!phone) return res.status(400).json({ message: "Phone is required" });
+    const customer = await storage.findOrCreateCustomerByPhone(phone, name);
+    res.json(customer);
+  });
+  app.put("/api/customers/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const { name, phone } = req.body;
+    const updated = await storage.updateCustomer(id, { name, phone });
+    if (!updated) return res.status(404).json({ message: "Customer not found" });
+    res.json(updated);
   });
 
   app.get("/api/suppliers", requireAuth, requireManager, async (req, res) => {
@@ -1039,7 +1058,11 @@ export async function registerRoutes(
       return res.status(400).json({ message: "لا توجد منتجات في الفاتورة" });
     }
     try {
-      res.status(201).json(await storage.createSale(parsed.data, items));
+      const sale = await storage.createSale(parsed.data, items);
+      if (parsed.data.customerId) {
+        storage.updateCustomerAfterSale(parsed.data.customerId, String(parsed.data.total || "0")).catch(() => {});
+      }
+      res.status(201).json(sale);
     } catch (e: any) {
       res.status(400).json({ message: e.message || "فشل إنشاء الفاتورة" });
     }

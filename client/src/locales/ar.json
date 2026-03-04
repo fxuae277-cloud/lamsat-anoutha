@@ -367,6 +367,26 @@
     "delivery_label": "التسليم:",
     "value_label": "القيمة:"
   },
+  "customers": {
+    "page_title": "العملاء",
+    "search_placeholder": "ابحث بالاسم أو رقم الهاتف...",
+    "add_customer": "إضافة عميل",
+    "name": "الاسم",
+    "phone": "الهاتف",
+    "visits": "الزيارات",
+    "total_spent": "إجمالي المشتريات",
+    "last_visit": "آخر زيارة",
+    "no_customers": "لا يوجد عملاء بعد",
+    "customer_detail": "تفاصيل العميل",
+    "invoices_list": "الفواتير",
+    "edit_name": "تعديل الاسم",
+    "no_invoices": "لا توجد فواتير لهذا العميل",
+    "customer_created": "تم إنشاء العميل",
+    "customer_updated": "تم تحديث بيانات العميل",
+    "customer_saved": "تم حفظ العميل",
+    "name_required": "الاسم مطلوب",
+    "phone_required": "رقم الهاتف مطلوب"
+  },
   "pos": {
     "start_title": "تشغيل نقطة البيع",
     "start_subtitle": "أدخل رصيد الصندوق لفتح شفت جديد",
@@ -481,7 +501,12 @@
     "scan_barcode": "مسح الباركود",
     "camera_error": "لا يمكن الوصول إلى الكاميرا. يرجى السماح بصلاحيات الكاميرا.",
     "scan_button": "مسح",
-    "product_added": "تم إضافة المنتج"
+    "product_added": "تم إضافة المنتج",
+    "customer_phone": "رقم هاتف العميل (اختياري)",
+    "customer_phone_placeholder": "مثال: 91234567",
+    "send_whatsapp": "إرسال الفاتورة عبر واتساب",
+    "customer_found": "تم العثور على العميل",
+    "customer_new": "سيتم إنشاء عميل جديد"
   },
   "hr": {
     "title": "الرواتب والموظفين",

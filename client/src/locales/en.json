@@ -367,6 +367,26 @@
     "delivery_label": "Delivery:",
     "value_label": "Value:"
   },
+  "customers": {
+    "page_title": "Customers",
+    "search_placeholder": "Search by name or phone...",
+    "add_customer": "Add Customer",
+    "name": "Name",
+    "phone": "Phone",
+    "visits": "Visits",
+    "total_spent": "Total Spent",
+    "last_visit": "Last Visit",
+    "no_customers": "No customers yet",
+    "customer_detail": "Customer Details",
+    "invoices_list": "Invoices",
+    "edit_name": "Edit Name",
+    "no_invoices": "No invoices for this customer",
+    "customer_created": "Customer created",
+    "customer_updated": "Customer updated",
+    "customer_saved": "Customer saved",
+    "name_required": "Name is required",
+    "phone_required": "Phone is required"
+  },
   "pos": {
     "start_title": "Start Point of Sale",
     "start_subtitle": "Enter drawer balance to open a new shift",
@@ -481,7 +501,12 @@
     "scan_barcode": "Scan Barcode",
     "camera_error": "Could not access camera. Please allow camera permissions.",
     "scan_button": "Scan",
-    "product_added": "Product added"
+    "product_added": "Product added",
+    "customer_phone": "Customer Phone (optional)",
+    "customer_phone_placeholder": "e.g. 91234567",
+    "send_whatsapp": "Send invoice via WhatsApp",
+    "customer_found": "Customer found",
+    "customer_new": "New customer will be created"
   },
   "hr": {
     "title": "HR & Payroll",

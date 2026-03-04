@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Plus, Minus, Trash2, CheckCircle2, Image as ImageIcon, Store, Monitor, Banknote, LogOut, User as UserIcon, XCircle, Clock, AlertTriangle, Printer, ArrowLeft, Receipt, TrendingUp, TrendingDown, Camera, Pause, Play, ShoppingCart } from "lucide-react";
+import { Search, Plus, Minus, Trash2, CheckCircle2, Image as ImageIcon, Store, Monitor, Banknote, LogOut, User as UserIcon, XCircle, Clock, AlertTriangle, Printer, ArrowLeft, Receipt, TrendingUp, TrendingDown, Camera, Pause, Play, ShoppingCart, MessageSquare } from "lucide-react";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
@@ -297,6 +299,9 @@ export default function POS() {
   const [holdNote, setHoldNote] = useState("");
   const [heldListDialogOpen, setHeldListDialogOpen] = useState(false);
   const heldIdCounter = useRef(1);
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [sendWhatsApp, setSendWhatsApp] = useState(false);
+  const [foundCustomerId, setFoundCustomerId] = useState<number | null>(null);
 
   const isOwner = user?.role === "owner" || user?.role === "admin";
 
@@ -386,12 +391,19 @@ export default function POS() {
 
   const saleMutation = useMutation({
     mutationFn: async () => {
+      let customerId = null;
+      if (customerPhone) {
+        const custRes = await apiRequest("POST", "/api/customers/find-or-create", { phone: customerPhone });
+        const customer = await custRes.json();
+        customerId = customer.id;
+      }
+
       const invoiceNumber = `INV-${Date.now()}`;
       const saleData = {
         invoiceNumber,
         branchId: user!.branchId,
         cashierId: user!.id,
-        customerId: null,
+        customerId,
         subtotal: subtotal.toFixed(3),
         discount: discountAmount.toFixed(3),
         discountType,
@@ -412,6 +424,20 @@ export default function POS() {
     },
     onSuccess: (result) => {
       toast({ title: t("pos.sale_success"), description: t("pos.sale_success_desc") });
+
+      if (sendWhatsApp && customerPhone) {
+        const itemsList = cart.map(it => `${it.qty}x ${it.product.name}`).join("\n");
+        const message = `مرحبا 🌸 شكراً لتسوقك من لمسة أنوثة\n\n` +
+          `${t("pos.receipt_invoice")}: ${result.invoiceNumber}\n` +
+          `${t("pos.receipt_total")}: ${result.saleData.total} ${t("common.omr")}\n` +
+          `${t("pos.receipt_branch")}: ${branchName}\n\n` +
+          `${itemsList}`;
+        
+        const encoded = encodeURIComponent(message);
+        const phone = customerPhone.replace(/\D/g, "");
+        const finalPhone = phone.startsWith("968") ? phone : `968${phone}`;
+        window.open(`https://wa.me/${finalPhone}?text=${encoded}`, "_blank");
+      }
 
       printThermalReceipt({
         invoiceNumber: result.invoiceNumber,
@@ -434,11 +460,15 @@ export default function POS() {
       setDiscountValue(0);
       setBankTxnId("");
       setPaymentMethod("cash");
+      setCustomerPhone("");
+      setSendWhatsApp(false);
+      setFoundCustomerId(null);
       setPayDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
       queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
       queryClient.invalidateQueries({ queryKey: ["/api/location-inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
     },
     onError: (err: Error) => {
       toast({ title: t("common.error"), description: err.message, variant: "destructive" });
@@ -890,6 +920,38 @@ export default function POS() {
                     <p className="text-sm text-muted-foreground mb-1">{t("pos.amount_due")}</p>
                     <p className="text-3xl font-bold text-primary">{total.toFixed(3)} {t("common.omr")}</p>
                   </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="customer-phone" className="text-sm font-medium">{t("pos.customer_phone")}</Label>
+                      <Input
+                        id="customer-phone"
+                        placeholder={t("pos.customer_phone_placeholder")}
+                        value={customerPhone}
+                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        data-testid="input-customer-phone"
+                      />
+                    </div>
+
+                    <div className="flex items-center space-x-2 rtl:space-x-reverse">
+                      <Checkbox
+                        id="send-whatsapp"
+                        checked={sendWhatsApp}
+                        onCheckedChange={(checked) => setSendWhatsApp(!!checked)}
+                        disabled={!customerPhone}
+                        data-testid="checkbox-send-whatsapp"
+                      />
+                      <Label
+                        htmlFor="send-whatsapp"
+                        className={`text-sm font-medium ${!customerPhone ? "text-muted-foreground cursor-not-allowed" : "cursor-pointer"}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="w-4 h-4 text-green-600" />
+                          {t("pos.send_whatsapp")}
+                        </div>
+                      </Label>
+                    </div>
+                  </div>
                   
                   <div className="space-y-3">
                     <label className="text-sm font-medium">{t("pos.payment_method")}</label>
@@ -926,7 +988,7 @@ export default function POS() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <XCircle className="w-5 h-5 text-red-500" />
-              {t("pos.close_shift_title").replace("{0}", String(currentShift.id))}
+              {t("pos.close_shift_title").replace("{0}", String(currentShift?.id || ""))}
             </DialogTitle>
             <DialogDescription>{t("pos.close_shift_desc")}</DialogDescription>
           </DialogHeader>

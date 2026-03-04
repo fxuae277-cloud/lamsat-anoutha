@@ -73,7 +73,12 @@ export interface IStorage {
   createTransfer(data: InsertInventoryTransfer): Promise<InventoryTransfer>;
   getCustomers(): Promise<Customer[]>;
   getCustomer(id: number): Promise<Customer | undefined>;
+  getCustomerByPhone(phone: string): Promise<Customer | undefined>;
+  findOrCreateCustomerByPhone(phone: string, name?: string): Promise<Customer>;
   createCustomer(data: InsertCustomer): Promise<Customer>;
+  updateCustomer(id: number, data: { name?: string; phone?: string }): Promise<Customer | undefined>;
+  updateCustomerAfterSale(customerId: number, saleTotal: string): Promise<void>;
+  getCustomerWithInvoices(id: number): Promise<any>;
   getSuppliers(activeOnly?: boolean): Promise<Supplier[]>;
   getSupplier(id: number): Promise<Supplier | undefined>;
   getSupplierByName(name: string): Promise<Supplier | undefined>;
@@ -297,14 +302,59 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getCustomers() { return db.select().from(customers); }
+  async getCustomers() { return db.select().from(customers).orderBy(desc(customers.lastVisit)); }
   async getCustomer(id: number) {
     const [row] = await db.select().from(customers).where(eq(customers.id, id));
     return row;
   }
+  private normalizePhone(phone: string): string {
+    let p = phone.replace(/[\s\-\+]/g, "");
+    if (p.startsWith("00968")) p = p.slice(5);
+    else if (p.startsWith("968") && p.length > 8) p = p.slice(3);
+    return p;
+  }
+  async getCustomerByPhone(phone: string) {
+    const normalized = this.normalizePhone(phone);
+    const [row] = await db.select().from(customers).where(eq(customers.phone, normalized));
+    return row;
+  }
+  async findOrCreateCustomerByPhone(phone: string, name?: string) {
+    const normalized = this.normalizePhone(phone);
+    const existing = await this.getCustomerByPhone(normalized);
+    if (existing) return existing;
+    const [row] = await db.insert(customers).values({ phone: normalized, name: name || null }).returning();
+    return row;
+  }
   async createCustomer(data: InsertCustomer) {
+    if (data.phone) data.phone = this.normalizePhone(data.phone);
     const [row] = await db.insert(customers).values(data).returning();
     return row;
+  }
+  async updateCustomer(id: number, data: { name?: string; phone?: string }) {
+    const updateData: any = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.phone !== undefined) updateData.phone = this.normalizePhone(data.phone);
+    const [row] = await db.update(customers).set(updateData).where(eq(customers.id, id)).returning();
+    return row;
+  }
+  async updateCustomerAfterSale(customerId: number, saleTotal: string) {
+    await pool.query(
+      `UPDATE customers SET visits = COALESCE(visits, 0) + 1, total_spent = COALESCE(total_spent, 0) + $1, last_visit = now() WHERE id = $2`,
+      [saleTotal, customerId]
+    );
+  }
+  async getCustomerWithInvoices(id: number) {
+    const customer = await this.getCustomer(id);
+    if (!customer) return null;
+    const invoices = await pool.query(
+      `SELECT s.id, s.invoice_number, s.total, s.payment_method, s.created_at, b.name as branch_name
+       FROM sales s
+       LEFT JOIN branches b ON b.id = s.branch_id
+       WHERE s.customer_id = $1
+       ORDER BY s.created_at DESC`,
+      [id]
+    );
+    return { ...customer, invoices: invoices.rows };
   }
 
   async getSuppliers(activeOnly?: boolean) {

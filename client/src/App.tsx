@@ -27,6 +27,7 @@ import Returns from "@/pages/Returns";
 import AuditLog from "@/pages/AuditLog";
 import Operations from "@/pages/Operations";
 import StockControl from "@/pages/StockControl";
+import Customers from "@/pages/Customers";
 import { ReactNode } from "react";
 
 function RequireOwner({ children }: { children: ReactNode }) {
@@ -62,9 +63,7 @@ function AuthenticatedRouter() {
         <Route path="/pos" component={POS}/>
         <Route path="/orders" component={Orders}/>
         <Route path="/invoices" component={Invoices}/>
-        <Route path="/customers">
-          <div className="p-8 text-center text-muted-foreground">{t("app.customers_coming_soon")}</div>
-        </Route>
+        <Route path="/customers" component={Customers}/>
 
         <Route path="/">
           <RequireOwner><Executive /></RequireOwner>
