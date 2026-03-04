@@ -420,6 +420,7 @@
     "ocr_result": "نتائج قراءة الفاتورة",
     "ocr_lines_found": "تم استخراج {0} صنف",
     "ocr_no_lines": "لم يتم العثور على أصناف في الصورة",
+    "ocr_add_item": "إضافة صنف",
     "ocr_raw_text": "النص المستخرج",
     "ocr_matched": "مطابق",
     "ocr_not_matched": "غير مطابق",

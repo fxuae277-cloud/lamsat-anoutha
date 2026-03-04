@@ -420,6 +420,7 @@
     "ocr_result": "Invoice Scan Results",
     "ocr_lines_found": "{0} items extracted",
     "ocr_no_lines": "No items found in the image",
+    "ocr_add_item": "Add Item",
     "ocr_raw_text": "Extracted Text",
     "ocr_matched": "Matched",
     "ocr_not_matched": "Not Matched",

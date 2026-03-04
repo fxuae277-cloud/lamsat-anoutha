@@ -572,6 +572,21 @@ function PurchasesTab() {
     revalidateOcrTotals();
   }
 
+  function addOcrItem() {
+    setOcrItems(prev => [...prev, {
+      lineNo: prev.length + 1,
+      code: "",
+      color: "",
+      size: "",
+      qty: 1,
+      unitCost: 0,
+      amount: 0,
+      computedAmount: 0,
+      needsReview: true,
+      reviewReasons: ["price_zero"],
+    }]);
+  }
+
   function removeOcrItem(index: number) {
     setOcrItems(prev => prev.filter((_, i) => i !== index));
     revalidateOcrTotals();
@@ -1200,6 +1215,9 @@ function PurchasesTab() {
             </div>
 
             <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="gap-1" onClick={addOcrItem} data-testid="button-ocr-add-row">
+                <Plus className="w-4 h-4" /> {t("purchases_v2.ocr_add_item")}
+              </Button>
               <Button variant="outline" size="sm" onClick={() => setShowOcrRawText(!showOcrRawText)}>
                 {t("purchases_v2.ocr_raw_text")}
               </Button>

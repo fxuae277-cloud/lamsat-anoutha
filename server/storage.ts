@@ -1478,12 +1478,6 @@ export class DatabaseStorage implements IStorage {
           [centralLocationId, item.productId, item.qty, id, invoice.createdBy]
         );
 
-        await client.query(
-          `INSERT INTO stock_movements (product_id, branch_id, quantity, movement_type, reference_id, created_at)
-           VALUES ($1, 0, $2, 'purchase', $3, now())`,
-          [item.productId, item.qty, id]
-        );
-
         if (item.variantId) {
           await client.query(
             `INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, boolean, timestamp, date } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, boolean, timestamp, date, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -360,7 +360,9 @@ export const locationInventory = pgTable("location_inventory", {
   qtyOnHand: integer("qty_on_hand").notNull().default(0),
   reorderLevel: integer("reorder_level").notNull().default(5),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (t) => [
+  uniqueIndex("uq_location_product").on(t.locationId, t.productId),
+]);
 export const insertLocationInventorySchema = createInsertSchema(locationInventory).omit({ id: true, updatedAt: true });
 export type InsertLocationInventory = z.infer<typeof insertLocationInventorySchema>;
 export type LocationInventory = typeof locationInventory.$inferSelect;
