@@ -20,8 +20,15 @@ import {
 import { registerExportRoutes } from "./exports";
 import { processInvoiceImage } from "./ocr";
 
+const ocrStorage = multer.diskStorage({
+  destination: "uploads/",
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || ".png";
+    cb(null, `inv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`);
+  },
+});
 const upload = multer({
-  dest: "uploads/",
+  storage: ocrStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = [".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"];

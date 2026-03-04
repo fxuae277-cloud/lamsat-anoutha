@@ -26,7 +26,13 @@ export interface OcrInvoiceResult {
 }
 
 async function preprocessImage(inputPath: string): Promise<string> {
-  const outputPath = inputPath.replace(/\.[^.]+$/, "_processed.png");
+  const dir = path.dirname(inputPath);
+  const baseName = path.basename(inputPath, path.extname(inputPath));
+  const outputPath = path.join(dir, `${baseName}_processed_${Date.now()}.png`);
+
+  if (path.resolve(inputPath) === path.resolve(outputPath)) {
+    throw new Error("Input and output paths must differ");
+  }
 
   await sharp(inputPath)
     .greyscale()
