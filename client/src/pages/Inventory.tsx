@@ -25,9 +25,9 @@ function BalancesTab() {
     queryKey: ["/api/locations"],
   });
 
+  const balancesUrl = locationId === "all" ? "/api/inventory-balances" : `/api/inventory-balances?locationId=${locationId}`;
   const { data: balances = [] } = useQuery<any[]>({
-    queryKey: ["/api/inventory-balances", locationId],
-    queryFn: getQueryFn({ on401: "throw" }),
+    queryKey: [balancesUrl],
   });
 
   const filtered = balances.filter(b => 
@@ -308,8 +308,9 @@ function LedgerTab() {
     queryKey: ["/api/locations"],
   });
 
+  const ledgerUrl = locationId === "all" ? "/api/inventory-ledger" : `/api/inventory-ledger?locationId=${locationId}`;
   const { data: ledger = [] } = useQuery<any[]>({
-    queryKey: ["/api/inventory-ledger", locationId],
+    queryKey: [ledgerUrl],
   });
 
   const getReasonColor = (reason: string) => {

@@ -1478,20 +1478,43 @@ export class DatabaseStorage implements IStorage {
           [centralLocationId, item.productId, item.qty, id, invoice.createdBy]
         );
 
-        if (item.variantId) {
-          await client.query(
-            `INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
-             VALUES ($1, $2, $3, 0)
-             ON CONFLICT (location_id, variant_id)
-             DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + EXCLUDED.qty_on_hand`,
-            [centralLocationId, item.variantId, item.qty]
+        let variantId = item.variantId;
+        if (!variantId) {
+          const existingVar = await client.query(
+            `SELECT id FROM product_variants WHERE product_id = $1 LIMIT 1`,
+            [item.productId]
           );
+          if (existingVar.rows.length > 0) {
+            variantId = existingVar.rows[0].id;
+          } else {
+            const prodName = await client.query(`SELECT name, barcode FROM products WHERE id = $1`, [item.productId]);
+            const pName = prodName.rows[0]?.name || `Product-${item.productId}`;
+            const sku = `SKU-${item.productId}-${Date.now()}`;
+            const newVar = await client.query(
+              `INSERT INTO product_variants (product_id, sku, barcode, color, size, cost_default, price, active)
+               VALUES ($1, $2, $3, '', '', $4, $4, true) RETURNING id`,
+              [item.productId, sku, prodName.rows[0]?.barcode || null, unitCostFinal.toFixed(3)]
+            );
+            variantId = newVar.rows[0].id;
+          }
           await client.query(
-            `INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by, created_at)
-             VALUES ($1, $2, $3, 'purchase_posted', 'purchase_invoices', $4, $5, now())`,
-            [item.variantId, centralLocationId, item.qty, id, invoice.createdBy]
+            `UPDATE purchase_items SET variant_id = $1 WHERE id = $2`,
+            [variantId, item.id]
           );
         }
+
+        await client.query(
+          `INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
+           VALUES ($1, $2, $3, 0)
+           ON CONFLICT (location_id, variant_id)
+           DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + EXCLUDED.qty_on_hand`,
+          [centralLocationId, variantId, item.qty]
+        );
+        await client.query(
+          `INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by, created_at)
+           VALUES ($1, $2, $3, 'purchase_posted', 'purchase_invoices', $4, $5, now())`,
+          [variantId, centralLocationId, item.qty, id, invoice.createdBy]
+        );
       }
 
       const result = await client.query(
