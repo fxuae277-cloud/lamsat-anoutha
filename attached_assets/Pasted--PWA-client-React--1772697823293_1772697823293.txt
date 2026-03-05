@@ -1,0 +1,148 @@
+قم بتحويل المشروع إلى PWA (تطبيق هاتف) مع دعم اللغة العربية فقط.
+
+هيكل المشروع:
+
+client = React + Vite
+server = Express API
+
+نفذ الخطوات التالية:
+
+---------------------------------------
+
+1️⃣ إنشاء مجلد PWA داخل client
+
+أنشئ المجلد:
+
+client/public
+
+ثم داخله:
+
+client/public/icons
+
+---------------------------------------
+
+2️⃣ إنشاء ملف manifest
+
+أنشئ الملف:
+
+client/public/manifest.json
+
+المحتوى:
+
+{
+  "name": "لمسة أنوثة",
+  "short_name": "لمسة",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#111111",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
+
+---------------------------------------
+
+3️⃣ إنشاء service worker
+
+أنشئ الملف:
+
+client/public/service-worker.js
+
+المحتوى:
+
+const CACHE_NAME = "lamsat-pos-v1";
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.add("/");
+    })
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  event.respondWith(
+    fetch(event.request).catch(() => caches.match(event.request))
+  );
+});
+
+---------------------------------------
+
+4️⃣ تسجيل service worker
+
+افتح الملف:
+
+client/src/main.tsx
+
+أضف في الأسفل:
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/service-worker.js");
+  });
+}
+
+---------------------------------------
+
+5️⃣ إضافة manifest في HTML
+
+افتح:
+
+client/index.html
+
+داخل head أضف:
+
+<link rel="manifest" href="/manifest.json" />
+<meta name="theme-color" content="#111111" />
+
+---------------------------------------
+
+6️⃣ إضافة دعم iPhone
+
+داخل head أضف أيضاً:
+
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+---------------------------------------
+
+7️⃣ تأكد من أن Vite يخدم public
+
+أي ملف داخل:
+
+client/public
+
+سيكون متاح تلقائياً في الموقع.
+
+---------------------------------------
+
+8️⃣ اختبار التطبيق
+
+بعد تشغيل المشروع:
+
+npm run dev
+
+افتح الموقع من الهاتف.
+
+من Chrome:
+
+⋮
+Add to Home Screen
+
+سيظهر تطبيق:
+
+"لمسة أنوثة"
+
+على الهاتف.
