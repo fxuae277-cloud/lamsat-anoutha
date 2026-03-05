@@ -5,11 +5,8 @@ import XLSX from "xlsx";
 import PDFDocument from "pdfkit";
 import path from "path";
 import fs from "fs";
-import { fileURLToPath } from "url";
 
-const __filename2 = fileURLToPath(import.meta.url);
-const __dirname2 = path.dirname(__filename2);
-const FONT_PATH = path.join(__dirname2, "fonts", "Cairo-Regular.ttf");
+const FONT_PATH = path.join(process.cwd(), "server", "fonts", "Cairo-Regular.ttf");
 const hasArabicFont = fs.existsSync(FONT_PATH);
 
 function requireAuth(req: Request, res: Response, next: () => void) {
