@@ -1858,6 +1858,8 @@
     "nav_purchases": "المشتريات",
     "nav_transfers": "التحويل",
     "nav_stocktake": "الجرد",
+    "nav_inventory": "المخزون",
+    "nav_customers": "العملاء",
     "shift_status": "حالة الشفت",
     "shift_open": "مفتوح",
     "shift_closed": "مغلق",

@@ -40,6 +40,9 @@ import MobilePurchases from "@/pages/mobile/MobilePurchases";
 import MobileTransfers from "@/pages/mobile/MobileTransfers";
 import MobileStocktake from "@/pages/mobile/MobileStocktake";
 import MobileMore from "@/pages/mobile/MobileMore";
+import MobileCustomers from "@/pages/mobile/MobileCustomers";
+import MobileProducts from "@/pages/mobile/MobileProducts";
+import MobileInventory from "@/pages/mobile/MobileInventory";
 
 import { ReactNode } from "react";
 
@@ -89,16 +92,16 @@ function MobileRouter() {
           <RequireMobileOwner><MobilePurchases /></RequireMobileOwner>
         </Route>
         <Route path="/products">
-          <RequireMobileOwner><MobileMore /></RequireMobileOwner>
+          <RequireMobileOwner><MobileProducts /></RequireMobileOwner>
         </Route>
         <Route path="/inventory">
-          <RequireMobileOwner><MobileMore /></RequireMobileOwner>
+          <RequireMobileOwner><MobileInventory /></RequireMobileOwner>
         </Route>
+        <Route path="/customers" component={MobileCustomers} />
         <Route path="/settings">
           <MobileMore />
         </Route>
         <Route path="/orders" component={MobileInvoices} />
-        <Route path="/customers" component={MobileMore} />
         <Route path="/reports">
           <RequireMobileOwner><MobileMore /></RequireMobileOwner>
         </Route>

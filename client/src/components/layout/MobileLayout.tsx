@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import {
   Home, ShoppingCart, ReceiptText, Clock, MoreHorizontal,
-  LayoutDashboard, Truck, ArrowRightLeft, ClipboardCheck
+  LayoutDashboard, Boxes, Users
 } from "lucide-react";
 
 type NavItem = {
@@ -23,9 +23,9 @@ const EMPLOYEE_NAV: NavItem[] = [
 
 const OWNER_NAV: NavItem[] = [
   { icon: LayoutDashboard, labelKey: "mobile.nav_home", path: "/" },
-  { icon: Truck, labelKey: "mobile.nav_purchases", path: "/purchases" },
-  { icon: ArrowRightLeft, labelKey: "mobile.nav_transfers", path: "/transfers" },
-  { icon: ClipboardCheck, labelKey: "mobile.nav_stocktake", path: "/stocktake" },
+  { icon: ShoppingCart, labelKey: "mobile.nav_pos", path: "/pos" },
+  { icon: Boxes, labelKey: "mobile.nav_inventory", path: "/inventory" },
+  { icon: Users, labelKey: "mobile.nav_customers", path: "/customers" },
   { icon: MoreHorizontal, labelKey: "mobile.nav_more", path: "/more" },
 ];
 

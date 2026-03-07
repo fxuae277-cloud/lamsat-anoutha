@@ -30,10 +30,11 @@ Currency: Omani Rial (OMR) | VAT: 5% | Unified pricing across branches.
 ```
 client/src/
   locales/              → ar.json, en.json (1,434 translation keys each)
-  components/layout/    → Sidebar, AppLayout
+  components/layout/    → Sidebar, AppLayout, MobileLayout (bottom nav)
   components/ui/        → shadcn/ui components
-  pages/                → Login, Dashboard, POS, Products, Inventory, Orders, Expenses, Settings, Reports, Purchases
-  hooks/                → use-toast, use-mobile
+  pages/                → Login, Dashboard, POS, Products, Inventory, Orders, Expenses, Settings, Reports, Purchases, Customers
+  pages/mobile/         → MobileCustomers, MobileProducts, MobileInventory, MobilePOS, MobileInvoices, MobilePurchases, MobileTransfers, MobileStocktake, MobileMore, MobileOwnerHome, MobileEmployeeHome, MobileShift
+  hooks/                → use-toast, use-mobile (768px breakpoint)
   lib/                  → queryClient, auth (AuthProvider/useAuth), i18n (I18nProvider/useI18n), utils
 server/
   index.ts              → Express server entry + session setup
@@ -44,6 +45,20 @@ server/
 shared/
   schema.ts             → Drizzle schema + Zod validation
 ```
+
+## Mobile Experience
+- **Detection**: `useIsMobile()` hook (768px breakpoint) — below 768px renders `MobileRouter`, above renders `DesktopRouter`
+- **Layout**: `MobileLayout` wraps all mobile pages with fixed bottom navigation bar
+- **Navigation**: Role-based bottom nav:
+  - **Employee**: Home, POS, Invoices, Shift, More
+  - **Owner**: Home (Dashboard), POS, Inventory, Customers, More
+- **Mobile Pages**: Fully card-based layouts (no tables), touch-friendly inputs (h-12, text-base), large buttons
+  - MobileCustomers: Card list with KPIs, detail dialog, add/edit/delete, WhatsApp
+  - MobileProducts: Expandable product cards with inline variant details
+  - MobileInventory: Card-based balances + transfers with low stock alerts
+  - MobilePOS, MobileInvoices, MobilePurchases, MobileTransfers, MobileStocktake, MobileShift
+- **More Menu**: Full navigation hub with icon cards for all owner/employee pages
+- **Desktop Unchanged**: Sidebar + table-based layouts preserved for ≥768px
 
 ## Authentication & Authorization (Role-Based Access Control)
 - **Roles**: `owner`, `admin`, `manager`, `employee`/`cashier`
