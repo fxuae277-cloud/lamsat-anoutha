@@ -19,6 +19,7 @@ import {
 } from "@shared/schema";
 import { registerExportRoutes } from "./exports";
 import { registerBackupRoutes } from "./backup";
+import { registerMobileRoutes } from "./mobile-routes";
 import { saveUploadedFile, parseInvoiceFile } from "./ocr";
 
 const upload = multer({
@@ -2460,6 +2461,7 @@ export async function registerRoutes(
 
   registerExportRoutes(app);
   registerBackupRoutes(app);
+  registerMobileRoutes(app);
 
   return httpServer;
 }

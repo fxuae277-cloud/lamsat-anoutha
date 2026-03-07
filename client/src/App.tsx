@@ -8,6 +8,7 @@ import { I18nProvider, useI18n } from "@/lib/i18n";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { MobileLayout } from "@/components/layout/MobileLayout";
 import { EMPLOYEE_ALLOWED_PATHS } from "@/config/sidebar";
 
 import Executive from "@/pages/Executive";
@@ -28,6 +29,17 @@ import AuditLog from "@/pages/AuditLog";
 import Operations from "@/pages/Operations";
 import StockControl from "@/pages/StockControl";
 import Customers from "@/pages/Customers";
+
+import MobileEmployeeHome from "@/pages/mobile/MobileEmployeeHome";
+import MobileOwnerHome from "@/pages/mobile/MobileOwnerHome";
+import MobilePOS from "@/pages/mobile/MobilePOS";
+import MobileShift from "@/pages/mobile/MobileShift";
+import MobileInvoices from "@/pages/mobile/MobileInvoices";
+import MobilePurchases from "@/pages/mobile/MobilePurchases";
+import MobileTransfers from "@/pages/mobile/MobileTransfers";
+import MobileStocktake from "@/pages/mobile/MobileStocktake";
+import MobileMore from "@/pages/mobile/MobileMore";
+
 import { ReactNode } from "react";
 
 function RequireOwner({ children }: { children: ReactNode }) {
@@ -38,25 +50,47 @@ function RequireOwner({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-function AuthenticatedRouter() {
-  const { user, isLoading } = useAuth();
-  const { t } = useI18n();
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center space-y-3">
-          <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-muted-foreground">{t("app.loading")}</p>
-        </div>
-      </div>
-    );
+function MobileHome() {
+  const { user } = useAuth();
+  if (user?.role === "owner" || user?.role === "admin") {
+    return <MobileOwnerHome />;
   }
+  return <MobileEmployeeHome />;
+}
 
-  if (!user) {
-    return <Login />;
+function RequireMobileOwner({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  if (user?.role !== "owner" && user?.role !== "admin") {
+    return <Redirect to="/m" />;
   }
+  return <>{children}</>;
+}
 
+function MobileRouter() {
+  return (
+    <MobileLayout>
+      <Switch>
+        <Route path="/m" component={MobileHome} />
+        <Route path="/m/pos" component={MobilePOS} />
+        <Route path="/m/invoices" component={MobileInvoices} />
+        <Route path="/m/shift" component={MobileShift} />
+        <Route path="/m/more" component={MobileMore} />
+        <Route path="/m/purchases">
+          <RequireMobileOwner><MobilePurchases /></RequireMobileOwner>
+        </Route>
+        <Route path="/m/transfers">
+          <RequireMobileOwner><MobileTransfers /></RequireMobileOwner>
+        </Route>
+        <Route path="/m/stocktake">
+          <RequireMobileOwner><MobileStocktake /></RequireMobileOwner>
+        </Route>
+        <Route><Redirect to="/m" /></Route>
+      </Switch>
+    </MobileLayout>
+  );
+}
+
+function DesktopRouter() {
   return (
     <AppLayout>
       <Switch>
@@ -113,6 +147,36 @@ function AuthenticatedRouter() {
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
+  );
+}
+
+function AuthenticatedRouter() {
+  const { user, isLoading } = useAuth();
+  const { t } = useI18n();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-muted-foreground">{t("app.loading")}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
+  return (
+    <Switch>
+      <Route path="/m/:rest*" component={MobileRouter} />
+      <Route path="/m" component={MobileRouter} />
+      <Route>
+        <DesktopRouter />
+      </Route>
+    </Switch>
   );
 }
 
