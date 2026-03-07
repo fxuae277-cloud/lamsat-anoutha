@@ -7,7 +7,6 @@ import {
   FileText, Truck, Tag, Boxes, Activity, Settings, Database,
   LogOut, UserCircle, ChevronLeft, Users, ArrowRightLeft,
   ClipboardCheck, ShoppingCart, ReceiptText, DollarSign,
-  BookOpen, FileSpreadsheet, BookMarked,
 } from "lucide-react";
 
 export default function MobileMore() {
@@ -27,9 +26,6 @@ export default function MobileMore() {
     { icon: ClipboardCheck, label: t("mobile.nav_stocktake"), path: "/stocktake" },
     { icon: DollarSign, label: t("mobile.expenses"), path: "/expenses" },
     { icon: FileText, label: t("mobile.reports"), path: "/reports" },
-    { icon: BookOpen, label: t("nav.accounts"), path: "/accounts" },
-    { icon: FileSpreadsheet, label: t("nav.journal"), path: "/journal-entries" },
-    { icon: BookMarked, label: t("nav.ledger"), path: "/general-ledger" },
     { icon: Activity, label: t("mobile.activity_log"), path: "/audit-log" },
     { icon: Settings, label: t("mobile.settings"), path: "/settings" },
     { icon: Database, label: t("mobile.backups"), path: "/settings" },
