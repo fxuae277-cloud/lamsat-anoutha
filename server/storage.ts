@@ -3370,6 +3370,85 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async createSalaryPayment(data: any) {
+    const result = await pool.query(`
+      INSERT INTO salary_payments (payroll_id, payroll_detail_id, employee_id, amount, payment_date, payment_method, branch_id, paid_by, note)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *
+    `, [data.payrollId, data.payrollDetailId, data.employeeId, data.amount, data.paymentDate, data.paymentMethod, data.branchId || null, data.paidBy, data.note || null]);
+    return result.rows[0];
+  }
+
+  async getSalaryPayments(payrollId?: number) {
+    let query = `
+      SELECT sp.*, u.name as employee_name, b.name as branch_name, u2.name as paid_by_name
+      FROM salary_payments sp
+      JOIN users u ON u.id = sp.employee_id
+      LEFT JOIN branches b ON b.id = sp.branch_id
+      LEFT JOIN users u2 ON u2.id = sp.paid_by
+    `;
+    const params: any[] = [];
+    if (payrollId) {
+      query += ` WHERE sp.payroll_id = $1`;
+      params.push(payrollId);
+    }
+    query += ` ORDER BY sp.created_at DESC`;
+    const result = await pool.query(query, params);
+    return result.rows;
+  }
+
+  async getPayrollDetailPayments(payrollDetailId: number) {
+    const result = await pool.query(`
+      SELECT sp.*, u2.name as paid_by_name
+      FROM salary_payments sp
+      LEFT JOIN users u2 ON u2.id = sp.paid_by
+      WHERE sp.payroll_detail_id = $1
+      ORDER BY sp.created_at DESC
+    `, [payrollDetailId]);
+    return result.rows;
+  }
+
+  async getPayrollDetailsWithPayments(payrollId: number) {
+    const result = await pool.query(`
+      SELECT pd.*, u.name as employee_name, u.salary_type, u.branch_id,
+             b.name as branch_name,
+             COALESCE((SELECT SUM(sp.amount::numeric) FROM salary_payments sp WHERE sp.payroll_detail_id = pd.id), 0) as total_paid
+      FROM payroll_details pd
+      JOIN users u ON u.id = pd.employee_id
+      LEFT JOIN branches b ON b.id = u.branch_id
+      WHERE pd.payroll_id = $1
+      ORDER BY u.name
+    `, [payrollId]);
+    return result.rows.map((r: any) => {
+      const net = parseFloat(r.net_salary || "0");
+      const paid = parseFloat(r.total_paid || "0");
+      let paymentStatus = "unpaid";
+      if (paid >= net && net > 0) paymentStatus = "paid";
+      else if (paid > 0) paymentStatus = "partial";
+      return { ...r, total_paid: paid.toFixed(3), payment_status: paymentStatus, remaining: (net - paid).toFixed(3) };
+    });
+  }
+
+  async getPayrollSummary(payrollId: number) {
+    const details = await this.getPayrollDetailsWithPayments(payrollId);
+    const totalBasic = details.reduce((s: number, d: any) => s + parseFloat(d.basic_salary || "0"), 0);
+    const totalCommission = details.reduce((s: number, d: any) => s + parseFloat(d.commission || "0"), 0);
+    const totalDeductions = details.reduce((s: number, d: any) => s + parseFloat(d.deductions || "0"), 0);
+    const totalAdvances = details.reduce((s: number, d: any) => s + parseFloat(d.advances || "0"), 0);
+    const totalNet = details.reduce((s: number, d: any) => s + parseFloat(d.net_salary || "0"), 0);
+    const totalPaid = details.reduce((s: number, d: any) => s + parseFloat(d.total_paid || "0"), 0);
+    const totalRemaining = totalNet - totalPaid;
+    const paidCount = details.filter((d: any) => d.payment_status === "paid").length;
+    const partialCount = details.filter((d: any) => d.payment_status === "partial").length;
+    const unpaidCount = details.filter((d: any) => d.payment_status === "unpaid").length;
+    return {
+      employeeCount: details.length, totalBasic: totalBasic.toFixed(3), totalCommission: totalCommission.toFixed(3),
+      totalDeductions: totalDeductions.toFixed(3), totalAdvances: totalAdvances.toFixed(3), totalNet: totalNet.toFixed(3),
+      totalPaid: totalPaid.toFixed(3), totalRemaining: totalRemaining.toFixed(3),
+      paidCount, partialCount, unpaidCount, details,
+    };
+  }
+
   async getStocktakes(branchId?: number) {
     let query = `
       SELECT st.*, b.name as branch_name, l.name as location_name,

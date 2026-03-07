@@ -9,6 +9,7 @@ const ACCOUNT_CODES: Record<string, string> = {
   SALES_REVENUE: "4100",
   SALES_RETURNS: "4200",
   COGS: "5100",
+  SALARY_EXPENSES: "5200",
   GENERAL_EXPENSES: "5400",
 };
 
@@ -261,6 +262,37 @@ export async function journalForSupplierPayment(payment: {
     createdBy: payment.createdBy,
     lines: [
       { accountCode: ACCOUNT_CODES.SUPPLIER_PAYABLES, debit: payment.amount, credit: 0, description: desc },
+      { accountCode: cashOrBank, debit: 0, credit: payment.amount, description: desc },
+    ],
+  });
+}
+
+export async function journalForSalaryPayment(payment: {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  amount: number;
+  paymentMethod: string;
+  branchId: number | null;
+  paidBy: number;
+  month: string;
+  year: number;
+}) {
+  if (payment.amount <= 0) return;
+
+  const cashOrBank = (payment.paymentMethod === "cash" || payment.paymentMethod === "card") ? ACCOUNT_CODES.CASH : ACCOUNT_CODES.BANK;
+  const date = new Date().toISOString().slice(0, 10);
+  const desc = `دفع راتب ${payment.employeeName} - ${payment.month}/${payment.year}`;
+
+  await createAutoJournal({
+    date,
+    description: desc,
+    sourceType: "salary_payment",
+    sourceId: payment.id,
+    branchId: payment.branchId || 1,
+    createdBy: payment.paidBy,
+    lines: [
+      { accountCode: ACCOUNT_CODES.SALARY_EXPENSES, debit: payment.amount, credit: 0, description: desc },
       { accountCode: cashOrBank, debit: 0, credit: payment.amount, description: desc },
     ],
   });

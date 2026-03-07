@@ -18,7 +18,7 @@ import {
   insertPayrollRunSchema, insertEmployeeAdvanceSchema, insertEmployeeDeductionSchema,
 } from "@shared/schema";
 import { registerExportRoutes } from "./exports";
-import { journalForSale, journalForExpense, journalForPurchase, journalForSaleReturn, journalForSupplierPayment } from "./autoJournal";
+import { journalForSale, journalForExpense, journalForPurchase, journalForSaleReturn, journalForSupplierPayment, journalForSalaryPayment } from "./autoJournal";
 import { registerBackupRoutes } from "./backup";
 import { registerMobileRoutes } from "./mobile-routes";
 import { saveUploadedFile, parseInvoiceFile } from "./ocr";
@@ -2581,6 +2581,95 @@ export async function registerRoutes(
         createdBy: req.session.userId!,
       });
       res.status(201).json(deduction);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/payroll-runs/:id/summary", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const summary = await storage.getPayrollSummary(Number(req.params.id));
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/payroll-runs/:id/details-with-payments", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const details = await storage.getPayrollDetailsWithPayments(Number(req.params.id));
+      res.json(details);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/salary-payments", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const payrollId = req.query.payrollId ? Number(req.query.payrollId) : undefined;
+      const payments = await storage.getSalaryPayments(payrollId);
+      res.json(payments);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.post("/api/salary-payments", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const { payrollId, payrollDetailId, employeeId, amount, paymentDate, paymentMethod, branchId, note } = req.body;
+      if (!payrollId || !payrollDetailId || !employeeId || !amount || !paymentDate) {
+        return res.status(400).json({ message: "بيانات ناقصة" });
+      }
+
+      const detail = await pool.query(`SELECT * FROM payroll_details WHERE id = $1`, [payrollDetailId]);
+      if (!detail.rows[0]) return res.status(404).json({ message: "تفاصيل الراتب غير موجودة" });
+
+      const existingPayments = await pool.query(`SELECT COALESCE(SUM(amount::numeric), 0) as total FROM salary_payments WHERE payroll_detail_id = $1`, [payrollDetailId]);
+      const alreadyPaid = parseFloat(existingPayments.rows[0].total || "0");
+      const netSalary = parseFloat(detail.rows[0].net_salary || "0");
+      const payAmount = parseFloat(amount);
+      if (payAmount <= 0) return res.status(400).json({ message: "المبلغ يجب أن يكون أكبر من صفر" });
+      if (alreadyPaid + payAmount > netSalary + 0.001) {
+        return res.status(400).json({ message: `المبلغ يتجاوز المتبقي. المتبقي: ${(netSalary - alreadyPaid).toFixed(3)}` });
+      }
+
+      const payment = await storage.createSalaryPayment({
+        payrollId: Number(payrollId),
+        payrollDetailId: Number(payrollDetailId),
+        employeeId: Number(employeeId),
+        amount: payAmount.toFixed(3),
+        paymentDate,
+        paymentMethod: paymentMethod || "cash",
+        branchId: branchId ? Number(branchId) : null,
+        paidBy: req.session.userId!,
+        note: note || null,
+      });
+
+      const run = await storage.getPayrollRun(Number(payrollId));
+      const emp = await storage.getUser(Number(employeeId));
+
+      journalForSalaryPayment({
+        id: payment.id,
+        employeeId: Number(employeeId),
+        employeeName: emp?.name || "",
+        amount: payAmount,
+        paymentMethod: paymentMethod || "cash",
+        branchId: branchId ? Number(branchId) : (emp?.branchId || null),
+        paidBy: req.session.userId!,
+        month: run?.month || "",
+        year: run?.year || 2026,
+      });
+
+      res.status(201).json(payment);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/payroll-detail/:id/payments", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const payments = await storage.getPayrollDetailPayments(Number(req.params.id));
+      res.json(payments);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
     }

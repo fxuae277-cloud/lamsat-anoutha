@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Users, Building2, Phone, KeyRound, Wallet, Search, TrendingUp, ShoppingBag, Receipt, Clock, Edit, Eye, Shield, Hash, UserCheck, BarChart3, Calendar, FileText, Banknote, MinusCircle, CreditCard, CheckCircle2, RefreshCw, Percent } from "lucide-react";
+import { useState, useRef } from "react";
+import { Plus, Users, Building2, Phone, KeyRound, Wallet, Search, TrendingUp, ShoppingBag, Receipt, Clock, Edit, Eye, Shield, Hash, UserCheck, BarChart3, Calendar, FileText, Banknote, MinusCircle, CreditCard, CheckCircle2, RefreshCw, Percent, Printer, Download, FileSpreadsheet, DollarSign, CircleDollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -612,29 +612,56 @@ function EmployeesTab({ usersList, branchMap, branchesList, search, setSearch, o
 }
 
 function PayrollTab({ usersList }: { usersList: any[] }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const printRef = useRef<HTMLDivElement>(null);
+  const slipRef = useRef<HTMLDivElement>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [payOpen, setPayOpen] = useState(false);
+  const [slipOpen, setSlipOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedRun, setSelectedRun] = useState<any>(null);
+  const [selectedDetail, setSelectedDetail] = useState<any>(null);
   const now = new Date();
   const [newMonth, setNewMonth] = useState(String(now.getMonth() + 1));
   const [newYear, setNewYear] = useState(String(now.getFullYear()));
   const [newNote, setNewNote] = useState("");
+  const [payAmount, setPayAmount] = useState("");
+  const [payMethod, setPayMethod] = useState("cash");
+  const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
+  const [payNote, setPayNote] = useState("");
 
   const MONTH_NAMES = [
     t("month_names.jan"), t("month_names.feb"), t("month_names.mar"), t("month_names.apr"), t("month_names.may"), t("month_names.jun"),
     t("month_names.jul"), t("month_names.aug"), t("month_names.sep"), t("month_names.oct"), t("month_names.nov"), t("month_names.dec"),
   ];
+
   const { data: payrollRuns = [] } = useQuery<any[]>({
     queryKey: ["/api/payroll-runs"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
+  const detailsKey = selectedRun ? `/api/payroll-runs/${selectedRun.id}/details-with-payments` : null;
   const { data: details = [] } = useQuery<any[]>({
-    queryKey: [`/api/payroll-runs/${selectedRun?.id}/details`],
+    queryKey: [detailsKey],
     queryFn: getQueryFn({ on401: "throw" }),
     enabled: !!selectedRun,
+  });
+
+  const summaryKey = selectedRun ? `/api/payroll-runs/${selectedRun.id}/summary` : null;
+  const { data: summary } = useQuery<any>({
+    queryKey: [summaryKey],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: !!selectedRun && detailsOpen,
+  });
+
+  const paymentHistoryKey = selectedDetail ? `/api/payroll-detail/${selectedDetail.id}/payments` : null;
+  const { data: paymentHistory = [] } = useQuery<any[]>({
+    queryKey: [paymentHistoryKey],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: !!selectedDetail && historyOpen,
   });
 
   const createMutation = useMutation({
@@ -661,7 +688,10 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
     onSuccess: () => {
       toast({ title: t("hr.payroll_recalculated") });
       queryClient.invalidateQueries({ queryKey: ["/api/payroll-runs"] });
-      if (selectedRun) queryClient.invalidateQueries({ queryKey: [`/api/payroll-runs/${selectedRun.id}/details`] });
+      if (selectedRun) {
+        queryClient.invalidateQueries({ queryKey: [detailsKey] });
+        queryClient.invalidateQueries({ queryKey: [summaryKey] });
+      }
     },
     onError: (err: Error) => {
       toast({ title: t("common.error"), description: err.message, variant: "destructive" });
@@ -681,9 +711,101 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
     },
   });
 
+  const payMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedDetail || !selectedRun) return;
+      await apiRequest("POST", "/api/salary-payments", {
+        payrollId: selectedRun.id,
+        payrollDetailId: selectedDetail.id,
+        employeeId: selectedDetail.employee_id,
+        amount: payAmount,
+        paymentDate: payDate,
+        paymentMethod: payMethod,
+        branchId: selectedDetail.branch_id,
+        note: payNote,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: t("hr.payment_recorded") });
+      queryClient.invalidateQueries({ queryKey: [detailsKey] });
+      queryClient.invalidateQueries({ queryKey: [summaryKey] });
+      setPayOpen(false);
+      setPayAmount(""); setPayNote("");
+    },
+    onError: (err: Error) => {
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handlePrint = () => {
+    if (!printRef.current) return;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<html dir="${lang === 'ar' ? 'rtl' : 'ltr'}"><head><title>${t("hr.payroll_sheet")}</title><style>
+      body{font-family:Arial,sans-serif;padding:30px;direction:${lang === 'ar' ? 'rtl' : 'ltr'}}
+      table{width:100%;border-collapse:collapse;margin:15px 0}
+      th,td{border:1px solid #ddd;padding:8px;text-align:${lang === 'ar' ? 'right' : 'left'};font-size:12px}
+      th{background:#f5f5f5;font-weight:bold}
+      .header{text-align:center;margin-bottom:20px}
+      .header h1{font-size:18px;margin:5px 0}
+      .header h2{font-size:14px;color:#666;margin:5px 0}
+      .summary{display:flex;flex-wrap:wrap;gap:15px;margin:15px 0;font-size:13px}
+      .summary div{flex:1;min-width:120px;padding:8px;background:#f8f8f8;border-radius:5px;text-align:center}
+      .footer{margin-top:20px;font-size:11px;color:#888;text-align:center}
+      .paid{color:green}.unpaid{color:red}.partial{color:orange}
+      @media print{body{padding:15px}}
+    </style></head><body>${printRef.current.innerHTML}<div class="footer">${t("hr.print_date")}: ${new Date().toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-US')}</div></body></html>`);
+    win.document.close();
+    win.print();
+  };
+
+  const handleSlipPrint = () => {
+    if (!slipRef.current) return;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<html dir="${lang === 'ar' ? 'rtl' : 'ltr'}"><head><title>${t("hr.salary_slip")}</title><style>
+      body{font-family:Arial,sans-serif;padding:30px;direction:${lang === 'ar' ? 'rtl' : 'ltr'};max-width:600px;margin:0 auto}
+      table{width:100%;border-collapse:collapse;margin:15px 0}
+      th,td{border:1px solid #ddd;padding:10px;text-align:${lang === 'ar' ? 'right' : 'left'};font-size:13px}
+      th{background:#f5f5f5;font-weight:bold;width:40%}
+      .header{text-align:center;margin-bottom:20px;border-bottom:2px solid #333;padding-bottom:15px}
+      .header h1{font-size:18px;margin:5px 0}
+      .header h2{font-size:14px;color:#666;margin:5px 0}
+      .net{font-size:16px;font-weight:bold;color:#2563eb;text-align:center;margin:15px 0;padding:10px;background:#eff6ff;border-radius:8px}
+      .footer{margin-top:20px;font-size:11px;color:#888;text-align:center}
+      .status{padding:4px 12px;border-radius:12px;font-size:12px;display:inline-block}
+      .paid{background:#dcfce7;color:#16a34a}.unpaid{background:#fee2e2;color:#dc2626}.partial{background:#fef3c7;color:#d97706}
+    </style></head><body>${slipRef.current.innerHTML}<div class="footer">${t("hr.print_date")}: ${new Date().toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-US')}</div></body></html>`);
+    win.document.close();
+    win.print();
+  };
+
+  const handleExportExcel = () => {
+    if (!details.length || !selectedRun) return;
+    const monthName = MONTH_NAMES[parseInt(selectedRun.month) - 1];
+    let csv = "\uFEFF";
+    csv += [t("hr.table_employee"), t("common.branch"), t("hr.table_base_salary"), t("hr.table_commissions"), t("hr.gross_salary"), t("hr.table_deductions"), t("hr.table_advances"), t("hr.net_salary"), t("hr.payment_status"), t("hr.total_paid"), t("hr.remaining_amount")].join(",") + "\n";
+    details.forEach((d: any) => {
+      const gross = (parseFloat(d.basic_salary || "0") + parseFloat(d.commission || "0")).toFixed(3);
+      csv += [d.employee_name, d.branch_name || "-", fmt(d.basic_salary), fmt(d.commission), gross, fmt(d.deductions), fmt(d.advances), fmt(d.net_salary), d.payment_status === "paid" ? t("hr.payment_status_paid") : d.payment_status === "partial" ? t("hr.payment_status_partial") : t("hr.payment_status_unpaid"), fmt(d.total_paid), fmt(d.remaining)].join(",") + "\n";
+    });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `payroll_${monthName}_${selectedRun.year}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const getPayrollRunStatus = (run: any) => {
+    if (run.status === "draft") return "draft";
+    return "approved";
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h3 className="text-lg font-bold">{t("hr.payroll_title")}</h3>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
@@ -754,9 +876,9 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
                 </TableCell>
                 <TableCell>
                   {run.status === "draft" ? (
-                    <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">{t("status_labels.draft")}</Badge>
+                    <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">{t("hr.payroll_status_draft")}</Badge>
                   ) : (
-                    <Badge className="bg-green-100 text-green-700 border-green-200">{t("status_labels.approved")}</Badge>
+                    <Badge className="bg-green-100 text-green-700 border-green-200">{t("hr.payroll_status_approved")}</Badge>
                   )}
                 </TableCell>
                 <TableCell>{fmt(run.total_basic)}</TableCell>
@@ -767,7 +889,7 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
                 <TableCell className="text-sm text-muted-foreground">{run.creator_name || "-"}</TableCell>
                 <TableCell>
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setSelectedRun(run); setDetailsOpen(true); }} data-testid={`button-details-${run.id}`}>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setSelectedRun(run); setDetailsOpen(true); }} data-testid={`button-details-${run.id}`} title={t("hr.payroll_details")}>
                       <Eye className="w-3.5 h-3.5" />
                     </Button>
                     {run.status === "draft" && (
@@ -789,50 +911,305 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
       </div>
 
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="sm:max-w-[800px] max-h-[85vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[1100px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" />
               {t("hr.payroll_details")} - {selectedRun && `${MONTH_NAMES[parseInt(selectedRun.month) - 1]} ${selectedRun.year}`}
             </DialogTitle>
+            <DialogDescription className="flex items-center gap-2">
+              {selectedRun?.status === "draft" ? (
+                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">{t("hr.payroll_status_draft")}</Badge>
+              ) : (
+                <Badge className="bg-green-100 text-green-700 border-green-200">{t("hr.payroll_status_approved")}</Badge>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {summary && (
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-3">
+              <div className="bg-blue-50 rounded-lg p-2 text-center">
+                <p className="text-[10px] text-blue-600">{t("hr.total_basic_salary")}</p>
+                <p className="text-sm font-bold text-blue-700">{fmt(summary.totalBasic)}</p>
+              </div>
+              <div className="bg-indigo-50 rounded-lg p-2 text-center">
+                <p className="text-[10px] text-indigo-600">{t("hr.total_commissions")}</p>
+                <p className="text-sm font-bold text-indigo-700">{fmt(summary.totalCommission)}</p>
+              </div>
+              <div className="bg-red-50 rounded-lg p-2 text-center">
+                <p className="text-[10px] text-red-600">{t("hr.total_deductions")}</p>
+                <p className="text-sm font-bold text-red-700">{fmt(summary.totalDeductions)}</p>
+              </div>
+              <div className="bg-orange-50 rounded-lg p-2 text-center">
+                <p className="text-[10px] text-orange-600">{t("hr.total_advances")}</p>
+                <p className="text-sm font-bold text-orange-700">{fmt(summary.totalAdvances)}</p>
+              </div>
+              <div className="bg-primary/5 rounded-lg p-2 text-center">
+                <p className="text-[10px] text-primary">{t("hr.total_net")}</p>
+                <p className="text-sm font-bold text-primary">{fmt(summary.totalNet)}</p>
+              </div>
+              <div className="bg-green-50 rounded-lg p-2 text-center">
+                <p className="text-[10px] text-green-600">{t("hr.total_paid")}</p>
+                <p className="text-sm font-bold text-green-700">{fmt(summary.totalPaid)}</p>
+              </div>
+              <div className="bg-red-50 rounded-lg p-2 text-center">
+                <p className="text-[10px] text-red-600">{t("hr.total_remaining")}</p>
+                <p className="text-sm font-bold text-red-700">{fmt(summary.totalRemaining)}</p>
+              </div>
+              <div className="bg-green-50 rounded-lg p-2 text-center">
+                <p className="text-[10px] text-green-600">{t("hr.paid_employees")}</p>
+                <p className="text-sm font-bold text-green-700">{summary.paidCount}</p>
+              </div>
+              <div className="bg-orange-50 rounded-lg p-2 text-center">
+                <p className="text-[10px] text-orange-600">{t("hr.partial_employees")}</p>
+                <p className="text-sm font-bold text-orange-700">{summary.partialCount}</p>
+              </div>
+              <div className="bg-red-50 rounded-lg p-2 text-center">
+                <p className="text-[10px] text-red-600">{t("hr.unpaid_employees")}</p>
+                <p className="text-sm font-bold text-red-700">{summary.unpaidCount}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2 mb-2 flex-wrap">
+            <Button variant="outline" size="sm" className="gap-1" onClick={handlePrint} data-testid="button-print-payroll">
+              <Printer className="w-3.5 h-3.5" />
+              {t("hr.print")}
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1" onClick={handleSlipPrint} data-testid="button-export-pdf">
+              <Download className="w-3.5 h-3.5" />
+              {t("hr.export_pdf")}
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1" onClick={handleExportExcel} data-testid="button-export-excel">
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              {t("hr.export_excel")}
+            </Button>
+          </div>
+
+          <div ref={printRef}>
+            <div className="header hidden print:block" style={{ textAlign: "center", marginBottom: 15 }}>
+              <h1 style={{ fontSize: 18, margin: "5px 0" }}>{t("hr.company_name")}</h1>
+              <h2 style={{ fontSize: 14, color: "#666", margin: "5px 0" }}>
+                {t("hr.payroll_sheet")} - {selectedRun && `${MONTH_NAMES[parseInt(selectedRun.month) - 1]} ${selectedRun.year}`}
+              </h2>
+            </div>
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead>{t("hr.table_employee")}</TableHead>
+                  <TableHead>{t("common.branch")}</TableHead>
+                  <TableHead>{t("hr.table_base_salary")}</TableHead>
+                  <TableHead>{t("hr.table_commissions")}</TableHead>
+                  <TableHead>{t("hr.gross_salary")}</TableHead>
+                  <TableHead>{t("hr.table_deductions")}</TableHead>
+                  <TableHead>{t("hr.table_advances")}</TableHead>
+                  <TableHead>{t("hr.net_salary")}</TableHead>
+                  <TableHead>{t("hr.payment_status")}</TableHead>
+                  <TableHead>{t("hr.total_paid")}</TableHead>
+                  <TableHead className="w-[120px]">{t("hr.actions_col")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {details.length === 0 ? (
+                  <TableRow><TableCell colSpan={11} className="text-center py-6 text-muted-foreground">{t("common.no_details")}</TableCell></TableRow>
+                ) : details.map((d: any) => {
+                  const gross = (parseFloat(d.basic_salary || "0") + parseFloat(d.commission || "0")).toFixed(3);
+                  return (
+                    <TableRow key={d.id} data-testid={`row-payroll-detail-${d.id}`}>
+                      <TableCell className="font-medium">{d.employee_name}</TableCell>
+                      <TableCell className="text-sm">{d.branch_name || "-"}</TableCell>
+                      <TableCell>{fmt(d.basic_salary)}</TableCell>
+                      <TableCell className="text-blue-600">{fmt(d.commission)}</TableCell>
+                      <TableCell className="font-medium">{gross}</TableCell>
+                      <TableCell className="text-red-600">{fmt(d.deductions)}</TableCell>
+                      <TableCell className="text-red-600">{fmt(d.advances)}</TableCell>
+                      <TableCell className="font-bold text-primary">{fmt(d.net_salary)}</TableCell>
+                      <TableCell>
+                        {d.payment_status === "paid" ? (
+                          <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">{t("hr.payment_status_paid")}</Badge>
+                        ) : d.payment_status === "partial" ? (
+                          <Badge className="bg-orange-100 text-orange-700 border-orange-200 text-xs">{t("hr.payment_status_partial")}</Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs">{t("hr.payment_status_unpaid")}</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm font-medium">{fmt(d.total_paid)}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {selectedRun?.status === "approved" && d.payment_status !== "paid" && parseFloat(d.net_salary || "0") > 0 && (
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-green-600" onClick={() => { setSelectedDetail(d); setPayAmount(d.remaining); setPayOpen(true); }} data-testid={`button-pay-${d.id}`} title={t("hr.record_payment")}>
+                              <DollarSign className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setSelectedDetail(d); setSlipOpen(true); }} data-testid={`button-slip-${d.id}`} title={t("hr.salary_slip")}>
+                            <Receipt className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-blue-600" onClick={() => { setSelectedDetail(d); setHistoryOpen(true); }} data-testid={`button-history-${d.id}`} title={t("hr.view_payments")}>
+                            <Clock className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+
+          {details.length > 0 && summary && (
+            <div className="p-3 bg-muted/30 rounded-lg grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+              <div><span className="text-muted-foreground">{t("hr.total_employees")}:</span> <span className="font-bold">{summary.employeeCount}</span></div>
+              <div><span className="text-muted-foreground">{t("hr.total_basic_salary")}:</span> <span className="font-bold">{fmt(summary.totalBasic)}</span></div>
+              <div><span className="text-muted-foreground">{t("hr.total_net")}:</span> <span className="font-bold text-primary">{fmt(summary.totalNet)}</span></div>
+              <div><span className="text-muted-foreground">{t("hr.total_paid")}:</span> <span className="font-bold text-green-600">{fmt(summary.totalPaid)}</span></div>
+              <div><span className="text-muted-foreground">{t("hr.total_remaining")}:</span> <span className="font-bold text-red-600">{fmt(summary.totalRemaining)}</span></div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={payOpen} onOpenChange={setPayOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CircleDollarSign className="w-5 h-5 text-green-600" />
+              {t("hr.record_payment_title")}
+            </DialogTitle>
+            <DialogDescription>{selectedDetail?.employee_name} - {t("hr.remaining_amount")}: {fmt(selectedDetail?.remaining)} {t("common.omr")}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-3">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t("hr.payment_amount")} *</label>
+                <Input type="number" step="0.001" value={payAmount} onChange={e => setPayAmount(e.target.value)} data-testid="input-pay-amount" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t("hr.payment_date")} *</label>
+                <Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} data-testid="input-pay-date" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("hr.payment_method")}</label>
+              <Select value={payMethod} onValueChange={setPayMethod}>
+                <SelectTrigger data-testid="select-pay-method"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">{t("hr.pay_cash")}</SelectItem>
+                  <SelectItem value="bank_transfer">{t("hr.pay_bank")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("common.notes")}</label>
+              <Input placeholder={t("hr.notes_placeholder")} value={payNote} onChange={e => setPayNote(e.target.value)} data-testid="input-pay-note" />
+            </div>
+            <div className="bg-blue-50 rounded-lg p-3 text-sm">
+              <div className="flex justify-between"><span>{t("hr.net_salary")}</span><span className="font-bold">{fmt(selectedDetail?.net_salary)}</span></div>
+              <div className="flex justify-between"><span>{t("hr.total_paid")}</span><span className="font-bold text-green-600">{fmt(selectedDetail?.total_paid)}</span></div>
+              <div className="flex justify-between border-t mt-1 pt-1"><span>{t("hr.remaining_amount")}</span><span className="font-bold text-red-600">{fmt(selectedDetail?.remaining)}</span></div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPayAmount(selectedDetail?.remaining || "0"); }} data-testid="button-pay-full">
+              {t("hr.pay_full")}
+            </Button>
+            <Button onClick={() => payMutation.mutate()} disabled={payMutation.isPending || !payAmount || parseFloat(payAmount) <= 0} data-testid="button-confirm-pay" className="bg-green-600 hover:bg-green-700">
+              {payMutation.isPending ? t("common.saving") : t("hr.record_payment")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={slipOpen} onOpenChange={setSlipOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-primary" />
+              {t("hr.salary_slip_title")}
+            </DialogTitle>
             <DialogDescription>
-              {selectedRun?.status === "draft" ? (t("status_labels.draft_desc")) : t("status_labels.approved")}
+              {selectedDetail?.employee_name} - {selectedRun && `${MONTH_NAMES[parseInt(selectedRun.month) - 1]} ${selectedRun.year}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div ref={slipRef}>
+            <div style={{ textAlign: "center", borderBottom: "2px solid #333", paddingBottom: 10, marginBottom: 15 }}>
+              <h1 style={{ fontSize: 16, margin: "3px 0" }}>{t("hr.company_name")}</h1>
+              <h2 style={{ fontSize: 13, color: "#666", margin: "3px 0" }}>
+                {t("hr.salary_slip")} - {selectedRun && `${MONTH_NAMES[parseInt(selectedRun.month) - 1]} ${selectedRun.year}`}
+              </h2>
+            </div>
+            {selectedDetail && (
+              <Table>
+                <TableBody>
+                  <TableRow><TableCell className="font-medium bg-muted/50">{t("hr.table_employee")}</TableCell><TableCell>{selectedDetail.employee_name}</TableCell></TableRow>
+                  <TableRow><TableCell className="font-medium bg-muted/50">{t("common.branch")}</TableCell><TableCell>{selectedDetail.branch_name || "-"}</TableCell></TableRow>
+                  <TableRow><TableCell className="font-medium bg-muted/50">{t("hr.table_base_salary")}</TableCell><TableCell>{fmt(selectedDetail.basic_salary)} {t("common.omr")}</TableCell></TableRow>
+                  <TableRow><TableCell className="font-medium bg-muted/50">{t("hr.table_commissions")}</TableCell><TableCell className="text-blue-600">{fmt(selectedDetail.commission)} {t("common.omr")}</TableCell></TableRow>
+                  <TableRow><TableCell className="font-medium bg-muted/50">{t("hr.gross_salary")}</TableCell><TableCell className="font-bold">{(parseFloat(selectedDetail.basic_salary || "0") + parseFloat(selectedDetail.commission || "0")).toFixed(3)} {t("common.omr")}</TableCell></TableRow>
+                  <TableRow><TableCell className="font-medium bg-muted/50">{t("hr.table_deductions")}</TableCell><TableCell className="text-red-600">-{fmt(selectedDetail.deductions)} {t("common.omr")}</TableCell></TableRow>
+                  <TableRow><TableCell className="font-medium bg-muted/50">{t("hr.table_advances")}</TableCell><TableCell className="text-red-600">-{fmt(selectedDetail.advances)} {t("common.omr")}</TableCell></TableRow>
+                  <TableRow className="bg-primary/5"><TableCell className="font-bold">{t("hr.net_salary")}</TableCell><TableCell className="font-bold text-primary text-lg">{fmt(selectedDetail.net_salary)} {t("common.omr")}</TableCell></TableRow>
+                  <TableRow><TableCell className="font-medium bg-muted/50">{t("hr.payment_status")}</TableCell><TableCell>
+                    {selectedDetail.payment_status === "paid" ? (
+                      <Badge className="bg-green-100 text-green-700">{t("hr.payment_status_paid")}</Badge>
+                    ) : selectedDetail.payment_status === "partial" ? (
+                      <Badge className="bg-orange-100 text-orange-700">{t("hr.payment_status_partial")}</Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-red-50 text-red-700">{t("hr.payment_status_unpaid")}</Badge>
+                    )}
+                  </TableCell></TableRow>
+                  <TableRow><TableCell className="font-medium bg-muted/50">{t("hr.total_paid")}</TableCell><TableCell className="text-green-600 font-medium">{fmt(selectedDetail.total_paid)} {t("common.omr")}</TableCell></TableRow>
+                  <TableRow><TableCell className="font-medium bg-muted/50">{t("hr.remaining_amount")}</TableCell><TableCell className="text-red-600 font-medium">{fmt(selectedDetail.remaining)} {t("common.omr")}</TableCell></TableRow>
+                </TableBody>
+              </Table>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="gap-1" onClick={handleSlipPrint} data-testid="button-print-slip">
+              <Printer className="w-3.5 h-3.5" />
+              {t("hr.print")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[70vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-blue-600" />
+              {t("hr.payment_history")} - {selectedDetail?.employee_name}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedRun && `${MONTH_NAMES[parseInt(selectedRun.month) - 1]} ${selectedRun.year}`}
             </DialogDescription>
           </DialogHeader>
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
-                <TableHead>{t("hr.table_employee")}</TableHead>
-                <TableHead>{t("common.branch")}</TableHead>
-                <TableHead>{t("hr.table_base_salary")}</TableHead>
-                <TableHead>{t("hr.table_commissions")}</TableHead>
-                <TableHead>{t("hr.table_deductions")}</TableHead>
-                <TableHead>{t("hr.table_advances")}</TableHead>
-                <TableHead>{t("hr.table_net")}</TableHead>
+                <TableHead>{t("common.amount")}</TableHead>
+                <TableHead>{t("hr.payment_date")}</TableHead>
+                <TableHead>{t("hr.payment_method")}</TableHead>
+                <TableHead>{t("hr.created_by")}</TableHead>
+                <TableHead>{t("common.notes")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {details.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-6 text-muted-foreground">{t("common.no_details")}</TableCell></TableRow>
-              ) : details.map((d: any) => (
-                <TableRow key={d.id}>
-                  <TableCell className="font-medium">{d.employee_name}</TableCell>
-                  <TableCell className="text-sm">{d.branch_name || "-"}</TableCell>
-                  <TableCell>{fmt(d.basic_salary)}</TableCell>
-                  <TableCell className="text-blue-600">{fmt(d.commission)}</TableCell>
-                  <TableCell className="text-red-600">{fmt(d.deductions)}</TableCell>
-                  <TableCell className="text-red-600">{fmt(d.advances)}</TableCell>
-                  <TableCell className="font-bold text-primary">{fmt(d.net_salary)}</TableCell>
+              {paymentHistory.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">{t("hr.no_payments")}</TableCell></TableRow>
+              ) : paymentHistory.map((p: any) => (
+                <TableRow key={p.id}>
+                  <TableCell className="font-bold text-green-600">{fmt(p.amount)} {t("common.omr")}</TableCell>
+                  <TableCell className="text-sm">{p.payment_date ? new Date(p.payment_date + "T00:00:00").toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
+                  <TableCell><Badge variant="outline" className="text-xs">{p.payment_method === "cash" ? t("hr.pay_cash") : t("hr.pay_bank")}</Badge></TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{p.paid_by_name || "-"}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{p.note || "—"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-          {details.length > 0 && (
-            <div className="p-3 bg-muted/30 rounded-lg flex items-center justify-between text-sm font-bold">
-              <span>{details.length} {t("common.employee")}</span>
-              <span className="text-primary">
-                {t("hr.total_net")}: {details.reduce((s: number, d: any) => s + parseFloat(d.net_salary || "0"), 0).toFixed(3)} {t("common.omr")}
-              </span>
+          {paymentHistory.length > 0 && (
+            <div className="p-2 bg-green-50 rounded-lg text-center text-sm font-bold text-green-700">
+              {t("hr.total_paid")}: {paymentHistory.reduce((s: number, p: any) => s + parseFloat(p.amount || "0"), 0).toFixed(3)} {t("common.omr")}
             </div>
           )}
         </DialogContent>

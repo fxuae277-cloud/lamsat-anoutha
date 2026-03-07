@@ -707,6 +707,23 @@ export const insertJournalEntryLineSchema = createInsertSchema(journalEntryLines
 export type InsertJournalEntryLine = z.infer<typeof insertJournalEntryLineSchema>;
 export type JournalEntryLine = typeof journalEntryLines.$inferSelect;
 
+export const salaryPayments = pgTable("salary_payments", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  payrollId: integer("payroll_id").references(() => payrollRuns.id).notNull(),
+  payrollDetailId: integer("payroll_detail_id").references(() => payrollDetails.id).notNull(),
+  employeeId: integer("employee_id").references(() => users.id).notNull(),
+  amount: decimal("amount", { precision: 10, scale: 3 }).notNull(),
+  paymentDate: date("payment_date").notNull(),
+  paymentMethod: text("payment_method").notNull().default("cash"),
+  branchId: integer("branch_id").references(() => branches.id),
+  paidBy: integer("paid_by").references(() => users.id).notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertSalaryPaymentSchema = createInsertSchema(salaryPayments).omit({ id: true, createdAt: true });
+export type InsertSalaryPayment = z.infer<typeof insertSalaryPaymentSchema>;
+export type SalaryPayment = typeof salaryPayments.$inferSelect;
+
 export const supplierOcrTemplates = pgTable("supplier_ocr_templates", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   supplierId: integer("supplier_id").references(() => suppliers.id).notNull(),

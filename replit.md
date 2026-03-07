@@ -152,10 +152,11 @@ shared/
 - **payroll_details** (payroll_id, employee_id, basic_salary, commission, deductions, advances, bonus, net_salary, note)
 - **employee_advances** (employee_id, amount, date, note, settled, settled_in_payroll_id, created_by)
 - **employee_deductions** (employee_id, amount, reason, date, applied_in_payroll_id, created_by)
+- **salary_payments** (payroll_id, payroll_detail_id, employee_id, amount, payment_date, payment_method, branch_id, paid_by, note, created_at)
 - users table extended: salary_type (monthly/daily/commission), commission_rate (decimal 5,2)
 - **session** (auto-created by connect-pg-simple)
 
-## Payroll System
+## Payroll System (Professional)
 - Users have salary_type (monthly/daily/commission) and commission_rate
 - Create payroll run for a month/year → auto-generates details for all active non-owner employees
 - Each detail row: basic_salary + commission (auto-calculated from sales if commission type) - deductions - advances = net_salary
@@ -163,6 +164,17 @@ shared/
 - Deductions: unapplied deductions are deducted in payroll; marked as applied when approved
 - Draft payroll can be regenerated (recalculated); approved payroll is final
 - HR page has 5 tabs: Employees, Payroll Runs, Advances, Deductions, Performance
+- **Payment Tracking**: salary_payments table tracks individual payments per employee per payroll
+  - Payment status: paid/unpaid/partial (computed from total_paid vs net_salary)
+  - Record partial or full payments with method (cash/bank_transfer), date, notes
+  - Overpayment protection: API validates amount <= remaining
+  - API: POST /api/salary-payments, GET /api/salary-payments?payrollId=, GET /api/payroll-detail/:id/payments
+- **Auto Journal**: Every salary payment creates auto journal entry (Dr: Salary Expenses 5200, Cr: Cash/Bank)
+- **Payroll Details Enhanced**: GET /api/payroll-runs/:id/details-with-payments includes total_paid, payment_status, remaining
+- **Payroll Summary**: GET /api/payroll-runs/:id/summary includes paid/unpaid/partial counts and totals
+- **Salary Slip**: Individual employee payslip with print support (employee, branch, basic, commission, gross, deductions, advances, net, status)
+- **Export**: Print payroll sheet (A4), Export Excel (CSV), Salary slip print
+- **Summary Cards**: 10 KPI cards in payroll details (basic, commissions, deductions, advances, net, paid, remaining, paid/partial/unpaid counts)
 
 ## Purchases & Average Cost System
 - Create draft purchase invoice with optional supplier, branch, date, extra costs
