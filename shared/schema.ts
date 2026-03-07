@@ -136,9 +136,11 @@ export const suppliers = pgTable("suppliers", {
   crNo: text("cr_no"),
   notes: text("notes"),
   active: boolean("active").notNull().default(true),
+  totalPurchases: decimal("total_purchases", { precision: 12, scale: 3 }).default("0"),
+  balance: decimal("balance", { precision: 12, scale: 3 }).default("0"),
   createdAt: timestamp("created_at").defaultNow(),
 });
-export const insertSupplierSchema = createInsertSchema(suppliers).omit({ id: true, createdAt: true });
+export const insertSupplierSchema = createInsertSchema(suppliers).omit({ id: true, createdAt: true, totalPurchases: true, balance: true });
 export type InsertSupplier = z.infer<typeof insertSupplierSchema>;
 export type Supplier = typeof suppliers.$inferSelect;
 
@@ -654,6 +656,56 @@ export const purchaseExtraCosts = pgTable("purchase_extra_costs", {
 export const insertPurchaseExtraCostSchema = createInsertSchema(purchaseExtraCosts).omit({ id: true });
 export type InsertPurchaseExtraCost = z.infer<typeof insertPurchaseExtraCostSchema>;
 export type PurchaseExtraCost = typeof purchaseExtraCosts.$inferSelect;
+
+export const ACCOUNT_TYPES = ["asset", "liability", "equity", "revenue", "expense"] as const;
+export type AccountType = typeof ACCOUNT_TYPES[number];
+
+export const accounts = pgTable("accounts", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  nameEn: text("name_en"),
+  type: text("type").notNull(),
+  parentId: integer("parent_id"),
+  level: integer("level").default(1),
+  isSystem: boolean("is_system").default(false),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true, createdAt: true });
+export type InsertAccount = z.infer<typeof insertAccountSchema>;
+export type Account = typeof accounts.$inferSelect;
+
+export const journalEntries = pgTable("journal_entries", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  entryNumber: text("entry_number").notNull(),
+  date: date("date").notNull(),
+  description: text("description").notNull(),
+  status: text("status").default("draft"),
+  sourceType: text("source_type"),
+  sourceId: integer("source_id"),
+  totalDebit: decimal("total_debit", { precision: 12, scale: 3 }).default("0"),
+  totalCredit: decimal("total_credit", { precision: 12, scale: 3 }).default("0"),
+  branchId: integer("branch_id").references(() => branches.id),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  postedAt: timestamp("posted_at"),
+});
+export const insertJournalEntrySchema = createInsertSchema(journalEntries).omit({ id: true, createdAt: true, postedAt: true });
+export type InsertJournalEntry = z.infer<typeof insertJournalEntrySchema>;
+export type JournalEntry = typeof journalEntries.$inferSelect;
+
+export const journalEntryLines = pgTable("journal_entry_lines", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  entryId: integer("entry_id").references(() => journalEntries.id).notNull(),
+  accountId: integer("account_id").references(() => accounts.id).notNull(),
+  debit: decimal("debit", { precision: 12, scale: 3 }).default("0"),
+  credit: decimal("credit", { precision: 12, scale: 3 }).default("0"),
+  description: text("description"),
+});
+export const insertJournalEntryLineSchema = createInsertSchema(journalEntryLines).omit({ id: true });
+export type InsertJournalEntryLine = z.infer<typeof insertJournalEntryLineSchema>;
+export type JournalEntryLine = typeof journalEntryLines.$inferSelect;
 
 export const supplierOcrTemplates = pgTable("supplier_ocr_templates", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),

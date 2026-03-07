@@ -14,6 +14,212 @@ function ensureBackupDir() {
   }
 }
 
+async function createBackupInternal() {
+  const startTime = Date.now();
+  const now = new Date();
+  const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}`;
+  const filename = `lamsat-backup-${timestamp}.zip`;
+  const filepath = path.join(BACKUP_DIR, filename);
+
+  console.log(`[Backup] بدء إنشاء النسخة الاحتياطية: ${filename}`);
+
+  try {
+    const dumpPath = path.join(BACKUP_DIR, `dump-${timestamp}.sql`);
+    let dumpSuccess = false;
+    let dumpError = "";
+
+    try {
+      const dbUrl = process.env.DATABASE_URL;
+      if (!dbUrl) throw new Error("DATABASE_URL not set");
+      execSync(`pg_dump "${dbUrl}" --no-owner --no-acl --clean --if-exists > "${dumpPath}"`, {
+        timeout: 120000,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      const dumpStat = fs.statSync(dumpPath);
+      if (dumpStat.size < 100) {
+        throw new Error("Dump file is too small, likely empty");
+      }
+      dumpSuccess = true;
+      console.log(`[Backup] تصدير قاعدة البيانات نجح: ${(dumpStat.size / 1024).toFixed(1)} KB`);
+    } catch (err: any) {
+      dumpError = err.message;
+      console.error(`[Backup] فشل تصدير قاعدة البيانات: ${dumpError}`);
+    }
+
+    const tables = [
+      "settings", "branches", "cities", "categories", "products", "product_variants",
+      "users", "employees", "customers", "suppliers",
+      "locations", "location_inventory", "inventory_balances", "inventory_transactions",
+      "inventory_ledger", "inventory_adjustments",
+      "warehouses", "inventory",
+      "sales", "sale_items", "sale_returns", "sale_return_items",
+      "orders", "order_items",
+      "purchase_invoices", "purchase_items", "purchase_extra_costs",
+      "stock_transfers", "stock_transfer_lines",
+      "stocktakes", "stocktake_items",
+      "shifts", "expenses", "cash_ledger", "bank_ledger",
+      "payroll_runs", "payroll_details", "employee_advances", "employee_deductions",
+      "audit_log",
+    ];
+    const jsonData: Record<string, any[]> = {};
+    for (const table of tables) {
+      try {
+        const result = await pool.query(`SELECT * FROM "${table}"`);
+        jsonData[table] = result.rows;
+      } catch {
+        jsonData[table] = [];
+      }
+    }
+
+    const settingsRows = jsonData["settings"] || [];
+    const configObj: Record<string, string> = {};
+    for (const row of settingsRows) {
+      if (row.key && row.value !== undefined) {
+        configObj[row.key] = row.value;
+      }
+    }
+
+    let totalRows = 0;
+    const tableCounts: Record<string, number> = {};
+    for (const [table, rows] of Object.entries(jsonData)) {
+      tableCounts[table] = rows.length;
+      totalRows += rows.length;
+    }
+
+    const metadata = {
+      system: "لمسة أنوثة ERP",
+      version: "1.0",
+      createdAt: now.toISOString(),
+      filename,
+      databaseDump: dumpSuccess,
+      dumpError: dumpError || null,
+      totalTables: Object.keys(jsonData).length,
+      totalRows,
+      tableCounts,
+      postgresVersion: null as string | null,
+    };
+
+    try {
+      const pgVersion = await pool.query("SELECT version()");
+      metadata.postgresVersion = pgVersion.rows[0]?.version || null;
+    } catch {}
+
+    await new Promise<void>((resolve, reject) => {
+      const output = fs.createWriteStream(filepath);
+      const archive = archiver("zip", { zlib: { level: 6 } });
+
+      output.on("close", resolve);
+      archive.on("error", reject);
+      archive.pipe(output);
+
+      if (dumpSuccess && fs.existsSync(dumpPath)) {
+        archive.file(dumpPath, { name: "database/dump.sql" });
+      }
+      archive.append(JSON.stringify(jsonData, null, 2), { name: "database/data.json" });
+
+      archive.append(JSON.stringify(configObj, null, 2), { name: "config/settings.json" });
+
+      archive.append(JSON.stringify(metadata, null, 2), { name: "metadata.json" });
+
+      archive.append(generateRestoreReadme(), { name: "README-RESTORE.txt" });
+
+      const uploadsDir = path.join(process.cwd(), "uploads");
+      if (fs.existsSync(uploadsDir)) {
+        const uploadFiles = fs.readdirSync(uploadsDir);
+        for (const file of uploadFiles) {
+          const filePath = path.join(uploadsDir, file);
+          if (fs.statSync(filePath).isFile()) {
+            archive.file(filePath, { name: `uploads/${file}` });
+          }
+        }
+        const subDirs = ["original", "processed", "invoices"];
+        for (const sub of subDirs) {
+          const subPath = path.join(uploadsDir, sub);
+          if (fs.existsSync(subPath) && fs.statSync(subPath).isDirectory()) {
+            archive.directory(subPath, `uploads/${sub}`);
+          }
+        }
+      }
+
+      archive.finalize();
+    });
+
+    if (fs.existsSync(dumpPath)) {
+      fs.unlinkSync(dumpPath);
+    }
+
+    const stat = fs.statSync(filepath);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    console.log(`[Backup] اكتمل إنشاء النسخة: ${filename} (${(stat.size / 1024 / 1024).toFixed(2)} MB) في ${duration} ثانية`);
+
+    return {
+      success: true,
+      filename,
+      size: stat.size,
+      createdAt: now.toISOString(),
+      duration: parseFloat(duration),
+      databaseDump: dumpSuccess,
+      totalTables: Object.keys(jsonData).length,
+      totalRows,
+    };
+  } catch (err: any) {
+    console.error(`[Backup] فشل إنشاء النسخة الاحتياطية:`, err);
+    throw err;
+  }
+}
+
+export function initBackupScheduler() {
+  console.log("[Backup] تهيئة جدولة النسخ الاحتياطي التلقائي...");
+  
+  // Check every hour
+  setInterval(async () => {
+    try {
+      const settingsResult = await pool.query("SELECT value FROM settings WHERE key = 'autoBackup'");
+      const autoBackupEnabled = settingsResult.rows[0]?.value === "true";
+
+      if (!autoBackupEnabled) return;
+
+      ensureBackupDir();
+      const files = fs.readdirSync(BACKUP_DIR)
+        .filter(f => f.endsWith(".zip") && f.startsWith("lamsat-backup-"))
+        .map(f => {
+          const stat = fs.statSync(path.join(BACKUP_DIR, f));
+          return { filename: f, createdAt: stat.mtime };
+        })
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+      const lastBackup = files[0];
+      const now = new Date();
+      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+      if (!lastBackup || lastBackup.createdAt < twentyFourHoursAgo) {
+        console.log("[Backup] بدء النسخ الاحتياطي التلقائي الدوري...");
+        await createBackupInternal();
+
+        // Clean old backups (keep last 7)
+        const updatedFiles = fs.readdirSync(BACKUP_DIR)
+          .filter(f => f.endsWith(".zip") && f.startsWith("lamsat-backup-"))
+          .map(f => {
+            const stat = fs.statSync(path.join(BACKUP_DIR, f));
+            return { filename: f, createdAt: stat.mtime };
+          })
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+        if (updatedFiles.length > 7) {
+          const filesToDelete = updatedFiles.slice(7);
+          for (const file of filesToDelete) {
+            fs.unlinkSync(path.join(BACKUP_DIR, file.filename));
+            console.log(`[Backup] حذف نسخة قديمة: ${file.filename}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[Backup] خطأ في جدولة النسخ الاحتياطي:", err);
+    }
+  }, 60 * 60 * 1000); // Every hour
+}
+
 function requireOwnerOrAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
     return res.status(401).json({ message: "غير مصرح" });
@@ -100,156 +306,10 @@ export function registerBackupRoutes(app: Express) {
   ensureBackupDir();
 
   app.post("/api/settings/backup/create", requireOwnerOrAdmin, async (req: Request, res: Response) => {
-    const startTime = Date.now();
-    const now = new Date();
-    const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}`;
-    const filename = `lamsat-backup-${timestamp}.zip`;
-    const filepath = path.join(BACKUP_DIR, filename);
-
-    console.log(`[Backup] بدء إنشاء النسخة الاحتياطية: ${filename}`);
-
     try {
-      const dumpPath = path.join(BACKUP_DIR, `dump-${timestamp}.sql`);
-      let dumpSuccess = false;
-      let dumpError = "";
-
-      try {
-        const dbUrl = process.env.DATABASE_URL;
-        if (!dbUrl) throw new Error("DATABASE_URL not set");
-        execSync(`pg_dump "${dbUrl}" --no-owner --no-acl --clean --if-exists > "${dumpPath}"`, {
-          timeout: 120000,
-          stdio: ["pipe", "pipe", "pipe"],
-        });
-        const dumpStat = fs.statSync(dumpPath);
-        if (dumpStat.size < 100) {
-          throw new Error("Dump file is too small, likely empty");
-        }
-        dumpSuccess = true;
-        console.log(`[Backup] تصدير قاعدة البيانات نجح: ${(dumpStat.size / 1024).toFixed(1)} KB`);
-      } catch (err: any) {
-        dumpError = err.message;
-        console.error(`[Backup] فشل تصدير قاعدة البيانات: ${dumpError}`);
-      }
-
-      const tables = [
-        "settings", "branches", "cities", "categories", "products", "product_variants",
-        "users", "employees", "customers", "suppliers",
-        "locations", "location_inventory", "inventory_balances", "inventory_transactions",
-        "inventory_ledger", "inventory_adjustments",
-        "warehouses", "inventory",
-        "sales", "sale_items", "sale_returns", "sale_return_items",
-        "orders", "order_items",
-        "purchase_invoices", "purchase_items", "purchase_extra_costs",
-        "stock_transfers", "stock_transfer_lines",
-        "stocktakes", "stocktake_items",
-        "shifts", "expenses", "cash_ledger", "bank_ledger",
-        "payroll_runs", "payroll_details", "employee_advances", "employee_deductions",
-        "audit_log",
-      ];
-      const jsonData: Record<string, any[]> = {};
-      for (const table of tables) {
-        try {
-          const result = await pool.query(`SELECT * FROM "${table}"`);
-          jsonData[table] = result.rows;
-        } catch {
-          jsonData[table] = [];
-        }
-      }
-
-      const settingsRows = jsonData["settings"] || [];
-      const configObj: Record<string, string> = {};
-      for (const row of settingsRows) {
-        if (row.key && row.value !== undefined) {
-          configObj[row.key] = row.value;
-        }
-      }
-
-      let totalRows = 0;
-      const tableCounts: Record<string, number> = {};
-      for (const [table, rows] of Object.entries(jsonData)) {
-        tableCounts[table] = rows.length;
-        totalRows += rows.length;
-      }
-
-      const metadata = {
-        system: "لمسة أنوثة ERP",
-        version: "1.0",
-        createdAt: now.toISOString(),
-        filename,
-        databaseDump: dumpSuccess,
-        dumpError: dumpError || null,
-        totalTables: Object.keys(jsonData).length,
-        totalRows,
-        tableCounts,
-        postgresVersion: null as string | null,
-      };
-
-      try {
-        const pgVersion = await pool.query("SELECT version()");
-        metadata.postgresVersion = pgVersion.rows[0]?.version || null;
-      } catch {}
-
-      await new Promise<void>((resolve, reject) => {
-        const output = fs.createWriteStream(filepath);
-        const archive = archiver("zip", { zlib: { level: 6 } });
-
-        output.on("close", resolve);
-        archive.on("error", reject);
-        archive.pipe(output);
-
-        if (dumpSuccess && fs.existsSync(dumpPath)) {
-          archive.file(dumpPath, { name: "database/dump.sql" });
-        }
-        archive.append(JSON.stringify(jsonData, null, 2), { name: "database/data.json" });
-
-        archive.append(JSON.stringify(configObj, null, 2), { name: "config/settings.json" });
-
-        archive.append(JSON.stringify(metadata, null, 2), { name: "metadata.json" });
-
-        archive.append(generateRestoreReadme(), { name: "README-RESTORE.txt" });
-
-        const uploadsDir = path.join(process.cwd(), "uploads");
-        if (fs.existsSync(uploadsDir)) {
-          const uploadFiles = fs.readdirSync(uploadsDir);
-          for (const file of uploadFiles) {
-            const filePath = path.join(uploadsDir, file);
-            if (fs.statSync(filePath).isFile()) {
-              archive.file(filePath, { name: `uploads/${file}` });
-            }
-          }
-          const subDirs = ["original", "processed", "invoices"];
-          for (const sub of subDirs) {
-            const subPath = path.join(uploadsDir, sub);
-            if (fs.existsSync(subPath) && fs.statSync(subPath).isDirectory()) {
-              archive.directory(subPath, `uploads/${sub}`);
-            }
-          }
-        }
-
-        archive.finalize();
-      });
-
-      if (fs.existsSync(dumpPath)) {
-        fs.unlinkSync(dumpPath);
-      }
-
-      const stat = fs.statSync(filepath);
-      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-
-      console.log(`[Backup] اكتمل إنشاء النسخة: ${filename} (${(stat.size / 1024 / 1024).toFixed(2)} MB) في ${duration} ثانية`);
-
-      res.json({
-        success: true,
-        filename,
-        size: stat.size,
-        createdAt: now.toISOString(),
-        duration: parseFloat(duration),
-        databaseDump: dumpSuccess,
-        totalTables: Object.keys(jsonData).length,
-        totalRows,
-      });
+      const result = await createBackupInternal();
+      res.json(result);
     } catch (err: any) {
-      console.error(`[Backup] فشل إنشاء النسخة الاحتياطية:`, err);
       res.status(500).json({ message: err.message || "فشل إنشاء النسخة الاحتياطية" });
     }
   });
@@ -275,7 +335,8 @@ export function registerBackupRoutes(app: Express) {
   });
 
   app.get("/api/settings/backup/download/:filename", requireOwnerOrAdmin, (req: Request, res: Response) => {
-    const clean = sanitizeFilename(req.params.filename);
+    const filename = req.params.filename as string;
+    const clean = sanitizeFilename(filename);
     if (!clean) {
       return res.status(400).json({ message: "اسم ملف غير صالح" });
     }
@@ -290,7 +351,8 @@ export function registerBackupRoutes(app: Express) {
   });
 
   app.delete("/api/settings/backup/:filename", requireOwnerOrAdmin, (req: Request, res: Response) => {
-    const clean = sanitizeFilename(req.params.filename);
+    const filename = req.params.filename as string;
+    const clean = sanitizeFilename(filename);
     if (!clean) {
       return res.status(400).json({ message: "اسم ملف غير صالح" });
     }
@@ -304,7 +366,8 @@ export function registerBackupRoutes(app: Express) {
   });
 
   app.post("/api/settings/backup/validate/:filename", requireOwnerOrAdmin, async (req: Request, res: Response) => {
-    const clean = sanitizeFilename(req.params.filename);
+    const filename = req.params.filename as string;
+    const clean = sanitizeFilename(filename);
     if (!clean) {
       return res.status(400).json({ message: "اسم ملف غير صالح" });
     }
@@ -349,17 +412,21 @@ export function registerBackupRoutes(app: Express) {
       if (hasDataJson) {
         try {
           const dataEntry = zip.getEntry("database/data.json");
-          const jsonContent = JSON.parse(dataEntry.getData().toString("utf8"));
-          const tableCount = Object.keys(jsonContent).length;
-          let rowCount = 0;
-          for (const rows of Object.values(jsonContent)) {
-            if (Array.isArray(rows)) rowCount += rows.length;
+          if (dataEntry) {
+            const jsonContent = JSON.parse(dataEntry.getData().toString("utf8"));
+            const tableCount = Object.keys(jsonContent).length;
+            let rowCount = 0;
+            for (const rows of Object.values(jsonContent)) {
+              if (Array.isArray(rows)) rowCount += rows.length;
+            }
+            checks.push({
+              name: "data_content",
+              passed: tableCount > 0 && rowCount > 0,
+              details: `${tableCount} جدول، ${rowCount} سجل`,
+            });
+          } else {
+            checks.push({ name: "data_content", passed: false, details: "فشل العثور على data.json داخل الملف" });
           }
-          checks.push({
-            name: "data_content",
-            passed: tableCount > 0 && rowCount > 0,
-            details: `${tableCount} جدول، ${rowCount} سجل`,
-          });
         } catch {
           checks.push({ name: "data_content", passed: false, details: "فشل قراءة data.json" });
         }

@@ -1216,6 +1216,46 @@ export async function registerRoutes(
     res.json(row);
   });
 
+  app.post("/api/suppliers/:id/payment", requireAuth, requireManager, async (req, res) => {
+    try {
+      const supplierId = Number(req.params.id);
+      const { amount, method, note, branchId } = req.body;
+      const createdBy = req.session.userId!;
+
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ message: "المبلغ يجب أن يكون أكبر من صفر" });
+      }
+      if (!method || !PAYMENT_METHODS.includes(method)) {
+        return res.status(400).json({ message: "طريقة دفع غير صحيحة" });
+      }
+
+      await storage.createSupplierPayment(supplierId, {
+        amount: Number(amount),
+        method,
+        note,
+        branchId: Number(branchId),
+        createdBy
+      });
+
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/suppliers/:id/statement", requireAuth, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const from = req.query.from as string;
+      const to = req.query.to as string;
+      const statement = await storage.getSupplierStatement(id, from, to);
+      if (!statement) return res.status(404).json({ message: "المورد غير موجود" });
+      res.json(statement);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/sales", requireAuth, enforceBranchScope, async (req, res) => {
     const scope = req.branchScope!;
     const filters: any = {};
@@ -2486,6 +2526,134 @@ export async function registerRoutes(
         createdBy: req.session.userId!,
       });
       res.status(201).json(deduction);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  // ============ Chart of Accounts ============
+  app.get("/api/accounts", requireAuth, async (_req, res) => {
+    try {
+      const accs = await storage.getAccounts();
+      res.json(accs);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.post("/api/accounts", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const { code, name, nameEn, type, parentId, level } = req.body;
+      if (!code || !name || !type) return res.status(400).json({ message: "بيانات ناقصة" });
+      const acc = await storage.createAccount({ code, name, nameEn, type, parentId: parentId || null, level: level || 1 });
+      res.status(201).json(acc);
+    } catch (err: any) {
+      if (err?.message?.includes("unique")) return res.status(400).json({ message: "رمز الحساب موجود مسبقاً" });
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.patch("/api/accounts/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const acc = await storage.updateAccount(parseInt(req.params.id), req.body);
+      if (!acc) return res.status(404).json({ message: "الحساب غير موجود" });
+      res.json(acc);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.post("/api/accounts/seed", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      await storage.seedDefaultAccounts();
+      const accs = await storage.getAccounts();
+      res.json(accs);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  // ============ Journal Entries ============
+  app.get("/api/journal-entries", requireAuth, async (req, res) => {
+    try {
+      const entries = await storage.getJournalEntries({
+        from: req.query.from as string,
+        to: req.query.to as string,
+        status: req.query.status as string,
+        sourceType: req.query.sourceType as string,
+      });
+      res.json(entries);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/journal-entries/:id", requireAuth, async (req, res) => {
+    try {
+      const entry = await storage.getJournalEntry(parseInt(req.params.id));
+      if (!entry) return res.status(404).json({ message: "القيد غير موجود" });
+      res.json(entry);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.post("/api/journal-entries", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const { date, description, sourceType, sourceId, branchId, lines } = req.body;
+      if (!date || !description || !lines || lines.length < 2) {
+        return res.status(400).json({ message: "القيد يجب أن يحتوي على تاريخ ووصف وسطرين على الأقل" });
+      }
+      const totalDebit = lines.reduce((s: number, l: any) => s + parseFloat(l.debit || 0), 0);
+      const totalCredit = lines.reduce((s: number, l: any) => s + parseFloat(l.credit || 0), 0);
+      if (Math.abs(totalDebit - totalCredit) > 0.01) {
+        return res.status(400).json({ message: "القيد غير متوازن - المدين لا يساوي الدائن" });
+      }
+      const entryNumber = await storage.getNextEntryNumber();
+      const entry = await storage.createJournalEntry({
+        entryNumber,
+        date,
+        description,
+        sourceType: sourceType || "manual",
+        sourceId: sourceId || null,
+        branchId: branchId || null,
+        createdBy: req.session.userId!,
+        totalDebit: totalDebit.toFixed(3),
+        totalCredit: totalCredit.toFixed(3),
+        status: "draft",
+      }, lines);
+      res.status(201).json(entry);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.post("/api/journal-entries/:id/post", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const entry = await storage.postJournalEntry(parseInt(req.params.id));
+      if (!entry) return res.status(404).json({ message: "القيد غير موجود" });
+      res.json(entry);
+    } catch (err: any) {
+      res.status(400).json({ message: err?.message ?? "خطأ في ترحيل القيد" });
+    }
+  });
+
+  // ============ General Ledger ============
+  app.get("/api/general-ledger", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const accountId = parseInt(req.query.accountId as string);
+      if (!accountId) return res.status(400).json({ message: "يجب تحديد الحساب" });
+      const entries = await storage.getGeneralLedger(accountId, req.query.from as string, req.query.to as string);
+      res.json(entries);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/trial-balance", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const data = await storage.getTrialBalance(req.query.from as string, req.query.to as string);
+      res.json(data);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
     }

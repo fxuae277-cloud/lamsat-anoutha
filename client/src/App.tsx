@@ -30,6 +30,9 @@ import AuditLog from "@/pages/AuditLog";
 import Operations from "@/pages/Operations";
 import StockControl from "@/pages/StockControl";
 import Customers from "@/pages/Customers";
+import Accounts from "@/pages/Accounts";
+import JournalEntries from "@/pages/JournalEntries";
+import GeneralLedger from "@/pages/GeneralLedger";
 
 import MobileEmployeeHome from "@/pages/mobile/MobileEmployeeHome";
 import MobileOwnerHome from "@/pages/mobile/MobileOwnerHome";
@@ -108,6 +111,15 @@ function MobileRouter() {
         <Route path="/expenses">
           <RequireMobileOwner><MobileMore /></RequireMobileOwner>
         </Route>
+        <Route path="/accounts">
+          <RequireMobileOwner><Accounts /></RequireMobileOwner>
+        </Route>
+        <Route path="/journal-entries">
+          <RequireMobileOwner><JournalEntries /></RequireMobileOwner>
+        </Route>
+        <Route path="/general-ledger">
+          <RequireMobileOwner><GeneralLedger /></RequireMobileOwner>
+        </Route>
         <Route><Redirect to="/" /></Route>
       </Switch>
     </MobileLayout>
@@ -167,6 +179,15 @@ function DesktopRouter() {
         </Route>
         <Route path="/audit-log">
           <RequireOwner><AuditLog /></RequireOwner>
+        </Route>
+        <Route path="/journal-entries">
+          <RequireOwner><JournalEntries /></RequireOwner>
+        </Route>
+        <Route path="/accounts">
+          <RequireOwner><Accounts /></RequireOwner>
+        </Route>
+        <Route path="/general-ledger">
+          <RequireOwner><GeneralLedger /></RequireOwner>
         </Route>
         <Route path="/shift" component={POS} />
         <Route path="/more"><Redirect to="/" /></Route>

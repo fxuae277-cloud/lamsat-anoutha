@@ -16,6 +16,9 @@ import {
   ShieldCheck,
   Settings,
   UserCog,
+  BookOpen,
+  FileSpreadsheet,
+  BookMarked,
 } from "lucide-react";
 
 export type SidebarItem = {
@@ -71,6 +74,9 @@ export const OWNER_SIDEBAR: SidebarSection[] = [
       { labelKey: "nav.expenses", icon: Banknote, path: "/expenses" },
       { labelKey: "nav.finance", icon: Calculator, path: "/finance" },
       { labelKey: "nav.reports", icon: FileText, path: "/reports" },
+      { labelKey: "nav.accounts", icon: BookOpen, path: "/accounts" },
+      { labelKey: "nav.journal", icon: FileSpreadsheet, path: "/journal-entries" },
+      { labelKey: "nav.ledger", icon: BookMarked, path: "/general-ledger" },
     ],
   },
   {

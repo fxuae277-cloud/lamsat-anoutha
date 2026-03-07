@@ -21,7 +21,7 @@ Currency: Omani Rial (OMR) | VAT: 5% | Unified pricing across branches.
 - Provider: `I18nProvider` in `client/src/lib/i18n.tsx` wraps app, stores lang in localStorage
 - Hook: `useI18n()` returns `{ t, lang, setLang, dir }` — `t("key.path")` resolves nested JSON keys
 - Locale files: `client/src/locales/en.json` and `ar.json` — 1,434 keys each, perfectly matched
-- Key namespaces: `app`, `nav`, `sidebar`, `settings`, `login`, `dashboard`, `products`, `orders`, `pos`, `hr`, `invoices`, `purchases`, `purchases_v2`, `reports`, `inventory`, `inventory_page`, `stock_control`, `returns`, `expenses`, `expenses_page`, `finance`, `finance_page`, `audit_log`, `operations`, `executive`, `executive_plus`, `common`, `payment_methods`, `status_labels`, `day_names`, `month_names`, `inv_balances`, `transfers`, `ledger`
+- Key namespaces: `app`, `nav`, `sidebar`, `settings`, `login`, `dashboard`, `products`, `orders`, `pos`, `hr`, `invoices`, `purchases`, `purchases_v2`, `reports`, `inventory`, `inventory_page`, `stock_control`, `returns`, `expenses`, `expenses_page`, `finance`, `finance_page`, `audit_log`, `operations`, `executive`, `executive_plus`, `common`, `payment_methods`, `status_labels`, `day_names`, `month_names`, `inv_balances`, `transfers`, `ledger`, `inv_ledger`, `journal`, `accounts`, `supplier_statement`, `mobile`
 - Date formatting uses `lang === "ar" ? "ar-OM" : "en-US"` pattern throughout
 - All pages import `useI18n` and use `t()` for all user-facing strings
 - Language switcher in Settings page persists to localStorage
@@ -59,6 +59,28 @@ shared/
   - MobilePOS, MobileInvoices, MobilePurchases, MobileTransfers, MobileStocktake, MobileShift
 - **More Menu**: Full navigation hub with icon cards for all owner/employee pages
 - **Desktop Unchanged**: Sidebar + table-based layouts preserved for ≥768px
+
+## Accounting Module
+- **Chart of Accounts** (Accounts.tsx): Tree view of accounts with hierarchy (parentId), seeded with 24 default accounts
+  - Account types: asset, liability, equity, revenue, expense
+  - System accounts are read-only; custom accounts can be added/edited
+  - API: GET/POST /api/accounts, PATCH /api/accounts/:id, POST /api/accounts/seed
+- **Journal Entries** (JournalEntries.tsx): Double-entry bookkeeping
+  - Create manual entries with multiple debit/credit lines (must balance)
+  - Draft → Posted workflow; posted entries are read-only
+  - Source types: manual, sale, purchase, expense, return
+  - API: GET/POST /api/journal-entries, POST /api/journal-entries/:id/post
+- **General Ledger + Trial Balance** (GeneralLedger.tsx):
+  - General Ledger: Select account, view all posted journal entry lines with running balance
+  - Trial Balance: All accounts with total debits/credits, grouped by type
+  - API: GET /api/general-ledger?accountId=, GET /api/trial-balance
+- **Supplier Statement**: View purchase history per supplier with running balance (Purchases.tsx)
+  - API: GET /api/suppliers/:id/statement
+- **Supplier Balance Tracking**: totalPurchases + balance columns on suppliers table
+  - Updated on purchase approval, reduced by supplier payments
+  - API: POST /api/suppliers/:id/payment
+- **Auto-Backup**: Backend scheduler checks hourly, runs daily backup when enabled
+  - Settings toggle controls it; keeps last 7 auto-backups
 
 ## Authentication & Authorization (Role-Based Access Control)
 - **Roles**: `owner`, `admin`, `manager`, `employee`/`cashier`

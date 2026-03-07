@@ -44,6 +44,9 @@ import {
   inventoryLedger, type InsertInventoryLedger, type InventoryLedger,
   purchaseExtraCosts, type InsertPurchaseExtraCost, type PurchaseExtraCost,
   supplierOcrTemplates, type InsertSupplierOcrTemplate, type SupplierOcrTemplate,
+  accounts, type InsertAccount, type Account,
+  journalEntries, type InsertJournalEntry, type JournalEntry,
+  journalEntryLines, type InsertJournalEntryLine, type JournalEntryLine,
   type PaymentMethod, PAYMENT_METHODS,
 } from "@shared/schema";
 
@@ -89,6 +92,7 @@ export interface IStorage {
   getCustomerWithInvoices(id: number): Promise<any>;
   getCustomerKpis(): Promise<any>;
   getCustomerStatement(id: number, from?: string, to?: string): Promise<any>;
+  getSupplierStatement(id: number, from?: string, to?: string): Promise<any>;
   getSuppliers(activeOnly?: boolean): Promise<Supplier[]>;
   getSupplier(id: number): Promise<Supplier | undefined>;
   getSupplierByName(name: string): Promise<Supplier | undefined>;
@@ -149,6 +153,7 @@ export interface IStorage {
   approvePurchaseInvoice(id: number): Promise<PurchaseInvoice>;
   receivePurchaseInvoice(id: number): Promise<PurchaseInvoice>;
   updateSupplier(id: number, data: Partial<InsertSupplier>): Promise<Supplier | undefined>;
+  createSupplierPayment(supplierId: number, data: { amount: number; method: PaymentMethod; note?: string; branchId: number; createdBy: number }): Promise<any>;
   createSaleReturn(data: InsertSaleReturn, items: InsertSaleReturnItem[]): Promise<SaleReturn>;
   getSaleReturns(branchId?: number): Promise<any[]>;
   getSaleReturn(id: number): Promise<SaleReturn | undefined>;
@@ -212,6 +217,24 @@ export interface IStorage {
   // Supplier OCR Templates
   getSupplierOcrTemplate(supplierId: number): Promise<SupplierOcrTemplate | undefined>;
   upsertSupplierOcrTemplate(supplierId: number, data: { tableStartKeyword?: string | null; columnOrder?: string | null }): Promise<SupplierOcrTemplate>;
+
+  // Chart of Accounts
+  getAccounts(): Promise<Account[]>;
+  getAccount(id: number): Promise<Account | undefined>;
+  createAccount(data: InsertAccount): Promise<Account>;
+  updateAccount(id: number, data: Partial<InsertAccount>): Promise<Account | undefined>;
+  seedDefaultAccounts(): Promise<void>;
+
+  // Journal Entries
+  getJournalEntries(filters?: { from?: string; to?: string; status?: string; sourceType?: string }): Promise<any[]>;
+  getJournalEntry(id: number): Promise<any>;
+  createJournalEntry(data: InsertJournalEntry, lines: InsertJournalEntryLine[]): Promise<JournalEntry>;
+  postJournalEntry(id: number): Promise<JournalEntry | undefined>;
+  getNextEntryNumber(): Promise<string>;
+
+  // General Ledger
+  getGeneralLedger(accountId: number, from?: string, to?: string): Promise<any[]>;
+  getTrialBalance(from?: string, to?: string): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -483,6 +506,51 @@ export class DatabaseStorage implements IStorage {
         salesCount: salesRes.rows.length,
         returnsCount: returnsRes.rows.length,
       },
+    };
+  }
+
+  async getSupplierStatement(id: number, from?: string, to?: string) {
+    const supplier = await this.getSupplier(id);
+    if (!supplier) return null;
+
+    let purchasesQuery = `
+      SELECT pi.id, pi.invoice_number, pi.grand_total as total, pi.invoice_date as created_at, b.name as branch_name, 'purchase' as type
+      FROM purchase_invoices pi
+      LEFT JOIN branches b ON b.id = pi.branch_id
+      WHERE pi.supplier_id = $1 AND pi.status = 'approved'
+    `;
+    const params: any[] = [id];
+    if (from) {
+      params.push(from);
+      purchasesQuery += ` AND pi.invoice_date >= $${params.length}`;
+    }
+    if (to) {
+      params.push(to);
+      purchasesQuery += ` AND pi.invoice_date <= $${params.length}`;
+    }
+    purchasesQuery += ` ORDER BY pi.invoice_date DESC`;
+
+    const purchasesRes = await pool.query(purchasesQuery, params);
+
+    // For now, we only have purchases. If we add payments later in T003, we would union them here.
+    const transactions = purchasesRes.rows.map(r => ({
+      ...r,
+      total: parseFloat(r.total || "0")
+    })).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    let runningBalance = 0;
+    const items = transactions.reverse().map(t => {
+      // In a supplier statement, a purchase increases what we owe (positive balance/credit)
+      // A payment would decrease it.
+      runningBalance += t.total;
+      return { ...t, balance: runningBalance };
+    }).reverse();
+
+    return {
+      supplier,
+      items,
+      totalPurchases: items.filter(i => i.type === 'purchase').reduce((sum, i) => sum + i.total, 0),
+      currentBalance: runningBalance
     };
   }
 
@@ -1487,6 +1555,46 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
+  async createSupplierPayment(supplierId: number, data: { amount: number; method: PaymentMethod; note?: string; branchId: number; createdBy: number }) {
+    const supplier = await this.getSupplier(supplierId);
+    if (!supplier) throw new Error("المورد غير موجود");
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      // Update supplier balance
+      await client.query(
+        `UPDATE suppliers SET balance = COALESCE(balance, 0) - $1 WHERE id = $2`,
+        [data.amount.toFixed(3), supplierId]
+      );
+
+      // Log to cash/bank ledger
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if (data.method === "cash") {
+        await client.query(
+          `INSERT INTO cash_ledger (date, branch_id, type, amount_out, category, note, created_by, created_at)
+           VALUES ($1, $2, 'SUPPLIER_PAYMENT', $3, 'Purchases', $4, $5, now())`,
+          [todayStr, data.branchId, data.amount.toFixed(3), data.note || `دفع للمورد: ${supplier.name}`, data.createdBy]
+        );
+      } else {
+        await client.query(
+          `INSERT INTO bank_ledger (date, branch_id, method, amount_out, category, note, created_by, created_at)
+           VALUES ($1, $2, $3, $4, 'Purchases', $5, $6, now())`,
+          [todayStr, data.branchId, data.method, data.amount.toFixed(3), data.note || `دفع للمورد: ${supplier.name}`, data.createdBy]
+        );
+      }
+
+      await client.query("COMMIT");
+      return { success: true };
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   async approvePurchaseInvoice(id: number): Promise<PurchaseInvoice> {
     const invoice = await this.getPurchaseInvoice(id);
     if (!invoice) throw new Error("الفاتورة غير موجودة");
@@ -1615,6 +1723,14 @@ export class DatabaseStorage implements IStorage {
           [variantId, centralLocationId, item.qty, id, invoice.createdBy]
         );
       }
+
+      await client.query(
+        `UPDATE suppliers 
+         SET total_purchases = COALESCE(total_purchases, 0) + $1, 
+             balance = COALESCE(balance, 0) + $1 
+         WHERE id = $2`,
+        [grandTotal.toFixed(3), invoice.supplierId]
+      );
 
       const result = await client.query(
         `UPDATE purchase_invoices
@@ -3710,6 +3826,218 @@ export class DatabaseStorage implements IStorage {
       .values({ supplierId, ...data })
       .returning();
     return row;
+  }
+  // ============ Chart of Accounts ============
+  async getAccounts(): Promise<Account[]> {
+    return db.select().from(accounts).orderBy(accounts.code);
+  }
+
+  async getAccount(id: number): Promise<Account | undefined> {
+    const [row] = await db.select().from(accounts).where(eq(accounts.id, id));
+    return row;
+  }
+
+  async createAccount(data: InsertAccount): Promise<Account> {
+    const [row] = await db.insert(accounts).values(data).returning();
+    return row;
+  }
+
+  async updateAccount(id: number, data: Partial<InsertAccount>): Promise<Account | undefined> {
+    const [row] = await db.update(accounts).set(data).where(eq(accounts.id, id)).returning();
+    return row;
+  }
+
+  async seedDefaultAccounts(): Promise<void> {
+    const existing = await db.select().from(accounts);
+    if (existing.length > 0) return;
+
+    const defaults: InsertAccount[] = [
+      { code: "1000", name: "الأصول", nameEn: "Assets", type: "asset", level: 1, isSystem: true },
+      { code: "1100", name: "النقدية والبنوك", nameEn: "Cash & Banks", type: "asset", parentId: null, level: 2, isSystem: true },
+      { code: "1101", name: "الصندوق", nameEn: "Cash in Hand", type: "asset", parentId: null, level: 3, isSystem: true },
+      { code: "1102", name: "البنك", nameEn: "Bank Account", type: "asset", parentId: null, level: 3, isSystem: true },
+      { code: "1200", name: "الذمم المدينة", nameEn: "Accounts Receivable", type: "asset", parentId: null, level: 2, isSystem: true },
+      { code: "1201", name: "ذمم العملاء", nameEn: "Customer Receivables", type: "asset", parentId: null, level: 3, isSystem: true },
+      { code: "1300", name: "المخزون", nameEn: "Inventory", type: "asset", parentId: null, level: 2, isSystem: true },
+      { code: "1301", name: "بضاعة بالمخزن", nameEn: "Merchandise Inventory", type: "asset", parentId: null, level: 3, isSystem: true },
+      { code: "2000", name: "الخصوم", nameEn: "Liabilities", type: "liability", level: 1, isSystem: true },
+      { code: "2100", name: "الذمم الدائنة", nameEn: "Accounts Payable", type: "liability", parentId: null, level: 2, isSystem: true },
+      { code: "2101", name: "ذمم الموردين", nameEn: "Supplier Payables", type: "liability", parentId: null, level: 3, isSystem: true },
+      { code: "2200", name: "ضريبة القيمة المضافة", nameEn: "VAT Payable", type: "liability", parentId: null, level: 2, isSystem: true },
+      { code: "3000", name: "حقوق الملكية", nameEn: "Equity", type: "equity", level: 1, isSystem: true },
+      { code: "3100", name: "رأس المال", nameEn: "Capital", type: "equity", parentId: null, level: 2, isSystem: true },
+      { code: "3200", name: "الأرباح المحتجزة", nameEn: "Retained Earnings", type: "equity", parentId: null, level: 2, isSystem: true },
+      { code: "4000", name: "الإيرادات", nameEn: "Revenue", type: "revenue", level: 1, isSystem: true },
+      { code: "4100", name: "إيرادات المبيعات", nameEn: "Sales Revenue", type: "revenue", parentId: null, level: 2, isSystem: true },
+      { code: "4200", name: "مرتجعات المبيعات", nameEn: "Sales Returns", type: "revenue", parentId: null, level: 2, isSystem: true },
+      { code: "5000", name: "المصروفات", nameEn: "Expenses", type: "expense", level: 1, isSystem: true },
+      { code: "5100", name: "تكلفة البضاعة المباعة", nameEn: "Cost of Goods Sold", type: "expense", parentId: null, level: 2, isSystem: true },
+      { code: "5200", name: "الرواتب والأجور", nameEn: "Salaries & Wages", type: "expense", parentId: null, level: 2, isSystem: true },
+      { code: "5300", name: "الإيجارات", nameEn: "Rent", type: "expense", parentId: null, level: 2, isSystem: true },
+      { code: "5400", name: "المصروفات العامة", nameEn: "General Expenses", type: "expense", parentId: null, level: 2, isSystem: true },
+      { code: "5500", name: "مصروفات أخرى", nameEn: "Other Expenses", type: "expense", parentId: null, level: 2, isSystem: true },
+    ];
+
+    for (const acc of defaults) {
+      await db.insert(accounts).values(acc).onConflictDoNothing();
+    }
+
+    const allAccounts = await db.select().from(accounts).orderBy(accounts.code);
+    const codeToId: Record<string, number> = {};
+    for (const a of allAccounts) codeToId[a.code] = a.id;
+
+    const parentMap: Record<string, string> = {
+      "1100": "1000", "1101": "1100", "1102": "1100",
+      "1200": "1000", "1201": "1200",
+      "1300": "1000", "1301": "1300",
+      "2100": "2000", "2101": "2100",
+      "2200": "2000",
+      "3100": "3000", "3200": "3000",
+      "4100": "4000", "4200": "4000",
+      "5100": "5000", "5200": "5000", "5300": "5000", "5400": "5000", "5500": "5000",
+    };
+
+    for (const [childCode, parentCode] of Object.entries(parentMap)) {
+      if (codeToId[childCode] && codeToId[parentCode]) {
+        await db.update(accounts).set({ parentId: codeToId[parentCode] }).where(eq(accounts.id, codeToId[childCode]));
+      }
+    }
+  }
+
+  // ============ Journal Entries ============
+  async getJournalEntries(filters?: { from?: string; to?: string; status?: string; sourceType?: string }): Promise<any[]> {
+    let query = `
+      SELECT je.*, u.name as created_by_name
+      FROM journal_entries je
+      LEFT JOIN users u ON u.id = je.created_by
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    let idx = 1;
+    if (filters?.from) {
+      query += ` AND je.date >= $${idx++}`;
+      params.push(filters.from);
+    }
+    if (filters?.to) {
+      query += ` AND je.date <= $${idx++}`;
+      params.push(filters.to);
+    }
+    if (filters?.status) {
+      query += ` AND je.status = $${idx++}`;
+      params.push(filters.status);
+    }
+    if (filters?.sourceType) {
+      query += ` AND je.source_type = $${idx++}`;
+      params.push(filters.sourceType);
+    }
+    query += ` ORDER BY je.date DESC, je.id DESC`;
+    const result = await pool.query(query, params);
+    return result.rows;
+  }
+
+  async getJournalEntry(id: number): Promise<any> {
+    const entryResult = await pool.query(`
+      SELECT je.*, u.name as created_by_name
+      FROM journal_entries je
+      LEFT JOIN users u ON u.id = je.created_by
+      WHERE je.id = $1
+    `, [id]);
+    if (entryResult.rows.length === 0) return null;
+
+    const linesResult = await pool.query(`
+      SELECT jel.*, a.code as account_code, a.name as account_name, a.name_en as account_name_en, a.type as account_type
+      FROM journal_entry_lines jel
+      JOIN accounts a ON a.id = jel.account_id
+      WHERE jel.entry_id = $1
+      ORDER BY jel.id
+    `, [id]);
+
+    return { ...entryResult.rows[0], lines: linesResult.rows };
+  }
+
+  async createJournalEntry(data: InsertJournalEntry, lines: InsertJournalEntryLine[]): Promise<JournalEntry> {
+    const [entry] = await db.insert(journalEntries).values(data).returning();
+    for (const line of lines) {
+      await db.insert(journalEntryLines).values({ ...line, entryId: entry.id });
+    }
+    return entry;
+  }
+
+  async postJournalEntry(id: number): Promise<JournalEntry | undefined> {
+    const entry = await this.getJournalEntry(id);
+    if (!entry) return undefined;
+    if (entry.status === "posted") return entry;
+
+    const totalDebit = entry.lines.reduce((s: number, l: any) => s + parseFloat(l.debit || 0), 0);
+    const totalCredit = entry.lines.reduce((s: number, l: any) => s + parseFloat(l.credit || 0), 0);
+
+    if (Math.abs(totalDebit - totalCredit) > 0.01) {
+      throw new Error("القيد غير متوازن - المدين لا يساوي الدائن");
+    }
+
+    const [updated] = await db.update(journalEntries)
+      .set({ status: "posted", postedAt: new Date(), totalDebit: totalDebit.toFixed(3), totalCredit: totalCredit.toFixed(3) })
+      .where(eq(journalEntries.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getNextEntryNumber(): Promise<string> {
+    const result = await pool.query(`SELECT COUNT(*) as cnt FROM journal_entries`);
+    const count = parseInt(result.rows[0].cnt) + 1;
+    return `JE-${count.toString().padStart(5, "0")}`;
+  }
+
+  // ============ General Ledger ============
+  async getGeneralLedger(accountId: number, from?: string, to?: string): Promise<any[]> {
+    let query = `
+      SELECT jel.id, jel.debit, jel.credit, jel.description as line_description,
+             je.id as entry_id, je.entry_number, je.date, je.description, je.status, je.source_type
+      FROM journal_entry_lines jel
+      JOIN journal_entries je ON je.id = jel.entry_id
+      WHERE jel.account_id = $1 AND je.status = 'posted'
+    `;
+    const params: any[] = [accountId];
+    let idx = 2;
+    if (from) {
+      query += ` AND je.date >= $${idx++}`;
+      params.push(from);
+    }
+    if (to) {
+      query += ` AND je.date <= $${idx++}`;
+      params.push(to);
+    }
+    query += ` ORDER BY je.date ASC, je.id ASC`;
+    const result = await pool.query(query, params);
+    return result.rows;
+  }
+
+  async getTrialBalance(from?: string, to?: string): Promise<any[]> {
+    let query = `
+      SELECT a.id, a.code, a.name, a.name_en, a.type, a.level, a.parent_id,
+             COALESCE(SUM(CAST(jel.debit AS numeric)), 0) as total_debit,
+             COALESCE(SUM(CAST(jel.credit AS numeric)), 0) as total_credit
+      FROM accounts a
+      LEFT JOIN journal_entry_lines jel ON jel.account_id = a.id
+      LEFT JOIN journal_entries je ON je.id = jel.entry_id AND je.status = 'posted'
+    `;
+    const params: any[] = [];
+    let idx = 1;
+    if (from || to) {
+      if (from) {
+        query += ` AND je.date >= $${idx++}`;
+        params.push(from);
+      }
+      if (to) {
+        query += ` AND je.date <= $${idx++}`;
+        params.push(to);
+      }
+    }
+    query += ` GROUP BY a.id, a.code, a.name, a.name_en, a.type, a.level, a.parent_id
+               HAVING COALESCE(SUM(CAST(jel.debit AS numeric)), 0) != 0 OR COALESCE(SUM(CAST(jel.credit AS numeric)), 0) != 0
+               ORDER BY a.code`;
+    const result = await pool.query(query, params);
+    return result.rows;
   }
 }
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
-import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle, Search, Edit, Building, UserPlus, FileSpreadsheet, X, Loader2, CheckCircle2, Upload } from "lucide-react";
+import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle, Search, Edit, Building, UserPlus, FileSpreadsheet, X, Loader2, CheckCircle2, Upload, Printer } from "lucide-react";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,9 +37,23 @@ function SuppliersTab() {
   const [formTaxNo, setFormTaxNo] = useState("");
   const [formCrNo, setFormCrNo] = useState("");
   const [formNotes, setFormNotes] = useState("");
+  const [showStatement, setShowStatement] = useState(false);
+  const [statementSupplierId, setStatementSupplierId] = useState<number | null>(null);
+  const [showPayment, setShowPayment] = useState(false);
+  const [paySupplier, setPaySupplier] = useState<Supplier | null>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [payMethod, setPayMethod] = useState<string>("cash");
+  const [payNote, setPayNote] = useState("");
+  const [payBranchId, setPayBranchId] = useState("");
+  const { user } = useAuth();
 
   const { data: suppliers = [] } = useQuery<Supplier[]>({
     queryKey: ["/api/suppliers"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const { data: branches = [] } = useQuery<any[]>({
+    queryKey: ["/api/branches"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
@@ -66,6 +80,35 @@ function SuppliersTab() {
     setFormNotes(s.notes || "");
     setShowForm(true);
   }
+
+  function openPayment(s: Supplier) {
+    setPaySupplier(s);
+    setPayAmount("");
+    setPayMethod("cash");
+    setPayNote("");
+    setPayBranchId(String(user?.branchId || ""));
+    setShowPayment(true);
+  }
+
+  const payMutation = useMutation({
+    mutationFn: async () => {
+      if (!paySupplier) return;
+      await apiRequest("POST", `/api/suppliers/${paySupplier.id}/payment`, {
+        amount: Number(payAmount),
+        method: payMethod,
+        note: payNote || null,
+        branchId: Number(payBranchId),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/suppliers"] });
+      qc.invalidateQueries({ queryKey: ["/api/cash-ledger"] });
+      qc.invalidateQueries({ queryKey: ["/api/bank-ledger"] });
+      setShowPayment(false);
+      toast({ title: t("purchases.payment_success") });
+    },
+    onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
+  });
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -133,10 +176,9 @@ function SuppliersTab() {
               <TableRow>
                 <TableHead>{t("purchases.table_name")}</TableHead>
                 <TableHead>{t("purchases.table_phone")}</TableHead>
-                <TableHead>{t("purchases.table_email")}</TableHead>
                 <TableHead>{t("purchases.table_city")}</TableHead>
-                <TableHead>{t("purchases.table_tax_no")}</TableHead>
-                <TableHead>{t("purchases.table_cr_no")}</TableHead>
+                <TableHead>{t("purchases.balance")}</TableHead>
+                <TableHead>{t("purchases.total_purchases")}</TableHead>
                 <TableHead>{t("purchases.table_status")}</TableHead>
                 <TableHead></TableHead>
               </TableRow>
@@ -144,7 +186,7 @@ function SuppliersTab() {
             <TableBody>
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     {search ? t("purchases.no_results") : t("purchases.no_suppliers")}
                   </TableCell>
                 </TableRow>
@@ -153,10 +195,9 @@ function SuppliersTab() {
                 <TableRow key={s.id} data-testid={`row-supplier-${s.id}`}>
                   <TableCell className="font-medium">{s.name}</TableCell>
                   <TableCell className="font-mono text-sm">{s.phone || "—"}</TableCell>
-                  <TableCell className="text-sm">{s.email || "—"}</TableCell>
                   <TableCell>{s.city || "—"}</TableCell>
-                  <TableCell className="font-mono text-sm">{s.taxNo || "—"}</TableCell>
-                  <TableCell className="font-mono text-sm">{s.crNo || "—"}</TableCell>
+                  <TableCell className="font-mono font-bold text-red-600">{omr((s as any).balance)}</TableCell>
+                  <TableCell className="font-mono">{omr((s as any).totalPurchases)}</TableCell>
                   <TableCell>
                     <Badge
                       variant={s.active ? "default" : "outline"}
@@ -168,9 +209,17 @@ function SuppliersTab() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(s)} data-testid={`button-edit-supplier-${s.id}`}>
-                      <Edit className="w-4 h-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(s)} data-testid={`button-edit-supplier-${s.id}`} title={t("common.edit")}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => openPayment(s)} data-testid={`button-pay-supplier-${s.id}`} title={t("purchases.record_payment")}>
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => { setStatementSupplierId(s.id); setShowStatement(true); }} data-testid={`button-statement-supplier-${s.id}`} title={t("customers.statement")}>
+                        <FileText className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -178,6 +227,86 @@ function SuppliersTab() {
           </Table>
         </CardContent>
       </Card>
+
+      <SupplierStatementDialog
+        open={showStatement}
+        onOpenChange={setShowStatement}
+        supplierId={statementSupplierId}
+      />
+
+      <Dialog open={showPayment} onOpenChange={setShowPayment}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-green-600" />
+              {t("purchases.record_payment")}
+            </DialogTitle>
+            <DialogDescription>
+              {paySupplier?.name} - {t("purchases.current_balance")}: {omr((paySupplier as any)?.balance)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("common.amount")} ({t("common.omr")})</label>
+              <Input
+                type="number"
+                step="0.001"
+                value={payAmount}
+                onChange={e => setPayAmount(e.target.value)}
+                placeholder="0.000"
+                autoFocus
+                data-testid="input-payment-amount"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("common.method")}</label>
+              <Select value={payMethod} onValueChange={setPayMethod}>
+                <SelectTrigger data-testid="select-payment-method">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">{t("payment_methods.cash")}</SelectItem>
+                  <SelectItem value="bank_transfer">{t("payment_methods.bank_transfer")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("common.branch")}</label>
+              <Select value={payBranchId} onValueChange={setPayBranchId}>
+                <SelectTrigger data-testid="select-payment-branch">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((b: any) => (
+                    <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("common.note")}</label>
+              <Input
+                value={payNote}
+                onChange={e => setPayNote(e.target.value)}
+                placeholder={t("common.note")}
+                data-testid="input-payment-note"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPayment(false)}>{t("common.cancel")}</Button>
+            <Button
+              onClick={() => payMutation.mutate()}
+              disabled={!payAmount || Number(payAmount) <= 0 || !payBranchId || payMutation.isPending}
+              className="bg-green-600 hover:bg-green-700"
+              data-testid="button-confirm-payment"
+            >
+              {payMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {t("common.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showForm} onOpenChange={v => { if (!v) { setShowForm(false); resetForm(); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -236,6 +365,128 @@ function SuppliersTab() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function SupplierStatementDialog({ open, onOpenChange, supplierId }: { open: boolean; onOpenChange: (v: boolean) => void; supplierId: number | null }) {
+  const { t } = useI18n();
+  const [from, setFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10));
+  const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
+
+  const { data: statement, isLoading } = useQuery<any>({
+    queryKey: ["/api/suppliers", supplierId, "statement", { from, to }],
+    queryFn: async () => {
+      const res = await fetch(`/api/suppliers/${supplierId}/statement?from=${from}&to=${to}`, { credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    enabled: open && !!supplierId,
+  });
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto print:max-w-none print:p-0 print:m-0 print:overflow-visible">
+        <DialogHeader className="print:hidden">
+          <DialogTitle className="flex items-center gap-2">
+            <FileText className="w-5 h-5" /> {t("customers.supplier_statement")}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="flex items-end gap-4 print:hidden">
+            <div className="space-y-1 flex-1">
+              <label className="text-sm font-medium">{t("customers.statement_from")}</label>
+              <Input type="date" value={from} onChange={e => setFrom(e.target.value)} />
+            </div>
+            <div className="space-y-1 flex-1">
+              <label className="text-sm font-medium">{t("customers.statement_to")}</label>
+              <Input type="date" value={to} onChange={e => setTo(e.target.value)} />
+            </div>
+            <Button variant="outline" className="gap-2" onClick={handlePrint}>
+              <Printer className="w-4 h-4" /> {t("common.print")}
+            </Button>
+          </div>
+
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : statement ? (
+            <div id="statement-print-area" className="space-y-6">
+              <div className="flex justify-between items-start border-b pb-4">
+                <div>
+                  <h2 className="text-2xl font-bold">{t("customers.supplier_statement")}</h2>
+                  <p className="text-muted-foreground">{from} - {to}</p>
+                </div>
+                <div className="text-left">
+                  <h3 className="font-bold text-lg">{statement.supplier.name}</h3>
+                  <p className="text-sm">{statement.supplier.phone}</p>
+                  <p className="text-sm">{statement.supplier.city}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <Card className="bg-muted/30">
+                  <CardHeader className="py-3 px-4">
+                    <CardTitle className="text-sm font-medium">{t("customers.statement_total_purchases")}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="py-2 px-4">
+                    <p className="text-2xl font-bold">{omr(statement.totalPurchases)}</p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-muted/30 col-span-2">
+                  <CardHeader className="py-3 px-4">
+                    <CardTitle className="text-sm font-medium">{t("customers.statement_current_balance")}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="py-2 px-4">
+                    <p className="text-2xl font-bold text-primary">{omr(statement.currentBalance)}</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("common.date")}</TableHead>
+                    <TableHead>{t("common.type")}</TableHead>
+                    <TableHead>{t("customers.invoice_number")}</TableHead>
+                    <TableHead>{t("common.branch")}</TableHead>
+                    <TableHead className="text-left">{t("common.amount")}</TableHead>
+                    <TableHead className="text-left">{t("customers.statement_balance")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {statement.items.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        {t("customers.statement_no_transactions")}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    statement.items.map((item: any, idx: number) => (
+                      <TableRow key={idx}>
+                        <TableCell>{new Date(item.created_at).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          {item.type === 'purchase' ? t("customers.statement_purchase") : t("customers.statement_payment")}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{item.invoice_number || "—"}</TableCell>
+                        <TableCell>{item.branch_name || "—"}</TableCell>
+                        <TableCell className="text-left font-medium">{omr(item.total)}</TableCell>
+                        <TableCell className="text-left font-bold">{omr(item.balance)}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          ) : null}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
