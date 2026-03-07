@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Plus, Users, Building2, Phone, KeyRound, Wallet, Search, TrendingUp, ShoppingBag, Receipt, Clock, Edit, Eye, Shield, Hash, UserCheck, BarChart3, Calendar, FileText, Banknote, MinusCircle, CreditCard, CheckCircle2, RefreshCw, Percent, Printer, Download, FileSpreadsheet, DollarSign, CircleDollarSign, AlertCircle, User } from "lucide-react";
+import { Plus, Users, Building2, Phone, KeyRound, Wallet, Search, TrendingUp, ShoppingBag, Receipt, Clock, Edit, Eye, Shield, Hash, UserCheck, BarChart3, Calendar, FileText, Banknote, MinusCircle, CreditCard, CheckCircle2, RefreshCw, Percent, Printer, Download, FileSpreadsheet, DollarSign, CircleDollarSign, AlertCircle, User, ClipboardCheck, RotateCcw, XCircle, BookOpen, UserX, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -128,6 +128,9 @@ export default function HR() {
         salary: selectedUser.salary || "0",
         salaryType: selectedUser.salaryType || "monthly",
         commissionRate: selectedUser.commissionRate || "0",
+        employmentStatus: selectedUser.employmentStatus || "active",
+        openingAdvanceBalance: selectedUser.openingAdvanceBalance || "0",
+        openingPayableBalance: selectedUser.openingPayableBalance || "0",
       });
     },
     onSuccess: () => {
@@ -215,7 +218,7 @@ export default function HR() {
       </div>
 
       <Tabs defaultValue="employees" dir={lang === "ar" ? "rtl" : "ltr"}>
-        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 max-w-4xl">
+        <TabsList className="grid w-full grid-cols-4 sm:grid-cols-7 max-w-5xl">
           <TabsTrigger value="employees" className="gap-1 text-xs">
             <Users className="w-4 h-4" />
             {t("hr.tab_employees")}
@@ -239,6 +242,10 @@ export default function HR() {
           <TabsTrigger value="performance" className="gap-1 text-xs">
             <BarChart3 className="w-4 h-4" />
             {t("hr.tab_performance")}
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="gap-1 text-xs">
+            <FileSpreadsheet className="w-4 h-4" />
+            {t("hr.tab_reports")}
           </TabsTrigger>
         </TabsList>
 
@@ -278,6 +285,10 @@ export default function HR() {
             branchMap={branchMap}
             branchesList={branchesList}
           />
+        </TabsContent>
+
+        <TabsContent value="reports">
+          <ReportsTab usersList={usersList} />
         </TabsContent>
       </Tabs>
 
@@ -470,6 +481,27 @@ export default function HR() {
                   {t("status_labels.inactive")}
                 </Button>
               </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t("hr.employment_status")}</label>
+                <Select value={selectedUser.employmentStatus || "active"} onValueChange={v => setSelectedUser({...selectedUser, employmentStatus: v})}>
+                  <SelectTrigger data-testid="select-employment-status"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">{t("hr.emp_status_active")}</SelectItem>
+                    <SelectItem value="suspended">{t("hr.emp_status_suspended")}</SelectItem>
+                    <SelectItem value="terminated">{t("hr.emp_status_terminated")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("hr.opening_advance_balance")}</label>
+                  <Input type="number" step="0.001" placeholder="0.000" value={selectedUser.openingAdvanceBalance || ""} onChange={e => setSelectedUser({...selectedUser, openingAdvanceBalance: e.target.value})} data-testid="input-opening-advance" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("hr.opening_payable_balance")}</label>
+                  <Input type="number" step="0.001" placeholder="0.000" value={selectedUser.openingPayableBalance || ""} onChange={e => setSelectedUser({...selectedUser, openingPayableBalance: e.target.value})} data-testid="input-opening-payable" />
+                </div>
+              </div>
             </div>
           )}
           <DialogFooter>
@@ -537,6 +569,7 @@ export default function HR() {
 
 function FinancialProfileDialog({ open, onOpenChange, employeeId }: { open: boolean; onOpenChange: (v: boolean) => void; employeeId: number | null }) {
   const { t, lang } = useI18n();
+  const [ledgerTab, setLedgerTab] = useState<"profile" | "ledger">("profile");
   const MONTH_NAMES = [
     t("month_names.jan"), t("month_names.feb"), t("month_names.mar"), t("month_names.apr"), t("month_names.may"), t("month_names.jun"),
     t("month_names.jul"), t("month_names.aug"), t("month_names.sep"), t("month_names.oct"), t("month_names.nov"), t("month_names.dec"),
@@ -546,6 +579,12 @@ function FinancialProfileDialog({ open, onOpenChange, employeeId }: { open: bool
     queryKey: [employeeId ? `/api/employees/${employeeId}/financial-profile` : null],
     queryFn: getQueryFn({ on401: "throw" }),
     enabled: !!employeeId && open,
+  });
+
+  const { data: ledgerEntries = [] } = useQuery<any[]>({
+    queryKey: [employeeId ? `/api/employees/${employeeId}/ledger` : null],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: !!employeeId && open && ledgerTab === "ledger",
   });
 
   if (!profile) return (
@@ -576,6 +615,47 @@ function FinancialProfileDialog({ open, onOpenChange, employeeId }: { open: bool
           <DialogDescription>{emp.branch_name || ""} - {emp.role}</DialogDescription>
         </DialogHeader>
 
+        <div className="flex gap-2 mb-2">
+          <Button variant={ledgerTab === "profile" ? "default" : "outline"} size="sm" onClick={() => setLedgerTab("profile")} data-testid="button-fin-profile-tab">
+            <Wallet className="w-3.5 h-3.5 me-1" /> {t("hr.financial_profile")}
+          </Button>
+          <Button variant={ledgerTab === "ledger" ? "default" : "outline"} size="sm" onClick={() => setLedgerTab("ledger")} data-testid="button-fin-ledger-tab">
+            <BookOpen className="w-3.5 h-3.5 me-1" /> {t("hr.financial_ledger")}
+          </Button>
+        </div>
+
+        {ledgerTab === "ledger" ? (
+          <div className="space-y-3">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead>{t("common.date")}</TableHead>
+                  <TableHead>{t("hr.movement_type")}</TableHead>
+                  <TableHead>{t("common.amount")}</TableHead>
+                  <TableHead>{t("hr.balance_after")}</TableHead>
+                  <TableHead>{t("common.notes")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {ledgerEntries.length === 0 ? (
+                  <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">{t("hr.no_ledger_entries")}</TableCell></TableRow>
+                ) : ledgerEntries.map((le: any) => (
+                  <TableRow key={le.id}>
+                    <TableCell className="text-sm">{le.date ? new Date(le.date + "T00:00:00").toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {t(`hr.ledger_${le.movement_type}`) || le.movement_type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className={`font-bold ${parseFloat(le.amount) >= 0 ? "text-green-600" : "text-red-600"}`}>{fmt(le.amount)}</TableCell>
+                    <TableCell className="font-medium">{fmt(le.balance_after)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{le.note || "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
         <div className="space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <div className="bg-blue-50 rounded-lg p-3 text-center">
@@ -689,6 +769,7 @@ function FinancialProfileDialog({ open, onOpenChange, employeeId }: { open: bool
             </div>
           )}
         </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -754,11 +835,18 @@ function EmployeesTab({ usersList, branchMap, branchesList, search, setSearch, o
                 {u.salaryType === "commission" ? `${parseFloat(u.commissionRate || "0").toFixed(2)}%` : "—"}
               </TableCell>
               <TableCell>
-                {u.isActive ? (
-                  <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">{t("status_labels.active")}</Badge>
-                ) : (
-                  <Badge variant="destructive" className="text-xs">{t("status_labels.inactive")}</Badge>
-                )}
+                <div className="flex gap-1 flex-wrap">
+                  {u.isActive ? (
+                    <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">{t("status_labels.active")}</Badge>
+                  ) : (
+                    <Badge variant="destructive" className="text-xs">{t("status_labels.inactive")}</Badge>
+                  )}
+                  {u.employmentStatus && u.employmentStatus !== "active" && (
+                    <Badge variant="outline" className={`text-xs ${u.employmentStatus === "suspended" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+                      {u.employmentStatus === "suspended" ? t("hr.emp_status_suspended") : t("hr.emp_status_terminated")}
+                    </Badge>
+                  )}
+                </div>
               </TableCell>
               <TableCell>
                 <div className="flex gap-1">
@@ -813,6 +901,10 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
   const [payMethod, setPayMethod] = useState("cash");
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
   const [payNote, setPayNote] = useState("");
+  const [payRefNo, setPayRefNo] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [newPeriodStart, setNewPeriodStart] = useState("");
+  const [newPeriodEnd, setNewPeriodEnd] = useState("");
 
   const MONTH_NAMES = [
     t("month_names.jan"), t("month_names.feb"), t("month_names.mar"), t("month_names.apr"), t("month_names.may"), t("month_names.jun"),
@@ -845,17 +937,24 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
     enabled: !!selectedDetail && historyOpen,
   });
 
+  const { data: previewData } = useQuery<any>({
+    queryKey: [`/api/payroll/preview?month=${newMonth}&year=${newYear}`],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: previewOpen,
+  });
+
   const createMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/payroll-runs", {
         month: newMonth, year: Number(newYear), note: newNote,
+        periodStart: newPeriodStart || undefined, periodEnd: newPeriodEnd || undefined,
       });
     },
     onSuccess: () => {
       toast({ title: t("hr.payroll_generated") });
       queryClient.invalidateQueries({ queryKey: ["/api/payroll-runs"] });
-      setCreateOpen(false);
-      setNewNote("");
+      setCreateOpen(false); setPreviewOpen(false);
+      setNewNote(""); setNewPeriodStart(""); setNewPeriodEnd("");
     },
     onError: (err: Error) => {
       toast({ title: t("common.error"), description: err.message, variant: "destructive" });
@@ -892,6 +991,24 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
     },
   });
 
+  const reviewMutation = useMutation({
+    mutationFn: async (id: number) => { await apiRequest("POST", `/api/payroll-runs/${id}/review`, {}); },
+    onSuccess: () => { toast({ title: t("hr.payroll_reviewed") }); queryClient.invalidateQueries({ queryKey: ["/api/payroll-runs"] }); },
+    onError: (err: Error) => { toast({ title: t("common.error"), description: err.message, variant: "destructive" }); },
+  });
+
+  const reopenMutation = useMutation({
+    mutationFn: async (id: number) => { await apiRequest("POST", `/api/payroll-runs/${id}/reopen`, {}); },
+    onSuccess: () => { toast({ title: t("hr.payroll_reopened") }); queryClient.invalidateQueries({ queryKey: ["/api/payroll-runs"] }); },
+    onError: (err: Error) => { toast({ title: t("common.error"), description: err.message, variant: "destructive" }); },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async (id: number) => { await apiRequest("POST", `/api/payroll-runs/${id}/cancel`, {}); },
+    onSuccess: () => { toast({ title: t("hr.payroll_cancelled") }); queryClient.invalidateQueries({ queryKey: ["/api/payroll-runs"] }); },
+    onError: (err: Error) => { toast({ title: t("common.error"), description: err.message, variant: "destructive" }); },
+  });
+
   const payMutation = useMutation({
     mutationFn: async () => {
       if (!selectedDetail || !selectedRun) return;
@@ -902,6 +1019,7 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
         amount: payAmount,
         paymentDate: payDate,
         paymentMethod: payMethod,
+        referenceNo: payRefNo || undefined,
         branchId: selectedDetail.branch_id,
         note: payNote,
       });
@@ -910,8 +1028,9 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
       toast({ title: t("hr.payment_recorded") });
       queryClient.invalidateQueries({ queryKey: [detailsKey] });
       queryClient.invalidateQueries({ queryKey: [summaryKey] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll-runs"] });
       setPayOpen(false);
-      setPayAmount(""); setPayNote("");
+      setPayAmount(""); setPayNote(""); setPayRefNo("");
     },
     onError: (err: Error) => {
       toast({ title: t("common.error"), description: err.message, variant: "destructive" });
@@ -979,9 +1098,17 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
     URL.revokeObjectURL(url);
   };
 
-  const getPayrollRunStatus = (run: any) => {
-    if (run.status === "draft") return "draft";
-    return "approved";
+  const statusBadge = (status: string) => {
+    const map: Record<string, { cls: string; label: string }> = {
+      draft: { cls: "bg-yellow-50 text-yellow-700 border-yellow-200", label: t("hr.payroll_status_draft") },
+      reviewed: { cls: "bg-blue-50 text-blue-700 border-blue-200", label: t("hr.status_reviewed") },
+      approved: { cls: "bg-green-50 text-green-700 border-green-200", label: t("hr.payroll_status_approved") },
+      partial: { cls: "bg-orange-50 text-orange-700 border-orange-200", label: t("hr.status_partial") },
+      paid: { cls: "bg-emerald-50 text-emerald-700 border-emerald-200", label: t("hr.status_paid") },
+      cancelled: { cls: "bg-gray-100 text-gray-500 border-gray-200", label: t("hr.status_cancelled") },
+    };
+    const s = map[status] || map.draft;
+    return <Badge variant="outline" className={s.cls}>{s.label}</Badge>;
   };
 
   return (
@@ -1018,12 +1145,48 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
                   <Input type="number" value={newYear} onChange={e => setNewYear(e.target.value)} data-testid="input-payroll-year" />
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("hr.period_start")}</label>
+                  <Input type="date" value={newPeriodStart} onChange={e => setNewPeriodStart(e.target.value)} data-testid="input-period-start" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("hr.period_end")}</label>
+                  <Input type="date" value={newPeriodEnd} onChange={e => setNewPeriodEnd(e.target.value)} data-testid="input-period-end" />
+                </div>
+              </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("common.notes")}</label>
                 <Input placeholder={t("hr.notes_placeholder")} value={newNote} onChange={e => setNewNote(e.target.value)} data-testid="input-payroll-note" />
               </div>
+
+              {previewOpen && previewData && (
+                <div className="bg-muted/50 rounded-lg p-3 space-y-2 text-sm">
+                  <div className="font-semibold">{t("hr.preview_title")}</div>
+                  {previewData.warnings?.length > 0 && (
+                    <div className="text-amber-600 text-xs space-y-1">
+                      {previewData.warnings.map((w: string, i: number) => (
+                        <div key={i}>⚠ {t(`hr.warning_${w}`) || w}</div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-center"><span className="text-xs text-muted-foreground">{t("hr.employees_count")}</span><br/><b>{previewData.totals?.employeeCount}</b></div>
+                    <div className="text-center"><span className="text-xs text-muted-foreground">{t("hr.total_basic_salary")}</span><br/><b>{fmt(previewData.totals?.basic)}</b></div>
+                    <div className="text-center"><span className="text-xs text-muted-foreground">{t("hr.net_salary")}</span><br/><b className="text-primary">{fmt(previewData.totals?.net)}</b></div>
+                  </div>
+                  {previewData.details?.filter((d: any) => d.warnings?.length > 0).map((d: any) => (
+                    <div key={d.employeeId} className="text-xs text-amber-600">
+                      {d.employeeName}: {d.warnings.map((w: string) => t(`hr.warning_${w}`) || w).join(", ")}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <DialogFooter>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setPreviewOpen(!previewOpen)} data-testid="button-preview-payroll">
+                <Eye className="w-4 h-4 me-1" /> {t("hr.preview")}
+              </Button>
               <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending} data-testid="button-save-payroll">
                 {createMutation.isPending ? t("hr.generating") : t("hr.generate_btn")}
               </Button>
@@ -1055,13 +1218,7 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
                 <TableCell className="font-medium">
                   {MONTH_NAMES[parseInt(run.month) - 1]} {run.year}
                 </TableCell>
-                <TableCell>
-                  {run.status === "draft" ? (
-                    <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">{t("hr.payroll_status_draft")}</Badge>
-                  ) : (
-                    <Badge className="bg-green-100 text-green-700 border-green-200">{t("hr.payroll_status_approved")}</Badge>
-                  )}
-                </TableCell>
+                <TableCell>{statusBadge(run.status)}</TableCell>
                 <TableCell>{fmt(run.total_basic)}</TableCell>
                 <TableCell>{fmt(run.total_commission)}</TableCell>
                 <TableCell className="text-red-600">{fmt(run.total_deductions)}</TableCell>
@@ -1069,19 +1226,37 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
                 <TableCell className="font-bold text-primary">{fmt(run.total_net)}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{run.creator_name || "-"}</TableCell>
                 <TableCell>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-wrap">
                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setSelectedRun(run); setDetailsOpen(true); }} data-testid={`button-details-${run.id}`} title={t("hr.payroll_details")}>
                       <Eye className="w-3.5 h-3.5" />
                     </Button>
                     {run.status === "draft" && (
                       <>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => regenerateMutation.mutate(run.id)} disabled={regenerateMutation.isPending} data-testid={`button-regen-${run.id}`}>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => regenerateMutation.mutate(run.id)} disabled={regenerateMutation.isPending} data-testid={`button-regen-${run.id}`} title={t("hr.payroll_recalculated")}>
                           <RefreshCw className="w-3.5 h-3.5" />
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-green-600" onClick={() => approveMutation.mutate(run.id)} disabled={approveMutation.isPending} data-testid={`button-approve-${run.id}`}>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-blue-600" onClick={() => reviewMutation.mutate(run.id)} disabled={reviewMutation.isPending} data-testid={`button-review-${run.id}`} title={t("hr.review")}>
+                          <ClipboardCheck className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-green-600" onClick={() => approveMutation.mutate(run.id)} disabled={approveMutation.isPending} data-testid={`button-approve-${run.id}`} title={t("hr.approve")}>
                           <CheckCircle2 className="w-3.5 h-3.5" />
                         </Button>
                       </>
+                    )}
+                    {run.status === "reviewed" && (
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-green-600" onClick={() => approveMutation.mutate(run.id)} disabled={approveMutation.isPending} data-testid={`button-approve-${run.id}`} title={t("hr.approve")}>
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                    {["approved", "partial", "paid"].includes(run.status) && user?.role === "owner" && (
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-amber-600" onClick={() => reopenMutation.mutate(run.id)} disabled={reopenMutation.isPending} data-testid={`button-reopen-${run.id}`} title={t("hr.reopen")}>
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                    {["draft", "reviewed"].includes(run.status) && user?.role === "owner" && (
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" onClick={() => cancelMutation.mutate(run.id)} disabled={cancelMutation.isPending} data-testid={`button-cancel-${run.id}`} title={t("hr.cancel")}>
+                        <XCircle className="w-3.5 h-3.5" />
+                      </Button>
                     )}
                   </div>
                 </TableCell>
@@ -1099,11 +1274,8 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
               {t("hr.payroll_details")} - {selectedRun && `${MONTH_NAMES[parseInt(selectedRun.month) - 1]} ${selectedRun.year}`}
             </DialogTitle>
             <DialogDescription className="flex items-center gap-2">
-              {selectedRun?.status === "draft" ? (
-                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">{t("hr.payroll_status_draft")}</Badge>
-              ) : (
-                <Badge className="bg-green-100 text-green-700 border-green-200">{t("hr.payroll_status_approved")}</Badge>
-              )}
+              {selectedRun && statusBadge(selectedRun.status)}
+              {selectedRun?.period_start && <span className="text-xs text-muted-foreground">({selectedRun.period_start} → {selectedRun.period_end})</span>}
             </DialogDescription>
           </DialogHeader>
 
@@ -1276,8 +1448,14 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
                 <SelectContent>
                   <SelectItem value="cash">{t("hr.pay_cash")}</SelectItem>
                   <SelectItem value="bank_transfer">{t("hr.pay_bank")}</SelectItem>
+                  <SelectItem value="wallet">{t("hr.pay_wallet")}</SelectItem>
+                  <SelectItem value="cheque">{t("hr.pay_cheque")}</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("hr.reference_no")}</label>
+              <Input placeholder={t("hr.reference_no_placeholder")} value={payRefNo} onChange={e => setPayRefNo(e.target.value)} data-testid="input-pay-refno" />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("common.notes")}</label>
@@ -1409,6 +1587,8 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
   const [note, setNote] = useState("");
   const [filterEmp, setFilterEmp] = useState("__all__");
   const [filterStatus, setFilterStatus] = useState("__all__");
+  const [deductionMode, setDeductionMode] = useState("full_next_payroll");
+  const [installmentAmt, setInstallmentAmt] = useState("");
 
   const url = filterEmp && filterEmp !== "__all__" ? `/api/employee-advances?employeeId=${filterEmp}` : "/api/employee-advances";
   const { data: advances = [] } = useQuery<any[]>({
@@ -1420,6 +1600,8 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
     mutationFn: async () => {
       await apiRequest("POST", "/api/employee-advances", {
         employeeId: Number(empId), amount, date, note,
+        deductionMode,
+        installmentAmount: deductionMode === "fixed_installment" ? installmentAmt : undefined,
       });
     },
     onSuccess: () => {
@@ -1532,6 +1714,23 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
                     <Input type="date" value={date} onChange={e => setDate(e.target.value)} data-testid="input-advance-date" />
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("hr.deduction_mode")}</label>
+                  <Select value={deductionMode} onValueChange={setDeductionMode}>
+                    <SelectTrigger data-testid="select-deduction-mode"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="full_next_payroll">{t("hr.mode_full_next_payroll")}</SelectItem>
+                      <SelectItem value="fixed_installment">{t("hr.mode_fixed_installment")}</SelectItem>
+                      <SelectItem value="manual">{t("hr.mode_manual")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {deductionMode === "fixed_installment" && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">{t("hr.installment_amount")}</label>
+                    <Input type="number" step="0.001" placeholder="0.000" value={installmentAmt} onChange={e => setInstallmentAmt(e.target.value)} data-testid="input-installment-amount" />
+                  </div>
+                )}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">{t("common.notes")}</label>
                   <Input placeholder={t("hr.advance_note_placeholder")} value={note} onChange={e => setNote(e.target.value)} data-testid="input-advance-note" />
@@ -1998,6 +2197,280 @@ function PerformanceTab({ usersList, branchMap, branchesList }: any) {
             ))}
           </TableBody>
         </Table>
+      </div>
+    </div>
+  );
+}
+
+function ReportsTab({ usersList }: { usersList: any[] }) {
+  const { t, lang } = useI18n();
+  const [reportType, setReportType] = useState("employee_statement");
+  const [empId, setEmpId] = useState("");
+  const [from, setFrom] = useState(monthAgoStr());
+  const [to, setTo] = useState(todayStr());
+  const [rMonth, setRMonth] = useState(String(new Date().getMonth() + 1));
+  const [rYear, setRYear] = useState(String(new Date().getFullYear()));
+
+  const statementUrl = empId ? `/api/reports/employee-statement/${empId}?from=${from}&to=${to}` : null;
+  const { data: statement } = useQuery<any>({
+    queryKey: [statementUrl],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: reportType === "employee_statement" && !!empId,
+  });
+
+  const { data: payrollPayments } = useQuery<any>({
+    queryKey: [`/api/reports/payroll-payments?month=${rMonth}&year=${rYear}`],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: reportType === "payroll_payments",
+  });
+
+  const { data: recurringDed } = useQuery<any[]>({
+    queryKey: ["/api/reports/recurring-deductions"],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: reportType === "recurring_deductions",
+  });
+
+  const { data: branchPayroll } = useQuery<any>({
+    queryKey: [`/api/reports/payroll-by-branch?month=${rMonth}&year=${rYear}`],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: reportType === "branch_payroll",
+  });
+
+  const { data: comparison } = useQuery<any>({
+    queryKey: [`/api/reports/payroll-comparison?year=${rYear}`],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: reportType === "payroll_comparison",
+  });
+
+  const MONTH_NAMES = [
+    t("month_names.jan"), t("month_names.feb"), t("month_names.mar"), t("month_names.apr"), t("month_names.may"), t("month_names.jun"),
+    t("month_names.jul"), t("month_names.aug"), t("month_names.sep"), t("month_names.oct"), t("month_names.nov"), t("month_names.dec"),
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <label className="text-xs font-medium">{t("hr.report_type")}</label>
+          <Select value={reportType} onValueChange={setReportType}>
+            <SelectTrigger className="w-56" data-testid="select-report-type"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="employee_statement">{t("hr.report_employee_statement")}</SelectItem>
+              <SelectItem value="payroll_payments">{t("hr.report_payroll_payments")}</SelectItem>
+              <SelectItem value="recurring_deductions">{t("hr.report_recurring_deductions")}</SelectItem>
+              <SelectItem value="branch_payroll">{t("hr.report_branch_payroll")}</SelectItem>
+              <SelectItem value="payroll_comparison">{t("hr.report_payroll_comparison")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {reportType === "employee_statement" && (
+          <>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">{t("common.employee")}</label>
+              <Select value={empId} onValueChange={setEmpId}>
+                <SelectTrigger className="w-48" data-testid="select-report-emp"><SelectValue placeholder={t("hr.select_employee")} /></SelectTrigger>
+                <SelectContent>
+                  {usersList.filter(u => u.role !== "owner").map(u => (
+                    <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">{t("common.from")}</label>
+              <Input type="date" className="w-40" value={from} onChange={e => setFrom(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">{t("common.to")}</label>
+              <Input type="date" className="w-40" value={to} onChange={e => setTo(e.target.value)} />
+            </div>
+          </>
+        )}
+
+        {["payroll_payments", "branch_payroll"].includes(reportType) && (
+          <>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">{t("hr.select_month")}</label>
+              <Select value={rMonth} onValueChange={setRMonth}>
+                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {MONTH_NAMES.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">{t("hr.select_year")}</label>
+              <Input type="number" className="w-24" value={rYear} onChange={e => setRYear(e.target.value)} />
+            </div>
+          </>
+        )}
+
+        {reportType === "payroll_comparison" && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium">{t("hr.select_year")}</label>
+            <Input type="number" className="w-24" value={rYear} onChange={e => setRYear(e.target.value)} />
+          </div>
+        )}
+      </div>
+
+      <div className="bg-card border shadow-sm rounded-xl overflow-hidden">
+        {reportType === "employee_statement" && statement && (
+          <div className="p-4 space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-blue-50 rounded-lg p-3 text-center">
+                <p className="text-[10px] text-blue-600">{t("hr.total_earned")}</p>
+                <p className="text-sm font-bold text-blue-700">{fmt(statement.summary?.totalEarned)}</p>
+              </div>
+              <div className="bg-green-50 rounded-lg p-3 text-center">
+                <p className="text-[10px] text-green-600">{t("hr.total_paid")}</p>
+                <p className="text-sm font-bold text-green-700">{fmt(statement.summary?.totalPaid)}</p>
+              </div>
+              <div className="bg-red-50 rounded-lg p-3 text-center">
+                <p className="text-[10px] text-red-600">{t("hr.total_deducted")}</p>
+                <p className="text-sm font-bold text-red-700">{fmt(statement.summary?.totalDeducted)}</p>
+              </div>
+            </div>
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead>{t("common.date")}</TableHead>
+                  <TableHead>{t("hr.movement_type")}</TableHead>
+                  <TableHead>{t("common.amount")}</TableHead>
+                  <TableHead>{t("hr.balance_after")}</TableHead>
+                  <TableHead>{t("common.notes")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(statement.entries || []).length === 0 ? (
+                  <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">{t("common.no_data")}</TableCell></TableRow>
+                ) : (statement.entries || []).map((e: any) => (
+                  <TableRow key={e.id}>
+                    <TableCell className="text-sm">{e.date ? new Date(e.date + "T00:00:00").toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-xs">{t(`hr.ledger_${e.movement_type}`) || e.movement_type}</Badge></TableCell>
+                    <TableCell className={`font-bold ${parseFloat(e.amount) >= 0 ? "text-green-600" : "text-red-600"}`}>{fmt(e.amount)}</TableCell>
+                    <TableCell className="font-medium">{fmt(e.balance_after)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{e.note || "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
+        {reportType === "payroll_payments" && (
+          <Table>
+            <TableHeader className="bg-muted/50">
+              <TableRow>
+                <TableHead>{t("common.employee")}</TableHead>
+                <TableHead>{t("common.amount")}</TableHead>
+                <TableHead>{t("hr.payment_method")}</TableHead>
+                <TableHead>{t("hr.reference_no")}</TableHead>
+                <TableHead>{t("common.date")}</TableHead>
+                <TableHead>{t("common.notes")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {!payrollPayments || (payrollPayments.payments || []).length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">{t("common.no_data")}</TableCell></TableRow>
+              ) : (payrollPayments.payments || []).map((p: any, i: number) => (
+                <TableRow key={i}>
+                  <TableCell className="font-medium">{p.employee_name || "—"}</TableCell>
+                  <TableCell className="font-bold text-green-600">{fmt(p.amount)}</TableCell>
+                  <TableCell><Badge variant="outline" className="text-xs">{t(`hr.pay_${p.payment_method}`) || p.payment_method}</Badge></TableCell>
+                  <TableCell className="text-sm">{p.reference_no || "—"}</TableCell>
+                  <TableCell className="text-sm">{p.date ? new Date(p.date + "T00:00:00").toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{p.note || "—"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+
+        {reportType === "recurring_deductions" && (
+          <Table>
+            <TableHeader className="bg-muted/50">
+              <TableRow>
+                <TableHead>{t("common.employee")}</TableHead>
+                <TableHead>{t("hr.deduction_type")}</TableHead>
+                <TableHead>{t("common.amount")}</TableHead>
+                <TableHead>{t("common.status")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {!recurringDed || recurringDed.length === 0 ? (
+                <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">{t("common.no_data")}</TableCell></TableRow>
+              ) : recurringDed.map((d: any, i: number) => (
+                <TableRow key={i}>
+                  <TableCell className="font-medium">{d.employee_name || "—"}</TableCell>
+                  <TableCell>{d.type === "recurring" ? t("hr.deduction_recurring") : t("hr.deduction_one_time")}</TableCell>
+                  <TableCell className="font-bold text-red-600">{fmt(d.amount)}</TableCell>
+                  <TableCell>{d.is_active ? <Badge className="bg-green-100 text-green-700 text-xs">{t("status_labels.active")}</Badge> : <Badge variant="outline" className="text-xs">{t("status_labels.inactive")}</Badge>}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+
+        {reportType === "branch_payroll" && (
+          <Table>
+            <TableHeader className="bg-muted/50">
+              <TableRow>
+                <TableHead>{t("common.branch")}</TableHead>
+                <TableHead>{t("hr.employees_count")}</TableHead>
+                <TableHead>{t("hr.total_basic_salary")}</TableHead>
+                <TableHead>{t("hr.table_commissions")}</TableHead>
+                <TableHead>{t("hr.total_deductions")}</TableHead>
+                <TableHead>{t("hr.net_salary")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {!branchPayroll || (branchPayroll.branches || []).length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">{t("common.no_data")}</TableCell></TableRow>
+              ) : (branchPayroll.branches || []).map((b: any, i: number) => (
+                <TableRow key={i}>
+                  <TableCell className="font-medium">{b.branch_name || "—"}</TableCell>
+                  <TableCell>{b.employee_count}</TableCell>
+                  <TableCell>{fmt(b.total_basic)}</TableCell>
+                  <TableCell className="text-blue-600">{fmt(b.total_commission)}</TableCell>
+                  <TableCell className="text-red-600">{fmt(b.total_deductions)}</TableCell>
+                  <TableCell className="font-bold text-primary">{fmt(b.total_net)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+
+        {reportType === "payroll_comparison" && (
+          <Table>
+            <TableHeader className="bg-muted/50">
+              <TableRow>
+                <TableHead>{t("hr.table_month")}</TableHead>
+                <TableHead>{t("hr.employees_count")}</TableHead>
+                <TableHead>{t("hr.total_basic_salary")}</TableHead>
+                <TableHead>{t("hr.table_commissions")}</TableHead>
+                <TableHead>{t("hr.net_salary")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {!comparison || (comparison.months || []).length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">{t("common.no_data")}</TableCell></TableRow>
+              ) : (comparison.months || []).map((m: any, i: number) => (
+                <TableRow key={i}>
+                  <TableCell className="font-medium">{MONTH_NAMES[parseInt(m.month) - 1]}</TableCell>
+                  <TableCell>{m.employee_count}</TableCell>
+                  <TableCell>{fmt(m.total_basic)}</TableCell>
+                  <TableCell className="text-blue-600">{fmt(m.total_commission)}</TableCell>
+                  <TableCell className="font-bold text-primary">{fmt(m.total_net)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+
+        {reportType === "employee_statement" && !empId && (
+          <div className="p-8 text-center text-muted-foreground">{t("hr.select_employee_prompt")}</div>
+        )}
       </div>
     </div>
   );

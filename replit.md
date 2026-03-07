@@ -148,36 +148,39 @@ shared/
 - **purchase_invoices** (invoice_number, supplier_id, branch_id, invoice_date, shipping/customs/clearance/other costs, subtotal, total_extra_cost, grand_total, status[pending/approved])
 - **purchase_items** (purchase_id, product_id, variant_id, qty, unit_cost_base, line_subtotal, allocated_extra_cost, unit_cost_final)
 - **supplier_ocr_templates** (supplier_id FK, invoice_no_pattern, date_pattern, table_start_keyword, column_order)
-- **payroll_runs** (month, year, status[draft/approved], total_basic, total_commission, total_deductions, total_advances, total_net, created_by, approved_by, approved_at)
-- **payroll_details** (payroll_id, employee_id, basic_salary, commission, deductions, advances, bonus, net_salary, note)
-- **employee_advances** (employee_id, amount, date, note, settled, settled_in_payroll_id, created_by)
+- **payroll_runs** (month, year, status[draft/reviewed/approved/partial/paid/cancelled], total_basic, total_commission, total_deductions, total_advances, total_net, created_by, approved_by, approved_at, reviewed_by, reviewed_at, cancelled_by, cancelled_at, period_start, period_end)
+- **payroll_details** (payroll_id, employee_id, basic_salary, commission, commission_source[manual/sales_based], gross_salary, deductions, advances, bonus, net_salary, note)
+- **employee_advances** (employee_id, amount, date, note, settled, settled_in_payroll_id, created_by, deduction_mode[manual/fixed_installment/full_next_payroll], installment_amount)
 - **employee_deductions** (employee_id, amount, reason, date, applied_in_payroll_id, created_by)
-- **salary_payments** (payroll_id, payroll_detail_id, employee_id, amount, payment_date, payment_method, branch_id, paid_by, note, created_at)
-- users table extended: salary_type (monthly/daily/commission), commission_rate (decimal 5,2)
+- **salary_payments** (payroll_id, payroll_detail_id, employee_id, amount, payment_date, payment_method[cash/bank_transfer/wallet/cheque], branch_id, paid_by, note, reference_no, created_at)
+- **employee_financial_ledger** (employee_id, movement_type[payroll_generated/payroll_payment/advance_given/advance_repayment_from_payroll/deduction_applied/commission/bonus/manual_adjustment], reference_type, reference_id, amount, balance_after, date, note, created_by)
+- users table extended: salary_type (monthly/daily/commission), commission_rate, employment_status[active/suspended/terminated], opening_advance_balance, opening_payable_balance
 - **session** (auto-created by connect-pg-simple)
 
 ## Payroll System (Professional)
-- Users have salary_type (monthly/daily/commission) and commission_rate
-- Create payroll run for a month/year → auto-generates details for all active non-owner employees
-- Each detail row: basic_salary + commission (auto-calculated from sales if commission type) - deductions - advances = net_salary
-- **Advances (Partial Repayment)**: Advances have total_repaid tracking; when payroll approved, advance amounts are partially deducted (not all-or-nothing); settled=true only when fully repaid
-- **Deductions (Typed)**: Each deduction has deduction_type (one_time/recurring) and optional month_reference (e.g. "3/2026"); recurring deductions apply every month, one-time only to specified month
-- Draft payroll can be regenerated (recalculated); approved payroll is final; duplicate prevention (cannot create 2 payrolls for same month/year)
-- HR page has 6 tabs: Employees, Payroll Runs, Advances, Deductions, Outstanding, Performance
-- **Employee Financial Profile**: GET /api/employees/:id/financial-profile returns salary, advances summary (total/repaid/remaining), deductions total, last payroll, payroll history, open advances
-- **Outstanding Reports**: GET /api/payroll/outstanding (unpaid/partial salary records), GET /api/payroll/advances-outstanding (open advance balances)
+- Users have salary_type (monthly/daily/commission), commission_rate, employment_status, opening balances
+- **Payroll Workflow**: draft → reviewed → approved → partial → paid → cancelled
+  - Review: marks as reviewed (any auth user)
+  - Approve: finalizes, creates ledger entries, settles advances (owner/admin)
+  - Reopen: reverts approved/partial/paid → draft, reverses advance settlements + deletes ledger entries (owner only)
+  - Cancel: marks as cancelled (owner only, from draft/reviewed)
+- **Advance Deduction Modes**: manual (skip auto-deduct), fixed_installment (deduct installment_amount per payroll), full_next_payroll (deduct all remaining)
+- **Financial Ledger**: All financial movements logged per employee with running balance
+- **Payroll Preview**: GET /api/payroll/preview?month=&year= — calculates without saving, shows warnings
+- **Employee Status**: active/suspended/terminated — affects payroll generation
+- **Opening Balances**: opening_advance_balance, opening_payable_balance per employee
+- HR page has 7 tabs: Employees, Payroll Runs, Advances, Deductions, Outstanding, Performance, Reports
+- **Reports Tab**: Employee Statement, Payment Report, Recurring Deductions, Branch Payroll, Monthly Comparison
+- **Employee Financial Profile**: includes Financial Ledger tab with full movement history
+- **Payment Methods**: cash, bank_transfer, wallet, cheque — with optional reference_no
+- **Permission Guards**: salary edit (owner), approve (owner/admin), reopen/cancel (owner), pay (owner/admin)
+- **Audit Logging**: all sensitive HR operations logged with before/after values
+- Report endpoints: /api/reports/employee-statement/:id, /api/reports/payroll-payments, /api/reports/recurring-deductions, /api/reports/payroll-by-branch, /api/reports/payroll-comparison
+- **Auto Journal**: salary payments create journal entries (Dr: Salary Expenses 5200, Cr: Cash/Bank)
 - **Auto Journal for Advances**: When creating advance, auto-journal entry (Dr: Employee Advances 1401, Cr: Cash 1101)
-- **Payment Tracking**: salary_payments table tracks individual payments per employee per payroll
-  - Payment status: paid/unpaid/partial (computed from total_paid vs net_salary)
-  - Record partial or full payments with method (cash/bank_transfer), date, notes
-  - Overpayment protection: API validates amount <= remaining
-  - API: POST /api/salary-payments, GET /api/salary-payments?payrollId=, GET /api/payroll-detail/:id/payments
-- **Auto Journal**: Every salary payment creates auto journal entry (Dr: Salary Expenses 5200, Cr: Cash/Bank)
-- **Payroll Details Enhanced**: GET /api/payroll-runs/:id/details-with-payments includes total_paid, payment_status, remaining
-- **Payroll Summary**: GET /api/payroll-runs/:id/summary includes paid/unpaid/partial counts and totals
-- **Salary Slip**: Individual employee payslip with print support (employee, branch, basic, commission, gross, deductions, advances, net, status)
+- **Salary Slip**: Individual employee payslip with print support
 - **Export**: Print payroll sheet (A4), Export Excel (CSV), Salary slip print
-- **Summary Cards**: 10 KPI cards in payroll details (basic, commissions, deductions, advances, net, paid, remaining, paid/partial/unpaid counts)
+- **Summary Cards**: 10 KPI cards in payroll details
 
 ## Purchases & Average Cost System
 - Create draft purchase invoice with optional supplier, branch, date, extra costs

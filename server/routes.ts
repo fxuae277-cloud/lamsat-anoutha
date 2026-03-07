@@ -282,7 +282,7 @@ export async function registerRoutes(
   });
   app.patch("/api/users/:id", requireOwnerOrAdmin, async (req, res) => {
     const id = Number(req.params.id);
-    const { name, role, branchId, terminalName, isActive, pin, phone, salary, salaryType, commissionRate } = req.body;
+    const { name, role, branchId, terminalName, isActive, pin, phone, salary, salaryType, commissionRate, employmentStatus, openingAdvanceBalance, openingPayableBalance } = req.body;
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (role !== undefined) updateData.role = role;
@@ -300,6 +300,9 @@ export async function registerRoutes(
     if (salary !== undefined) updateData.salary = String(salary);
     if (salaryType !== undefined) updateData.salaryType = salaryType;
     if (commissionRate !== undefined) updateData.commissionRate = String(commissionRate);
+    if (employmentStatus !== undefined) updateData.employmentStatus = employmentStatus;
+    if (openingAdvanceBalance !== undefined) updateData.openingAdvanceBalance = String(openingAdvanceBalance);
+    if (openingPayableBalance !== undefined) updateData.openingPayableBalance = String(openingPayableBalance);
     const updated = await storage.updateUser(id, updateData);
     if (!updated) return res.status(404).json({ message: "المستخدم غير موجود" });
     const { password: _, ...safeUser } = updated;
@@ -2473,7 +2476,11 @@ export async function registerRoutes(
 
   app.get("/api/payroll-runs", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
-      const runs = await storage.getPayrollRuns();
+      const filters: any = {};
+      if (req.query.month) filters.month = String(req.query.month);
+      if (req.query.year) filters.year = Number(req.query.year);
+      if (req.query.status) filters.status = String(req.query.status);
+      const runs = await storage.getPayrollRuns(filters);
       res.json(runs);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
@@ -2482,10 +2489,10 @@ export async function registerRoutes(
 
   app.post("/api/payroll-runs", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
-      const { month, year, note } = req.body;
+      const { month, year, note, periodStart, periodEnd } = req.body;
       if (!month || !year) return res.status(400).json({ message: "الشهر والسنة مطلوبة" });
       const existing = await pool.query(
-        `SELECT id FROM payroll_runs WHERE month = $1 AND year = $2`,
+        `SELECT id FROM payroll_runs WHERE month = $1 AND year = $2 AND status != 'cancelled'`,
         [String(month), Number(year)]
       );
       if (existing.rows.length > 0) {
@@ -2495,10 +2502,19 @@ export async function registerRoutes(
         month: String(month),
         year: Number(year),
         status: "draft",
+        periodStart: periodStart || null,
+        periodEnd: periodEnd || null,
         note: note || null,
         createdBy: req.session.userId!,
       });
       await storage.generatePayrollRun(run.id, String(month), Number(year));
+
+      await storage.addAuditLog({
+        action: "payroll_generate", entityType: "payroll_run", entityId: run.id,
+        userId: req.session.userId!, userName: req.session.userName || "",
+        details: `توليد كشف راتب ${month}/${year}`,
+      });
+
       const updated = await storage.getPayrollRun(run.id);
       res.status(201).json(updated);
     } catch (err: any) {
@@ -2523,6 +2539,60 @@ export async function registerRoutes(
     try {
       const updated = await storage.approvePayrollRun(Number(req.params.id), req.session.userId!);
       if (!updated) return res.status(400).json({ message: "لا يمكن اعتماد هذا الكشف" });
+      await storage.addAuditLog({
+        action: "payroll_approve", entityType: "payroll_run", entityId: updated.id,
+        userId: req.session.userId!, userName: req.session.userName || "",
+        details: `اعتماد كشف راتب ${updated.month}/${updated.year}`,
+      });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.post("/api/payroll-runs/:id/review", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const updated = await storage.reviewPayrollRun(Number(req.params.id), req.session.userId!);
+      if (!updated) return res.status(400).json({ message: "لا يمكن مراجعة هذا الكشف" });
+      await storage.addAuditLog({
+        action: "payroll_review", entityType: "payroll_run", entityId: updated.id,
+        userId: req.session.userId!, userName: req.session.userName || "",
+        details: `مراجعة كشف راتب ${updated.month}/${updated.year}`,
+      });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.post("/api/payroll-runs/:id/reopen", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user || user.role !== "owner") return res.status(403).json({ message: "فقط المالك يمكنه إعادة فتح الكشف" });
+      const updated = await storage.reopenPayrollRun(Number(req.params.id), req.session.userId!);
+      if (!updated) return res.status(400).json({ message: "لا يمكن إعادة فتح هذا الكشف" });
+      await storage.addAuditLog({
+        action: "payroll_reopen", entityType: "payroll_run", entityId: updated.id,
+        userId: req.session.userId!, userName: req.session.userName || "",
+        details: `إعادة فتح كشف راتب ${updated.month}/${updated.year}`,
+      });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.post("/api/payroll-runs/:id/cancel", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user || user.role !== "owner") return res.status(403).json({ message: "فقط المالك يمكنه إلغاء الكشف" });
+      const updated = await storage.cancelPayrollRun(Number(req.params.id), req.session.userId!);
+      if (!updated) return res.status(400).json({ message: "لا يمكن إلغاء هذا الكشف" });
+      await storage.addAuditLog({
+        action: "payroll_cancel", entityType: "payroll_run", entityId: updated.id,
+        userId: req.session.userId!, userName: req.session.userName || "",
+        details: `إلغاء كشف راتب ${updated.month}/${updated.year}`,
+      });
       res.json(updated);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
@@ -2550,15 +2620,31 @@ export async function registerRoutes(
 
   app.post("/api/employee-advances", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
-      const { employeeId, amount, date, note } = req.body;
+      const { employeeId, amount, date, note, deductionMode, installmentAmount } = req.body;
       if (!employeeId || !amount || !date) return res.status(400).json({ message: "بيانات ناقصة" });
       const advance = await storage.createEmployeeAdvance({
         employeeId: Number(employeeId),
         amount: String(amount),
         date,
         note: note || null,
+        deductionMode: deductionMode || "full_next_payroll",
+        installmentAmount: installmentAmount ? String(installmentAmount) : null,
         createdBy: req.session.userId!,
       });
+
+      await storage.createLedgerEntry({
+        employeeId: Number(employeeId), movementType: "advance_given",
+        referenceType: "employee_advance", referenceId: advance.id,
+        amount: String(amount), date,
+        note: note || "سلفة جديدة", createdBy: req.session.userId!,
+      });
+
+      await storage.addAuditLog({
+        action: "advance_create", entityType: "employee_advance", entityId: advance.id,
+        userId: req.session.userId!, userName: req.session.userName || "",
+        details: `إنشاء سلفة بمبلغ ${amount}`, newValue: JSON.stringify({ amount, deductionMode: deductionMode || "full_next_payroll" }),
+      });
+
       try {
         const { journalForEmployeeAdvance } = await import("./autoJournal");
         await journalForEmployeeAdvance(advance, req.session.userId!);
@@ -2583,6 +2669,17 @@ export async function registerRoutes(
     try {
       const { employeeId, amount, reason, date, deductionType, monthReference } = req.body;
       if (!employeeId || !amount || !reason || !date) return res.status(400).json({ message: "بيانات ناقصة" });
+
+      if (deductionType === "recurring" && monthReference) {
+        const existingDup = await pool.query(
+          `SELECT id FROM employee_deductions WHERE employee_id = $1 AND deduction_type = 'recurring' AND reason = $2 AND month_reference = $3 AND applied_in_payroll_id IS NULL`,
+          [Number(employeeId), reason, monthReference]
+        );
+        if (existingDup.rows.length > 0) {
+          return res.status(400).json({ message: "يوجد خصم متكرر بنفس السبب لنفس الفترة" });
+        }
+      }
+
       const deduction = await storage.createEmployeeDeduction({
         employeeId: Number(employeeId),
         amount: String(amount),
@@ -2592,6 +2689,14 @@ export async function registerRoutes(
         monthReference: monthReference || null,
         createdBy: req.session.userId!,
       });
+
+      await storage.addAuditLog({
+        action: "deduction_create", entityType: "employee_deduction", entityId: deduction.id,
+        userId: req.session.userId!, userName: req.session.userName || "",
+        details: `إنشاء خصم بمبلغ ${amount} - ${reason}`,
+        newValue: JSON.stringify({ amount, reason, deductionType: deductionType || "one_time" }),
+      });
+
       res.status(201).json(deduction);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
@@ -2656,9 +2761,14 @@ export async function registerRoutes(
 
   app.post("/api/salary-payments", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
-      const { payrollId, payrollDetailId, employeeId, amount, paymentDate, paymentMethod, branchId, note } = req.body;
+      const { payrollId, payrollDetailId, employeeId, amount, paymentDate, paymentMethod, referenceNo, branchId, note } = req.body;
       if (!payrollId || !payrollDetailId || !employeeId || !amount || !paymentDate) {
         return res.status(400).json({ message: "بيانات ناقصة" });
+      }
+
+      const run = await storage.getPayrollRun(Number(payrollId));
+      if (run && !["approved", "partial"].includes(run.status)) {
+        return res.status(400).json({ message: "لا يمكن الدفع إلا لكشف معتمد" });
       }
 
       const detail = await pool.query(`SELECT * FROM payroll_details WHERE id = $1`, [payrollDetailId]);
@@ -2680,12 +2790,12 @@ export async function registerRoutes(
         amount: payAmount.toFixed(3),
         paymentDate,
         paymentMethod: paymentMethod || "cash",
+        referenceNo: referenceNo || null,
         branchId: branchId ? Number(branchId) : null,
         paidBy: req.session.userId!,
         note: note || null,
       });
 
-      const run = await storage.getPayrollRun(Number(payrollId));
       const emp = await storage.getUser(Number(employeeId));
 
       journalForSalaryPayment({
@@ -2700,6 +2810,12 @@ export async function registerRoutes(
         year: run?.year || 2026,
       });
 
+      await storage.addAuditLog({
+        action: "salary_payment", entityType: "salary_payment", entityId: payment.id,
+        userId: req.session.userId!, userName: req.session.userName || "",
+        details: `دفعة راتب ${payAmount.toFixed(3)} للموظف ${emp?.name || employeeId}`,
+      });
+
       res.status(201).json(payment);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
@@ -2710,6 +2826,131 @@ export async function registerRoutes(
     try {
       const payments = await storage.getPayrollDetailPayments(Number(req.params.id));
       res.json(payments);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  // ============ Payroll Preview & Reports ============
+  app.get("/api/payroll/preview", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const { month, year } = req.query;
+      if (!month || !year) return res.status(400).json({ message: "الشهر والسنة مطلوبة" });
+      const preview = await storage.previewPayrollRun(String(month), Number(year));
+      res.json(preview);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/employees/:id/ledger", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const filters: any = {};
+      if (req.query.from) filters.from = String(req.query.from);
+      if (req.query.to) filters.to = String(req.query.to);
+      if (req.query.movementType) filters.movementType = String(req.query.movementType);
+      const ledger = await storage.getEmployeeLedger(Number(req.params.id), filters);
+      res.json(ledger);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/reports/employee-statement/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const from = String(req.query.from || "2020-01-01");
+      const to = String(req.query.to || new Date().toISOString().slice(0, 10));
+      const statement = await storage.getEmployeeStatement(Number(req.params.id), from, to);
+      if (!statement) return res.status(404).json({ message: "الموظف غير موجود" });
+      res.json(statement);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/reports/payroll-payments", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const filters: any = {};
+      if (req.query.month) filters.month = String(req.query.month);
+      if (req.query.year) filters.year = Number(req.query.year);
+      if (req.query.branchId) filters.branchId = Number(req.query.branchId);
+      const report = await storage.getPayrollPaymentsReport(filters);
+      res.json(report);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/reports/recurring-deductions", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const report = await storage.getRecurringDeductionsReport();
+      res.json(report);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/reports/payroll-by-branch", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const { month, year } = req.query;
+      if (!month || !year) return res.status(400).json({ message: "الشهر والسنة مطلوبة" });
+      const report = await storage.getPayrollByBranch(String(month), Number(year));
+      res.json(report);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/reports/payroll-comparison", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const year = Number(req.query.year || new Date().getFullYear());
+      const report = await storage.getPayrollComparison(year);
+      res.json(report);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.post("/api/employees/:id/opening-balances", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user || user.role !== "owner") return res.status(403).json({ message: "فقط المالك يمكنه تعديل الأرصدة الافتتاحية" });
+      const { openingAdvanceBalance, openingPayableBalance } = req.body;
+      const updated = await storage.updateUser(Number(req.params.id), {
+        openingAdvanceBalance: openingAdvanceBalance !== undefined ? String(openingAdvanceBalance) : undefined,
+        openingPayableBalance: openingPayableBalance !== undefined ? String(openingPayableBalance) : undefined,
+      });
+      if (!updated) return res.status(404).json({ message: "الموظف غير موجود" });
+
+      await storage.addAuditLog({
+        action: "opening_balance_update", entityType: "user", entityId: updated.id,
+        userId: req.session.userId!, userName: req.session.userName || "",
+        details: `تحديث أرصدة افتتاحية`,
+        newValue: JSON.stringify({ openingAdvanceBalance, openingPayableBalance }),
+      });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.patch("/api/employees/:id/status", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const { employmentStatus } = req.body;
+      if (!["active", "suspended", "terminated"].includes(employmentStatus)) {
+        return res.status(400).json({ message: "حالة غير صالحة" });
+      }
+      const emp = await storage.getUser(Number(req.params.id));
+      if (!emp) return res.status(404).json({ message: "الموظف غير موجود" });
+
+      const updated = await storage.updateUser(Number(req.params.id), { employmentStatus });
+      await storage.addAuditLog({
+        action: "employment_status_change", entityType: "user", entityId: emp.id,
+        userId: req.session.userId!, userName: req.session.userName || "",
+        details: `تغيير حالة التوظيف من ${emp.employmentStatus} إلى ${employmentStatus}`,
+        oldValue: emp.employmentStatus, newValue: employmentStatus,
+      });
+      res.json(updated);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
     }
