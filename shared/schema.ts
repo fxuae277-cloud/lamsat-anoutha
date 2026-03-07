@@ -112,12 +112,16 @@ export const customers = pgTable("customers", {
   phone: text("phone"),
   city: text("city"),
   address: text("address"),
+  notes: text("notes"),
+  active: boolean("active").default(true),
+  branchId: integer("branch_id").references(() => branches.id),
   totalSpent: decimal("total_spent", { precision: 12, scale: 3 }).default("0"),
   visits: integer("visits").default(0),
+  invoiceCount: integer("invoice_count").default(0),
   lastVisit: timestamp("last_visit"),
   createdAt: timestamp("created_at").defaultNow(),
 });
-export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, totalSpent: true, visits: true, lastVisit: true, createdAt: true });
+export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, totalSpent: true, visits: true, invoiceCount: true, lastVisit: true, createdAt: true });
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 export type Customer = typeof customers.$inferSelect;
 

@@ -1123,6 +1123,10 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/customers/kpis", requireAuth, async (_req, res) => {
+    try { res.json(await storage.getCustomerKpis()); }
+    catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
   app.get("/api/customers", requireAuth, async (_req, res) => {
     res.json(await storage.getCustomers());
   });
@@ -1132,10 +1136,26 @@ export async function registerRoutes(
     if (!result) return res.status(404).json({ message: "Customer not found" });
     res.json(result);
   });
+  app.get("/api/customers/:id/statement", requireAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const from = req.query.from as string | undefined;
+      const to = req.query.to as string | undefined;
+      const result = await storage.getCustomerStatement(id, from, to);
+      if (!result) return res.status(404).json({ message: "Customer not found" });
+      res.json(result);
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
   app.post("/api/customers", requireAuth, async (req, res) => {
-    const parsed = insertCustomerSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    res.status(201).json(await storage.createCustomer(parsed.data));
+    try {
+      const parsed = insertCustomerSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+      if (parsed.data.phone) {
+        const existing = await storage.getCustomerByPhone(parsed.data.phone);
+        if (existing) return res.status(409).json({ message: "phone_exists" });
+      }
+      res.status(201).json(await storage.createCustomer(parsed.data));
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
   app.post("/api/customers/find-or-create", requireAuth, async (req, res) => {
     const { phone, name } = req.body;
@@ -1144,11 +1164,23 @@ export async function registerRoutes(
     res.json(customer);
   });
   app.put("/api/customers/:id", requireAuth, async (req, res) => {
-    const id = parseInt(req.params.id);
-    const { name, phone } = req.body;
-    const updated = await storage.updateCustomer(id, { name, phone });
-    if (!updated) return res.status(404).json({ message: "Customer not found" });
-    res.json(updated);
+    try {
+      const id = parseInt(req.params.id);
+      const { name, phone, notes, active, branchId } = req.body;
+      if (phone) {
+        const existing = await storage.getCustomerByPhone(phone);
+        if (existing && existing.id !== id) return res.status(409).json({ message: "phone_exists" });
+      }
+      const updated = await storage.updateCustomer(id, { name, phone, notes, active, branchId });
+      if (!updated) return res.status(404).json({ message: "Customer not found" });
+      res.json(updated);
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+  app.delete("/api/customers/:id", requireAuth, requireManager, async (req, res) => {
+    try {
+      await storage.deleteCustomer(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
 
   app.get("/api/suppliers", requireAuth, requireManager, async (req, res) => {

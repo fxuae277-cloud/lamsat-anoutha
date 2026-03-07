@@ -83,9 +83,12 @@ export interface IStorage {
   getCustomerByPhone(phone: string): Promise<Customer | undefined>;
   findOrCreateCustomerByPhone(phone: string, name?: string): Promise<Customer>;
   createCustomer(data: InsertCustomer): Promise<Customer>;
-  updateCustomer(id: number, data: { name?: string; phone?: string }): Promise<Customer | undefined>;
+  updateCustomer(id: number, data: Partial<InsertCustomer>): Promise<Customer | undefined>;
+  deleteCustomer(id: number): Promise<void>;
   updateCustomerAfterSale(customerId: number, saleTotal: string): Promise<void>;
   getCustomerWithInvoices(id: number): Promise<any>;
+  getCustomerKpis(): Promise<any>;
+  getCustomerStatement(id: number, from?: string, to?: string): Promise<any>;
   getSuppliers(activeOnly?: boolean): Promise<Supplier[]>;
   getSupplier(id: number): Promise<Supplier | undefined>;
   getSupplierByName(name: string): Promise<Supplier | undefined>;
@@ -370,16 +373,18 @@ export class DatabaseStorage implements IStorage {
     const [row] = await db.insert(customers).values(data).returning();
     return row;
   }
-  async updateCustomer(id: number, data: { name?: string; phone?: string }) {
-    const updateData: any = {};
-    if (data.name !== undefined) updateData.name = data.name;
+  async updateCustomer(id: number, data: Partial<InsertCustomer>) {
+    const updateData: any = { ...data };
     if (data.phone !== undefined) updateData.phone = this.normalizePhone(data.phone);
     const [row] = await db.update(customers).set(updateData).where(eq(customers.id, id)).returning();
     return row;
   }
+  async deleteCustomer(id: number) {
+    await db.delete(customers).where(eq(customers.id, id));
+  }
   async updateCustomerAfterSale(customerId: number, saleTotal: string) {
     await pool.query(
-      `UPDATE customers SET visits = COALESCE(visits, 0) + 1, total_spent = COALESCE(total_spent, 0) + $1, last_visit = now() WHERE id = $2`,
+      `UPDATE customers SET visits = COALESCE(visits, 0) + 1, invoice_count = COALESCE(invoice_count, 0) + 1, total_spent = COALESCE(total_spent, 0) + $1, last_visit = now() WHERE id = $2`,
       [saleTotal, customerId]
     );
   }
@@ -387,14 +392,98 @@ export class DatabaseStorage implements IStorage {
     const customer = await this.getCustomer(id);
     if (!customer) return null;
     const invoices = await pool.query(
-      `SELECT s.id, s.invoice_number, s.total, s.payment_method, s.created_at, b.name as branch_name
+      `SELECT s.id, s.invoice_number, s.total, s.subtotal, s.discount, s.vat, s.payment_method, s.created_at, b.name as branch_name, s.branch_id
        FROM sales s
        LEFT JOIN branches b ON b.id = s.branch_id
        WHERE s.customer_id = $1
        ORDER BY s.created_at DESC`,
       [id]
     );
-    return { ...customer, invoices: invoices.rows };
+    const returns = await pool.query(
+      `SELECT sr.id, sr.refund_amount, sr.reason, sr.created_at, s.invoice_number, b.name as branch_name
+       FROM sale_returns sr
+       LEFT JOIN sales s ON s.id = sr.sale_id
+       LEFT JOIN branches b ON b.id = sr.branch_id
+       WHERE s.customer_id = $1
+       ORDER BY sr.created_at DESC`,
+      [id]
+    );
+    const branchStats = await pool.query(
+      `SELECT b.name, COUNT(*)::int as count, SUM(s.total::numeric)::numeric as total
+       FROM sales s LEFT JOIN branches b ON b.id = s.branch_id
+       WHERE s.customer_id = $1 GROUP BY b.name ORDER BY total DESC LIMIT 1`,
+      [id]
+    );
+    return {
+      ...customer,
+      invoices: invoices.rows,
+      returns: returns.rows,
+      topBranch: branchStats.rows[0]?.name || null,
+      returnsTotal: returns.rows.reduce((s: number, r: any) => s + parseFloat(r.refund_amount || "0"), 0),
+      returnsCount: returns.rows.length,
+      avgInvoice: invoices.rows.length > 0
+        ? invoices.rows.reduce((s: number, i: any) => s + parseFloat(i.total || "0"), 0) / invoices.rows.length
+        : 0,
+    };
+  }
+  async getCustomerKpis() {
+    const totalRes = await pool.query(`SELECT COUNT(*)::int as total FROM customers`);
+    const activeRes = await pool.query(`SELECT COUNT(*)::int as total FROM customers WHERE active = true OR active IS NULL`);
+    const inactiveRes = await pool.query(`SELECT COUNT(*)::int as total FROM customers WHERE active = false`);
+    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+    const newThisMonthRes = await pool.query(`SELECT COUNT(*)::int as total FROM customers WHERE created_at >= $1`, [monthStart]);
+    const totalPurchasesRes = await pool.query(`SELECT COALESCE(SUM(total_spent::numeric), 0)::numeric as total FROM customers`);
+    const topRes = await pool.query(
+      `SELECT id, name, phone, total_spent FROM customers ORDER BY total_spent::numeric DESC LIMIT 1`
+    );
+    return {
+      totalCustomers: totalRes.rows[0]?.total || 0,
+      activeCustomers: activeRes.rows[0]?.total || 0,
+      inactiveCustomers: inactiveRes.rows[0]?.total || 0,
+      newThisMonth: newThisMonthRes.rows[0]?.total || 0,
+      totalPurchases: parseFloat(totalPurchasesRes.rows[0]?.total || "0"),
+      topCustomer: topRes.rows[0] || null,
+    };
+  }
+  async getCustomerStatement(id: number, from?: string, to?: string) {
+    const customer = await this.getCustomer(id);
+    if (!customer) return null;
+    let salesQuery = `SELECT s.id, s.invoice_number, s.total, s.payment_method, s.created_at, b.name as branch_name, 'sale' as type
+       FROM sales s LEFT JOIN branches b ON b.id = s.branch_id
+       WHERE s.customer_id = $1`;
+    const params: any[] = [id];
+    if (from) { params.push(from); salesQuery += ` AND s.created_at >= $${params.length}`; }
+    if (to) { params.push(to + "T23:59:59"); salesQuery += ` AND s.created_at <= $${params.length}`; }
+    salesQuery += ` ORDER BY s.created_at DESC`;
+    const salesRes = await pool.query(salesQuery, params);
+
+    let returnsQuery = `SELECT sr.id, s.invoice_number, sr.refund_amount as total, sr.reason as notes, sr.created_at, b.name as branch_name, 'return' as type
+       FROM sale_returns sr LEFT JOIN sales s ON s.id = sr.sale_id LEFT JOIN branches b ON b.id = sr.branch_id
+       WHERE s.customer_id = $1`;
+    const rParams: any[] = [id];
+    if (from) { rParams.push(from); returnsQuery += ` AND sr.created_at >= $${rParams.length}`; }
+    if (to) { rParams.push(to + "T23:59:59"); returnsQuery += ` AND sr.created_at <= $${rParams.length}`; }
+    returnsQuery += ` ORDER BY sr.created_at DESC`;
+    const returnsRes = await pool.query(returnsQuery, rParams);
+
+    const entries = [...salesRes.rows, ...returnsRes.rows].sort(
+      (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    const totalSales = salesRes.rows.reduce((s: number, r: any) => s + parseFloat(r.total || "0"), 0);
+    const totalReturns = returnsRes.rows.reduce((s: number, r: any) => s + parseFloat(r.total || "0"), 0);
+    return {
+      customer,
+      entries,
+      summary: {
+        totalSales,
+        totalReturns,
+        netAmount: totalSales - totalReturns,
+        operationCount: entries.length,
+        avgInvoice: salesRes.rows.length > 0 ? totalSales / salesRes.rows.length : 0,
+        salesCount: salesRes.rows.length,
+        returnsCount: returnsRes.rows.length,
+      },
+    };
   }
 
   async getSuppliers(activeOnly?: boolean) {
