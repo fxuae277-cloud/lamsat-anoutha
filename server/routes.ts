@@ -18,6 +18,7 @@ import {
   insertPayrollRunSchema, insertEmployeeAdvanceSchema, insertEmployeeDeductionSchema,
 } from "@shared/schema";
 import { registerExportRoutes } from "./exports";
+import { registerBackupRoutes } from "./backup";
 import { saveUploadedFile, parseInvoiceFile } from "./ocr";
 
 const upload = multer({
@@ -2458,6 +2459,7 @@ export async function registerRoutes(
   });
 
   registerExportRoutes(app);
+  registerBackupRoutes(app);
 
   return httpServer;
 }

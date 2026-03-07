@@ -208,6 +208,75 @@ export default function Settings() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
 
+  type BackupFile = { filename: string; size: number; createdAt: string };
+  type ValidationCheck = { name: string; passed: boolean; details: string };
+
+  const [validationResult, setValidationResult] = useState<{ valid: boolean; checks: ValidationCheck[] } | null>(null);
+  const [validatingFile, setValidatingFile] = useState<string | null>(null);
+
+  const { data: backupsList = [], refetch: refetchBackups } = useQuery<BackupFile[]>({
+    queryKey: ["/api/settings/backups"],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: isOwnerOrAdmin,
+  });
+
+  const createBackupMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/settings/backup/create");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: t("settings.backup_created_success"), description: `${data.filename} (${(data.size / 1024 / 1024).toFixed(2)} MB)` });
+      refetchBackups();
+    },
+    onError: (err: Error) => {
+      toast({ title: t("settings.backup_create_error"), description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteBackupMutation = useMutation({
+    mutationFn: async (filename: string) => {
+      await apiRequest("DELETE", `/api/settings/backup/${filename}`);
+    },
+    onSuccess: () => {
+      toast({ title: t("settings.backup_deleted") });
+      refetchBackups();
+    },
+    onError: (err: Error) => {
+      toast({ title: t("settings.error_generic"), description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleDownloadBackup = async (filename: string) => {
+    try {
+      const res = await fetch(`/api/settings/backup/download/${filename}`, { credentials: "include" });
+      if (!res.ok) throw new Error("فشل التنزيل");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast({ title: t("settings.error_generic"), description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleValidateBackup = async (filename: string) => {
+    setValidatingFile(filename);
+    setValidationResult(null);
+    try {
+      const res = await apiRequest("POST", `/api/settings/backup/validate/${filename}`);
+      const data = await res.json();
+      setValidationResult(data);
+    } catch (err: any) {
+      toast({ title: t("settings.error_generic"), description: err.message, variant: "destructive" });
+    } finally {
+      setValidatingFile(null);
+    }
+  };
+
   const handleBackup = async () => {
     setBackupLoading(true);
     try {
@@ -793,6 +862,80 @@ export default function Settings() {
                 </div>
                 <Switch checked={currentSettings.autoBackup === "true"} onCheckedChange={v => updateSetting("autoBackup", v ? "true" : "false")} data-testid="switch-auto-backup" />
               </div>
+
+              <div className="flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg">
+                <div>
+                  <Label className="text-base font-semibold">{t("settings.create_backup")}</Label>
+                  <p className="text-sm text-muted-foreground">{t("settings.create_backup_desc")}</p>
+                </div>
+                <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700" onClick={() => createBackupMutation.mutate()} disabled={createBackupMutation.isPending} data-testid="button-create-backup">
+                  {createBackupMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+                  {createBackupMutation.isPending ? t("settings.creating_backup") : t("settings.create_backup_btn")}
+                </Button>
+              </div>
+
+              {backupsList.length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-muted/50 px-4 py-3 border-b">
+                    <Label className="text-base font-semibold">{t("settings.backup_list")}</Label>
+                    <p className="text-xs text-muted-foreground">{t("settings.backup_list_desc")}</p>
+                  </div>
+                  <div className="divide-y">
+                    {backupsList.map((backup: BackupFile) => (
+                      <div key={backup.filename} className="p-4 flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-mono text-sm font-medium truncate" data-testid={`text-backup-name-${backup.filename}`}>{backup.filename}</p>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                              <span>{new Date(backup.createdAt).toLocaleString(lang === "ar" ? "ar-OM" : "en-US")}</span>
+                              <span className="font-semibold">{(backup.size / 1024 / 1024).toFixed(2)} MB</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleDownloadBackup(backup.filename)} data-testid={`button-download-${backup.filename}`}>
+                              <Download className="w-3.5 h-3.5" />
+                              {t("settings.download")}
+                            </Button>
+                            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleValidateBackup(backup.filename)} disabled={validatingFile === backup.filename} data-testid={`button-validate-${backup.filename}`}>
+                              {validatingFile === backup.filename ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                              {t("settings.validate")}
+                            </Button>
+                            <Button variant="destructive" size="sm" className="gap-1.5" onClick={() => { if (confirm(t("settings.confirm_delete_backup"))) deleteBackupMutation.mutate(backup.filename); }} data-testid={`button-delete-${backup.filename}`}>
+                              <X className="w-3.5 h-3.5" />
+                              {t("settings.delete")}
+                            </Button>
+                          </div>
+                        </div>
+
+                        {validationResult && validatingFile === null && backupsList.findIndex(b => b.filename === backup.filename) === backupsList.findIndex(b => {
+                          const lastValidated = validationResult.checks[0]?.details;
+                          return lastValidated?.includes(backup.filename);
+                        }) && null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {validationResult && (
+                <div className={`border rounded-lg p-4 ${validationResult.valid ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200" : "bg-red-50 dark:bg-red-950/20 border-red-200"}`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <ShieldCheck className={`w-5 h-5 ${validationResult.valid ? "text-emerald-600" : "text-red-600"}`} />
+                    <Label className="text-base font-semibold">
+                      {validationResult.valid ? t("settings.backup_valid") : t("settings.backup_invalid")}
+                    </Label>
+                  </div>
+                  <div className="space-y-1.5">
+                    {validationResult.checks.map((check: ValidationCheck, idx: number) => (
+                      <div key={idx} className="flex items-center gap-2 text-sm">
+                        <span className={check.passed ? "text-emerald-600" : "text-red-600"}>{check.passed ? "✓" : "✗"}</span>
+                        <span>{check.details}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-between p-4 bg-muted/30 border rounded-lg">
                 <div>
                   <Label className="text-base">{t("settings.download_backup")}</Label>
