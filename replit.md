@@ -160,10 +160,13 @@ shared/
 - Users have salary_type (monthly/daily/commission) and commission_rate
 - Create payroll run for a month/year → auto-generates details for all active non-owner employees
 - Each detail row: basic_salary + commission (auto-calculated from sales if commission type) - deductions - advances = net_salary
-- Advances: unsettled advances are deducted in payroll; settled when payroll is approved
-- Deductions: unapplied deductions are deducted in payroll; marked as applied when approved
-- Draft payroll can be regenerated (recalculated); approved payroll is final
-- HR page has 5 tabs: Employees, Payroll Runs, Advances, Deductions, Performance
+- **Advances (Partial Repayment)**: Advances have total_repaid tracking; when payroll approved, advance amounts are partially deducted (not all-or-nothing); settled=true only when fully repaid
+- **Deductions (Typed)**: Each deduction has deduction_type (one_time/recurring) and optional month_reference (e.g. "3/2026"); recurring deductions apply every month, one-time only to specified month
+- Draft payroll can be regenerated (recalculated); approved payroll is final; duplicate prevention (cannot create 2 payrolls for same month/year)
+- HR page has 6 tabs: Employees, Payroll Runs, Advances, Deductions, Outstanding, Performance
+- **Employee Financial Profile**: GET /api/employees/:id/financial-profile returns salary, advances summary (total/repaid/remaining), deductions total, last payroll, payroll history, open advances
+- **Outstanding Reports**: GET /api/payroll/outstanding (unpaid/partial salary records), GET /api/payroll/advances-outstanding (open advance balances)
+- **Auto Journal for Advances**: When creating advance, auto-journal entry (Dr: Employee Advances 1401, Cr: Cash 1101)
 - **Payment Tracking**: salary_payments table tracks individual payments per employee per payroll
   - Payment status: paid/unpaid/partial (computed from total_paid vs net_salary)
   - Record partial or full payments with method (cash/bank_transfer), date, notes

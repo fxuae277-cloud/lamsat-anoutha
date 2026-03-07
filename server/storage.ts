@@ -3206,7 +3206,8 @@ export class DatabaseStorage implements IStorage {
 
   async getEmployeeAdvances(employeeId?: number, settledOnly?: boolean) {
     let query = `
-      SELECT ea.*, u.name as employee_name, uc.name as created_by_name
+      SELECT ea.*, u.name as employee_name, uc.name as created_by_name,
+             (ea.amount::numeric - ea.total_repaid::numeric) as remaining_amount
       FROM employee_advances ea
       JOIN users u ON u.id = ea.employee_id
       LEFT JOIN users uc ON uc.id = ea.created_by
@@ -3266,17 +3267,25 @@ export class DatabaseStorage implements IStorage {
 
   async getUnsettledAdvances(employeeId: number) {
     const result = await pool.query(
-      `SELECT * FROM employee_advances WHERE employee_id = $1 AND settled = false ORDER BY date`,
+      `SELECT *, (amount::numeric - total_repaid::numeric) as remaining_amount 
+       FROM employee_advances 
+       WHERE employee_id = $1 AND (amount::numeric - total_repaid::numeric) > 0 
+       ORDER BY date`,
       [employeeId]
     );
     return result.rows;
   }
 
-  async getUnappliedDeductions(employeeId: number) {
-    const result = await pool.query(
-      `SELECT * FROM employee_deductions WHERE employee_id = $1 AND applied_in_payroll_id IS NULL ORDER BY date`,
-      [employeeId]
-    );
+  async getUnappliedDeductions(employeeId: number, month?: string, year?: number) {
+    let query = `SELECT * FROM employee_deductions WHERE employee_id = $1 AND applied_in_payroll_id IS NULL`;
+    const params: any[] = [employeeId];
+    if (month && year) {
+      const monthRef = `${month}/${year}`;
+      query += ` AND (deduction_type = 'recurring' OR month_reference = $2 OR month_reference IS NULL)`;
+      params.push(monthRef);
+    }
+    query += ` ORDER BY date`;
+    const result = await pool.query(query, params);
     return result.rows;
   }
 
@@ -3310,9 +3319,9 @@ export class DatabaseStorage implements IStorage {
       }
 
       const unsettledAdv = await this.getUnsettledAdvances(emp.id);
-      const advTotal = unsettledAdv.reduce((s: number, a: any) => s + parseFloat(a.amount), 0);
+      const advTotal = unsettledAdv.reduce((s: number, a: any) => s + parseFloat(a.remaining_amount || (parseFloat(a.amount) - parseFloat(a.total_repaid || "0"))), 0);
 
-      const unappliedDed = await this.getUnappliedDeductions(emp.id);
+      const unappliedDed = await this.getUnappliedDeductions(emp.id, month, year);
       const dedTotal = unappliedDed.reduce((s: number, d: any) => s + parseFloat(d.amount), 0);
 
       const net = basicSalary + commission - dedTotal - advTotal;
@@ -3350,11 +3359,24 @@ export class DatabaseStorage implements IStorage {
 
     const details = await this.getPayrollDetails(id);
     for (const d of details) {
-      const unsettled = await this.getUnsettledAdvances(d.employee_id);
-      for (const adv of unsettled) {
-        await this.settleAdvance(adv.id, id);
+      const advanceApplied = parseFloat(d.advances || "0");
+      if (advanceApplied > 0) {
+        const unsettled = await this.getUnsettledAdvances(d.employee_id);
+        let remaining = advanceApplied;
+        for (const adv of unsettled) {
+          if (remaining <= 0) break;
+          const advRemaining = parseFloat(adv.remaining_amount || (parseFloat(adv.amount) - parseFloat(adv.total_repaid || "0")));
+          const repayAmount = Math.min(remaining, advRemaining);
+          const newTotalRepaid = parseFloat(adv.total_repaid || "0") + repayAmount;
+          const isFullyRepaid = newTotalRepaid >= parseFloat(adv.amount) - 0.001;
+          await pool.query(
+            `UPDATE employee_advances SET total_repaid = $1, settled = $2, settled_in_payroll_id = CASE WHEN $2 THEN $3 ELSE settled_in_payroll_id END WHERE id = $4`,
+            [newTotalRepaid.toFixed(3), isFullyRepaid, id, adv.id]
+          );
+          remaining -= repayAmount;
+        }
       }
-      const unapplied = await this.getUnappliedDeductions(d.employee_id);
+      const unapplied = await this.getUnappliedDeductions(d.employee_id, run.month, run.year);
       for (const ded of unapplied) {
         await pool.query(
           `UPDATE employee_deductions SET applied_in_payroll_id = $1 WHERE id = $2`,
@@ -3447,6 +3469,131 @@ export class DatabaseStorage implements IStorage {
       totalPaid: totalPaid.toFixed(3), totalRemaining: totalRemaining.toFixed(3),
       paidCount, partialCount, unpaidCount, details,
     };
+  }
+
+  async getEmployeeFinancialProfile(employeeId: number) {
+    const empResult = await pool.query(`SELECT id, name, salary, salary_type, commission_rate, branch_id, role, is_active, hire_date FROM users WHERE id = $1`, [employeeId]);
+    if (!empResult.rows[0]) return null;
+    const emp = empResult.rows[0];
+
+    const branchResult = await pool.query(`SELECT name FROM branches WHERE id = $1`, [emp.branch_id]);
+    const branchName = branchResult.rows[0]?.name || null;
+
+    const advResult = await pool.query(`
+      SELECT COALESCE(SUM(amount::numeric), 0) as total_advances,
+             COALESCE(SUM(total_repaid::numeric), 0) as total_repaid,
+             COALESCE(SUM(amount::numeric - total_repaid::numeric), 0) as total_remaining
+      FROM employee_advances WHERE employee_id = $1
+    `, [employeeId]);
+
+    const dedResult = await pool.query(`
+      SELECT COALESCE(SUM(amount::numeric), 0) as total_deductions
+      FROM employee_deductions WHERE employee_id = $1
+    `, [employeeId]);
+
+    const lastPayroll = await pool.query(`
+      SELECT pd.*, pr.month, pr.year, pr.status as run_status,
+             COALESCE((SELECT SUM(sp.amount::numeric) FROM salary_payments sp WHERE sp.payroll_detail_id = pd.id), 0) as total_paid
+      FROM payroll_details pd
+      JOIN payroll_runs pr ON pr.id = pd.payroll_id
+      WHERE pd.employee_id = $1
+      ORDER BY pr.year DESC, pr.month::int DESC
+      LIMIT 1
+    `, [employeeId]);
+
+    const payrollHistory = await pool.query(`
+      SELECT pd.*, pr.month, pr.year, pr.status as run_status,
+             COALESCE((SELECT SUM(sp.amount::numeric) FROM salary_payments sp WHERE sp.payroll_detail_id = pd.id), 0) as total_paid
+      FROM payroll_details pd
+      JOIN payroll_runs pr ON pr.id = pd.payroll_id
+      WHERE pd.employee_id = $1
+      ORDER BY pr.year DESC, pr.month::int DESC
+      LIMIT 12
+    `, [employeeId]);
+
+    const lastPayment = await pool.query(`
+      SELECT * FROM salary_payments WHERE employee_id = $1 ORDER BY payment_date DESC LIMIT 1
+    `, [employeeId]);
+
+    const openAdvances = await pool.query(`
+      SELECT id, amount, total_repaid, (amount::numeric - total_repaid::numeric) as remaining_amount, date, note, settled
+      FROM employee_advances WHERE employee_id = $1 AND (amount::numeric - total_repaid::numeric) > 0
+      ORDER BY date DESC
+    `, [employeeId]);
+
+    const lp = lastPayroll.rows[0];
+    const lpPaid = lp ? parseFloat(lp.total_paid || "0") : 0;
+    const lpNet = lp ? parseFloat(lp.net_salary || "0") : 0;
+
+    return {
+      employee: { ...emp, branch_name: branchName },
+      advances: {
+        total: parseFloat(advResult.rows[0].total_advances),
+        repaid: parseFloat(advResult.rows[0].total_repaid),
+        remaining: parseFloat(advResult.rows[0].total_remaining),
+        openAdvances: openAdvances.rows,
+      },
+      deductions: {
+        total: parseFloat(dedResult.rows[0].total_deductions),
+      },
+      lastPayroll: lp ? {
+        month: lp.month, year: lp.year, status: lp.run_status,
+        basicSalary: lp.basic_salary, commission: lp.commission,
+        deductions: lp.deductions, advances: lp.advances,
+        netSalary: lp.net_salary, totalPaid: lpPaid.toFixed(3),
+        remaining: (lpNet - lpPaid).toFixed(3),
+      } : null,
+      lastPaymentDate: lastPayment.rows[0]?.payment_date || null,
+      payrollHistory: payrollHistory.rows.map((r: any) => {
+        const paid = parseFloat(r.total_paid || "0");
+        const net = parseFloat(r.net_salary || "0");
+        return {
+          month: r.month, year: r.year, status: r.run_status,
+          netSalary: r.net_salary, totalPaid: paid.toFixed(3),
+          remaining: (net - paid).toFixed(3),
+          paymentStatus: paid >= net && net > 0 ? "paid" : paid > 0 ? "partial" : "unpaid",
+        };
+      }),
+    };
+  }
+
+  async getPayrollOutstandingReport() {
+    const result = await pool.query(`
+      SELECT pd.employee_id, u.name as employee_name, b.name as branch_name,
+             pr.month, pr.year, pd.net_salary,
+             COALESCE((SELECT SUM(sp.amount::numeric) FROM salary_payments sp WHERE sp.payroll_detail_id = pd.id), 0) as total_paid
+      FROM payroll_details pd
+      JOIN payroll_runs pr ON pr.id = pd.payroll_id AND pr.status = 'approved'
+      JOIN users u ON u.id = pd.employee_id
+      LEFT JOIN branches b ON b.id = u.branch_id
+      ORDER BY pr.year DESC, pr.month::int DESC, u.name
+    `);
+    return result.rows.filter((r: any) => {
+      const net = parseFloat(r.net_salary || "0");
+      const paid = parseFloat(r.total_paid || "0");
+      return net > paid + 0.001;
+    }).map((r: any) => {
+      const net = parseFloat(r.net_salary || "0");
+      const paid = parseFloat(r.total_paid || "0");
+      return {
+        ...r, remaining: (net - paid).toFixed(3),
+        paymentStatus: paid > 0.001 ? "partial" : "unpaid",
+      };
+    });
+  }
+
+  async getAdvancesOutstandingReport() {
+    const result = await pool.query(`
+      SELECT ea.id, ea.employee_id, u.name as employee_name, b.name as branch_name,
+             ea.amount, ea.total_repaid, (ea.amount::numeric - ea.total_repaid::numeric) as remaining_amount,
+             ea.date, ea.note
+      FROM employee_advances ea
+      JOIN users u ON u.id = ea.employee_id
+      LEFT JOIN branches b ON b.id = u.branch_id
+      WHERE (ea.amount::numeric - ea.total_repaid::numeric) > 0
+      ORDER BY u.name, ea.date DESC
+    `);
+    return result.rows;
   }
 
   async getStocktakes(branchId?: number) {

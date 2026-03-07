@@ -509,10 +509,11 @@ export const employeeAdvances = pgTable("employee_advances", {
   note: text("note"),
   settled: boolean("settled").notNull().default(false),
   settledInPayrollId: integer("settled_in_payroll_id").references(() => payrollRuns.id),
+  totalRepaid: decimal("total_repaid", { precision: 10, scale: 3 }).notNull().default("0"),
   createdBy: integer("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
-export const insertEmployeeAdvanceSchema = createInsertSchema(employeeAdvances).omit({ id: true, createdAt: true });
+export const insertEmployeeAdvanceSchema = createInsertSchema(employeeAdvances).omit({ id: true, createdAt: true, settled: true, settledInPayrollId: true, totalRepaid: true });
 export type InsertEmployeeAdvance = z.infer<typeof insertEmployeeAdvanceSchema>;
 export type EmployeeAdvance = typeof employeeAdvances.$inferSelect;
 
@@ -522,6 +523,8 @@ export const employeeDeductions = pgTable("employee_deductions", {
   amount: decimal("amount", { precision: 10, scale: 3 }).notNull(),
   reason: text("reason").notNull(),
   date: date("date").notNull(),
+  deductionType: text("deduction_type").notNull().default("one_time"),
+  monthReference: text("month_reference"),
   appliedInPayrollId: integer("applied_in_payroll_id").references(() => payrollRuns.id),
   createdBy: integer("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),

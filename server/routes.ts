@@ -2484,6 +2484,13 @@ export async function registerRoutes(
     try {
       const { month, year, note } = req.body;
       if (!month || !year) return res.status(400).json({ message: "الشهر والسنة مطلوبة" });
+      const existing = await pool.query(
+        `SELECT id FROM payroll_runs WHERE month = $1 AND year = $2`,
+        [String(month), Number(year)]
+      );
+      if (existing.rows.length > 0) {
+        return res.status(400).json({ message: "يوجد كشف رواتب لهذا الشهر مسبقاً", existingId: existing.rows[0].id });
+      }
       const run = await storage.createPayrollRun({
         month: String(month),
         year: Number(year),
@@ -2550,9 +2557,12 @@ export async function registerRoutes(
         amount: String(amount),
         date,
         note: note || null,
-        settled: false,
         createdBy: req.session.userId!,
       });
+      try {
+        const { journalForEmployeeAdvance } = await import("./autoJournal");
+        await journalForEmployeeAdvance(advance, req.session.userId!);
+      } catch (jErr) {}
       res.status(201).json(advance);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
@@ -2571,13 +2581,15 @@ export async function registerRoutes(
 
   app.post("/api/employee-deductions", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
-      const { employeeId, amount, reason, date } = req.body;
+      const { employeeId, amount, reason, date, deductionType, monthReference } = req.body;
       if (!employeeId || !amount || !reason || !date) return res.status(400).json({ message: "بيانات ناقصة" });
       const deduction = await storage.createEmployeeDeduction({
         employeeId: Number(employeeId),
         amount: String(amount),
         reason,
         date,
+        deductionType: deductionType || "one_time",
+        monthReference: monthReference || null,
         createdBy: req.session.userId!,
       });
       res.status(201).json(deduction);
@@ -2599,6 +2611,34 @@ export async function registerRoutes(
     try {
       const details = await storage.getPayrollDetailsWithPayments(Number(req.params.id));
       res.json(details);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/employees/:id/financial-profile", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const profile = await storage.getEmployeeFinancialProfile(Number(req.params.id));
+      if (!profile) return res.status(404).json({ message: "الموظف غير موجود" });
+      res.json(profile);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/payroll/outstanding", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const report = await storage.getPayrollOutstandingReport();
+      res.json(report);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/payroll/advances-outstanding", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const report = await storage.getAdvancesOutstandingReport();
+      res.json(report);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
     }

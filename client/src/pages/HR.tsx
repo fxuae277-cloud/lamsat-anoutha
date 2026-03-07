@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Plus, Users, Building2, Phone, KeyRound, Wallet, Search, TrendingUp, ShoppingBag, Receipt, Clock, Edit, Eye, Shield, Hash, UserCheck, BarChart3, Calendar, FileText, Banknote, MinusCircle, CreditCard, CheckCircle2, RefreshCw, Percent, Printer, Download, FileSpreadsheet, DollarSign, CircleDollarSign } from "lucide-react";
+import { Plus, Users, Building2, Phone, KeyRound, Wallet, Search, TrendingUp, ShoppingBag, Receipt, Clock, Edit, Eye, Shield, Hash, UserCheck, BarChart3, Calendar, FileText, Banknote, MinusCircle, CreditCard, CheckCircle2, RefreshCw, Percent, Printer, Download, FileSpreadsheet, DollarSign, CircleDollarSign, AlertCircle, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,6 +63,8 @@ export default function HR() {
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [perfOpen, setPerfOpen] = useState(false);
+  const [finProfileOpen, setFinProfileOpen] = useState(false);
+  const [finProfileEmpId, setFinProfileEmpId] = useState<number | null>(null);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [perfFrom, setPerfFrom] = useState(monthAgoStr());
   const [perfTo, setPerfTo] = useState(todayStr());
@@ -213,7 +215,7 @@ export default function HR() {
       </div>
 
       <Tabs defaultValue="employees" dir={lang === "ar" ? "rtl" : "ltr"}>
-        <TabsList className="grid w-full grid-cols-5 max-w-3xl">
+        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 max-w-4xl">
           <TabsTrigger value="employees" className="gap-1 text-xs">
             <Users className="w-4 h-4" />
             {t("hr.tab_employees")}
@@ -229,6 +231,10 @@ export default function HR() {
           <TabsTrigger value="deductions" className="gap-1 text-xs">
             <MinusCircle className="w-4 h-4" />
             {t("hr.tab_deductions")}
+          </TabsTrigger>
+          <TabsTrigger value="outstanding" className="gap-1 text-xs">
+            <AlertCircle className="w-4 h-4" />
+            {t("hr.tab_outstanding")}
           </TabsTrigger>
           <TabsTrigger value="performance" className="gap-1 text-xs">
             <BarChart3 className="w-4 h-4" />
@@ -246,6 +252,7 @@ export default function HR() {
             onAdd={() => setAddOpen(true)}
             onEdit={(u: any) => { setSelectedUser({...u}); setEditOpen(true); }}
             onPerf={(u: any) => { setSelectedUser(u); setPerfOpen(true); }}
+            onFinProfile={(u: any) => { setFinProfileEmpId(u.id); setFinProfileOpen(true); }}
           />
         </TabsContent>
 
@@ -259,6 +266,10 @@ export default function HR() {
 
         <TabsContent value="deductions">
           <DeductionsTab usersList={usersList} />
+        </TabsContent>
+
+        <TabsContent value="outstanding">
+          <OutstandingTab usersList={usersList} />
         </TabsContent>
 
         <TabsContent value="performance">
@@ -514,11 +525,176 @@ export default function HR() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <FinancialProfileDialog
+        open={finProfileOpen}
+        onOpenChange={setFinProfileOpen}
+        employeeId={finProfileEmpId}
+      />
     </div>
   );
 }
 
-function EmployeesTab({ usersList, branchMap, branchesList, search, setSearch, onAdd, onEdit, onPerf }: any) {
+function FinancialProfileDialog({ open, onOpenChange, employeeId }: { open: boolean; onOpenChange: (v: boolean) => void; employeeId: number | null }) {
+  const { t, lang } = useI18n();
+  const MONTH_NAMES = [
+    t("month_names.jan"), t("month_names.feb"), t("month_names.mar"), t("month_names.apr"), t("month_names.may"), t("month_names.jun"),
+    t("month_names.jul"), t("month_names.aug"), t("month_names.sep"), t("month_names.oct"), t("month_names.nov"), t("month_names.dec"),
+  ];
+
+  const { data: profile } = useQuery<any>({
+    queryKey: [employeeId ? `/api/employees/${employeeId}/financial-profile` : null],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: !!employeeId && open,
+  });
+
+  if (!profile) return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[700px]">
+        <DialogHeader>
+          <DialogTitle>{t("hr.financial_profile")}</DialogTitle>
+          <DialogDescription>{t("common.loading")}</DialogDescription>
+        </DialogHeader>
+      </DialogContent>
+    </Dialog>
+  );
+
+  const emp = profile.employee;
+  const adv = profile.advances;
+  const ded = profile.deductions;
+  const lp = profile.lastPayroll;
+  const history = profile.payrollHistory || [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <User className="w-5 h-5 text-amber-600" />
+            {t("hr.financial_profile")} - {emp.name}
+          </DialogTitle>
+          <DialogDescription>{emp.branch_name || ""} - {emp.role}</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="bg-blue-50 rounded-lg p-3 text-center">
+              <p className="text-[10px] text-blue-600">{t("hr.basic_salary")}</p>
+              <p className="text-sm font-bold text-blue-700">{fmt(emp.salary)}</p>
+            </div>
+            <div className="bg-red-50 rounded-lg p-3 text-center">
+              <p className="text-[10px] text-red-600">{t("hr.total_advances_amount")}</p>
+              <p className="text-sm font-bold text-red-700">{adv.total.toFixed(3)}</p>
+            </div>
+            <div className="bg-green-50 rounded-lg p-3 text-center">
+              <p className="text-[10px] text-green-600">{t("hr.advances_repaid")}</p>
+              <p className="text-sm font-bold text-green-700">{adv.repaid.toFixed(3)}</p>
+            </div>
+            <div className="bg-orange-50 rounded-lg p-3 text-center">
+              <p className="text-[10px] text-orange-600">{t("hr.advances_remaining")}</p>
+              <p className="text-sm font-bold text-orange-700">{adv.remaining.toFixed(3)}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-red-50 rounded-lg p-3 text-center">
+              <p className="text-[10px] text-red-600">{t("hr.total_deductions")}</p>
+              <p className="text-sm font-bold text-red-700">{ded.total.toFixed(3)}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
+              <p className="text-[10px] text-gray-600">{t("hr.last_payment_date")}</p>
+              <p className="text-sm font-bold text-gray-700">{profile.lastPaymentDate ? new Date(profile.lastPaymentDate + "T00:00:00").toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</p>
+            </div>
+          </div>
+
+          {adv.openAdvances.length > 0 && (
+            <div>
+              <h4 className="text-sm font-bold mb-2">{t("hr.open_advances")}</h4>
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead>{t("common.amount")}</TableHead>
+                    <TableHead>{t("hr.total_repaid")}</TableHead>
+                    <TableHead>{t("hr.remaining_amount")}</TableHead>
+                    <TableHead>{t("common.date")}</TableHead>
+                    <TableHead>{t("common.notes")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {adv.openAdvances.map((a: any) => (
+                    <TableRow key={a.id}>
+                      <TableCell className="font-bold">{fmt(a.amount)}</TableCell>
+                      <TableCell className="text-green-600">{fmt(a.total_repaid)}</TableCell>
+                      <TableCell className="text-red-600 font-bold">{fmt(a.remaining_amount)}</TableCell>
+                      <TableCell className="text-sm">{a.date ? new Date(a.date + "T00:00:00").toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{a.note || "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {lp && (
+            <div>
+              <h4 className="text-sm font-bold mb-2">{t("hr.last_payroll_slip")}</h4>
+              <div className="bg-primary/5 rounded-lg p-3">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div><span className="text-muted-foreground">{t("hr.table_month")}:</span> <span className="font-medium">{MONTH_NAMES[parseInt(lp.month) - 1]} {lp.year}</span></div>
+                  <div><span className="text-muted-foreground">{t("hr.basic_salary")}:</span> <span className="font-medium">{fmt(lp.basicSalary)}</span></div>
+                  <div><span className="text-muted-foreground">{t("hr.table_commissions")}:</span> <span className="font-medium text-blue-600">{fmt(lp.commission)}</span></div>
+                  <div><span className="text-muted-foreground">{t("hr.table_deductions")}:</span> <span className="font-medium text-red-600">{fmt(lp.deductions)}</span></div>
+                  <div><span className="text-muted-foreground">{t("hr.table_advances")}:</span> <span className="font-medium text-red-600">{fmt(lp.advances)}</span></div>
+                  <div><span className="text-muted-foreground">{t("hr.net_salary")}:</span> <span className="font-bold text-primary">{fmt(lp.netSalary)}</span></div>
+                  <div><span className="text-muted-foreground">{t("hr.total_paid")}:</span> <span className="font-medium text-green-600">{fmt(lp.totalPaid)}</span></div>
+                  <div><span className="text-muted-foreground">{t("hr.remaining_amount")}:</span> <span className="font-bold text-red-600">{fmt(lp.remaining)}</span></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {history.length > 0 && (
+            <div>
+              <h4 className="text-sm font-bold mb-2">{t("hr.payroll_history")}</h4>
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead>{t("hr.table_month")}</TableHead>
+                    <TableHead>{t("hr.net_salary")}</TableHead>
+                    <TableHead>{t("hr.total_paid")}</TableHead>
+                    <TableHead>{t("hr.remaining_amount")}</TableHead>
+                    <TableHead>{t("common.status")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {history.map((h: any, i: number) => (
+                    <TableRow key={i}>
+                      <TableCell className="font-medium">{MONTH_NAMES[parseInt(h.month) - 1]} {h.year}</TableCell>
+                      <TableCell className="font-bold">{fmt(h.netSalary)}</TableCell>
+                      <TableCell className="text-green-600">{fmt(h.totalPaid)}</TableCell>
+                      <TableCell className="text-red-600">{fmt(h.remaining)}</TableCell>
+                      <TableCell>
+                        {h.paymentStatus === "paid" ? (
+                          <Badge className="bg-green-100 text-green-700 text-xs">{t("hr.payment_status_paid")}</Badge>
+                        ) : h.paymentStatus === "partial" ? (
+                          <Badge className="bg-orange-100 text-orange-700 text-xs">{t("hr.payment_status_partial")}</Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-red-50 text-red-700 text-xs">{t("hr.payment_status_unpaid")}</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EmployeesTab({ usersList, branchMap, branchesList, search, setSearch, onAdd, onEdit, onPerf, onFinProfile }: any) {
   const { t } = useI18n();
   return (
     <div className="bg-card border shadow-sm rounded-xl overflow-hidden">
@@ -592,6 +768,11 @@ function EmployeesTab({ usersList, branchMap, branchesList, search, setSearch, o
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-primary" onClick={() => onPerf(u)} data-testid={`button-perf-${u.id}`}>
                     <Eye className="w-3.5 h-3.5" />
                   </Button>
+                  {u.role !== "owner" && (
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-amber-600" onClick={() => onFinProfile(u)} data-testid={`button-fin-${u.id}`} title={t("hr.financial_profile")}>
+                      <Wallet className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
                 </div>
               </TableCell>
             </TableRow>
@@ -1227,6 +1408,7 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
   const [date, setDate] = useState(todayStr());
   const [note, setNote] = useState("");
   const [filterEmp, setFilterEmp] = useState("__all__");
+  const [filterStatus, setFilterStatus] = useState("__all__");
 
   const url = filterEmp && filterEmp !== "__all__" ? `/api/employee-advances?employeeId=${filterEmp}` : "/api/employee-advances";
   const { data: advances = [] } = useQuery<any[]>({
@@ -1252,16 +1434,61 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
     },
   });
 
-  const totalUnsettled = advances.filter((a: any) => !a.settled).reduce((s: number, a: any) => s + parseFloat(a.amount), 0);
+  const totalAmount = advances.reduce((s: number, a: any) => s + parseFloat(a.amount || "0"), 0);
+  const totalRepaid = advances.reduce((s: number, a: any) => s + parseFloat(a.total_repaid || "0"), 0);
+  const totalRemaining = advances.reduce((s: number, a: any) => s + parseFloat(a.remaining_amount || "0"), 0);
+  const openCount = advances.filter((a: any) => parseFloat(a.remaining_amount || "0") > 0).length;
+  const settledCount = advances.filter((a: any) => a.settled).length;
+  const partialCount = advances.filter((a: any) => !a.settled && parseFloat(a.total_repaid || "0") > 0).length;
+
+  const filtered = advances.filter((a: any) => {
+    if (filterStatus === "open") return parseFloat(a.remaining_amount || "0") > 0;
+    if (filterStatus === "partial") return !a.settled && parseFloat(a.total_repaid || "0") > 0;
+    if (filterStatus === "settled") return a.settled;
+    return true;
+  });
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-bold">{t("hr.advances_title")}</h3>
-          <p className="text-sm text-muted-foreground">{t("hr.total_unsettled")}: <span className="font-bold text-red-600">{totalUnsettled.toFixed(3)} {t("common.omr")}</span></p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        <div className="bg-blue-50 rounded-lg p-3 text-center">
+          <p className="text-[10px] text-blue-600">{t("hr.total_advances_amount")}</p>
+          <p className="text-sm font-bold text-blue-700">{totalAmount.toFixed(3)}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="bg-green-50 rounded-lg p-3 text-center">
+          <p className="text-[10px] text-green-600">{t("hr.total_repaid")}</p>
+          <p className="text-sm font-bold text-green-700">{totalRepaid.toFixed(3)}</p>
+        </div>
+        <div className="bg-red-50 rounded-lg p-3 text-center">
+          <p className="text-[10px] text-red-600">{t("hr.total_remaining_advances")}</p>
+          <p className="text-sm font-bold text-red-700">{totalRemaining.toFixed(3)}</p>
+        </div>
+        <div className="bg-orange-50 rounded-lg p-3 text-center">
+          <p className="text-[10px] text-orange-600">{t("hr.open_advances")}</p>
+          <p className="text-sm font-bold text-orange-700">{openCount}</p>
+        </div>
+        <div className="bg-yellow-50 rounded-lg p-3 text-center">
+          <p className="text-[10px] text-yellow-600">{t("hr.partial_repaid")}</p>
+          <p className="text-sm font-bold text-yellow-700">{partialCount}</p>
+        </div>
+        <div className="bg-green-50 rounded-lg p-3 text-center">
+          <p className="text-[10px] text-green-600">{t("hr.fully_settled")}</p>
+          <p className="text-sm font-bold text-green-700">{settledCount}</p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h3 className="text-lg font-bold">{t("hr.advances_title")}</h3>
+        <div className="flex gap-2 flex-wrap">
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-36" data-testid="select-filter-advance-status"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">{t("common.all")}</SelectItem>
+              <SelectItem value="open">{t("hr.open_advances")}</SelectItem>
+              <SelectItem value="partial">{t("hr.partial_repaid")}</SelectItem>
+              <SelectItem value="settled">{t("hr.fully_settled")}</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={filterEmp} onValueChange={setFilterEmp}>
             <SelectTrigger className="w-48" data-testid="select-filter-advance-emp"><SelectValue placeholder={t("hr.all_employees")} /></SelectTrigger>
             <SelectContent>
@@ -1325,7 +1552,9 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
           <TableHeader className="bg-muted/50">
             <TableRow>
               <TableHead>{t("common.employee")}</TableHead>
-              <TableHead>{t("common.amount")}</TableHead>
+              <TableHead>{t("hr.advance_amount")}</TableHead>
+              <TableHead>{t("hr.total_repaid")}</TableHead>
+              <TableHead>{t("hr.remaining_amount")}</TableHead>
               <TableHead>{t("common.date")}</TableHead>
               <TableHead>{t("common.notes")}</TableHead>
               <TableHead>{t("common.status")}</TableHead>
@@ -1333,24 +1562,33 @@ function AdvancesTab({ usersList }: { usersList: any[] }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {advances.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t("hr.no_advances")}</TableCell></TableRow>
-            ) : advances.map((a: any) => (
-              <TableRow key={a.id} data-testid={`row-advance-${a.id}`}>
-                <TableCell className="font-medium">{a.employee_name}</TableCell>
-                <TableCell className="font-bold">{fmt(a.amount)} {t("common.omr")}</TableCell>
-                <TableCell className="text-sm">{a.date ? new Date(a.date + "T00:00:00").toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">{a.note || "—"}</TableCell>
-                <TableCell>
-                  {a.settled ? (
-                    <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">{t("hr.settled")}</Badge>
-                  ) : (
-                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs">{t("hr.unsettled")}</Badge>
-                  )}
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">{a.created_by_name || "—"}</TableCell>
-              </TableRow>
-            ))}
+            {filtered.length === 0 ? (
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">{t("hr.no_advances")}</TableCell></TableRow>
+            ) : filtered.map((a: any) => {
+              const remaining = parseFloat(a.remaining_amount || "0");
+              const repaid = parseFloat(a.total_repaid || "0");
+              const isPartial = !a.settled && repaid > 0;
+              return (
+                <TableRow key={a.id} data-testid={`row-advance-${a.id}`}>
+                  <TableCell className="font-medium">{a.employee_name}</TableCell>
+                  <TableCell className="font-bold">{fmt(a.amount)} {t("common.omr")}</TableCell>
+                  <TableCell className="text-green-600 font-medium">{fmt(a.total_repaid)} {t("common.omr")}</TableCell>
+                  <TableCell className={`font-bold ${remaining > 0 ? "text-red-600" : "text-green-600"}`}>{remaining.toFixed(3)} {t("common.omr")}</TableCell>
+                  <TableCell className="text-sm">{a.date ? new Date(a.date + "T00:00:00").toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{a.note || "—"}</TableCell>
+                  <TableCell>
+                    {a.settled ? (
+                      <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">{t("hr.settled")}</Badge>
+                    ) : isPartial ? (
+                      <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 text-xs">{t("hr.partial_repaid")}</Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs">{t("hr.unsettled")}</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{a.created_by_name || "—"}</TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
@@ -1366,6 +1604,8 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const [date, setDate] = useState(todayStr());
+  const [deductionType, setDeductionType] = useState("one_time");
+  const [monthRef, setMonthRef] = useState("");
   const [filterEmp, setFilterEmp] = useState("__all__");
 
   const url = filterEmp && filterEmp !== "__all__" ? `/api/employee-deductions?employeeId=${filterEmp}` : "/api/employee-deductions";
@@ -1374,10 +1614,18 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
+  const now = new Date();
+  const MONTH_NAMES = [
+    t("month_names.jan"), t("month_names.feb"), t("month_names.mar"), t("month_names.apr"), t("month_names.may"), t("month_names.jun"),
+    t("month_names.jul"), t("month_names.aug"), t("month_names.sep"), t("month_names.oct"), t("month_names.nov"), t("month_names.dec"),
+  ];
+
   const createMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/employee-deductions", {
         employeeId: Number(empId), amount, reason, date,
+        deductionType,
+        monthReference: deductionType === "one_time" && monthRef ? monthRef : null,
       });
     },
     onSuccess: () => {
@@ -1385,18 +1633,42 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
       queryClient.invalidateQueries({ queryKey: [url] });
       queryClient.invalidateQueries({ queryKey: ["/api/employee-deductions"] });
       setAddOpen(false);
-      setEmpId(""); setAmount(""); setReason("");
+      setEmpId(""); setAmount(""); setReason(""); setDeductionType("one_time"); setMonthRef("");
     },
     onError: (err: Error) => {
       toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
+  const totalDeductions = deductions.reduce((s: number, d: any) => s + parseFloat(d.amount || "0"), 0);
+  const appliedCount = deductions.filter((d: any) => d.applied_in_payroll_id).length;
+  const notAppliedCount = deductions.filter((d: any) => !d.applied_in_payroll_id).length;
+  const recurringCount = deductions.filter((d: any) => d.deduction_type === "recurring").length;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="bg-red-50 rounded-lg p-3 text-center">
+          <p className="text-[10px] text-red-600">{t("hr.total_deductions")}</p>
+          <p className="text-sm font-bold text-red-700">{totalDeductions.toFixed(3)}</p>
+        </div>
+        <div className="bg-green-50 rounded-lg p-3 text-center">
+          <p className="text-[10px] text-green-600">{t("hr.applied_deductions")}</p>
+          <p className="text-sm font-bold text-green-700">{appliedCount}</p>
+        </div>
+        <div className="bg-orange-50 rounded-lg p-3 text-center">
+          <p className="text-[10px] text-orange-600">{t("hr.pending_deductions")}</p>
+          <p className="text-sm font-bold text-orange-700">{notAppliedCount}</p>
+        </div>
+        <div className="bg-blue-50 rounded-lg p-3 text-center">
+          <p className="text-[10px] text-blue-600">{t("hr.recurring_deductions")}</p>
+          <p className="text-sm font-bold text-blue-700">{recurringCount}</p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h3 className="text-lg font-bold">{t("hr.deductions_title")}</h3>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Select value={filterEmp} onValueChange={setFilterEmp}>
             <SelectTrigger className="w-48" data-testid="select-filter-deduction-emp"><SelectValue placeholder={t("hr.all_employees")} /></SelectTrigger>
             <SelectContent>
@@ -1413,7 +1685,7 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
                 {t("hr.new_deduction")}
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[400px]">
+            <DialogContent className="sm:max-w-[450px]">
               <DialogHeader>
                 <DialogTitle>{t("hr.record_deduction")}</DialogTitle>
                 <DialogDescription>{t("hr.record_deduction_desc")}</DialogDescription>
@@ -1441,6 +1713,33 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
                   </div>
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("hr.deduction_type")}</label>
+                  <Select value={deductionType} onValueChange={setDeductionType}>
+                    <SelectTrigger data-testid="select-deduction-type"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="one_time">{t("hr.one_time")}</SelectItem>
+                      <SelectItem value="recurring">{t("hr.recurring")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {deductionType === "one_time" && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">{t("hr.month_reference")}</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Select value={monthRef ? monthRef.split("/")[0] : ""} onValueChange={m => setMonthRef(`${m}/${monthRef ? monthRef.split("/")[1] : now.getFullYear()}`)}>
+                        <SelectTrigger data-testid="select-deduction-month"><SelectValue placeholder={t("hr.select_month")} /></SelectTrigger>
+                        <SelectContent>
+                          {MONTH_NAMES.map((m, i) => (
+                            <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input type="number" placeholder={String(now.getFullYear())} value={monthRef ? monthRef.split("/")[1] : ""} onChange={e => setMonthRef(`${monthRef ? monthRef.split("/")[0] : "1"}/${e.target.value}`)} data-testid="input-deduction-year" />
+                    </div>
+                    <p className="text-xs text-muted-foreground">{t("hr.month_reference_hint")}</p>
+                  </div>
+                )}
+                <div className="space-y-2">
                   <label className="text-sm font-medium">{t("hr.reason")} *</label>
                   <Input placeholder={t("hr.deduction_reason_placeholder")} value={reason} onChange={e => setReason(e.target.value)} data-testid="input-deduction-reason" />
                 </div>
@@ -1462,6 +1761,8 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
               <TableHead>{t("common.employee")}</TableHead>
               <TableHead>{t("common.amount")}</TableHead>
               <TableHead>{t("hr.reason")}</TableHead>
+              <TableHead>{t("hr.deduction_type")}</TableHead>
+              <TableHead>{t("hr.month_reference")}</TableHead>
               <TableHead>{t("common.date")}</TableHead>
               <TableHead>{t("common.status")}</TableHead>
               <TableHead>{t("hr.created_by")}</TableHead>
@@ -1469,12 +1770,20 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
           </TableHeader>
           <TableBody>
             {deductions.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t("hr.no_deductions")}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">{t("hr.no_deductions")}</TableCell></TableRow>
             ) : deductions.map((d: any) => (
               <TableRow key={d.id} data-testid={`row-deduction-${d.id}`}>
                 <TableCell className="font-medium">{d.employee_name}</TableCell>
                 <TableCell className="font-bold text-red-600">{fmt(d.amount)} {t("common.omr")}</TableCell>
                 <TableCell className="text-sm">{d.reason}</TableCell>
+                <TableCell>
+                  {d.deduction_type === "recurring" ? (
+                    <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-xs">{t("hr.recurring")}</Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-xs">{t("hr.one_time")}</Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-sm">{d.month_reference || "—"}</TableCell>
                 <TableCell className="text-sm">{d.date ? new Date(d.date + "T00:00:00").toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
                 <TableCell>
                   {d.applied_in_payroll_id ? (
@@ -1489,6 +1798,142 @@ function DeductionsTab({ usersList }: { usersList: any[] }) {
           </TableBody>
         </Table>
       </div>
+    </div>
+  );
+}
+
+function OutstandingTab({ usersList }: { usersList: any[] }) {
+  const { t, lang } = useI18n();
+  const [activeReport, setActiveReport] = useState<"salaries" | "advances">("salaries");
+
+  const MONTH_NAMES = [
+    t("month_names.jan"), t("month_names.feb"), t("month_names.mar"), t("month_names.apr"), t("month_names.may"), t("month_names.jun"),
+    t("month_names.jul"), t("month_names.aug"), t("month_names.sep"), t("month_names.oct"), t("month_names.nov"), t("month_names.dec"),
+  ];
+
+  const { data: salaryOutstanding = [] } = useQuery<any[]>({
+    queryKey: ["/api/payroll/outstanding"],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: activeReport === "salaries",
+  });
+
+  const { data: advanceOutstanding = [] } = useQuery<any[]>({
+    queryKey: ["/api/payroll/advances-outstanding"],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: activeReport === "advances",
+  });
+
+  const totalSalaryRemaining = salaryOutstanding.reduce((s: number, r: any) => s + parseFloat(r.remaining || "0"), 0);
+  const totalAdvanceRemaining = advanceOutstanding.reduce((s: number, r: any) => s + parseFloat(r.remaining_amount || "0"), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-red-50 rounded-lg p-4 text-center cursor-pointer border-2 transition-colors"
+          style={{ borderColor: activeReport === "salaries" ? "#ef4444" : "transparent" }}
+          onClick={() => setActiveReport("salaries")} data-testid="card-salary-outstanding">
+          <p className="text-xs text-red-600">{t("hr.outstanding_salaries")}</p>
+          <p className="text-xl font-bold text-red-700">{totalSalaryRemaining.toFixed(3)} {t("common.omr")}</p>
+          <p className="text-xs text-red-500">{salaryOutstanding.length} {t("hr.records")}</p>
+        </div>
+        <div className="bg-orange-50 rounded-lg p-4 text-center cursor-pointer border-2 transition-colors"
+          style={{ borderColor: activeReport === "advances" ? "#f97316" : "transparent" }}
+          onClick={() => setActiveReport("advances")} data-testid="card-advance-outstanding">
+          <p className="text-xs text-orange-600">{t("hr.outstanding_advances")}</p>
+          <p className="text-xl font-bold text-orange-700">{totalAdvanceRemaining.toFixed(3)} {t("common.omr")}</p>
+          <p className="text-xs text-orange-500">{advanceOutstanding.length} {t("hr.records")}</p>
+        </div>
+      </div>
+
+      {activeReport === "salaries" && (
+        <div className="bg-card border shadow-sm rounded-xl overflow-hidden">
+          <div className="p-3 border-b bg-muted/20">
+            <h3 className="text-sm font-bold">{t("hr.outstanding_salaries_report")}</h3>
+          </div>
+          <Table>
+            <TableHeader className="bg-muted/50">
+              <TableRow>
+                <TableHead>{t("common.employee")}</TableHead>
+                <TableHead>{t("common.branch")}</TableHead>
+                <TableHead>{t("hr.table_month")}</TableHead>
+                <TableHead>{t("hr.net_salary")}</TableHead>
+                <TableHead>{t("hr.total_paid")}</TableHead>
+                <TableHead>{t("hr.remaining_amount")}</TableHead>
+                <TableHead>{t("hr.payment_status")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {salaryOutstanding.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{t("hr.no_outstanding_salaries")}</TableCell></TableRow>
+              ) : salaryOutstanding.map((r: any, i: number) => (
+                <TableRow key={i} data-testid={`row-outstanding-salary-${i}`}>
+                  <TableCell className="font-medium">{r.employee_name}</TableCell>
+                  <TableCell className="text-sm">{r.branch_name || "—"}</TableCell>
+                  <TableCell className="text-sm">{MONTH_NAMES[parseInt(r.month) - 1]} {r.year}</TableCell>
+                  <TableCell className="font-bold">{fmt(r.net_salary)}</TableCell>
+                  <TableCell className="text-green-600">{fmt(r.total_paid)}</TableCell>
+                  <TableCell className="text-red-600 font-bold">{fmt(r.remaining)}</TableCell>
+                  <TableCell>
+                    {r.paymentStatus === "partial" ? (
+                      <Badge className="bg-orange-100 text-orange-700 text-xs">{t("hr.payment_status_partial")}</Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-red-50 text-red-700 text-xs">{t("hr.payment_status_unpaid")}</Badge>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          {salaryOutstanding.length > 0 && (
+            <div className="p-3 border-t bg-muted/30 flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">{salaryOutstanding.length} {t("hr.records")}</span>
+              <span className="font-bold text-red-600">{t("hr.total_remaining")}: {totalSalaryRemaining.toFixed(3)} {t("common.omr")}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeReport === "advances" && (
+        <div className="bg-card border shadow-sm rounded-xl overflow-hidden">
+          <div className="p-3 border-b bg-muted/20">
+            <h3 className="text-sm font-bold">{t("hr.outstanding_advances_report")}</h3>
+          </div>
+          <Table>
+            <TableHeader className="bg-muted/50">
+              <TableRow>
+                <TableHead>{t("common.employee")}</TableHead>
+                <TableHead>{t("common.branch")}</TableHead>
+                <TableHead>{t("hr.advance_amount")}</TableHead>
+                <TableHead>{t("hr.total_repaid")}</TableHead>
+                <TableHead>{t("hr.remaining_amount")}</TableHead>
+                <TableHead>{t("common.date")}</TableHead>
+                <TableHead>{t("common.notes")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {advanceOutstanding.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{t("hr.no_outstanding_advances")}</TableCell></TableRow>
+              ) : advanceOutstanding.map((r: any) => (
+                <TableRow key={r.id} data-testid={`row-outstanding-advance-${r.id}`}>
+                  <TableCell className="font-medium">{r.employee_name}</TableCell>
+                  <TableCell className="text-sm">{r.branch_name || "—"}</TableCell>
+                  <TableCell className="font-bold">{fmt(r.amount)}</TableCell>
+                  <TableCell className="text-green-600">{fmt(r.total_repaid)}</TableCell>
+                  <TableCell className="text-red-600 font-bold">{fmt(r.remaining_amount)}</TableCell>
+                  <TableCell className="text-sm">{r.date ? new Date(r.date + "T00:00:00").toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{r.note || "—"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          {advanceOutstanding.length > 0 && (
+            <div className="p-3 border-t bg-muted/30 flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">{advanceOutstanding.length} {t("hr.records")}</span>
+              <span className="font-bold text-orange-600">{t("hr.total_remaining")}: {totalAdvanceRemaining.toFixed(3)} {t("common.omr")}</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

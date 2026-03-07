@@ -9,6 +9,7 @@ const ACCOUNT_CODES: Record<string, string> = {
   SALES_REVENUE: "4100",
   SALES_RETURNS: "4200",
   COGS: "5100",
+  EMPLOYEE_ADVANCES: "1401",
   SALARY_EXPENSES: "5200",
   GENERAL_EXPENSES: "5400",
 };
@@ -294,6 +295,34 @@ export async function journalForSalaryPayment(payment: {
     lines: [
       { accountCode: ACCOUNT_CODES.SALARY_EXPENSES, debit: payment.amount, credit: 0, description: desc },
       { accountCode: cashOrBank, debit: 0, credit: payment.amount, description: desc },
+    ],
+  });
+}
+
+export async function journalForEmployeeAdvance(advance: {
+  id: number;
+  employeeId: number;
+  amount: string;
+}, createdBy: number) {
+  const amt = parseFloat(advance.amount);
+  if (amt <= 0) return;
+
+  const empResult = await pool.query(`SELECT name, branch_id FROM users WHERE id = $1`, [advance.employeeId]);
+  const empName = empResult.rows[0]?.name || "موظف";
+  const branchId = empResult.rows[0]?.branch_id || 1;
+  const date = new Date().toISOString().slice(0, 10);
+  const desc = `سلفة موظف: ${empName}`;
+
+  await createAutoJournal({
+    date,
+    description: desc,
+    sourceType: "employee_advance",
+    sourceId: advance.id,
+    branchId,
+    createdBy,
+    lines: [
+      { accountCode: ACCOUNT_CODES.EMPLOYEE_ADVANCES, debit: amt, credit: 0, description: desc },
+      { accountCode: ACCOUNT_CODES.CASH, debit: 0, credit: amt, description: desc },
     ],
   });
 }
