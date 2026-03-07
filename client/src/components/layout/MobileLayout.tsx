@@ -14,19 +14,19 @@ type NavItem = {
 };
 
 const EMPLOYEE_NAV: NavItem[] = [
-  { icon: Home, labelKey: "mobile.nav_home", path: "/m" },
-  { icon: ShoppingCart, labelKey: "mobile.nav_pos", path: "/m/pos" },
-  { icon: ReceiptText, labelKey: "mobile.nav_invoices", path: "/m/invoices" },
-  { icon: Clock, labelKey: "mobile.nav_shift", path: "/m/shift" },
-  { icon: MoreHorizontal, labelKey: "mobile.nav_more", path: "/m/more" },
+  { icon: Home, labelKey: "mobile.nav_home", path: "/" },
+  { icon: ShoppingCart, labelKey: "mobile.nav_pos", path: "/pos" },
+  { icon: ReceiptText, labelKey: "mobile.nav_invoices", path: "/invoices" },
+  { icon: Clock, labelKey: "mobile.nav_shift", path: "/shift" },
+  { icon: MoreHorizontal, labelKey: "mobile.nav_more", path: "/more" },
 ];
 
 const OWNER_NAV: NavItem[] = [
-  { icon: LayoutDashboard, labelKey: "mobile.nav_home", path: "/m" },
-  { icon: Truck, labelKey: "mobile.nav_purchases", path: "/m/purchases" },
-  { icon: ArrowRightLeft, labelKey: "mobile.nav_transfers", path: "/m/transfers" },
-  { icon: ClipboardCheck, labelKey: "mobile.nav_stocktake", path: "/m/stocktake" },
-  { icon: MoreHorizontal, labelKey: "mobile.nav_more", path: "/m/more" },
+  { icon: LayoutDashboard, labelKey: "mobile.nav_home", path: "/" },
+  { icon: Truck, labelKey: "mobile.nav_purchases", path: "/purchases" },
+  { icon: ArrowRightLeft, labelKey: "mobile.nav_transfers", path: "/transfers" },
+  { icon: ClipboardCheck, labelKey: "mobile.nav_stocktake", path: "/stocktake" },
+  { icon: MoreHorizontal, labelKey: "mobile.nav_more", path: "/more" },
 ];
 
 export function MobileLayout({ children }: { children: ReactNode }) {
@@ -38,17 +38,17 @@ export function MobileLayout({ children }: { children: ReactNode }) {
   const navItems = isOwner ? OWNER_NAV : EMPLOYEE_NAV;
 
   const isActive = (path: string) => {
-    if (path === "/m") return location === "/m";
+    if (path === "/") return location === "/";
     return location.startsWith(path);
   };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-20">
         {children}
       </div>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 safe-area-bottom">
+      <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
         <div className="flex items-center justify-around h-16">
           {navItems.map((item) => {
             const active = isActive(item.path);
@@ -59,7 +59,7 @@ export function MobileLayout({ children }: { children: ReactNode }) {
                   active ? "text-primary" : "text-muted-foreground"
                 }`}
                 onClick={() => setLocation(item.path)}
-                data-testid={`nav-${item.path.replace("/m/", "").replace("/m", "home")}`}
+                data-testid={`nav-${item.path === "/" ? "home" : item.path.slice(1)}`}
               >
                 <item.icon className={`w-5 h-5 ${active ? "text-primary" : ""}`} />
                 <span className="text-[10px] font-medium">{t(item.labelKey)}</span>

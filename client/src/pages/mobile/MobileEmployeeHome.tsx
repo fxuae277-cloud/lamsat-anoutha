@@ -85,7 +85,7 @@ export default function MobileEmployeeHome() {
         {!shiftOpen ? (
           <Button
             className="h-16 text-base gap-2 col-span-2 bg-emerald-600 hover:bg-emerald-700"
-            onClick={() => setLocation("/m/shift")}
+            onClick={() => setLocation("/shift")}
             data-testid="button-open-shift"
           >
             <PlayCircle className="w-6 h-6" />
@@ -95,7 +95,7 @@ export default function MobileEmployeeHome() {
           <>
             <Button
               className="h-16 text-base gap-2 bg-primary"
-              onClick={() => setLocation("/m/pos")}
+              onClick={() => setLocation("/pos")}
               data-testid="button-new-sale"
             >
               <ShoppingCart className="w-6 h-6" />
@@ -104,7 +104,7 @@ export default function MobileEmployeeHome() {
             <Button
               className="h-16 text-base gap-2"
               variant="outline"
-              onClick={() => setLocation("/m/invoices")}
+              onClick={() => setLocation("/invoices")}
               data-testid="button-view-invoices"
             >
               <ReceiptText className="w-6 h-6" />
@@ -113,7 +113,7 @@ export default function MobileEmployeeHome() {
             <Button
               className="h-16 text-base gap-2"
               variant="outline"
-              onClick={() => setLocation("/m/pos")}
+              onClick={() => setLocation("/pos")}
               data-testid="button-scan-barcode"
             >
               <Camera className="w-6 h-6" />
@@ -121,7 +121,7 @@ export default function MobileEmployeeHome() {
             </Button>
             <Button
               className="h-16 text-base gap-2 bg-orange-600 hover:bg-orange-700 text-white"
-              onClick={() => setLocation("/m/shift")}
+              onClick={() => setLocation("/shift")}
               data-testid="button-close-shift"
             >
               <StopCircle className="w-6 h-6" />

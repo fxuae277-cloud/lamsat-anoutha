@@ -149,19 +149,19 @@ export default function MobileOwnerHome() {
       </div>
 
       <div className="grid grid-cols-4 gap-2">
-        <Button variant="outline" className="h-16 flex-col gap-1 text-xs" onClick={() => setLocation("/m/purchases")} data-testid="button-quick-purchase">
+        <Button variant="outline" className="h-16 flex-col gap-1 text-xs" onClick={() => setLocation("/purchases")} data-testid="button-quick-purchase">
           <ShoppingCart className="w-5 h-5" />
           {t("mobile.purchase")}
         </Button>
-        <Button variant="outline" className="h-16 flex-col gap-1 text-xs" onClick={() => setLocation("/m/transfers")} data-testid="button-quick-transfer">
+        <Button variant="outline" className="h-16 flex-col gap-1 text-xs" onClick={() => setLocation("/transfers")} data-testid="button-quick-transfer">
           <ArrowRightLeft className="w-5 h-5" />
           {t("mobile.transfer")}
         </Button>
-        <Button variant="outline" className="h-16 flex-col gap-1 text-xs" onClick={() => setLocation("/m/stocktake")} data-testid="button-quick-stocktake">
+        <Button variant="outline" className="h-16 flex-col gap-1 text-xs" onClick={() => setLocation("/stocktake")} data-testid="button-quick-stocktake">
           <ClipboardCheck className="w-5 h-5" />
           {t("mobile.stocktake")}
         </Button>
-        <Button variant="outline" className="h-16 flex-col gap-1 text-xs" onClick={() => setLocation("/m/pos")} data-testid="button-quick-scan">
+        <Button variant="outline" className="h-16 flex-col gap-1 text-xs" onClick={() => setLocation("/pos")} data-testid="button-quick-scan">
           <Camera className="w-5 h-5" />
           {t("mobile.scan")}
         </Button>

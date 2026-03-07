@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { I18nProvider, useI18n } from "@/lib/i18n";
+import { useIsMobile } from "@/hooks/use-mobile";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -61,7 +62,7 @@ function MobileHome() {
 function RequireMobileOwner({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   if (user?.role !== "owner" && user?.role !== "admin") {
-    return <Redirect to="/m" />;
+    return <Redirect to="/" />;
   }
   return <>{children}</>;
 }
@@ -70,21 +71,41 @@ function MobileRouter() {
   return (
     <MobileLayout>
       <Switch>
-        <Route path="/m" component={MobileHome} />
-        <Route path="/m/pos" component={MobilePOS} />
-        <Route path="/m/invoices" component={MobileInvoices} />
-        <Route path="/m/shift" component={MobileShift} />
-        <Route path="/m/more" component={MobileMore} />
-        <Route path="/m/purchases">
+        <Route path="/" component={MobileHome} />
+        <Route path="/pos" component={MobilePOS} />
+        <Route path="/invoices" component={MobileInvoices} />
+        <Route path="/shift" component={MobileShift} />
+        <Route path="/more" component={MobileMore} />
+        <Route path="/purchases">
           <RequireMobileOwner><MobilePurchases /></RequireMobileOwner>
         </Route>
-        <Route path="/m/transfers">
+        <Route path="/transfers">
           <RequireMobileOwner><MobileTransfers /></RequireMobileOwner>
         </Route>
-        <Route path="/m/stocktake">
+        <Route path="/stocktake">
           <RequireMobileOwner><MobileStocktake /></RequireMobileOwner>
         </Route>
-        <Route><Redirect to="/m" /></Route>
+        <Route path="/suppliers">
+          <RequireMobileOwner><MobilePurchases /></RequireMobileOwner>
+        </Route>
+        <Route path="/products">
+          <RequireMobileOwner><MobileMore /></RequireMobileOwner>
+        </Route>
+        <Route path="/inventory">
+          <RequireMobileOwner><MobileMore /></RequireMobileOwner>
+        </Route>
+        <Route path="/settings">
+          <MobileMore />
+        </Route>
+        <Route path="/orders" component={MobileInvoices} />
+        <Route path="/customers" component={MobileMore} />
+        <Route path="/reports">
+          <RequireMobileOwner><MobileMore /></RequireMobileOwner>
+        </Route>
+        <Route path="/expenses">
+          <RequireMobileOwner><MobileMore /></RequireMobileOwner>
+        </Route>
+        <Route><Redirect to="/" /></Route>
       </Switch>
     </MobileLayout>
   );
@@ -144,6 +165,14 @@ function DesktopRouter() {
         <Route path="/audit-log">
           <RequireOwner><AuditLog /></RequireOwner>
         </Route>
+        <Route path="/shift" component={POS} />
+        <Route path="/more"><Redirect to="/" /></Route>
+        <Route path="/transfers">
+          <RequireOwner><Inventory /></RequireOwner>
+        </Route>
+        <Route path="/stocktake">
+          <RequireOwner><Inventory /></RequireOwner>
+        </Route>
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
@@ -153,6 +182,7 @@ function DesktopRouter() {
 function AuthenticatedRouter() {
   const { user, isLoading } = useAuth();
   const { t } = useI18n();
+  const isMobile = useIsMobile();
 
   if (isLoading) {
     return (
@@ -169,15 +199,11 @@ function AuthenticatedRouter() {
     return <Login />;
   }
 
-  return (
-    <Switch>
-      <Route path="/m/:rest*" component={MobileRouter} />
-      <Route path="/m" component={MobileRouter} />
-      <Route>
-        <DesktopRouter />
-      </Route>
-    </Switch>
-  );
+  if (isMobile) {
+    return <MobileRouter />;
+  }
+
+  return <DesktopRouter />;
 }
 
 function App() {
