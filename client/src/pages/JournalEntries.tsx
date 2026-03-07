@@ -108,6 +108,24 @@ export default function JournalEntries() {
     }
   });
 
+  const retroMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/journal-entries/generate-retroactive", {});
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message);
+      }
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/journal-entries"] });
+      toast({ title: t("common.success"), description: data.message || `${t("journal.generated")}: ${data.generated}` });
+    },
+    onError: (err: Error) => {
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
+    }
+  });
+
   const postMutation = useMutation({
     mutationFn: async (id: number) => {
       const res = await apiRequest("POST", `/api/journal-entries/${id}/post`, {});
@@ -181,9 +199,14 @@ export default function JournalEntries() {
             {t("journal.title")}
           </h1>
         </div>
-        <Button onClick={() => setIsAddOpen(true)} className="gap-2" data-testid="button-add-entry">
-          <Plus className="w-4 h-4" /> {t("journal.add_entry")}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => retroMutation.mutate()} disabled={retroMutation.isPending} className="gap-2" data-testid="button-generate-retro">
+            <CheckCircle2 className="w-4 h-4" /> {t("journal.generate_retro")}
+          </Button>
+          <Button onClick={() => setIsAddOpen(true)} className="gap-2" data-testid="button-add-entry">
+            <Plus className="w-4 h-4" /> {t("journal.add_entry")}
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -221,7 +244,8 @@ export default function JournalEntries() {
                 <SelectItem value="sale">{t("journal.sale")}</SelectItem>
                 <SelectItem value="purchase">{t("journal.purchase")}</SelectItem>
                 <SelectItem value="expense">{t("journal.expense")}</SelectItem>
-                <SelectItem value="return_entry">{t("journal.return_entry")}</SelectItem>
+                <SelectItem value="return">{t("journal.return")}</SelectItem>
+                <SelectItem value="supplier_payment">{t("journal.supplier_payment")}</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -18,6 +18,7 @@ import {
   insertPayrollRunSchema, insertEmployeeAdvanceSchema, insertEmployeeDeductionSchema,
 } from "@shared/schema";
 import { registerExportRoutes } from "./exports";
+import { journalForSale, journalForExpense, journalForPurchase, journalForSaleReturn, journalForSupplierPayment } from "./autoJournal";
 import { registerBackupRoutes } from "./backup";
 import { registerMobileRoutes } from "./mobile-routes";
 import { saveUploadedFile, parseInvoiceFile } from "./ocr";
@@ -1237,6 +1238,15 @@ export async function registerRoutes(
         createdBy
       });
 
+      journalForSupplierPayment({
+        supplierId,
+        amount: Number(amount),
+        method,
+        branchId: Number(branchId),
+        createdBy,
+        note,
+      }).catch(err => console.error("[AutoJournal] Supplier payment error:", err.message));
+
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1303,6 +1313,17 @@ export async function registerRoutes(
       if (parsed.data.customerId) {
         storage.updateCustomerAfterSale(parsed.data.customerId, String(parsed.data.total || "0")).catch(() => {});
       }
+      journalForSale({
+        id: sale.id,
+        invoiceNumber: sale.invoiceNumber || "",
+        total: sale.total || "0",
+        vat: sale.vat || "0",
+        paymentMethod: sale.paymentMethod || "cash",
+        branchId: sale.branchId,
+        cashierId: sale.cashierId,
+        cogsTotal: sale.cogsTotal || "0",
+        createdAt: sale.createdAt,
+      }).catch(err => console.error("[AutoJournal] Sale error:", err.message));
       res.status(201).json(sale);
     } catch (e: any) {
       res.status(400).json({ message: e.message || "فشل إنشاء الفاتورة" });
@@ -1461,6 +1482,18 @@ export async function registerRoutes(
         createdBy: user.id,
       }, returnItems);
 
+      journalForSaleReturn({
+        id: result.id,
+        returnNumber,
+        refundAmount: refundAmount.toFixed(3),
+        refundMethod: refundMethod || sale.paymentMethod || "cash",
+        cogsReturned: result.cogsReturned || "0",
+        branchId: sale.branchId,
+        createdBy: user.id,
+        saleInvoiceNumber: sale.invoiceNumber || "",
+        createdAt: result.createdAt,
+      }).catch(err => console.error("[AutoJournal] Return error:", err.message));
+
       res.status(201).json(result);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في إنشاء المرتجع" });
@@ -1556,6 +1589,17 @@ export async function registerRoutes(
         notes: notes || null,
         createdBy: user.id,
       });
+
+      journalForExpense({
+        id: expense.id,
+        category: catLabel,
+        amount: String(amount),
+        source: expenseSource,
+        date: todayStr,
+        branchId,
+        createdBy: user.id,
+        notes: notes || null,
+      }).catch(err => console.error("[AutoJournal] Expense error:", err.message));
 
       if (expenseSource === "cash") {
         await storage.addCashLedgerEntry({
@@ -1959,6 +2003,17 @@ export async function registerRoutes(
   app.post("/api/purchase-invoices/:id/approve", requireAuth, requireManager, async (req, res) => {
     try {
       const result = await storage.approvePurchaseInvoice(Number(req.params.id));
+
+      journalForPurchase({
+        id: result.id,
+        invoiceNumber: result.invoiceNumber || "",
+        grandTotal: result.grandTotal || "0",
+        supplierId: result.supplierId,
+        branchId: result.branchId,
+        createdBy: result.createdBy,
+        invoiceDate: result.invoiceDate || new Date().toISOString().slice(0, 10),
+      }).catch(err => console.error("[AutoJournal] Purchase error:", err.message));
+
       res.json(result);
     } catch (err: any) {
       res.status(400).json({ message: err?.message ?? "فشل الترحيل" });
@@ -2635,6 +2690,94 @@ export async function registerRoutes(
       res.json(entry);
     } catch (err: any) {
       res.status(400).json({ message: err?.message ?? "خطأ في ترحيل القيد" });
+    }
+  });
+
+  app.post("/api/journal-entries/generate-retroactive", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      let generated = 0;
+
+      const salesRes = await pool.query(`SELECT * FROM sales ORDER BY id`);
+      for (const sale of salesRes.rows) {
+        const existing = await pool.query(`SELECT id FROM journal_entries WHERE source_type = 'sale' AND source_id = $1`, [sale.id]);
+        if (existing.rows.length === 0) {
+          await journalForSale({
+            id: sale.id,
+            invoiceNumber: sale.invoice_number || "",
+            total: sale.total || "0",
+            vat: sale.vat || "0",
+            paymentMethod: sale.payment_method || "cash",
+            branchId: sale.branch_id,
+            cashierId: sale.cashier_id,
+            cogsTotal: sale.cogs_total || "0",
+            createdAt: sale.created_at,
+          });
+          generated++;
+        }
+      }
+
+      const expensesRes = await pool.query(`SELECT * FROM expenses ORDER BY id`);
+      for (const exp of expensesRes.rows) {
+        const existing = await pool.query(`SELECT id FROM journal_entries WHERE source_type = 'expense' AND source_id = $1`, [exp.id]);
+        if (existing.rows.length === 0) {
+          await journalForExpense({
+            id: exp.id,
+            category: exp.category,
+            amount: exp.amount,
+            source: exp.source,
+            date: exp.date,
+            branchId: exp.branch_id,
+            createdBy: exp.created_by,
+            notes: exp.notes,
+          });
+          generated++;
+        }
+      }
+
+      const purchasesRes = await pool.query(`SELECT * FROM purchase_invoices WHERE status IN ('approved', 'received') ORDER BY id`);
+      for (const pur of purchasesRes.rows) {
+        const existing = await pool.query(`SELECT id FROM journal_entries WHERE source_type = 'purchase' AND source_id = $1`, [pur.id]);
+        if (existing.rows.length === 0) {
+          await journalForPurchase({
+            id: pur.id,
+            invoiceNumber: pur.invoice_number || "",
+            grandTotal: pur.grand_total || "0",
+            supplierId: pur.supplier_id,
+            branchId: pur.branch_id,
+            createdBy: pur.created_by,
+            invoiceDate: pur.invoice_date || new Date().toISOString().slice(0, 10),
+          });
+          generated++;
+        }
+      }
+
+      const returnsRes = await pool.query(`
+        SELECT sr.*, s.invoice_number as sale_invoice_number 
+        FROM sale_returns sr 
+        LEFT JOIN sales s ON s.id = sr.sale_id 
+        ORDER BY sr.id
+      `);
+      for (const ret of returnsRes.rows) {
+        const existing = await pool.query(`SELECT id FROM journal_entries WHERE source_type = 'return' AND source_id = $1`, [ret.id]);
+        if (existing.rows.length === 0) {
+          await journalForSaleReturn({
+            id: ret.id,
+            returnNumber: ret.return_number || "",
+            refundAmount: ret.refund_amount || "0",
+            refundMethod: ret.refund_method || "cash",
+            cogsReturned: ret.cogs_returned || "0",
+            branchId: ret.branch_id,
+            createdBy: ret.created_by,
+            saleInvoiceNumber: ret.sale_invoice_number || "",
+            createdAt: ret.created_at,
+          });
+          generated++;
+        }
+      }
+
+      res.json({ success: true, generated, message: `تم توليد ${generated} قيد محاسبي بأثر رجعي` });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في التوليد" });
     }
   });
 

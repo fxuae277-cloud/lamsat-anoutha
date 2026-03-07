@@ -61,18 +61,29 @@ shared/
 - **Desktop Unchanged**: Sidebar + table-based layouts preserved for ≥768px
 
 ## Accounting Module
+- **Auto Journal Entries (server/autoJournal.ts)**: Automatic double-entry journal generation
+  - Every financial operation creates a posted journal entry automatically
+  - Duplicate prevention: checks `source_type + source_id` before creating
+  - Account mapping uses chart of accounts codes (1101=Cash, 1102=Bank, 1301=Inventory, etc.)
+  - **Sale** → Dr: Cash/Bank + COGS, Cr: Sales Revenue + VAT + Inventory
+  - **Expense** → Dr: General Expenses, Cr: Cash/Bank
+  - **Purchase (approval)** → Dr: Inventory, Cr: Supplier Payables
+  - **Sale Return** → Dr: Sales Returns + Inventory, Cr: Cash/Bank + COGS
+  - **Supplier Payment** → Dr: Supplier Payables, Cr: Cash/Bank
+  - **Retroactive generation**: POST /api/journal-entries/generate-retroactive — generates entries for all existing transactions that don't have journal entries yet
 - **Chart of Accounts** (Accounts.tsx): Tree view of accounts with hierarchy (parentId), seeded with 24 default accounts
   - Account types: asset, liability, equity, revenue, expense
   - System accounts are read-only; custom accounts can be added/edited
   - API: GET/POST /api/accounts, PATCH /api/accounts/:id, POST /api/accounts/seed
 - **Journal Entries** (JournalEntries.tsx): Double-entry bookkeeping
   - Create manual entries with multiple debit/credit lines (must balance)
-  - Draft → Posted workflow; posted entries are read-only
-  - Source types: manual, sale, purchase, expense, return
+  - Auto-generated entries from operations arrive as "posted" status
+  - Filter by source type: manual, sale, purchase, expense, return, supplier_payment
+  - Draft → Posted workflow for manual entries; auto entries are posted immediately
   - API: GET/POST /api/journal-entries, POST /api/journal-entries/:id/post
 - **General Ledger + Trial Balance** (GeneralLedger.tsx):
-  - General Ledger: Select account, view all posted journal entry lines with running balance
-  - Trial Balance: All accounts with total debits/credits, grouped by type
+  - General Ledger: Reads from journal_entry_lines (not directly from transactions)
+  - Trial Balance: Aggregates posted journal entries per account — always balanced
   - API: GET /api/general-ledger?accountId=, GET /api/trial-balance
 - **Supplier Statement**: View purchase history per supplier with running balance (Purchases.tsx)
   - API: GET /api/suppliers/:id/statement
