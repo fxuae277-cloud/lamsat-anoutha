@@ -38,7 +38,7 @@ export function I18nProvider({ children, initialLang }: { children: ReactNode; i
   }, []);
 
   useEffect(() => {
-    document.documentElement.lang = lang;
+    document.documentElement.lang = lang === "ar" ? "ar-u-nu-latn" : lang;
     document.documentElement.dir = dir;
     document.body.style.direction = dir;
     document.body.style.textAlign = lang === "ar" ? "right" : "left";
