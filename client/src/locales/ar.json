@@ -1173,6 +1173,10 @@
     "from_date": "من تاريخ",
     "to_date": "إلى تاريخ",
     "payroll_count": "عدد الموظفين",
+    "total_deductions_sum": "إجمالي الاستقطاعات",
+    "base_salary_total": "إجمالي الرواتب الأساسية",
+    "pay_amount_label": "مبلغ الدفع",
+    "save_payment_btn": "حفظ",
     "total_gross": "إجمالي الراتب الإجمالي"
   },
   "invoices": {

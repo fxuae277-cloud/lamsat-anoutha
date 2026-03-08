@@ -1173,6 +1173,10 @@
     "from_date": "From Date",
     "to_date": "To Date",
     "payroll_count": "Employee Count",
+    "total_deductions_sum": "Total Deductions",
+    "base_salary_total": "Total Base Salaries",
+    "pay_amount_label": "Pay Amount",
+    "save_payment_btn": "Save",
     "total_gross": "Total Gross Salary"
   },
   "invoices": {

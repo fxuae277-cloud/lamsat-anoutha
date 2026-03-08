@@ -1674,6 +1674,8 @@ function SalaryPaymentsTab({ usersList }: { usersList: any[] }) {
   const [payRefNo, setPayRefNo] = useState("");
   const [filterEmp, setFilterEmp] = useState("__all__");
   const [filterStatus, setFilterStatus] = useState("__all__");
+  const [inlinePayAmounts, setInlinePayAmounts] = useState<Record<number, string>>({});
+  const [savingId, setSavingId] = useState<number | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [newPeriodStart, setNewPeriodStart] = useState("");
@@ -1708,9 +1710,36 @@ function SalaryPaymentsTab({ usersList }: { usersList: any[] }) {
     return true;
   });
 
+  const totalBaseSalary = filteredDetails.reduce((s, d: any) => s + parseFloat(d.basic_salary || "0"), 0);
+  const totalDeductionsAll = filteredDetails.reduce((s, d: any) =>
+    s + parseFloat(d.commission || "0") + parseFloat(d.deductions || "0") + parseFloat(d.advances || "0"), 0);
   const totalNet = filteredDetails.reduce((s, d: any) => s + parseFloat(d.net_salary || "0"), 0);
   const totalPaid = filteredDetails.reduce((s, d: any) => s + parseFloat(d.total_paid || "0"), 0);
   const totalRemaining = filteredDetails.reduce((s, d: any) => s + parseFloat(d.remaining || "0"), 0);
+
+  const inlinePayMutation = useMutation({
+    mutationFn: async ({ detail, amount }: { detail: any; amount: string }) => {
+      if (!currentRun) return;
+      await apiRequest("POST", "/api/salary-payments", {
+        payrollId: currentRun.id, payrollDetailId: detail.id,
+        employeeId: detail.employee_id, amount,
+        paymentDate: todayStr(), paymentMethod: "bank_transfer",
+        branchId: detail.branch_id,
+      });
+    },
+    onMutate: ({ detail }) => { setSavingId(detail.id); },
+    onSuccess: (_data, { detail }) => {
+      toast({ title: t("hr.payment_saved") });
+      queryClient.invalidateQueries({ queryKey: [detailsKey] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll-runs"] });
+      setInlinePayAmounts(prev => { const n = { ...prev }; delete n[detail.id]; return n; });
+      setSavingId(null);
+    },
+    onError: (err: Error) => {
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
+      setSavingId(null);
+    },
+  });
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -1921,7 +1950,15 @@ function SalaryPaymentsTab({ usersList }: { usersList: any[] }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <div className="bg-indigo-50 rounded-lg p-3 text-center">
+              <p className="text-[10px] text-indigo-600">{t("hr.base_salary_total")}</p>
+              <p className="text-sm font-bold text-indigo-700">{totalBaseSalary.toFixed(3)}</p>
+            </div>
+            <div className="bg-orange-50 rounded-lg p-3 text-center">
+              <p className="text-[10px] text-orange-600">{t("hr.total_deductions_sum")}</p>
+              <p className="text-sm font-bold text-orange-700">{totalDeductionsAll.toFixed(3)}</p>
+            </div>
             <div className="bg-blue-50 rounded-lg p-3 text-center">
               <p className="text-[10px] text-blue-600">{t("hr.total_net")}</p>
               <p className="text-sm font-bold text-blue-700">{totalNet.toFixed(3)}</p>
@@ -1933,10 +1970,6 @@ function SalaryPaymentsTab({ usersList }: { usersList: any[] }) {
             <div className="bg-red-50 rounded-lg p-3 text-center">
               <p className="text-[10px] text-red-600">{t("hr.remaining_to_pay")}</p>
               <p className="text-sm font-bold text-red-700">{totalRemaining.toFixed(3)}</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-3 text-center">
-              <p className="text-[10px] text-gray-600">{t("hr.payroll_count")}</p>
-              <p className="text-sm font-bold text-gray-700">{filteredDetails.length}</p>
             </div>
           </div>
 
@@ -1950,17 +1983,24 @@ function SalaryPaymentsTab({ usersList }: { usersList: any[] }) {
                   <TableHead>{t("hr.table_commissions")}</TableHead>
                   <TableHead>{t("hr.table_deductions")}</TableHead>
                   <TableHead>{t("hr.table_advances")}</TableHead>
+                  <TableHead>{t("hr.total_deductions_sum")}</TableHead>
                   <TableHead>{t("hr.net_salary")}</TableHead>
                   <TableHead>{t("hr.total_paid")}</TableHead>
                   <TableHead>{t("hr.remaining_to_pay")}</TableHead>
                   <TableHead>{t("hr.payment_status")}</TableHead>
-                  <TableHead className="w-[130px]">{t("common.actions")}</TableHead>
+                  {currentRun.status === "approved" && <TableHead className="w-[120px]">{t("hr.pay_amount_label")}</TableHead>}
+                  <TableHead className="w-[120px]">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredDetails.length === 0 ? (
-                  <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">{t("hr.no_payment_data")}</TableCell></TableRow>
-                ) : filteredDetails.map((d: any) => (
+                  <TableRow><TableCell colSpan={currentRun.status === "approved" ? 13 : 12} className="text-center py-8 text-muted-foreground">{t("hr.no_payment_data")}</TableCell></TableRow>
+                ) : filteredDetails.map((d: any) => {
+                  const deductionsTotal = parseFloat(d.commission || "0") + parseFloat(d.deductions || "0") + parseFloat(d.advances || "0");
+                  const remaining = parseFloat(d.remaining || "0");
+                  const canPay = currentRun.status === "approved" && d.payment_status !== "paid" && remaining > 0;
+                  const inlineAmt = inlinePayAmounts[d.id] ?? "";
+                  return (
                   <TableRow key={d.id} data-testid={`row-payment-${d.id}`}>
                     <TableCell className="font-medium">{d.employee_name}</TableCell>
                     <TableCell className="text-sm">{d.branch_name || "-"}</TableCell>
@@ -1968,15 +2008,40 @@ function SalaryPaymentsTab({ usersList }: { usersList: any[] }) {
                     <TableCell className="text-blue-600">{fmt(d.commission)}</TableCell>
                     <TableCell className="text-red-600">{fmt(d.deductions)}</TableCell>
                     <TableCell className="text-red-600">{fmt(d.advances)}</TableCell>
+                    <TableCell className="text-orange-600 font-medium">{deductionsTotal.toFixed(3)}</TableCell>
                     <TableCell className="font-bold text-primary">{fmt(d.net_salary)}</TableCell>
                     <TableCell className="text-green-600 font-medium">{fmt(d.total_paid)}</TableCell>
                     <TableCell className="text-red-600 font-bold">{fmt(d.remaining)}</TableCell>
                     <TableCell>{paymentStatusBadge(d.payment_status, t)}</TableCell>
+                    {currentRun.status === "approved" && (
+                      <TableCell>
+                        {canPay ? (
+                          <Input
+                            type="number" step="0.001" min="0"
+                            max={remaining.toString()}
+                            placeholder={remaining.toFixed(3)}
+                            className="h-8 w-[100px] text-sm"
+                            value={inlineAmt}
+                            onChange={e => setInlinePayAmounts(prev => ({ ...prev, [d.id]: e.target.value }))}
+                            data-testid={`input-inline-pay-${d.id}`}
+                          />
+                        ) : d.payment_status === "paid" ? (
+                          <Badge className="bg-green-100 text-green-700 text-xs">{t("hr.status_paid")}</Badge>
+                        ) : null}
+                      </TableCell>
+                    )}
                     <TableCell>
                       <div className="flex gap-1">
-                        {currentRun.status === "approved" && d.payment_status !== "paid" && parseFloat(d.net_salary || "0") > 0 && (
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-green-600" onClick={() => { setSelectedDetail(d); setPayAmount(d.remaining); setPayOpen(true); }} data-testid={`button-pay-emp-${d.id}`} title={t("hr.record_payment")}>
-                            <DollarSign className="w-3.5 h-3.5" />
+                        {canPay && (
+                          <Button
+                            size="sm"
+                            className="h-7 gap-1 bg-green-600 hover:bg-green-700 text-xs px-2"
+                            disabled={savingId === d.id || !inlineAmt || parseFloat(inlineAmt) <= 0 || parseFloat(inlineAmt) > remaining}
+                            onClick={() => inlinePayMutation.mutate({ detail: d, amount: inlineAmt })}
+                            data-testid={`button-save-pay-${d.id}`}
+                          >
+                            {savingId === d.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                            {t("hr.save_payment_btn")}
                           </Button>
                         )}
                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setSelectedDetail(d); setSlipOpen(true); }} title={t("hr.salary_slip")}>
@@ -1988,7 +2053,8 @@ function SalaryPaymentsTab({ usersList }: { usersList: any[] }) {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
