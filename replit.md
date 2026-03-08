@@ -178,7 +178,7 @@ shared/
 - **Audit Logging**: all sensitive HR operations logged with before/after values
 - Report endpoints: /api/reports/employee-statement/:id, /api/reports/payroll-payments, /api/reports/recurring-deductions, /api/reports/payroll-by-branch, /api/reports/payroll-comparison
 - **Auto Journal**: salary payments create journal entries (Dr: Salary Expenses 5200, Cr: Bank 1102) — always bank, never cash
-- **Auto Journal for Advances**: When creating advance, auto-journal entry (Dr: Employee Advances 1401, Cr: Cash 1101)
+- **Auto Journal for Advances**: When creating advance, auto-journal entry (Dr: Employee Advances 1401, Cr: Bank 1102) + bank_ledger entry — always bank, never cash
 - **Salary Slip**: Individual employee payslip with print support
 - **Export**: Print payroll sheet (A4), Export Excel (CSV), Salary slip print
 - **Summary Cards**: 10 KPI cards in payroll details

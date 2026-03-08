@@ -2649,6 +2649,20 @@ export async function registerRoutes(
         const { journalForEmployeeAdvance } = await import("./autoJournal");
         await journalForEmployeeAdvance(advance, req.session.userId!);
       } catch (jErr) {}
+
+      const emp = await storage.getUser(Number(employeeId));
+      await storage.addBankLedgerEntry({
+        date,
+        branchId: emp?.branchId || 1,
+        method: "bank_transfer",
+        amountIn: "0",
+        amountOut: String(amount),
+        refId: `ADV-${advance.id}`,
+        category: "employee_advance",
+        note: `سلفة موظف: ${emp?.name || employeeId}`,
+        createdBy: req.session.userId!,
+      });
+
       res.status(201).json(advance);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });

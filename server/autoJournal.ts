@@ -321,7 +321,7 @@ export async function journalForEmployeeAdvance(advance: {
     createdBy,
     lines: [
       { accountCode: ACCOUNT_CODES.EMPLOYEE_ADVANCES, debit: amt, credit: 0, description: desc },
-      { accountCode: ACCOUNT_CODES.CASH, debit: 0, credit: amt, description: desc },
+      { accountCode: ACCOUNT_CODES.BANK, debit: 0, credit: amt, description: desc },
     ],
   });
 }
