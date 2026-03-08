@@ -3172,7 +3172,8 @@ export class DatabaseStorage implements IStorage {
   async getPayrollRuns(filters?: { branchId?: number; month?: string; year?: number; status?: string }) {
     let query = `
       SELECT pr.*, u1.name as creator_name, u2.name as approver_name,
-             u3.name as reviewer_name, u4.name as cancelled_by_name
+             u3.name as reviewer_name, u4.name as cancelled_by_name,
+             COALESCE((SELECT SUM(sp.amount) FROM salary_payments sp WHERE sp.payroll_id = pr.id), 0) as total_paid
       FROM payroll_runs pr
       LEFT JOIN users u1 ON u1.id = pr.created_by
       LEFT JOIN users u2 ON u2.id = pr.approved_by
