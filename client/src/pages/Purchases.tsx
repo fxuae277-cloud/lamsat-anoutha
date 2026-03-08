@@ -469,7 +469,7 @@ function SupplierStatementDialog({ open, onOpenChange, supplierId }: { open: boo
                   ) : (
                     statement.items.map((item: any, idx: number) => (
                       <TableRow key={idx}>
-                        <TableCell>{new Date(item.created_at).toLocaleDateString()}</TableCell>
+                        <TableCell>{new Date(item.created_at).toLocaleDateString("en-US")}</TableCell>
                         <TableCell>
                           {item.type === 'purchase' ? t("customers.statement_purchase") : t("customers.statement_payment")}
                         </TableCell>

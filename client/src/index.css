@@ -4,27 +4,57 @@
 @custom-variant dark (&:is(.dark *));
 
 @font-face {
-  font-family: 'WesternNums';
-  src: local('Inter'), local('Roboto'), local('Segoe UI'), local('Arial'), local('Helvetica');
-  unicode-range: U+0030-0039, U+0025, U+002B, U+002C, U+002D, U+002E, U+002F, U+003A;
-  font-weight: 100 900;
+  font-family: 'DigitsEN';
   font-style: normal;
+  font-weight: 300;
   font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuOKfMZg.ttf) format('truetype');
+  unicode-range: U+0020-007F;
+}
+@font-face {
+  font-family: 'DigitsEN';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf) format('truetype');
+  unicode-range: U+0020-007F;
+}
+@font-face {
+  font-family: 'DigitsEN';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuI6fMZg.ttf) format('truetype');
+  unicode-range: U+0020-007F;
+}
+@font-face {
+  font-family: 'DigitsEN';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuGKYMZg.ttf) format('truetype');
+  unicode-range: U+0020-007F;
+}
+@font-face {
+  font-family: 'DigitsEN';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf) format('truetype');
+  unicode-range: U+0020-007F;
+}
+@font-face {
+  font-family: 'DigitsEN';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuDyYMZg.ttf) format('truetype');
+  unicode-range: U+0020-007F;
 }
 
 * {
   font-variant-numeric: lining-nums tabular-nums;
   font-feature-settings: "lnum" 1, "tnum" 1;
-}
-
-input, textarea, select, button,
-[type="number"], [type="text"], [type="tel"], [type="email"], [type="date"],
-td, th, span, p, div, label, h1, h2, h3, h4, h5, h6, li, a {
-  font-family: 'WesternNums', 'Inter', 'Cairo', sans-serif !important;
-}
-
-::placeholder {
-  font-family: 'WesternNums', 'Inter', 'Cairo', sans-serif !important;
 }
 
 @theme inline {
@@ -63,7 +93,7 @@ td, th, span, p, div, label, h1, h2, h3, h4, h5, h6, li, a {
   --color-sidebar-border: hsl(var(--sidebar-border));
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 
-  --font-sans: 'Inter', 'Cairo', sans-serif;
+  --font-sans: 'DigitsEN', 'Cairo', sans-serif;
 }
 
 :root {
@@ -74,11 +104,9 @@ td, th, span, p, div, label, h1, h2, h3, h4, h5, h6, li, a {
   --popover: 0 0% 100%;
   --popover-foreground: 340 10% 20%;
   
-  /* Soft Rose / Feminine Pink */
   --primary: 346 80% 65%;
   --primary-foreground: 0 0% 100%;
   
-  /* Slightly darker rose for hover states (simulated via opacity/hsl math usually, but setting a specific accent) */
   --secondary: 346 40% 95%;
   --secondary-foreground: 346 80% 40%;
   

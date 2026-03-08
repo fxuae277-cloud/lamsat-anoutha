@@ -354,10 +354,11 @@ export default function POS() {
     const html = `<!DOCTYPE html><html dir="${dir}" lang="${lang}"><head><meta charset="utf-8">
       <title>${t("pos.receipt_title")}</title>
       <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+      <style>@font-face{font-family:'DigitsEN';font-style:normal;font-weight:400;src:url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf) format('truetype');unicode-range:U+0020-007F}@font-face{font-family:'DigitsEN';font-style:normal;font-weight:700;src:url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf) format('truetype');unicode-range:U+0020-007F}</style>
       <style>
         @page { size: 80mm auto; margin: 0; }
         * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family:'Inter','Cairo',sans-serif; width:80mm; padding:6mm 4mm; color:#000; direction:${dir}; font-size:12px; }
+        body { font-family:'DigitsEN','Cairo',sans-serif; width:80mm; padding:6mm 4mm; color:#000; direction:${dir}; font-size:12px; }
         .center { text-align:center; }
         .brand { font-size:18px; font-weight:700; color:#8b5a7a; }
         .sep { border-bottom:1px dashed #999; margin:4px 0; }

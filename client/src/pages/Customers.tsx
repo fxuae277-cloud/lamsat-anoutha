@@ -217,7 +217,9 @@ export default function Customers() {
     const w = window.open("", "_blank");
     if (!w) return;
     w.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>${t("customers.statement")}</title>
-<style>*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Tahoma,sans-serif}body{padding:20mm;direction:rtl;color:#333}
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+<style>@font-face{font-family:'DigitsEN';font-style:normal;font-weight:400;src:url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf) format('truetype');unicode-range:U+0020-007F}@font-face{font-family:'DigitsEN';font-style:normal;font-weight:700;src:url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf) format('truetype');unicode-range:U+0020-007F}</style>
+<style>*{margin:0;padding:0;box-sizing:border-box;font-family:'DigitsEN','Cairo',sans-serif}body{padding:20mm;direction:rtl;color:#333}
 .header{text-align:center;margin-bottom:20px;border-bottom:2px solid #333;padding-bottom:15px}.header h1{font-size:22px;margin-bottom:5px}.header p{font-size:12px;color:#666}
 .info{display:flex;justify-content:space-between;margin-bottom:15px;font-size:13px}.info div{flex:1}
 table{width:100%;border-collapse:collapse;margin:15px 0;font-size:12px}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f5f5f5;font-weight:bold}

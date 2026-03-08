@@ -3,14 +3,16 @@ import { Sidebar } from "./Sidebar";
 import { Bell, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/lib/i18n";
-import { toEnDigits } from "@/lib/formatters";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { t, lang } = useI18n();
 
-  const headerDate = toEnDigits(
-    new Date().toLocaleDateString(lang === "ar" ? "ar-u-nu-latn" : "en-US", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-  );
+  const WEEKDAY_AR = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+  const MONTH_AR = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+  const now = new Date();
+  const headerDate = lang === "ar"
+    ? `${WEEKDAY_AR[now.getDay()]}، ${now.getDate()} ${MONTH_AR[now.getMonth()]} ${now.getFullYear()}`
+    : now.toLocaleDateString("en-US", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
     <div className="flex h-screen bg-background overflow-hidden text-foreground">

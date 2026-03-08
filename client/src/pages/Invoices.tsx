@@ -64,10 +64,11 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
     const html = `<!DOCTYPE html><html dir="${lang === "ar" ? "rtl" : "ltr"}" lang="${lang}"><head><meta charset="utf-8">
       <title>${t("invoices.print_thermal")}</title>
       <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+      <style>@font-face{font-family:'DigitsEN';font-style:normal;font-weight:400;src:url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf) format('truetype');unicode-range:U+0020-007F}@font-face{font-family:'DigitsEN';font-style:normal;font-weight:700;src:url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf) format('truetype');unicode-range:U+0020-007F}</style>
       <style>
         @page { size: 80mm auto; margin: 0; }
         * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family:'Inter','Cairo',sans-serif; width:80mm; padding:6mm 4mm; color:#000; direction:${lang === "ar" ? "rtl" : "ltr"}; font-size:12px; }
+        body { font-family:'DigitsEN','Cairo',sans-serif; width:80mm; padding:6mm 4mm; color:#000; direction:${lang === "ar" ? "rtl" : "ltr"}; font-size:12px; }
         .center { text-align:center; }
         .brand { font-size:18px; font-weight:700; color:#8b5a7a; }
         .sep { border-bottom:1px dashed #999; margin:4px 0; }
@@ -125,9 +126,10 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
   <meta charset="utf-8">
   <title>${t("invoices.a4_title")} ${detail.invoiceNumber || detail.id}</title>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+  <style>@font-face{font-family:'DigitsEN';font-style:normal;font-weight:400;src:url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf) format('truetype');unicode-range:U+0020-007F}@font-face{font-family:'DigitsEN';font-style:normal;font-weight:700;src:url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf) format('truetype');unicode-range:U+0020-007F}</style>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Inter', 'Cairo', sans-serif; padding: 30px; max-width: 800px; margin: 0 auto; color: #333; direction: ${lang === "ar" ? "rtl" : "ltr"}; }
+    body { font-family: 'DigitsEN', 'Cairo', sans-serif; padding: 30px; max-width: 800px; margin: 0 auto; color: #333; direction: ${lang === "ar" ? "rtl" : "ltr"}; }
     .header { text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #e8d5e0; }
     .header h1 { color: #8b5a7a; font-size: 22px; margin-bottom: 4px; }
     .header p { color: #888; font-size: 13px; }
