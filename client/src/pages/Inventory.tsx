@@ -206,6 +206,10 @@ function TransfersTab() {
     setHighlightedVariant(found.variant_id);
     setTimeout(() => setHighlightedVariant(null), 1500);
     setScanBarcode("");
+    setTimeout(() => {
+      const row = document.querySelector(`[data-testid="row-source-item-${found.variant_id}"]`);
+      if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
   };
 
   const totalItems = Object.values(transferQtys).filter(q => q > 0).length;
@@ -254,7 +258,7 @@ function TransfersTab() {
           </div>
         </div>
 
-        {fromLoc && toLoc && (
+        {fromLoc && sourceStock.length > 0 && (
           <div className="flex gap-2 p-3 bg-muted rounded-md items-center">
             <Barcode className="w-4 h-4 text-muted-foreground shrink-0" />
             <Input 
@@ -264,6 +268,7 @@ function TransfersTab() {
               onKeyDown={e => { if (e.key === "Enter") handleBarcodeScan(scanBarcode); }}
               data-testid="input-transfer-barcode"
               className="flex-1"
+              autoFocus
             />
             <BarcodeScanButton onScan={handleBarcodeScan} />
           </div>
@@ -341,6 +346,19 @@ function TransfersTab() {
                 </TableBody>
               </Table>
             </div>
+
+            {totalItems > 0 && (
+              <div className="px-4 py-3 bg-blue-50/60 border-t flex items-center gap-6 text-sm">
+                <div>
+                  <span className="text-muted-foreground">{t("transfers.summary_items")}:</span>{" "}
+                  <span className="font-bold text-blue-700">{totalItems}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">{t("transfers.summary_total_qty")}:</span>{" "}
+                  <span className="font-bold text-blue-700">{totalQty}</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

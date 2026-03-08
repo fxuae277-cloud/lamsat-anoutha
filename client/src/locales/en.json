@@ -424,7 +424,9 @@
     "item_not_in_source": "Item not available at source or qty is zero",
     "no_items_yet": "No items added yet",
     "items_count": "items",
-    "total_qty": "units"
+    "total_qty": "units",
+    "summary_items": "Items selected",
+    "summary_total_qty": "Total units"
   },
   "ledger": {
     "title": "General Ledger & Trial Balance",

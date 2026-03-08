@@ -424,7 +424,9 @@
     "item_not_in_source": "الصنف غير متوفر في المصدر أو كميته صفر",
     "no_items_yet": "لم تتم إضافة أصناف بعد",
     "items_count": "صنف",
-    "total_qty": "وحدة"
+    "total_qty": "وحدة",
+    "summary_items": "عدد الأصناف",
+    "summary_total_qty": "إجمالي القطع"
   },
   "ledger": {
     "title": "سجل الأستاذ العام وميزان المراجعة",
