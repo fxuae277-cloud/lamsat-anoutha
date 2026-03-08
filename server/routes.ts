@@ -916,6 +916,50 @@ export async function registerRoutes(
   });
 
   // ── Stock Transfers ──
+  app.get("/api/transfer-locations", requireAuth, async (_req, res) => {
+    const result = await pool.query(`
+      SELECT 'central' as type, l.id as location_id, l.name as label, NULL::int as branch_id
+      FROM locations l WHERE l.is_central = true AND l.active = true
+      UNION ALL
+      SELECT 'branch' as type, l.id as location_id, b.name as label, b.id as branch_id
+      FROM branches b
+      JOIN locations l ON l.branch_id = b.id AND l.is_branch_default = true AND l.active = true
+      ORDER BY type DESC, label
+    `);
+    res.json(result.rows);
+  });
+
+  app.get("/api/transfer-source-stock/:locationId", requireAuth, async (req, res) => {
+    const locationId = Number(req.params.locationId);
+    const locRes = await pool.query(`SELECT id, is_central, branch_id FROM locations WHERE id = $1`, [locationId]);
+    const loc = locRes.rows[0];
+    if (!loc) return res.status(404).json({ message: "الموقع غير موجود" });
+
+    let locationIds: number[] = [];
+    if (loc.is_central) {
+      locationIds = [loc.id];
+    } else if (loc.branch_id) {
+      const branchLocs = await pool.query(`SELECT id FROM locations WHERE branch_id = $1 AND active = true`, [loc.branch_id]);
+      locationIds = branchLocs.rows.map((r: any) => r.id);
+    } else {
+      locationIds = [loc.id];
+    }
+
+    const result = await pool.query(`
+      SELECT ib.variant_id, SUM(ib.qty_on_hand) as qty_on_hand,
+             pv.barcode, pv.sku, pv.color, pv.size, pv.price,
+             p.name as product_name, p.id as product_id
+      FROM inventory_balances ib
+      JOIN product_variants pv ON pv.id = ib.variant_id
+      JOIN products p ON p.id = pv.product_id
+      WHERE ib.location_id = ANY($1) AND ib.qty_on_hand > 0
+      GROUP BY ib.variant_id, pv.barcode, pv.sku, pv.color, pv.size, pv.price, p.name, p.id
+      HAVING SUM(ib.qty_on_hand) > 0
+      ORDER BY p.name, pv.color, pv.size
+    `, [locationIds]);
+    res.json(result.rows);
+  });
+
   app.get("/api/stock-transfers", requireAuth, async (_req, res) => {
     res.json(await storage.getStockTransfers());
   });
@@ -923,7 +967,38 @@ export async function registerRoutes(
     const transfer = await storage.getStockTransfer(Number(req.params.id));
     if (!transfer) return res.status(404).json({ message: "التحويل غير موجود" });
     const lines = await storage.getStockTransferLines(transfer.id);
-    res.json({ ...transfer, lines });
+
+    const fromLocRes = await pool.query(`
+      SELECT l.is_central, CASE WHEN l.is_central THEN l.name ELSE COALESCE(b.name, l.name) END as label
+      FROM locations l LEFT JOIN branches b ON b.id = l.branch_id WHERE l.id = $1
+    `, [transfer.fromLocationId]);
+    const toLocRes = await pool.query(`
+      SELECT l.is_central, CASE WHEN l.is_central THEN l.name ELSE COALESCE(b.name, l.name) END as label
+      FROM locations l LEFT JOIN branches b ON b.id = l.branch_id WHERE l.id = $1
+    `, [transfer.toLocationId]);
+
+    const detFromLocRes = await pool.query(`SELECT id, is_central, branch_id FROM locations WHERE id = $1`, [transfer.fromLocationId]);
+    const detFromLoc = detFromLocRes.rows[0];
+    let detSourceLocIds: number[] = [transfer.fromLocationId];
+    if (detFromLoc && !detFromLoc.is_central && detFromLoc.branch_id) {
+      const branchLocs = await pool.query(`SELECT id FROM locations WHERE branch_id = $1 AND active = true`, [detFromLoc.branch_id]);
+      detSourceLocIds = branchLocs.rows.map((r: any) => r.id);
+    }
+
+    for (const line of lines) {
+      const balRes = await pool.query(
+        `SELECT COALESCE(SUM(qty_on_hand), 0) as available FROM inventory_balances WHERE variant_id = $1 AND location_id = ANY($2)`,
+        [line.variant_id, detSourceLocIds]
+      );
+      line.available_qty = Number(balRes.rows[0]?.available || 0);
+    }
+
+    res.json({
+      ...transfer,
+      from_location_name: fromLocRes.rows[0]?.label || "",
+      to_location_name: toLocRes.rows[0]?.label || "",
+      lines,
+    });
   });
   app.post("/api/stock-transfers", requireAuth, async (req, res) => {
     try {
@@ -943,10 +1018,38 @@ export async function registerRoutes(
     try {
       const transfer = await storage.getStockTransfer(Number(req.params.id));
       if (!transfer || transfer.status !== "draft") return res.status(400).json({ message: "لا يمكن التعديل" });
+
+      const variantId = req.body.variantId;
+      const qty = req.body.qty || 1;
+
+      const fromLocRes = await pool.query(`SELECT id, is_central, branch_id FROM locations WHERE id = $1`, [transfer.fromLocationId]);
+      const fromLoc = fromLocRes.rows[0];
+      let sourceLocIds: number[] = [transfer.fromLocationId];
+      if (fromLoc && !fromLoc.is_central && fromLoc.branch_id) {
+        const branchLocs = await pool.query(`SELECT id FROM locations WHERE branch_id = $1 AND active = true`, [fromLoc.branch_id]);
+        sourceLocIds = branchLocs.rows.map((r: any) => r.id);
+      }
+
+      const balRes = await pool.query(
+        `SELECT COALESCE(SUM(qty_on_hand), 0) as available FROM inventory_balances WHERE variant_id = $1 AND location_id = ANY($2)`,
+        [variantId, sourceLocIds]
+      );
+      const available = Number(balRes.rows[0]?.available || 0);
+
+      const existingRes = await pool.query(
+        `SELECT COALESCE(SUM(qty), 0) as already FROM stock_transfer_lines WHERE transfer_id = $1 AND variant_id = $2`,
+        [transfer.id, variantId]
+      );
+      const already = Number(existingRes.rows[0]?.already || 0);
+
+      if (already + qty > available) {
+        return res.status(400).json({ message: `الكمية غير كافية. المتوفر: ${available}, المطلوب سابقاً: ${already}` });
+      }
+
       const line = await storage.addStockTransferLine({
         transferId: transfer.id,
-        variantId: req.body.variantId,
-        qty: req.body.qty,
+        variantId,
+        qty,
       });
       res.status(201).json(line);
     } catch (err: any) {

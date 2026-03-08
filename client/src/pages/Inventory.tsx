@@ -122,6 +122,8 @@ function BalancesTab() {
   );
 }
 
+type TransferLocation = { type: string; location_id: number; label: string; branch_id: number | null };
+
 function TransfersTab() {
   const { t, lang } = useI18n();
   const { toast } = useToast();
@@ -135,14 +137,20 @@ function TransfersTab() {
     queryKey: ["/api/stock-transfers"],
   });
 
-  const { data: locations = [] } = useQuery<Location[]>({
-    queryKey: ["/api/locations"],
+  const { data: transferLocs = [] } = useQuery<TransferLocation[]>({
+    queryKey: ["/api/transfer-locations"],
   });
 
   const { data: transferDetail } = useQuery<any>({
     queryKey: [`/api/stock-transfers/${selectedTransfer?.id}`],
     queryFn: getQueryFn({ on401: "throw" }),
     enabled: !!selectedTransfer?.id,
+  });
+
+  const { data: sourceStock = [] } = useQuery<any[]>({
+    queryKey: [`/api/transfer-source-stock/${fromLoc}`],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: !!fromLoc,
   });
 
   const createMutation = useMutation({
@@ -175,7 +183,7 @@ function TransfersTab() {
   const addLineMutation = useMutation({
     mutationFn: async ({ id, barcode, qty }: { id: number, barcode: string, qty: number }) => {
       const res = await fetch(`/api/variants/barcode/${barcode}`);
-      if (!res.ok) throw new Error(t("pos.product_not_found"));
+      if (!res.ok) throw new Error(t("transfers.item_not_in_source"));
       const variant = await res.json();
       await apiRequest("POST", `/api/stock-transfers/${id}/lines`, { variantId: variant.id, qty });
     },
@@ -187,6 +195,18 @@ function TransfersTab() {
     onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" })
   });
 
+  const deleteLineMutation = useMutation({
+    mutationFn: async (lineId: number) => {
+      await apiRequest("DELETE", `/api/stock-transfer-lines/${lineId}`);
+    },
+    onSuccess: () => {
+      if (selectedTransfer?.id) queryClient.invalidateQueries({ queryKey: [`/api/stock-transfers/${selectedTransfer.id}`] });
+    },
+    onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" })
+  });
+
+  const detailStatus = transferDetail?.status || selectedTransfer?.status;
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
@@ -195,63 +215,110 @@ function TransfersTab() {
         </Button>
       </div>
 
-      <div className="border rounded-md">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("common.date")}</TableHead>
-              <TableHead>{t("transfers.from_location")}</TableHead>
-              <TableHead>{t("transfers.to_location")}</TableHead>
-              <TableHead>{t("common.status")}</TableHead>
-              <TableHead>{t("common.employee")}</TableHead>
-              <TableHead className="text-right">{t("common.actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {transfers.map((tx: any) => (
-              <TableRow key={tx.id} className="cursor-pointer" onClick={() => setSelectedTransfer(tx)}>
-                <TableCell>{new Date(tx.created_at || tx.createdAt).toLocaleDateString("en-US")}</TableCell>
-                <TableCell>{tx.from_location_name || tx.fromLocationName}</TableCell>
-                <TableCell>{tx.to_location_name || tx.toLocationName}</TableCell>
-                <TableCell>
-                  <Badge variant={tx.status === "approved" ? "outline" : tx.status === "cancelled" ? "destructive" : "secondary"} className={tx.status === "approved" ? "border-green-500 text-green-700 bg-green-50" : ""}>
-                    {t(`transfers.status_${tx.status}`)}
-                  </Badge>
-                </TableCell>
-                <TableCell>{tx.creator_name || tx.creatorName}</TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedTransfer(tx); }} data-testid={`button-view-transfer-${tx.id}`}>
-                    <Search className="w-4 h-4" />
-                  </Button>
-                </TableCell>
+      {transfers.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <ArrowRightLeft className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p>{t("transfers.no_transfers")}</p>
+        </div>
+      ) : (
+        <div className="border rounded-md">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>#</TableHead>
+                <TableHead>{t("common.date")}</TableHead>
+                <TableHead>{t("transfers.from_location")}</TableHead>
+                <TableHead>{t("transfers.to_location")}</TableHead>
+                <TableHead>{t("common.status")}</TableHead>
+                <TableHead>{t("common.employee")}</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+            </TableHeader>
+            <TableBody>
+              {transfers.map((tx: any) => (
+                <TableRow key={tx.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedTransfer(tx)} data-testid={`row-transfer-${tx.id}`}>
+                  <TableCell className="font-mono text-xs">{tx.id}</TableCell>
+                  <TableCell>{new Date(tx.created_at || tx.createdAt).toLocaleDateString("en-US")}</TableCell>
+                  <TableCell className="font-medium">{tx.from_location_name || tx.fromLocationName}</TableCell>
+                  <TableCell className="font-medium">{tx.to_location_name || tx.toLocationName}</TableCell>
+                  <TableCell>
+                    <Badge variant={tx.status === "approved" ? "outline" : tx.status === "cancelled" ? "destructive" : "secondary"} className={tx.status === "approved" ? "border-green-500 text-green-700 bg-green-50" : ""}>
+                      {t(`transfers.status_${tx.status}`)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{tx.creator_name || tx.creatorName}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent>
+      <Dialog open={isCreateOpen} onOpenChange={(open) => { if (!open) { setFromLoc(""); setToLoc(""); } setIsCreateOpen(open); }}>
+        <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{t("transfers.create_transfer")}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("transfers.from_location")}</label>
-              <Select value={fromLoc} onValueChange={setFromLoc}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select value={fromLoc} onValueChange={(v) => { setFromLoc(v); if (v === toLoc) setToLoc(""); }}>
+                <SelectTrigger data-testid="select-from-location"><SelectValue placeholder={t("transfers.select_source")} /></SelectTrigger>
                 <SelectContent>
-                  {locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{locLabel(l)}</SelectItem>)}
+                  {transferLocs.map(tl => (
+                    <SelectItem key={tl.location_id} value={String(tl.location_id)}>
+                      {tl.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("transfers.to_location")}</label>
               <Select value={toLoc} onValueChange={setToLoc}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger data-testid="select-to-location"><SelectValue placeholder={t("transfers.select_destination")} /></SelectTrigger>
                 <SelectContent>
-                  {locations.filter(l => String(l.id) !== fromLoc).map(l => <SelectItem key={l.id} value={String(l.id)}>{locLabel(l)}</SelectItem>)}
+                  {transferLocs
+                    .filter(tl => String(tl.location_id) !== fromLoc)
+                    .map(tl => (
+                      <SelectItem key={tl.location_id} value={String(tl.location_id)}>
+                        {tl.label}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
+
+            {fromLoc && sourceStock.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">{t("transfers.available_items")} ({sourceStock.length})</label>
+                <div className="border rounded-md max-h-40 overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">{t("inv_balances.product")}</TableHead>
+                        <TableHead className="text-xs">{t("products.variant_color")}</TableHead>
+                        <TableHead className="text-xs">{t("products.variant_size")}</TableHead>
+                        <TableHead className="text-xs text-right">{t("transfers.qty_available")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sourceStock.map((item: any, i: number) => (
+                        <TableRow key={i} className="text-xs">
+                          <TableCell>{item.product_name}</TableCell>
+                          <TableCell>{item.color || "-"}</TableCell>
+                          <TableCell>{item.size || "-"}</TableCell>
+                          <TableCell className="text-right font-medium">{Number(item.qty_on_hand)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+
+            {fromLoc && sourceStock.length === 0 && (
+              <div className="text-center py-4 text-sm text-muted-foreground bg-muted rounded-md">
+                {t("transfers.no_stock_at_source")}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCreateOpen(false)}>{t("common.cancel")}</Button>
@@ -266,30 +333,32 @@ function TransfersTab() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!selectedTransfer} onOpenChange={(open) => !open && setSelectedTransfer(null)}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={!!selectedTransfer} onOpenChange={(open) => { if (!open) { setSelectedTransfer(null); setScanBarcode(""); } }}>
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>{t("transfers.title")} #{selectedTransfer?.id}</DialogTitle>
-            <DialogDescription>
-              {selectedTransfer?.from_location_name || selectedTransfer?.fromLocationName} <ArrowRightLeft className="inline w-3 h-3 mx-1" /> {selectedTransfer?.to_location_name || selectedTransfer?.toLocationName}
+            <DialogDescription className="flex items-center gap-2 text-base">
+              <span className="font-semibold">{transferDetail?.from_location_name || selectedTransfer?.from_location_name}</span>
+              <ArrowRightLeft className="inline w-4 h-4 text-muted-foreground" />
+              <span className="font-semibold">{transferDetail?.to_location_name || selectedTransfer?.to_location_name}</span>
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4">
-            {(transferDetail?.status || selectedTransfer?.status) === "draft" && (
-              <div className="flex gap-2 p-2 bg-muted rounded-md">
+            {detailStatus === "draft" && (
+              <div className="flex gap-2 p-3 bg-muted rounded-md">
                 <Input 
                   placeholder={t("transfers.scan_barcode")} 
                   value={scanBarcode} 
                   onChange={e => setScanBarcode(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && addLineMutation.mutate({ id: selectedTransfer.id, barcode: scanBarcode, qty: 1 })}
+                  onKeyDown={e => e.key === "Enter" && scanBarcode.trim() && addLineMutation.mutate({ id: selectedTransfer.id, barcode: scanBarcode.trim(), qty: 1 })}
                   data-testid="input-transfer-barcode"
                 />
                 <BarcodeScanButton onScan={code => addLineMutation.mutate({ id: selectedTransfer.id, barcode: code, qty: 1 })} />
               </div>
             )}
 
-            <div className="border rounded-md max-h-60 overflow-auto">
+            <div className="border rounded-md max-h-72 overflow-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -297,30 +366,48 @@ function TransfersTab() {
                     <TableHead>{t("products.variant_color")}</TableHead>
                     <TableHead>{t("products.variant_size")}</TableHead>
                     <TableHead>{t("products.barcode")}</TableHead>
-                    <TableHead className="text-right">{t("transfers.qty")}</TableHead>
+                    <TableHead className="text-right">{t("transfers.qty_available")}</TableHead>
+                    <TableHead className="text-right">{t("transfers.qty_to_transfer")}</TableHead>
+                    {detailStatus === "draft" && <TableHead className="w-10"></TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(transferDetail?.lines || []).map((line: any, i: number) => (
-                    <TableRow key={i}>
-                      <TableCell className="font-medium">{line.product_name || line.productName}</TableCell>
-                      <TableCell>{line.color || "-"}</TableCell>
-                      <TableCell>{line.size || "-"}</TableCell>
-                      <TableCell className="font-mono text-xs">{line.barcode || "-"}</TableCell>
-                      <TableCell className="text-right">{line.qty}</TableCell>
+                  {(transferDetail?.lines || []).length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={detailStatus === "draft" ? 7 : 6} className="text-center text-muted-foreground py-8">
+                        {t("transfers.no_items_yet")}
+                      </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    (transferDetail?.lines || []).map((line: any) => (
+                      <TableRow key={line.id}>
+                        <TableCell className="font-medium">{line.product_name || line.productName}</TableCell>
+                        <TableCell>{line.color || "-"}</TableCell>
+                        <TableCell>{line.size || "-"}</TableCell>
+                        <TableCell className="font-mono text-xs">{line.barcode || "-"}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{line.available_qty ?? "-"}</TableCell>
+                        <TableCell className="text-right font-semibold">{line.qty}</TableCell>
+                        {detailStatus === "draft" && (
+                          <TableCell className="text-right">
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => deleteLineMutation.mutate(line.id)} data-testid={`button-delete-line-${line.id}`}>
+                              ×
+                            </Button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>
           </div>
 
           <DialogFooter className="flex justify-between items-center">
-            <Badge variant={(transferDetail?.status || selectedTransfer?.status) === "approved" ? "outline" : "secondary"} className={(transferDetail?.status || selectedTransfer?.status) === "approved" ? "border-green-500 text-green-700 bg-green-50" : ""}>
-              {t(`transfers.status_${transferDetail?.status || selectedTransfer?.status}`)}
+            <Badge variant={detailStatus === "approved" ? "outline" : "secondary"} className={detailStatus === "approved" ? "border-green-500 text-green-700 bg-green-50" : ""}>
+              {t(`transfers.status_${detailStatus}`)}
             </Badge>
             <div className="flex gap-2">
-              {(transferDetail?.status || selectedTransfer?.status) === "draft" && (
+              {detailStatus === "draft" && (
                 <Button 
                   onClick={() => approveMutation.mutate(selectedTransfer.id)} 
                   disabled={approveMutation.isPending || !(transferDetail?.lines?.length)}

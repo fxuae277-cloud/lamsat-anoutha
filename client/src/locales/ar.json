@@ -402,8 +402,8 @@
   "transfers": {
     "title": "التحويلات",
     "create_transfer": "إنشاء تحويل",
-    "from_location": "من موقع",
-    "to_location": "إلى موقع",
+    "from_location": "من",
+    "to_location": "إلى",
     "add_item": "إضافة صنف",
     "approve": "اعتماد التحويل",
     "status_draft": "مسودة",
@@ -414,7 +414,15 @@
     "insufficient_qty": "الكمية غير كافية",
     "select_variant": "اختر المتغير",
     "qty": "الكمية",
-    "scan_barcode": "امسح الباركود"
+    "scan_barcode": "امسح الباركود أو أدخله",
+    "select_source": "اختر المصدر",
+    "select_destination": "اختر الوجهة",
+    "available_items": "الأصناف المتوفرة في المصدر",
+    "qty_available": "المتوفر",
+    "qty_to_transfer": "الكمية المحوّلة",
+    "no_stock_at_source": "لا توجد أصناف متوفرة في هذا المصدر",
+    "item_not_in_source": "الصنف غير متوفر في المصدر أو كميته صفر",
+    "no_items_yet": "لم تتم إضافة أصناف بعد - امسح الباركود لإضافة صنف"
   },
   "ledger": {
     "title": "سجل الأستاذ العام وميزان المراجعة",
