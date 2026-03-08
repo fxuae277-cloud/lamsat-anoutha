@@ -70,7 +70,7 @@ export default function MobileInvoices() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">
-                  {new Date(inv.createdAt).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" })}
+                  {new Date(inv.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
                 </span>
                 <span className="text-lg font-bold text-primary" data-testid={`text-invoice-total-${inv.id}`}>
                   {parseFloat(inv.total).toFixed(3)}

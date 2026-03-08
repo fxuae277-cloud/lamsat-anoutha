@@ -22,7 +22,8 @@ Currency: Omani Rial (OMR) | VAT: 5% | Unified pricing across branches.
 - Hook: `useI18n()` returns `{ t, lang, setLang, dir }` — `t("key.path")` resolves nested JSON keys
 - Locale files: `client/src/locales/en.json` and `ar.json` — 1,434 keys each, perfectly matched
 - Key namespaces: `app`, `nav`, `sidebar`, `settings`, `login`, `dashboard`, `products`, `orders`, `pos`, `hr`, `invoices`, `purchases`, `purchases_v2`, `reports`, `inventory`, `inventory_page`, `stock_control`, `returns`, `expenses`, `expenses_page`, `finance`, `finance_page`, `audit_log`, `operations`, `executive`, `executive_plus`, `common`, `payment_methods`, `status_labels`, `day_names`, `month_names`, `inv_balances`, `transfers`, `ledger`, `inv_ledger`, `journal`, `accounts`, `supplier_statement`, `mobile`
-- Date formatting uses `lang === "ar" ? "ar-OM" : "en-US"` pattern throughout
+- **English numerals policy**: ALL numbers, dates, amounts and counters always display using English digits (0-9), never Arabic-Indic numerals (٠-٩), regardless of UI language. All `toLocaleDateString`/`toLocaleString`/`toLocaleTimeString` calls use `"en-US"` locale. For header date (weekday/month names), use `"ar-u-nu-latn"` locale + `toEnDigits()` safety wrapper.
+- Global formatters in `client/src/lib/formatters.ts`: `fmtDate()`, `fmtCurrency()`, `fmtNum()`, `toEnDigits()` — always produce English-digit output
 - All pages import `useI18n` and use `t()` for all user-facing strings
 - Language switcher in Settings page persists to localStorage
 

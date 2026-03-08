@@ -231,7 +231,7 @@ export default function AuditLog() {
                     <span className="truncate block">{log.details || "—"}</span>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                    {log.created_at ? new Date(log.created_at).toLocaleString(lang === "ar" ? "ar-OM" : "en-US", {
+                    {log.created_at ? new Date(log.created_at).toLocaleString("en-US", {
                       year: "numeric", month: "2-digit", day: "2-digit",
                       hour: "2-digit", minute: "2-digit"
                     }) : "—"}

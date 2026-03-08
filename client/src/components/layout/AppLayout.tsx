@@ -3,10 +3,14 @@ import { Sidebar } from "./Sidebar";
 import { Bell, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/lib/i18n";
+import { toEnDigits } from "@/lib/formatters";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { t, lang } = useI18n();
-  const locale = lang === "ar" ? "ar-OM" : "en-US";
+
+  const headerDate = toEnDigits(
+    new Date().toLocaleDateString(lang === "ar" ? "ar-u-nu-latn" : "en-US", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  );
 
   return (
     <div className="flex h-screen bg-background overflow-hidden text-foreground">
@@ -28,7 +32,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full"></span>
             </button>
             <div className="text-sm font-medium text-muted-foreground">
-              {new Date().toLocaleDateString(locale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              {headerDate}
             </div>
           </div>
         </header>

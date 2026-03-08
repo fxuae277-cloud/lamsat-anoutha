@@ -25,14 +25,14 @@ function omr(val: string | number | null) {
 
 function fmtDateTime(ts: string | null, lang: string) {
   if (!ts) return "-";
-  return new Date(ts).toLocaleString(lang === "ar" ? "ar-OM" : "en-US", {
+  return new Date(ts).toLocaleString("en-US", {
     month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
   });
 }
 
 function fmtTime(ts: string | null, lang: string) {
   if (!ts) return "-";
-  return new Date(ts).toLocaleTimeString(lang === "ar" ? "ar-OM" : "en-US", { hour: "2-digit", minute: "2-digit" });
+  return new Date(ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
 function downloadCSV(filename: string, rows: any[][]) {

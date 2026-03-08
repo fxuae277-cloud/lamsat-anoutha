@@ -30,7 +30,7 @@ function omr(v: number | string | null) {
 
 function fmtDateTime(ts: string | null, lang: string) {
   if (!ts) return "-";
-  return new Date(ts).toLocaleString(lang === "ar" ? "ar-OM" : "en-US", {
+  return new Date(ts).toLocaleString("en-US", {
     month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
   });
 }
@@ -231,7 +231,7 @@ export default function Executive() {
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip
                     formatter={(value: number) => `${omr(value)} OMR`}
-                    labelFormatter={(d: string) => new Date(d + "T00:00:00").toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US")}
+                    labelFormatter={(d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-US")}
                   />
                   <Legend />
                   <Area type="monotone" dataKey="sales" name={t("executive.sales_label")} stroke="#22c55e" fill="#22c55e" fillOpacity={0.15} strokeWidth={2} />

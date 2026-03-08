@@ -234,7 +234,7 @@ export default function Finance() {
                   <TableRow key={entry.id}>
                     <TableCell>{i + 1}</TableCell>
                     <TableCell className="text-sm">
-                      {entry.createdAt ? new Date(entry.createdAt).toLocaleTimeString(lang === "ar" ? "ar-OM" : "en-US", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                      {entry.createdAt ? new Date(entry.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "-"}
                     </TableCell>
                     {isAdmin && <TableCell className="text-sm">{branchName(entry.branchId)}</TableCell>}
                     <TableCell>
@@ -283,7 +283,7 @@ export default function Finance() {
                   <TableRow key={entry.id}>
                     <TableCell>{i + 1}</TableCell>
                     <TableCell className="text-sm">
-                      {entry.createdAt ? new Date(entry.createdAt).toLocaleTimeString(lang === "ar" ? "ar-OM" : "en-US", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                      {entry.createdAt ? new Date(entry.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "-"}
                     </TableCell>
                     {isAdmin && <TableCell className="text-sm">{branchName(entry.branchId)}</TableCell>}
                     <TableCell>
@@ -378,7 +378,7 @@ export default function Finance() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm">
-                        {s.endedAt ? new Date(s.endedAt).toLocaleTimeString(lang === "ar" ? "ar-OM" : "en-US", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                        {s.endedAt ? new Date(s.endedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "-"}
                       </TableCell>
                     </TableRow>
                   );

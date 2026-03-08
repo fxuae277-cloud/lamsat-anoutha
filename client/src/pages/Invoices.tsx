@@ -44,7 +44,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
     enabled: !!saleId && open,
   });
 
-  const locale = lang === "ar" ? "ar-OM" : "en-US";
+  const locale = "en-US";
 
   function handleThermalPrint() {
     if (!detail) return;
@@ -499,9 +499,9 @@ export default function Invoices() {
                       </TableCell>
                       <TableCell className="text-center font-mono font-bold">{omr(s.total)}</TableCell>
                       <TableCell className="text-center text-xs text-muted-foreground">
-                        {s.createdAt ? new Date(s.createdAt).toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : ""}
+                        {s.createdAt ? new Date(s.createdAt).toLocaleDateString("en-US") : ""}
                         <br />
-                        {s.createdAt ? new Date(s.createdAt).toLocaleTimeString(lang === "ar" ? "ar-OM" : "en-US", { hour: "2-digit", minute: "2-digit" }) : ""}
+                        {s.createdAt ? new Date(s.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : ""}
                       </TableCell>
                       <TableCell className="text-center">
                         <Button

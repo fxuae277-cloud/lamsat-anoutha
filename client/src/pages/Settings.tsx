@@ -51,7 +51,7 @@ const DEFAULT_SETTINGS: SettingsData = {
   businessName: "لمسة أنوثة إكسسوارات لوى",
   currency: "OMR",
   decimalPlaces: "3",
-  numberFormat: "ar-OM",
+  numberFormat: "en-US",
   vatEnabled: "true",
   vatRate: "5",
   vatInclusive: "true",
@@ -887,7 +887,7 @@ export default function Settings() {
                           <div className="flex-1 min-w-0">
                             <p className="font-mono text-sm font-medium truncate" data-testid={`text-backup-name-${backup.filename}`}>{backup.filename}</p>
                             <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                              <span>{new Date(backup.createdAt).toLocaleString(lang === "ar" ? "ar-OM" : "en-US")}</span>
+                              <span>{new Date(backup.createdAt).toLocaleString("en-US")}</span>
                               <span className="font-semibold">{(backup.size / 1024 / 1024).toFixed(2)} MB</span>
                             </div>
                           </div>

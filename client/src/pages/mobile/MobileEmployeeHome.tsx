@@ -58,7 +58,7 @@ export default function MobileEmployeeHome() {
           </div>
           {shiftOpen && data?.shift?.startedAt && (
             <span className="text-xs text-muted-foreground">
-              {new Date(data.shift.startedAt).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" })}
+              {new Date(data.shift.startedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
             </span>
           )}
         </CardContent>

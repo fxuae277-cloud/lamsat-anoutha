@@ -21,7 +21,7 @@ export default function Orders() {
   const { t, lang } = useI18n();
   const { toast } = useToast();
   const { user } = useAuth();
-  const locale = lang === "ar" ? "ar-OM" : "en-US";
+  const locale = "en-US";
 
   const isManager = ["owner", "admin", "manager"].includes(user?.role || "");
 

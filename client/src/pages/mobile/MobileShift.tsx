@@ -123,7 +123,7 @@ export default function MobileShift() {
             <div className="bg-muted/50 p-3 rounded-lg text-center">
               <p className="text-xs text-muted-foreground">{t("mobile.started_at")}</p>
               <p className="font-bold" data-testid="text-shift-start">
-                {currentShift.startedAt ? new Date(currentShift.startedAt).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" }) : "--"}
+                {currentShift.startedAt ? new Date(currentShift.startedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "--"}
               </p>
             </div>
             <div className="bg-muted/50 p-3 rounded-lg text-center">

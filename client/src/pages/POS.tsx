@@ -144,7 +144,7 @@ function ShiftReceipt({ report, onNewShift }: { report: any; onNewShift: () => v
   const diff = parseFloat(report.difference || "0");
   const diffColor = Math.abs(diff) < 0.002 ? "text-green-600" : diff > 0 ? "text-blue-600" : "text-red-600";
   const diffLabel = Math.abs(diff) < 0.002 ? t("status_labels.matched") : diff > 0 ? `${t("status_labels.surplus")} +${fmt(diff)}` : `${t("status_labels.shortage")} ${fmt(diff)}`;
-  const locale = lang === "ar" ? "ar-OM" : "en-US";
+  const locale = "en-US";
 
   return (
     <div className="h-[calc(100vh-8rem)] flex items-center justify-center">
@@ -340,7 +340,7 @@ export default function POS() {
       card: t("payment_methods.card"), 
       bank_transfer: t("payment_methods.bank_transfer") 
     };
-    const locale = lang === "ar" ? "ar-OM" : "en-US";
+    const locale = "en-US";
     const dateStr = new Date().toLocaleDateString(locale) + " " + new Date().toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
     const itemsHtml = receiptData.items.map(it => `
       <tr>
@@ -714,7 +714,7 @@ export default function POS() {
   const expectedCashLive = preCloseData ? parseFloat(preCloseData.expectedCash || "0") : 0;
   const actualCashNum = parseFloat(actualCash || "0");
   const liveDiff = actualCash ? actualCashNum - expectedCashLive : 0;
-  const locale = lang === "ar" ? "ar-OM" : "en-US";
+  const locale = "en-US";
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col gap-4">
@@ -1226,7 +1226,7 @@ export default function POS() {
                         {held.note || `${t("pos.held_invoice")} #${held.id}`}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {held.heldAt.toLocaleTimeString(lang === "ar" ? "ar-OM" : "en-US", { hour: "2-digit", minute: "2-digit" })}
+                        {held.heldAt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
                       </p>
                     </div>
                     <span className="font-bold text-primary">{heldTotal.toFixed(3)} {t("common.omr")}</span>

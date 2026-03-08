@@ -35,7 +35,7 @@ export default function Dashboard() {
   const chartData = (stats?.weeklySales || []).map((d: any) => {
     const date = new Date(d.date);
     const dayIndex = date.getDay();
-    const formattedDate = date.toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US", { month: 'short', day: 'numeric' });
+    const formattedDate = date.toLocaleDateString("en-US", { month: 'short', day: 'numeric' });
     return { 
       name: DAY_NAMES[dayIndex], 
       date: formattedDate,

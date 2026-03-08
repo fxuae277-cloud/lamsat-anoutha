@@ -180,7 +180,7 @@ export default function MobileTransfers() {
                   <span className="text-sm font-medium">#{tr.id}</span>
                   <Badge className={statusColor(tr.status)}>{tr.status === "approved" ? t("mobile.completed") : tr.status === "draft" ? t("mobile.draft") : tr.status}</Badge>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">{new Date(tr.createdAt).toLocaleDateString("ar-OM")}</p>
+                <p className="text-xs text-muted-foreground mt-1">{new Date(tr.createdAt).toLocaleDateString("en-US")}</p>
               </CardContent>
             </Card>
           ))}

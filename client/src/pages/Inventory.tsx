@@ -182,7 +182,7 @@ function TransfersTab() {
           <TableBody>
             {transfers.map((tx) => (
               <TableRow key={tx.id} className="cursor-pointer" onClick={() => setSelectedTransfer(tx)}>
-                <TableCell>{new Date(tx.createdAt).toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US")}</TableCell>
+                <TableCell>{new Date(tx.createdAt).toLocaleDateString("en-US")}</TableCell>
                 <TableCell>{tx.fromLocationName}</TableCell>
                 <TableCell>{tx.toLocationName}</TableCell>
                 <TableCell>
@@ -373,7 +373,7 @@ function LedgerTab() {
                     {t(`ledger.${entry.reason}`)}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-xs">{new Date(entry.createdAt).toLocaleString(lang === "ar" ? "ar-OM" : "en-US")}</TableCell>
+                <TableCell className="text-xs">{new Date(entry.createdAt).toLocaleString("en-US")}</TableCell>
                 <TableCell>{entry.userName}</TableCell>
               </TableRow>
             ))}

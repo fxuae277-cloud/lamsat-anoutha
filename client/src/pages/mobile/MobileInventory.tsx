@@ -44,7 +44,7 @@ export default function MobileInventory() {
     : balances;
 
   const f3 = (n: any) => parseFloat(String(n || "0")).toFixed(3);
-  const fD = (d: any) => d ? new Date(d).toLocaleDateString("ar-OM") : "---";
+  const fD = (d: any) => d ? new Date(d).toLocaleDateString("en-US") : "---";
 
   const locLabel = (loc: Location) => loc.isCentral ? loc.name : `${loc.branchName} - ${loc.name}`;
 
