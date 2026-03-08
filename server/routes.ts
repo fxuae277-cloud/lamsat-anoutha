@@ -1060,6 +1060,58 @@ export async function registerRoutes(
     await storage.deleteStockTransferLine(Number(req.params.id));
     res.json({ message: "تم الحذف" });
   });
+  app.post("/api/stock-transfers/execute", requireAuth, async (req, res) => {
+    const { fromLocationId, toLocationId, lines } = req.body;
+    if (!fromLocationId || !toLocationId || !lines?.length) {
+      return res.status(400).json({ message: "بيانات ناقصة" });
+    }
+    const filteredLines = lines.filter((l: any) => l.qty > 0);
+    if (filteredLines.length === 0) {
+      return res.status(400).json({ message: "لم يتم تحديد أصناف للتحويل" });
+    }
+
+    try {
+      const transfer = await storage.createStockTransfer({
+        fromLocationId,
+        toLocationId,
+        status: "draft",
+        notes: req.body.notes || null,
+        createdBy: req.session.userId!,
+      });
+
+      for (const line of filteredLines) {
+        await storage.addStockTransferLine({
+          transferId: transfer.id,
+          variantId: line.variantId,
+          qty: line.qty,
+        });
+      }
+
+      const result = await storage.approveStockTransfer(transfer.id, req.session.userId!);
+      if (!result) {
+        return res.status(400).json({ message: "فشل اعتماد التحويل" });
+      }
+
+      const fromLocRes = await pool.query(`
+        SELECT l.is_central, CASE WHEN l.is_central THEN l.name ELSE COALESCE(b.name, l.name) END as label
+        FROM locations l LEFT JOIN branches b ON b.id = l.branch_id WHERE l.id = $1
+      `, [fromLocationId]);
+      const toLocRes = await pool.query(`
+        SELECT l.is_central, CASE WHEN l.is_central THEN l.name ELSE COALESCE(b.name, l.name) END as label
+        FROM locations l LEFT JOIN branches b ON b.id = l.branch_id WHERE l.id = $1
+      `, [toLocationId]);
+
+      res.status(201).json({
+        ...result,
+        from_location_name: fromLocRes.rows[0]?.label || "",
+        to_location_name: toLocRes.rows[0]?.label || "",
+        lines_count: filteredLines.length,
+      });
+    } catch (err: any) {
+      res.status(400).json({ message: err?.message ?? "خطأ في تنفيذ التحويل" });
+    }
+  });
+
   app.post("/api/stock-transfers/:id/approve", requireAuth, async (req, res) => {
     try {
       const result = await storage.approveStockTransfer(Number(req.params.id), req.session.userId!);

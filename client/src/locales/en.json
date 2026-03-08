@@ -402,8 +402,8 @@
   "transfers": {
     "title": "Transfers",
     "create_transfer": "Create Transfer",
-    "from_location": "From Location",
-    "to_location": "To Location",
+    "from_location": "From",
+    "to_location": "To",
     "add_item": "Add Item",
     "approve": "Approve Transfer",
     "status_draft": "Draft",
@@ -414,7 +414,17 @@
     "insufficient_qty": "Insufficient quantity",
     "select_variant": "Select variant",
     "qty": "Quantity",
-    "scan_barcode": "Scan Barcode"
+    "scan_barcode": "Scan or enter barcode",
+    "select_source": "Select source",
+    "select_destination": "Select destination",
+    "available_items": "Available items at source",
+    "qty_available": "Available",
+    "qty_to_transfer": "Transfer Qty",
+    "no_stock_at_source": "No items available at this source",
+    "item_not_in_source": "Item not available at source or qty is zero",
+    "no_items_yet": "No items added yet",
+    "items_count": "items",
+    "total_qty": "units"
   },
   "ledger": {
     "title": "General Ledger & Trial Balance",
