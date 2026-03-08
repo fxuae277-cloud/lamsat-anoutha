@@ -447,7 +447,18 @@
     "to": "To"
   },
   "inv_ledger": {
-    "title": "Inventory Movement Log"
+    "title": "Inventory Movement Log",
+    "sale": "Sale",
+    "purchase_posted": "Purchase",
+    "transfer_in": "Transfer In",
+    "transfer_out": "Transfer Out",
+    "adjustment": "Adjustment",
+    "sale_return": "Return",
+    "return": "Return",
+    "qty_change": "Qty Change",
+    "reason": "Movement Type",
+    "reference": "Reference",
+    "no_entries": "No movements found"
   },
   "purchases_v2": {
     "quick_create": "Quick Create",

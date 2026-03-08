@@ -447,7 +447,18 @@
     "to": "إلى"
   },
   "inv_ledger": {
-    "title": "سجل حركة المخزون"
+    "title": "سجل حركة المخزون",
+    "sale": "بيع",
+    "purchase_posted": "شراء",
+    "transfer_in": "تحويل وارد",
+    "transfer_out": "تحويل صادر",
+    "adjustment": "تسوية",
+    "sale_return": "مرتجع",
+    "return": "مرتجع",
+    "qty_change": "التغيير",
+    "reason": "نوع الحركة",
+    "reference": "المرجع",
+    "no_entries": "لا توجد حركات"
   },
   "purchases_v2": {
     "quick_create": "إنشاء سريع",

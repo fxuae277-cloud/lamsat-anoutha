@@ -36,8 +36,8 @@ function BalancesTab() {
   });
 
   const filtered = balances.filter(b => 
-    b.productName?.toLowerCase().includes(search.toLowerCase()) || 
-    b.barcode?.includes(search)
+    (b.product_name || b.productName || "").toLowerCase().includes(search.toLowerCase()) || 
+    (b.barcode || "").includes(search)
   );
 
   return (
@@ -84,24 +84,37 @@ function BalancesTab() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((b, i) => (
-              <TableRow key={i} className={b.qtyOnHand < 5 ? "bg-red-50" : ""}>
-                <TableCell className="font-medium">{b.productName}</TableCell>
-                <TableCell className="font-mono text-xs">{b.barcode}</TableCell>
-                <TableCell>{b.color || "-"}</TableCell>
-                <TableCell>{b.size || "-"}</TableCell>
-                <TableCell className={`text-right font-bold ${b.qtyOnHand < 5 ? "text-red-600" : ""}`}>
-                  {b.qtyOnHand}
-                  {b.qtyOnHand < 5 && <Badge variant="destructive" className="ml-2 text-[10px] h-4">{t("inv_balances.low_stock")}</Badge>}
+            {filtered.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                  {t("inv_balances.no_balances")}
                 </TableCell>
-                <TableCell className="text-right font-mono">{Number(b.price).toFixed(3)}</TableCell>
-                <TableCell className="text-right font-mono">{Number(b.lastPurchasePrice || 0).toFixed(3)}</TableCell>
-                <TableCell className="text-xs">
-                  {b.lastReceiptDate ? new Date(b.lastReceiptDate).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US") : "-"}
-                </TableCell>
-                <TableCell>{b.full_location_name || b.locationName}</TableCell>
               </TableRow>
-            ))}
+            ) : filtered.map((b: any, i: number) => {
+              const qty = b.qty_on_hand ?? b.qtyOnHand ?? 0;
+              const pName = b.product_name || b.productName || "-";
+              const lpp = b.last_purchase_price ?? b.lastPurchasePrice ?? 0;
+              const lrd = b.last_receipt_date || b.lastReceiptDate;
+              const loc = b.full_location_name || b.location_name || b.locationName || "-";
+              return (
+                <TableRow key={i} className={qty < 5 ? "bg-red-50" : ""}>
+                  <TableCell className="font-medium">{pName}</TableCell>
+                  <TableCell className="font-mono text-xs">{b.barcode || "-"}</TableCell>
+                  <TableCell>{b.color || "-"}</TableCell>
+                  <TableCell>{b.size || "-"}</TableCell>
+                  <TableCell className={`text-right font-bold ${qty < 5 ? "text-red-600" : ""}`}>
+                    {qty}
+                    {qty < 5 && <Badge variant="destructive" className="ml-2 text-[10px] h-4">{t("inv_balances.low_stock")}</Badge>}
+                  </TableCell>
+                  <TableCell className="text-right font-mono">{Number(b.price || 0).toFixed(3)}</TableCell>
+                  <TableCell className="text-right font-mono">{Number(lpp).toFixed(3)}</TableCell>
+                  <TableCell className="text-xs">
+                    {lrd ? new Date(lrd).toLocaleDateString("en-US") : "-"}
+                  </TableCell>
+                  <TableCell>{loc}</TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
@@ -118,12 +131,18 @@ function TransfersTab() {
   const [toLoc, setToLoc] = useState("");
   const [scanBarcode, setScanBarcode] = useState("");
 
-  const { data: transfers = [], refetch: refetchTransfers } = useQuery<any[]>({
+  const { data: transfers = [] } = useQuery<any[]>({
     queryKey: ["/api/stock-transfers"],
   });
 
   const { data: locations = [] } = useQuery<Location[]>({
     queryKey: ["/api/locations"],
+  });
+
+  const { data: transferDetail } = useQuery<any>({
+    queryKey: [`/api/stock-transfers/${selectedTransfer?.id}`],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: !!selectedTransfer?.id,
   });
 
   const createMutation = useMutation({
@@ -146,6 +165,8 @@ function TransfersTab() {
     onSuccess: () => {
       toast({ title: t("transfers.transfer_approved") });
       queryClient.invalidateQueries({ queryKey: ["/api/stock-transfers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory-balances"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory-ledger"] });
       setSelectedTransfer(null);
     },
     onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" })
@@ -160,6 +181,7 @@ function TransfersTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/stock-transfers"] });
+      if (selectedTransfer?.id) queryClient.invalidateQueries({ queryKey: [`/api/stock-transfers/${selectedTransfer.id}`] });
       setScanBarcode("");
     },
     onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" })
@@ -186,17 +208,17 @@ function TransfersTab() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {transfers.map((tx) => (
+            {transfers.map((tx: any) => (
               <TableRow key={tx.id} className="cursor-pointer" onClick={() => setSelectedTransfer(tx)}>
-                <TableCell>{new Date(tx.createdAt).toLocaleDateString("en-US")}</TableCell>
-                <TableCell>{tx.fromLocationName}</TableCell>
-                <TableCell>{tx.toLocationName}</TableCell>
+                <TableCell>{new Date(tx.created_at || tx.createdAt).toLocaleDateString("en-US")}</TableCell>
+                <TableCell>{tx.from_location_name || tx.fromLocationName}</TableCell>
+                <TableCell>{tx.to_location_name || tx.toLocationName}</TableCell>
                 <TableCell>
                   <Badge variant={tx.status === "approved" ? "outline" : tx.status === "cancelled" ? "destructive" : "secondary"} className={tx.status === "approved" ? "border-green-500 text-green-700 bg-green-50" : ""}>
                     {t(`transfers.status_${tx.status}`)}
                   </Badge>
                 </TableCell>
-                <TableCell>{tx.creatorName}</TableCell>
+                <TableCell>{tx.creator_name || tx.creatorName}</TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedTransfer(tx); }} data-testid={`button-view-transfer-${tx.id}`}>
                     <Search className="w-4 h-4" />
@@ -249,12 +271,12 @@ function TransfersTab() {
           <DialogHeader>
             <DialogTitle>{t("transfers.title")} #{selectedTransfer?.id}</DialogTitle>
             <DialogDescription>
-              {selectedTransfer?.fromLocationName} <ArrowRightLeft className="inline w-3 h-3 mx-1" /> {selectedTransfer?.toLocationName}
+              {selectedTransfer?.from_location_name || selectedTransfer?.fromLocationName} <ArrowRightLeft className="inline w-3 h-3 mx-1" /> {selectedTransfer?.to_location_name || selectedTransfer?.toLocationName}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4">
-            {selectedTransfer?.status === "draft" && (
+            {(transferDetail?.status || selectedTransfer?.status) === "draft" && (
               <div className="flex gap-2 p-2 bg-muted rounded-md">
                 <Input 
                   placeholder={t("transfers.scan_barcode")} 
@@ -272,14 +294,20 @@ function TransfersTab() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>{t("inv_balances.product")}</TableHead>
-                    <TableHead>{t("transfers.qty")}</TableHead>
+                    <TableHead>{t("products.variant_color")}</TableHead>
+                    <TableHead>{t("products.variant_size")}</TableHead>
+                    <TableHead>{t("products.barcode")}</TableHead>
+                    <TableHead className="text-right">{t("transfers.qty")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {selectedTransfer?.lines?.map((line: any, i: number) => (
+                  {(transferDetail?.lines || []).map((line: any, i: number) => (
                     <TableRow key={i}>
-                      <TableCell>{line.productName} ({line.color}/{line.size})</TableCell>
-                      <TableCell>{line.qty}</TableCell>
+                      <TableCell className="font-medium">{line.product_name || line.productName}</TableCell>
+                      <TableCell>{line.color || "-"}</TableCell>
+                      <TableCell>{line.size || "-"}</TableCell>
+                      <TableCell className="font-mono text-xs">{line.barcode || "-"}</TableCell>
+                      <TableCell className="text-right">{line.qty}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -288,14 +316,14 @@ function TransfersTab() {
           </div>
 
           <DialogFooter className="flex justify-between items-center">
-            <Badge variant={selectedTransfer?.status === "approved" ? "outline" : "secondary"} className={selectedTransfer?.status === "approved" ? "border-green-500 text-green-700 bg-green-50" : ""}>
-              {t(`transfers.status_${selectedTransfer?.status}`)}
+            <Badge variant={(transferDetail?.status || selectedTransfer?.status) === "approved" ? "outline" : "secondary"} className={(transferDetail?.status || selectedTransfer?.status) === "approved" ? "border-green-500 text-green-700 bg-green-50" : ""}>
+              {t(`transfers.status_${transferDetail?.status || selectedTransfer?.status}`)}
             </Badge>
             <div className="flex gap-2">
-              {selectedTransfer?.status === "draft" && (
+              {(transferDetail?.status || selectedTransfer?.status) === "draft" && (
                 <Button 
                   onClick={() => approveMutation.mutate(selectedTransfer.id)} 
-                  disabled={approveMutation.isPending || !selectedTransfer.lines?.length}
+                  disabled={approveMutation.isPending || !(transferDetail?.lines?.length)}
                   className="bg-green-600 hover:bg-green-700"
                   data-testid="button-approve-transfer"
                 >
@@ -363,32 +391,36 @@ function LedgerTab() {
               <TableHead>{t("products.variant_color")}</TableHead>
               <TableHead>{t("products.variant_size")}</TableHead>
               <TableHead>{t("inv_balances.location")}</TableHead>
-              <TableHead className="text-right">{t("ledger.qty_change")}</TableHead>
-              <TableHead>{t("ledger.reason")}</TableHead>
+              <TableHead className="text-right">{t("inv_ledger.qty_change")}</TableHead>
               <TableHead>{t("common.employee")}</TableHead>
-              <TableHead>{t("common.reference")}</TableHead>
+              <TableHead>{t("inv_ledger.reference")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {ledger.map((entry, i) => (
-              <TableRow key={i}>
-                <TableCell className="text-xs">{new Date(entry.createdAt).toLocaleString(lang === "ar" ? "ar-EG" : "en-US")}</TableCell>
-                <TableCell>{t(`ledger.${entry.reason}`)}</TableCell>
-                <TableCell className="font-medium">{entry.productName}</TableCell>
-                <TableCell className="font-mono text-xs">{entry.barcode}</TableCell>
-                <TableCell>{entry.color || "-"}</TableCell>
-                <TableCell>{entry.size || "-"}</TableCell>
-                <TableCell>{entry.locationName}</TableCell>
-                <TableCell className={`text-right font-bold ${entry.qtyChange > 0 ? "text-green-600" : "text-red-600"}`}>
-                  {entry.qtyChange > 0 ? `+${entry.qtyChange}` : entry.qtyChange}
+            {ledger.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                  {t("inv_ledger.no_entries")}
                 </TableCell>
+              </TableRow>
+            ) : ledger.map((entry: any, i: number) => (
+              <TableRow key={i}>
+                <TableCell className="text-xs">{entry.created_at ? new Date(entry.created_at).toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }) : (entry.createdAt ? new Date(entry.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }) : "-")}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className={getReasonColor(entry.reason)}>
-                    {t(`ledger.${entry.reason}`)}
+                    {t(`inv_ledger.${entry.reason}`)}
                   </Badge>
                 </TableCell>
-                <TableCell>{entry.userName}</TableCell>
-                <TableCell className="text-xs font-mono">{entry.reference || "-"}</TableCell>
+                <TableCell className="font-medium">{entry.product_name || entry.productName}</TableCell>
+                <TableCell className="font-mono text-xs">{entry.barcode || "-"}</TableCell>
+                <TableCell>{entry.color || "-"}</TableCell>
+                <TableCell>{entry.size || "-"}</TableCell>
+                <TableCell>{entry.location_name || entry.locationName}</TableCell>
+                <TableCell className={`text-right font-bold ${(entry.qty_change ?? entry.qtyChange) > 0 ? "text-green-600" : "text-red-600"}`}>
+                  {(entry.qty_change ?? entry.qtyChange) > 0 ? `+${entry.qty_change ?? entry.qtyChange}` : (entry.qty_change ?? entry.qtyChange)}
+                </TableCell>
+                <TableCell>{entry.creator_name || entry.userName || "-"}</TableCell>
+                <TableCell className="text-xs font-mono">{entry.ref_id ? `${entry.ref_table || ""}#${entry.ref_id}` : (entry.reference || "-")}</TableCell>
               </TableRow>
             ))}
           </TableBody>
