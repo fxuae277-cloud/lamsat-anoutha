@@ -636,7 +636,9 @@ export const inventoryBalances = pgTable("inventory_balances", {
   variantId: integer("variant_id").references(() => productVariants.id).notNull(),
   qtyOnHand: integer("qty_on_hand").notNull().default(0),
   qtyReserved: integer("qty_reserved").notNull().default(0),
-});
+}, (t) => [
+  uniqueIndex("uq_inv_bal_loc_variant").on(t.locationId, t.variantId),
+]);
 export const insertInventoryBalanceSchema = createInsertSchema(inventoryBalances).omit({ id: true });
 export type InsertInventoryBalance = z.infer<typeof insertInventoryBalanceSchema>;
 export type InventoryBalance = typeof inventoryBalances.$inferSelect;
