@@ -190,6 +190,11 @@ export interface IStorage {
   getRecurringDeductionsReport(): Promise<any[]>;
   getPayrollByBranch(month: string, year: number): Promise<any[]>;
   getPayrollComparison(year: number): Promise<any[]>;
+  getPayrollRemainingByEmployee(): Promise<any[]>;
+  getEmployeeCommissions(employeeId?: number, month?: string, year?: number): Promise<EmployeeCommission[]>;
+  createEmployeeCommission(data: InsertEmployeeCommission): Promise<EmployeeCommission>;
+  getEmployeeEntitlements(employeeId?: number, month?: string, year?: number): Promise<EmployeeEntitlement[]>;
+  createEmployeeEntitlement(data: InsertEmployeeEntitlement): Promise<EmployeeEntitlement>;
   getStocktakes(branchId?: number): Promise<any[]>;
   getStocktake(id: number): Promise<Stocktake | undefined>;
   createStocktake(data: InsertStocktake): Promise<Stocktake>;
@@ -3953,6 +3958,59 @@ export class DatabaseStorage implements IStorage {
       ORDER BY pr.month::int
     `, [year]);
     return result.rows;
+  }
+
+  async getPayrollRemainingByEmployee(): Promise<any[]> {
+    const result = await pool.query(`
+      SELECT 
+        u.id as employee_id,
+        u.name as employee_name,
+        u.salary as basic_salary,
+        COALESCE(
+          (SELECT SUM(amount::numeric) FROM employee_financial_ledger WHERE employee_id = u.id),
+          0
+        ) as balance
+      FROM users u
+      WHERE u.is_active = true
+      ORDER BY u.name
+    `);
+    return result.rows;
+  }
+
+  async getEmployeeCommissions(employeeId?: number, month?: string, year?: number): Promise<EmployeeCommission[]> {
+    let query = db.select().from(employeeCommissions);
+    const conditions = [];
+    if (employeeId) conditions.push(eq(employeeCommissions.employeeId, employeeId));
+    if (month) conditions.push(eq(employeeCommissions.month, month));
+    if (year) conditions.push(eq(employeeCommissions.year, year));
+    
+    if (conditions.length > 0) {
+      return query.where(and(...conditions)).orderBy(desc(employeeCommissions.date));
+    }
+    return query.orderBy(desc(employeeCommissions.date));
+  }
+
+  async createEmployeeCommission(data: InsertEmployeeCommission): Promise<EmployeeCommission> {
+    const [row] = await db.insert(employeeCommissions).values(data).returning();
+    return row;
+  }
+
+  async getEmployeeEntitlements(employeeId?: number, month?: string, year?: number): Promise<EmployeeEntitlement[]> {
+    let query = db.select().from(employeeEntitlements);
+    const conditions = [];
+    if (employeeId) conditions.push(eq(employeeEntitlements.employeeId, employeeId));
+    if (month) conditions.push(eq(employeeEntitlements.month, month));
+    if (year) conditions.push(eq(employeeEntitlements.year, year));
+    
+    if (conditions.length > 0) {
+      return query.where(and(...conditions)).orderBy(desc(employeeEntitlements.date));
+    }
+    return query.orderBy(desc(employeeEntitlements.date));
+  }
+
+  async createEmployeeEntitlement(data: InsertEmployeeEntitlement): Promise<EmployeeEntitlement> {
+    const [row] = await db.insert(employeeEntitlements).values(data).returning();
+    return row;
   }
 
   async getStocktakes(branchId?: number) {

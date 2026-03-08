@@ -2474,6 +2474,80 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/payroll/remaining-by-employee", requireAuth, requireManager, async (_req, res) => {
+    try {
+      res.json(await storage.getPayrollRemainingByEmployee());
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/employee-commissions", requireAuth, requireManager, async (req, res) => {
+    try {
+      const { employeeId, month, year } = req.query;
+      res.json(await storage.getEmployeeCommissions(
+        employeeId ? Number(employeeId) : undefined,
+        month ? String(month) : undefined,
+        year ? Number(year) : undefined
+      ));
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "Internal Server Error" });
+    }
+  });
+
+  app.post("/api/employee-commissions", requireAuth, requireManager, async (req, res) => {
+    try {
+      const { employeeId, amount, date, month, year, type, note } = req.body;
+      const commission = await storage.createEmployeeCommission({
+        employeeId: Number(employeeId),
+        amount: String(amount),
+        date: new Date(date),
+        month: String(month),
+        year: Number(year),
+        type: type || "sales",
+        note: note || null,
+        status: "pending",
+        createdBy: req.session.userId!
+      });
+      res.status(201).json(commission);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/employee-entitlements", requireAuth, requireManager, async (req, res) => {
+    try {
+      const { employeeId, month, year } = req.query;
+      res.json(await storage.getEmployeeEntitlements(
+        employeeId ? Number(employeeId) : undefined,
+        month ? String(month) : undefined,
+        year ? Number(year) : undefined
+      ));
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "Internal Server Error" });
+    }
+  });
+
+  app.post("/api/employee-entitlements", requireAuth, requireManager, async (req, res) => {
+    try {
+      const { employeeId, amount, date, month, year, type, note } = req.body;
+      const entitlement = await storage.createEmployeeEntitlement({
+        employeeId: Number(employeeId),
+        amount: String(amount),
+        date: new Date(date),
+        month: String(month),
+        year: Number(year),
+        type: type || "other",
+        note: note || null,
+        status: "pending",
+        createdBy: req.session.userId!
+      });
+      res.status(201).json(entitlement);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "Internal Server Error" });
+    }
+  });
+
   app.get("/api/payroll-runs", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const filters: any = {};

@@ -564,6 +564,48 @@ export const insertEmployeeDeductionSchema = createInsertSchema(employeeDeductio
 export type InsertEmployeeDeduction = z.infer<typeof insertEmployeeDeductionSchema>;
 export type EmployeeDeduction = typeof employeeDeductions.$inferSelect;
 
+export const EMPLOYEE_COMMISSION_TYPES = ["sales", "fixed", "other"] as const;
+export type EmployeeCommissionType = typeof EMPLOYEE_COMMISSION_TYPES[number];
+
+export const EMPLOYEE_ENTITLEMENT_TYPES = ["housing", "transport", "other"] as const;
+export type EmployeeEntitlementType = typeof EMPLOYEE_ENTITLEMENT_TYPES[number];
+
+export const employeeCommissions = pgTable("employee_commissions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  employeeId: integer("employee_id").references(() => users.id).notNull(),
+  type: text("type").notNull().default("sales"),
+  amount: decimal("amount", { precision: 10, scale: 3 }).notNull(),
+  date: date("date").notNull(),
+  month: text("month").notNull(),
+  year: integer("year").notNull(),
+  note: text("note"),
+  status: text("status").notNull().default("pending"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertEmployeeCommissionSchema = createInsertSchema(employeeCommissions).omit({ id: true, createdAt: true });
+export type InsertEmployeeCommission = z.infer<typeof insertEmployeeCommissionSchema>;
+export type EmployeeCommission = typeof employeeCommissions.$inferSelect;
+
+export const employeeEntitlements = pgTable("employee_entitlements", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  employeeId: integer("employee_id").references(() => users.id).notNull(),
+  type: text("type").notNull().default("other"),
+  amount: decimal("amount", { precision: 10, scale: 3 }).notNull(),
+  date: date("date").notNull(),
+  month: text("month").notNull(),
+  year: integer("year").notNull(),
+  note: text("note"),
+  status: text("status").notNull().default("pending"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertEmployeeEntitlementSchema = createInsertSchema(employeeEntitlements).omit({ id: true, createdAt: true });
+export type InsertEmployeeEntitlement = z.infer<typeof insertEmployeeEntitlementSchema>;
+export type EmployeeEntitlement = typeof employeeEntitlements.$inferSelect;
+
 export const stocktakes = pgTable("stocktakes", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   branchId: integer("branch_id").references(() => branches.id).notNull(),
