@@ -253,7 +253,7 @@ export default function HR() {
       </div>
 
       <Tabs defaultValue="employees" dir={lang === "ar" ? "rtl" : "ltr"}>
-        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 max-w-4xl">
+        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 max-w-3xl">
           <TabsTrigger value="employees" className="gap-1 text-xs">
             <Users className="w-3.5 h-3.5" />
             {t("hr.tab_employees")}
@@ -265,10 +265,6 @@ export default function HR() {
           <TabsTrigger value="payroll" className="gap-1 text-xs">
             <FileText className="w-3.5 h-3.5" />
             {t("hr.tab_payroll_sheet")}
-          </TabsTrigger>
-          <TabsTrigger value="payments" className="gap-1 text-xs">
-            <CreditCard className="w-3.5 h-3.5" />
-            {t("hr.tab_payments")}
           </TabsTrigger>
           <TabsTrigger value="outstanding" className="gap-1 text-xs">
             <AlertCircle className="w-3.5 h-3.5" />
@@ -300,10 +296,6 @@ export default function HR() {
 
         <TabsContent value="payroll">
           <PayrollSheetTab usersList={usersList} />
-        </TabsContent>
-
-        <TabsContent value="payments">
-          <SalaryPaymentsTab usersList={usersList} />
         </TabsContent>
 
         <TabsContent value="outstanding">
@@ -1661,8 +1653,11 @@ function PayrollSheetTab({ usersList }: { usersList: any[] }) {
   );
 }
 
-/* ==================== SALARY PAYMENTS TAB ==================== */
-function SalaryPaymentsTab({ usersList }: { usersList: any[] }) {
+/* ==================== OUTSTANDING TAB (placeholder to find cut point) ==================== */
+const __SALARY_PAYMENTS_REMOVED__ = true;
+/* ==================== SALARY PAYMENTS TAB — MERGED INTO PAYROLL SHEET ==================== */
+/* removed to avoid duplication with PayrollSheetTab */
+function __removed_SalaryPaymentsTab({ usersList }: { usersList: any[] }) {
   const { t } = useI18n();
   const { toast } = useToast();
   const MONTH_NAMES = useMonthNames();
