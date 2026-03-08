@@ -2632,7 +2632,7 @@ export async function registerRoutes(
         createdBy: req.session.userId!,
       });
 
-      await storage.createLedgerEntry({
+      await storage.createEmployeeLedgerEntry({
         employeeId: Number(employeeId), movementType: "advance_given",
         referenceType: "employee_advance", referenceId: advance.id,
         amount: String(amount), date,

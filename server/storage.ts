@@ -183,7 +183,7 @@ export interface IStorage {
   reviewPayrollRun(id: number, userId: number): Promise<PayrollRun | undefined>;
   reopenPayrollRun(id: number, userId: number): Promise<PayrollRun | undefined>;
   cancelPayrollRun(id: number, userId: number): Promise<PayrollRun | undefined>;
-  createLedgerEntry(data: InsertEmployeeFinancialLedger): Promise<EmployeeFinancialLedger>;
+  createEmployeeLedgerEntry(data: InsertEmployeeFinancialLedger): Promise<EmployeeFinancialLedger>;
   getEmployeeLedger(employeeId: number, filters?: { from?: string; to?: string; movementType?: string }): Promise<EmployeeFinancialLedger[]>;
   getEmployeeStatement(employeeId: number, from: string, to: string): Promise<any>;
   getPayrollPaymentsReport(filters?: { month?: string; year?: number; branchId?: number }): Promise<any[]>;
@@ -3485,7 +3485,7 @@ export class DatabaseStorage implements IStorage {
           );
           remaining -= repayAmount;
 
-          await this.createLedgerEntry({
+          await this.createEmployeeLedgerEntry({
             employeeId: d.employee_id, movementType: "advance_repayment_from_payroll",
             referenceType: "payroll_run", referenceId: id,
             amount: (-repayAmount).toFixed(3), date: today,
@@ -3503,7 +3503,7 @@ export class DatabaseStorage implements IStorage {
             [id, ded.id]
           );
         }
-        await this.createLedgerEntry({
+        await this.createEmployeeLedgerEntry({
           employeeId: d.employee_id, movementType: "deduction_applied",
           referenceType: "payroll_run", referenceId: id,
           amount: (-dedApplied).toFixed(3), date: today,
@@ -3511,7 +3511,7 @@ export class DatabaseStorage implements IStorage {
         });
       }
 
-      await this.createLedgerEntry({
+      await this.createEmployeeLedgerEntry({
         employeeId: d.employee_id, movementType: "payroll_generated",
         referenceType: "payroll_run", referenceId: id,
         amount: parseFloat(d.net_salary || "0").toFixed(3), date: today,
@@ -3601,7 +3601,7 @@ export class DatabaseStorage implements IStorage {
 
     const payment = result.rows[0];
 
-    await this.createLedgerEntry({
+    await this.createEmployeeLedgerEntry({
       employeeId: data.employeeId, movementType: "payroll_payment",
       referenceType: "salary_payment", referenceId: payment.id,
       amount: (-parseFloat(data.amount)).toFixed(3),
@@ -3622,7 +3622,7 @@ export class DatabaseStorage implements IStorage {
     const anyPaid = allDetails.some((d: any) => d.payment_status === "paid" || d.payment_status === "partial");
 
     const run = await this.getPayrollRun(data.payrollId);
-    if (run && run.status === "approved" || run?.status === "partial") {
+    if (run && ["approved", "partial", "reviewed"].includes(run.status)) {
       let newStatus = run.status;
       if (allPaid) newStatus = "paid";
       else if (anyPaid) newStatus = "partial";
@@ -3829,7 +3829,7 @@ export class DatabaseStorage implements IStorage {
     return result.rows;
   }
 
-  async createLedgerEntry(data: InsertEmployeeFinancialLedger) {
+  async createEmployeeLedgerEntry(data: InsertEmployeeFinancialLedger) {
     const [row] = await db.insert(employeeFinancialLedger).values(data).returning();
     return row;
   }
