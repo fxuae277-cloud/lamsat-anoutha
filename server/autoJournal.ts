@@ -293,7 +293,7 @@ export async function journalForSalaryPayment(payment: {
     createdBy: payment.paidBy,
     lines: [
       { accountCode: ACCOUNT_CODES.SALARY_EXPENSES, debit: payment.amount, credit: 0, description: desc },
-      { accountCode: ACCOUNT_CODES.BANK, debit: 0, credit: payment.amount, description: desc },
+      { accountCode: payment.paymentMethod === "cash" ? ACCOUNT_CODES.CASH : ACCOUNT_CODES.BANK, debit: 0, credit: payment.amount, description: desc },
     ],
   });
 }
