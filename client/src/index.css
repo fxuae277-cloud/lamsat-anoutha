@@ -3,12 +3,6 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@font-face {
-  font-family: 'EnNums';
-  src: local('Segoe UI'), local('Arial'), local('Helvetica Neue'), local('Helvetica'), local('sans-serif');
-  unicode-range: U+0030-0039, U+002E, U+002C, U+002F, U+002D, U+0025, U+002B, U+003A;
-}
-
 * {
   font-variant-numeric: lining-nums tabular-nums;
   font-feature-settings: "lnum" 1, "tnum" 1;
@@ -50,7 +44,7 @@
   --color-sidebar-border: hsl(var(--sidebar-border));
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 
-  --font-sans: 'EnNums', 'Cairo', sans-serif;
+  --font-sans: 'Inter', 'Cairo', sans-serif;
 }
 
 :root {
