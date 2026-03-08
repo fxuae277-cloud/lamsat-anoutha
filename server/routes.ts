@@ -2781,8 +2781,8 @@ export async function registerRoutes(
       }
 
       const run = await storage.getPayrollRun(Number(payrollId));
-      if (run && !["approved", "partial"].includes(run.status)) {
-        return res.status(400).json({ message: "لا يمكن الدفع إلا لكشف معتمد" });
+      if (run && !["approved", "partial", "reviewed"].includes(run.status)) {
+        return res.status(400).json({ message: "لا يمكن الدفع إلا لكشف معتمد أو تمت مراجعته" });
       }
 
       const detail = await pool.query(`SELECT * FROM payroll_details WHERE id = $1`, [payrollDetailId]);
@@ -2797,10 +2797,10 @@ export async function registerRoutes(
         return res.status(400).json({ message: `المبلغ يتجاوز المتبقي. المتبقي: ${(netSalary - alreadyPaid).toFixed(3)}` });
       }
 
-      const allowedMethods = ["bank_transfer", "cheque", "wallet"];
+      const allowedMethods = ["cash", "bank_transfer", "cheque", "wallet"];
       const method = paymentMethod || "bank_transfer";
       if (!allowedMethods.includes(method)) {
-        return res.status(400).json({ message: "طريقة الدفع غير مسموحة للرواتب. الرواتب تُدفع عبر البنك فقط" });
+        return res.status(400).json({ message: "طريقة الدفع غير مسموحة" });
       }
 
       const payment = await storage.createSalaryPayment({

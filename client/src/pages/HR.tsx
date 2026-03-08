@@ -1392,7 +1392,8 @@ function SalaryPaymentsTab({ usersList }: { usersList: any[] }) {
                   <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{t("hr.no_payment_data")}</TableCell></TableRow>
                 ) : filteredDetails.map((d: any) => {
                   const remaining = parseFloat(d.remaining || "0");
-                  const canPay = currentRun.status === "approved" && d.payment_status !== "paid" && remaining > 0;
+                  const allowedStatuses = ["approved", "partial", "reviewed"];
+                  const canPay = allowedStatuses.includes(currentRun.status) && d.payment_status !== "paid" && remaining > 0;
                   return (
                     <TableRow key={d.id} data-testid={`row-payment-${d.id}`}>
                       <TableCell className="font-medium">{d.employee_name}</TableCell>
@@ -1403,15 +1404,20 @@ function SalaryPaymentsTab({ usersList }: { usersList: any[] }) {
                       <TableCell>{paymentStatusBadge(d.payment_status, t)}</TableCell>
                       <TableCell>
                         <div className="flex gap-1 flex-wrap">
-                          {canPay && (
-                            <Button size="sm" className="h-7 gap-1 bg-green-600 hover:bg-green-700 text-xs" onClick={() => { setSelectedDetail(d); setPayAmount(d.remaining); setPayDate(todayStr()); setPayOpen(true); }} data-testid={`button-pay-${d.id}`}>
-                              <DollarSign className="w-3 h-3" /> {t("hr.register_payment")}
-                            </Button>
-                          )}
-                          <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => { setSelectedDetail(d); setHistoryOpen(true); }}>
+                          <Button
+                            size="sm"
+                            className={canPay ? "h-8 gap-1.5 bg-green-600 hover:bg-green-700 text-xs font-bold px-3" : "h-8 gap-1.5 text-xs font-bold px-3"}
+                            variant={canPay ? "default" : "outline"}
+                            disabled={!canPay}
+                            onClick={() => { setSelectedDetail(d); setPayAmount(d.remaining); setPayDate(todayStr()); setPayMethod("bank_transfer"); setPayNote(""); setPayRefNo(""); setPayOpen(true); }}
+                            data-testid={`button-pay-${d.id}`}
+                          >
+                            <DollarSign className="w-3.5 h-3.5" /> {t("hr.register_payment")}
+                          </Button>
+                          <Button variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={() => { setSelectedDetail(d); setHistoryOpen(true); }}>
                             <Clock className="w-3 h-3" /> {t("hr.payment_log")}
                           </Button>
-                          <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => { setSelectedDetail(d); setSlipOpen(true); }}>
+                          <Button variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={() => { setSelectedDetail(d); setSlipOpen(true); }}>
                             <Receipt className="w-3 h-3" /> {t("hr.salary_slip_view")}
                           </Button>
                         </div>
@@ -1511,8 +1517,8 @@ function SalaryPaymentsTab({ usersList }: { usersList: any[] }) {
             )}
           </div>
           <DialogFooter>
-            {selectedDetail && parseFloat(selectedDetail.remaining || "0") > 0 && currentRun?.status === "approved" && (
-              <Button className="gap-1 bg-green-600 hover:bg-green-700" onClick={() => { setSlipOpen(false); setPayAmount(selectedDetail.remaining); setPayDate(todayStr()); setPayOpen(true); }}>
+            {selectedDetail && parseFloat(selectedDetail.remaining || "0") > 0 && ["approved", "partial", "reviewed"].includes(currentRun?.status) && (
+              <Button className="gap-1 bg-green-600 hover:bg-green-700" onClick={() => { setSlipOpen(false); setPayAmount(selectedDetail.remaining); setPayDate(todayStr()); setPayMethod("bank_transfer"); setPayNote(""); setPayRefNo(""); setPayOpen(true); }}>
                 <DollarSign className="w-3.5 h-3.5" /> {t("hr.register_payment")}
               </Button>
             )}
