@@ -281,7 +281,6 @@ export async function journalForSalaryPayment(payment: {
 }) {
   if (payment.amount <= 0) return;
 
-  const cashOrBank = (payment.paymentMethod === "cash" || payment.paymentMethod === "card") ? ACCOUNT_CODES.CASH : ACCOUNT_CODES.BANK;
   const date = new Date().toISOString().slice(0, 10);
   const desc = `دفع راتب ${payment.employeeName} - ${payment.month}/${payment.year}`;
 
@@ -294,7 +293,7 @@ export async function journalForSalaryPayment(payment: {
     createdBy: payment.paidBy,
     lines: [
       { accountCode: ACCOUNT_CODES.SALARY_EXPENSES, debit: payment.amount, credit: 0, description: desc },
-      { accountCode: cashOrBank, debit: 0, credit: payment.amount, description: desc },
+      { accountCode: ACCOUNT_CODES.BANK, debit: 0, credit: payment.amount, description: desc },
     ],
   });
 }

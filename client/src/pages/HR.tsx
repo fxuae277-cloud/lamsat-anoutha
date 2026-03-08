@@ -898,7 +898,7 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
   const [newYear, setNewYear] = useState(String(now.getFullYear()));
   const [newNote, setNewNote] = useState("");
   const [payAmount, setPayAmount] = useState("");
-  const [payMethod, setPayMethod] = useState("cash");
+  const [payMethod, setPayMethod] = useState("bank_transfer");
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
   const [payNote, setPayNote] = useState("");
   const [payRefNo, setPayRefNo] = useState("");
@@ -1446,10 +1446,9 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
               <Select value={payMethod} onValueChange={setPayMethod}>
                 <SelectTrigger data-testid="select-pay-method"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cash">{t("hr.pay_cash")}</SelectItem>
                   <SelectItem value="bank_transfer">{t("hr.pay_bank")}</SelectItem>
-                  <SelectItem value="wallet">{t("hr.pay_wallet")}</SelectItem>
                   <SelectItem value="cheque">{t("hr.pay_cheque")}</SelectItem>
+                  <SelectItem value="wallet">{t("hr.pay_wallet")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1548,18 +1547,20 @@ function PayrollTab({ usersList }: { usersList: any[] }) {
                 <TableHead>{t("common.amount")}</TableHead>
                 <TableHead>{t("hr.payment_date")}</TableHead>
                 <TableHead>{t("hr.payment_method")}</TableHead>
+                <TableHead>{t("hr.reference_no")}</TableHead>
                 <TableHead>{t("hr.created_by")}</TableHead>
                 <TableHead>{t("common.notes")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paymentHistory.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">{t("hr.no_payments")}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">{t("hr.no_payments")}</TableCell></TableRow>
               ) : paymentHistory.map((p: any) => (
                 <TableRow key={p.id}>
                   <TableCell className="font-bold text-green-600">{fmt(p.amount)} {t("common.omr")}</TableCell>
                   <TableCell className="text-sm">{p.payment_date ? new Date(p.payment_date + "T00:00:00").toLocaleDateString(lang === "ar" ? "ar-OM" : "en-US") : "—"}</TableCell>
-                  <TableCell><Badge variant="outline" className="text-xs">{p.payment_method === "cash" ? t("hr.pay_cash") : t("hr.pay_bank")}</Badge></TableCell>
+                  <TableCell><Badge variant="outline" className="text-xs">{t(`hr.pay_${p.payment_method}`) || p.payment_method}</Badge></TableCell>
+                  <TableCell className="text-sm">{p.reference_no || "—"}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{p.paid_by_name || "-"}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{p.note || "—"}</TableCell>
                 </TableRow>

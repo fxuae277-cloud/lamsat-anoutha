@@ -2783,13 +2783,19 @@ export async function registerRoutes(
         return res.status(400).json({ message: `المبلغ يتجاوز المتبقي. المتبقي: ${(netSalary - alreadyPaid).toFixed(3)}` });
       }
 
+      const allowedMethods = ["bank_transfer", "cheque", "wallet"];
+      const method = paymentMethod || "bank_transfer";
+      if (!allowedMethods.includes(method)) {
+        return res.status(400).json({ message: "طريقة الدفع غير مسموحة للرواتب. الرواتب تُدفع عبر البنك فقط" });
+      }
+
       const payment = await storage.createSalaryPayment({
         payrollId: Number(payrollId),
         payrollDetailId: Number(payrollDetailId),
         employeeId: Number(employeeId),
         amount: payAmount.toFixed(3),
         paymentDate,
-        paymentMethod: paymentMethod || "cash",
+        paymentMethod: method,
         referenceNo: referenceNo || null,
         branchId: branchId ? Number(branchId) : null,
         paidBy: req.session.userId!,
@@ -2797,23 +2803,36 @@ export async function registerRoutes(
       });
 
       const emp = await storage.getUser(Number(employeeId));
+      const empBranchId = branchId ? Number(branchId) : (emp?.branchId || 1);
 
       journalForSalaryPayment({
         id: payment.id,
         employeeId: Number(employeeId),
         employeeName: emp?.name || "",
         amount: payAmount,
-        paymentMethod: paymentMethod || "cash",
-        branchId: branchId ? Number(branchId) : (emp?.branchId || null),
+        paymentMethod: method,
+        branchId: empBranchId,
         paidBy: req.session.userId!,
         month: run?.month || "",
         year: run?.year || 2026,
       });
 
+      await storage.addBankLedgerEntry({
+        date: paymentDate,
+        branchId: empBranchId,
+        method: method,
+        amountIn: "0",
+        amountOut: payAmount.toFixed(3),
+        refId: `SAL-${payment.id}`,
+        category: "salary_payment",
+        note: `دفع راتب ${emp?.name || ""} - ${run?.month}/${run?.year}${referenceNo ? ` | مرجع: ${referenceNo}` : ""}`,
+        createdBy: req.session.userId!,
+      });
+
       await storage.addAuditLog({
         action: "salary_payment", entityType: "salary_payment", entityId: payment.id,
         userId: req.session.userId!, userName: req.session.userName || "",
-        details: `دفعة راتب ${payAmount.toFixed(3)} للموظف ${emp?.name || employeeId}`,
+        details: `دفعة راتب ${payAmount.toFixed(3)} للموظف ${emp?.name || employeeId} عبر ${method}`,
       });
 
       res.status(201).json(payment);

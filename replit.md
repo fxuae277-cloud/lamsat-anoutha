@@ -152,7 +152,7 @@ shared/
 - **payroll_details** (payroll_id, employee_id, basic_salary, commission, commission_source[manual/sales_based], gross_salary, deductions, advances, bonus, net_salary, note)
 - **employee_advances** (employee_id, amount, date, note, settled, settled_in_payroll_id, created_by, deduction_mode[manual/fixed_installment/full_next_payroll], installment_amount)
 - **employee_deductions** (employee_id, amount, reason, date, applied_in_payroll_id, created_by)
-- **salary_payments** (payroll_id, payroll_detail_id, employee_id, amount, payment_date, payment_method[cash/bank_transfer/wallet/cheque], branch_id, paid_by, note, reference_no, created_at)
+- **salary_payments** (payroll_id, payroll_detail_id, employee_id, amount, payment_date, payment_method[bank_transfer/cheque/wallet — NO cash], branch_id, paid_by, note, reference_no, created_at)
 - **employee_financial_ledger** (employee_id, movement_type[payroll_generated/payroll_payment/advance_given/advance_repayment_from_payroll/deduction_applied/commission/bonus/manual_adjustment], reference_type, reference_id, amount, balance_after, date, note, created_by)
 - users table extended: salary_type (monthly/daily/commission), commission_rate, employment_status[active/suspended/terminated], opening_advance_balance, opening_payable_balance
 - **session** (auto-created by connect-pg-simple)
@@ -172,11 +172,12 @@ shared/
 - HR page has 7 tabs: Employees, Payroll Runs, Advances, Deductions, Outstanding, Performance, Reports
 - **Reports Tab**: Employee Statement, Payment Report, Recurring Deductions, Branch Payroll, Monthly Comparison
 - **Employee Financial Profile**: includes Financial Ledger tab with full movement history
-- **Payment Methods**: cash, bank_transfer, wallet, cheque — with optional reference_no
+- **Payment Methods**: bank_transfer, cheque, wallet ONLY (cash NOT allowed for salaries) — with optional reference_no
+- **Bank-only Policy**: Salary payments always Dr: Salary Expenses 5200, Cr: Bank 1102; creates bank_ledger entry; NO cash_ledger impact
 - **Permission Guards**: salary edit (owner), approve (owner/admin), reopen/cancel (owner), pay (owner/admin)
 - **Audit Logging**: all sensitive HR operations logged with before/after values
 - Report endpoints: /api/reports/employee-statement/:id, /api/reports/payroll-payments, /api/reports/recurring-deductions, /api/reports/payroll-by-branch, /api/reports/payroll-comparison
-- **Auto Journal**: salary payments create journal entries (Dr: Salary Expenses 5200, Cr: Cash/Bank)
+- **Auto Journal**: salary payments create journal entries (Dr: Salary Expenses 5200, Cr: Bank 1102) — always bank, never cash
 - **Auto Journal for Advances**: When creating advance, auto-journal entry (Dr: Employee Advances 1401, Cr: Cash 1101)
 - **Salary Slip**: Individual employee payslip with print support
 - **Export**: Print payroll sheet (A4), Export Excel (CSV), Salary slip print
