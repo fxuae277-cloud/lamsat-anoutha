@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import type { Product, Category, ProductVariant } from "@shared/schema";
 import { useI18n } from "@/lib/i18n";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
@@ -26,6 +27,9 @@ export default function Products() {
 
   const [newProduct, setNewProduct] = useState({ name: "", categoryId: "", price: "", active: true });
   const [variantForm, setVariantForm] = useState({ barcode: "", sku: "", color: "", size: "", price: "", cost: "" });
+
+  const { user } = useAuth();
+  const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
 
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"], queryFn: getQueryFn({ on401: "throw" }) });
   const { data: categories = [] } = useQuery<Category[]>({ queryKey: ["/api/categories"], queryFn: getQueryFn({ on401: "throw" }) });
@@ -276,12 +280,74 @@ export default function Products() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("products.variant_price")}</label>
-              <Input type="number" step="0.001" value={variantForm.price} onChange={e => setVariantForm({...variantForm, price: e.target.value})} data-testid="input-variant-price" />
+              <Input 
+                type="number" 
+                step="0.001" 
+                value={variantForm.price} 
+                onChange={e => setVariantForm({...variantForm, price: e.target.value})} 
+                data-testid="input-variant-price" 
+                readOnly={!isOwnerOrAdmin}
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("products.variant_cost")}</label>
-              <Input type="number" step="0.001" value={variantForm.cost} onChange={e => setVariantForm({...variantForm, cost: e.target.value})} data-testid="input-variant-cost" />
+              <Input 
+                type="number" 
+                step="0.001" 
+                value={variantForm.cost} 
+                onChange={e => setVariantForm({...variantForm, cost: e.target.value})} 
+                data-testid="input-variant-cost" 
+                readOnly
+              />
             </div>
+            {editingVariant && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("products.last_purchase_price")}</label>
+                  <Input 
+                    type="number" 
+                    step="0.001" 
+                    value={editingVariant.lastPurchasePrice?.toString() || "0"} 
+                    readOnly 
+                    className="bg-muted"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("products.avg_cost")}</label>
+                  <Input 
+                    type="number" 
+                    step="0.001" 
+                    value={selectedProduct?.avgCost?.toString() || "0"} 
+                    readOnly 
+                    className="bg-muted"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("products.profit_margin")}</label>
+                  <div className="h-10 px-3 py-2 rounded-md border bg-muted text-sm flex items-center">
+                    {(() => {
+                      const price = parseFloat(variantForm.price);
+                      const avgCost = parseFloat(selectedProduct?.avgCost?.toString() || "0");
+                      if (avgCost > 0) {
+                        const margin = ((price - avgCost) / avgCost) * 100;
+                        return `${margin.toFixed(1)}%`;
+                      }
+                      return "-";
+                    })()}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("products.final_price")}</label>
+                  <Input 
+                    type="number" 
+                    step="0.001" 
+                    value={variantForm.price} 
+                    readOnly 
+                    className="bg-muted"
+                  />
+                </div>
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button onClick={() => upsertVariantMutation.mutate(variantForm)} disabled={upsertVariantMutation.isPending} data-testid="button-save-variant">{t("common.save")}</Button>

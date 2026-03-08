@@ -150,6 +150,9 @@
     "discount_settings": "إعدادات الخصومات",
     "allow_employee_discount": "السماح للموظف بتطبيق خصم",
     "allow_employee_discount_desc": "يمكن للكاشير تطبيق خصم أثناء البيع في نقطة البيع",
+    "pricing_settings": "إعدادات الأسعار",
+    "default_profit_margin": "نسبة الربح الافتراضية",
+    "default_profit_margin_desc": "النسبة المئوية للربح المستخدمة في اقتراح الأسعار عند اعتماد المشتريات",
     "invoice_settings": "إعدادات الفاتورة",
     "invoice_prefix": "بادئة رقم الفاتورة (لكل فرع)",
     "invoice_prefix_example": "مثال:",
@@ -374,7 +377,12 @@
     "variant_saved": "تم حفظ المتغير",
     "variant_deleted": "تم حذف المتغير",
     "manage_variants": "إدارة المتغيرات",
-    "default_price": "سعر افتراضي"
+    "default_price": "سعر افتراضي",
+    "last_purchase_price": "آخر سعر شراء",
+    "avg_cost": "متوسط التكلفة",
+    "profit_margin": "نسبة الربح",
+    "final_price": "سعر البيع النهائي",
+    "suggested_price": "السعر المقترح"
   },
   "inv_balances": {
     "title": "أرصدة المخزون",
@@ -1493,7 +1501,8 @@
     "table_before": "قبل",
     "table_after": "بعد",
     "table_notes": "ملاحظات",
-    "no_transactions": "لا توجد حركات"
+    "no_transactions": "لا توجد حركات",
+    "last_receipt_date": "تاريخ آخر استلام"
   },
   "stock_control": {
     "title": "الجرد والتسويات",
@@ -1654,7 +1663,8 @@
     "create_invoice_title": "إنشاء فاتورة مشتريات",
     "create_invoice_desc": "إنشاء مسودة فاتورة مشتريات جديدة",
     "select_supplier": "اختر المورد...",
-    "invoice_date": "تاريخ الفاتورة"
+    "invoice_date": "تاريخ الفاتورة",
+    "price_updated_on_approval": "تم تحديث السعر عند الاعتماد"
   },
   "returns": {
     "title": "المرتجعات",

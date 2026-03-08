@@ -968,6 +968,12 @@ function PurchasesTab() {
 
   const items = invoiceDetail?.items || [];
   const isPending = invoiceDetail?.status === "pending";
+  const { data: settings } = useQuery<Record<string, string>>({
+    queryKey: ["/api/settings"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+  const profitMargin = parseFloat(settings?.default_profit_margin || "50");
+
   const statusLabel = invoiceDetail?.status === "pending" ? t("purchases.pending") : invoiceDetail?.status === "approved" ? t("purchases.approved") : t("purchases.cancelled");
   const itemsSubtotal = items.reduce((s: number, it: any) => s + parseFloat(it.lineSubtotal || "0"), 0);
   const extraTotal = invoiceDetail
@@ -1555,7 +1561,7 @@ function PurchasesTab() {
         </Dialog>
 
         <Dialog open={showPostConfirm} onOpenChange={setShowPostConfirm}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-amber-500" /> {t("purchases.approve_confirm_title")}
@@ -1564,12 +1570,60 @@ function PurchasesTab() {
                 {t("purchases.approve_confirm_desc")}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-3 text-sm">
-              <div className="p-3 bg-muted/50 rounded-lg border space-y-2">
-                <p><strong>{t("purchases.items")}:</strong> {items.length}</p>
-                <p><strong>{t("purchases.subtotal")}:</strong> {omr(itemsSubtotal)} {t("common.omr")}</p>
-                <p><strong>{t("purchases.total_extra")}:</strong> {omr(extraTotal)} {t("common.omr")}</p>
-                <p className="border-t pt-2"><strong>{t("purchases.grand_total")}:</strong> <span className="text-lg font-bold text-emerald-700">{omr(itemsSubtotal + extraTotal)} {t("common.omr")}</span></p>
+            <div className="space-y-4 text-sm">
+              <div className="p-3 bg-muted/50 rounded-lg border grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">{t("purchases.items")}</p>
+                  <p className="font-bold">{items.length}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">{t("purchases.subtotal")}</p>
+                  <p className="font-bold">{omr(itemsSubtotal)} {t("common.omr")}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">{t("purchases.total_extra")}</p>
+                  <p className="font-bold text-amber-600">{omr(extraTotal)} {t("common.omr")}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">{t("purchases.grand_total")}</p>
+                  <p className="font-bold text-emerald-700">{omr(itemsSubtotal + extraTotal)} {t("common.omr")}</p>
+                </div>
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-muted p-2 text-xs font-bold border-b flex justify-between items-center">
+                  <span>{t("purchases.price_updated_on_approval")}</span>
+                  <span className="text-emerald-700">{t("products.profit_margin")}: {profitMargin}%</span>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto">
+                  <Table>
+                    <TableHeader className="bg-muted/30">
+                      <TableRow className="h-8">
+                        <TableHead className="h-8 py-0">{t("purchases.product")}</TableHead>
+                        <TableHead className="h-8 py-0 text-left">{t("purchases.table_unit_price")}</TableHead>
+                        <TableHead className="h-8 py-0 text-left">{t("products.suggested_price")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map((it: any) => {
+                        const unitCostFinal = parseFloat(it.unitCostFinal || "0");
+                        const suggestedPrice = unitCostFinal * (1 + profitMargin / 100);
+                        return (
+                          <TableRow key={it.id} className="h-8">
+                            <TableCell className="py-1">
+                              <p className="font-medium">{it.productName || productMap[it.productId] || "—"}</p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {[it.color, it.size].filter(Boolean).join(" / ")}
+                              </p>
+                            </TableCell>
+                            <TableCell className="py-1 font-mono text-left">{omr(unitCostFinal)}</TableCell>
+                            <TableCell className="py-1 font-mono text-left font-bold text-emerald-700">{omr(suggestedPrice)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             </div>
             <DialogFooter className="gap-2">

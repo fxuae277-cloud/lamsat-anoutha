@@ -66,6 +66,7 @@ const DEFAULT_SETTINGS: SettingsData = {
   thermalPrinter: "true",
   businessLogo: "",
   autoBackup: "true",
+  default_profit_margin: "50",
 };
 
 const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS);
@@ -421,6 +422,10 @@ export default function Settings() {
           <TabsTrigger value="general" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-general">
             <Settings2 className="w-4 h-4" />
             {t("settings.tab_general")}
+          </TabsTrigger>
+          <TabsTrigger value="pricing" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-pricing">
+            <Percent className="w-4 h-4" />
+            {t("settings.pricing_settings")}
           </TabsTrigger>
           <TabsTrigger value="branches" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-branches">
             <Building2 className="w-4 h-4" />
@@ -981,6 +986,36 @@ export default function Settings() {
             </CardContent>
           </Card>
 
+        </TabsContent>
+
+        {/* ─── Pricing Tab ─── */}
+        <TabsContent value="pricing" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Percent className="w-5 h-5" />
+                {t("settings.pricing_settings")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="max-w-md space-y-4">
+                <div className="space-y-2">
+                  <Label>{t("settings.default_profit_margin")} (%)</Label>
+                  <Input
+                    type="number"
+                    value={currentSettings.default_profit_margin}
+                    onChange={(e) => updateSetting("default_profit_margin", e.target.value)}
+                    data-testid="input-default-profit-margin"
+                    min="0"
+                    step="1"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    {t("settings.default_profit_margin_desc")}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* ─── Branches Tab ─── */}

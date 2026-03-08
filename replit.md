@@ -195,7 +195,25 @@ shared/
   4. Calculate unit_cost_final = (line_subtotal + allocated_extra) / qty
   5. Update products.avg_cost using Weighted Average: new_avg = (old_avg * old_qty + unit_cost_final * new_qty) / (old_qty + new_qty)
   6. Update products.stock_qty += qty
+  7. Update products.last_purchase_price = unitCostFinal
+  8. Calculate suggested price = unitCostFinal * (1 + profitMargin/100) using `default_profit_margin` setting
+  9. Update products.price + product_variants.price = suggested price (auto-publish to all branches)
+  10. Update product_variants.last_purchase_price, last_receipt_date, cost_default
 - Guards: Cannot post if status != draft or items empty; cannot modify posted invoices
+- **Approval dialog** shows pricing preview with suggested prices per item before confirming
+
+## Profit-Margin Pricing System
+- **Default Profit Margin**: System setting `default_profit_margin` (default 50%) in Settings > Pricing tab
+- On purchase approval: suggested_price = unitCostFinal × (1 + margin/100) auto-applied to product + variant prices
+- **Product page** shows: last purchase price, avg cost, profit margin %, final sale price (read-only for non-admin)
+- **Inventory page** shows: last purchase price, last receipt date columns in balances view
+- Price editing restricted to owner/admin roles; branch employees cannot change prices
+- Schema fields: `products.last_purchase_price`, `product_variants.last_purchase_price`, `product_variants.last_receipt_date`
+
+## Inventory Protection Rules
+- **Rule 1**: Stock never changes directly — only via movements (purchase, sale, transfer, return, adjustment)
+- **Rule 2**: Double-approval prevention — `approvePurchaseInvoice` checks `status === 'pending'` with atomic UPDATE
+- **Rule 3**: Variant-level tracking — `inventory_balances` tracks by `(variantId, locationId)` with unique constraint
 
 ## COGS & Profit Tracking
 - **POS Sales** (createSale): calculates COGS = sum(qty * product.avg_cost) at time of sale, stores in sales.cogs_total and sales.gross_profit

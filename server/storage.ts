@@ -1638,6 +1638,9 @@ export class DatabaseStorage implements IStorage {
     if (!centralLoc) throw new Error("لا يوجد مخزن مركزي — يرجى إنشاؤه أولاً");
     const centralLocationId = centralLoc.id;
 
+    const marginRow = await pool.query(`SELECT value FROM settings WHERE key = 'default_profit_margin'`);
+    const profitMargin = parseFloat(marginRow.rows[0]?.value || "50") / 100;
+
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -1674,9 +1677,10 @@ export class DatabaseStorage implements IStorage {
             ? ((oldAvgCost * oldQty) + (unitCostFinal * item.qty)) / newQty
             : unitCostFinal;
 
+          const suggestedPrice = unitCostFinal * (1 + profitMargin);
           await client.query(
-            `UPDATE products SET stock_qty = $1, avg_cost = $2 WHERE id = $3`,
-            [newQty, newAvgCost.toFixed(3), item.productId]
+            `UPDATE products SET stock_qty = $1, avg_cost = $2, last_purchase_price = $3, price = $4 WHERE id = $5`,
+            [newQty, newAvgCost.toFixed(3), unitCostFinal.toFixed(3), suggestedPrice.toFixed(3), item.productId]
           );
         }
 
@@ -1727,6 +1731,14 @@ export class DatabaseStorage implements IStorage {
             [variantId, item.id]
           );
         }
+
+        const suggestedVariantPrice = unitCostFinal * (1 + profitMargin);
+        await client.query(
+          `UPDATE product_variants 
+           SET last_purchase_price = $1, last_receipt_date = now(), cost_default = $1, price = $2
+           WHERE id = $3`,
+          [unitCostFinal.toFixed(3), suggestedVariantPrice.toFixed(3), variantId]
+        );
 
         await client.query(
           `INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
@@ -4262,6 +4274,7 @@ export class DatabaseStorage implements IStorage {
   async getInventoryBalances(locationId?: number) {
     let query = `
       SELECT ib.*, pv.barcode, pv.sku, pv.color, pv.size, pv.price,
+             pv.last_purchase_price, pv.last_receipt_date,
              p.name as product_name, p.category_id, c.name as category_name,
              l.name as location_name, l.type as location_type,
              b.name as branch_name,

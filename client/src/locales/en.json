@@ -150,6 +150,9 @@
     "discount_settings": "Discount Settings",
     "allow_employee_discount": "Allow employee to apply discount",
     "allow_employee_discount_desc": "Cashier can apply discount during POS sale",
+    "pricing_settings": "Pricing Settings",
+    "default_profit_margin": "Default Profit Margin",
+    "default_profit_margin_desc": "Profit margin percentage used to suggest prices when approving purchases",
     "invoice_settings": "Invoice Settings",
     "invoice_prefix": "Invoice Number Prefix (per branch)",
     "invoice_prefix_example": "Example:",
@@ -374,7 +377,12 @@
     "variant_saved": "Variant saved",
     "variant_deleted": "Variant deleted",
     "manage_variants": "Manage Variants",
-    "default_price": "Default Price"
+    "default_price": "Default Price",
+    "last_purchase_price": "Last Purchase Price",
+    "avg_cost": "Average Cost",
+    "profit_margin": "Profit Margin",
+    "final_price": "Final Sale Price",
+    "suggested_price": "Suggested Price"
   },
   "inv_balances": {
     "title": "Inventory Balances",
@@ -1493,7 +1501,8 @@
     "table_before": "Before",
     "table_after": "After",
     "table_notes": "Notes",
-    "no_transactions": "No transactions"
+    "no_transactions": "No transactions",
+    "last_receipt_date": "Last Receipt Date"
   },
   "stock_control": {
     "title": "Stocktake & Adjustments",
@@ -1654,7 +1663,8 @@
     "create_invoice_title": "Create Purchase Invoice",
     "create_invoice_desc": "Create a new draft purchase invoice",
     "select_supplier": "Select supplier...",
-    "invoice_date": "Invoice Date"
+    "invoice_date": "Invoice Date",
+    "price_updated_on_approval": "Prices updated on approval"
   },
   "returns": {
     "title": "Returns",

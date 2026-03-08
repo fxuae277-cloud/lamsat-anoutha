@@ -88,6 +88,7 @@ export const products = pgTable("products", {
   active: boolean("active").default(true),
   avgCost: decimal("avg_cost", { precision: 10, scale: 3 }).default("0"),
   stockQty: integer("stock_qty").default(0),
+  lastPurchasePrice: decimal("last_purchase_price", { precision: 10, scale: 3 }).default("0"),
 });
 export const insertProductSchema = createInsertSchema(products).omit({ id: true });
 export type InsertProduct = z.infer<typeof insertProductSchema>;
@@ -667,6 +668,8 @@ export const productVariants = pgTable("product_variants", {
   price: decimal("price", { precision: 10, scale: 3 }).notNull(),
   active: boolean("active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
+  lastPurchasePrice: decimal("last_purchase_price", { precision: 10, scale: 3 }).default("0"),
+  lastReceiptDate: timestamp("last_receipt_date"),
 });
 export const insertProductVariantSchema = createInsertSchema(productVariants).omit({ id: true, createdAt: true });
 export type InsertProductVariant = z.infer<typeof insertProductVariantSchema>;

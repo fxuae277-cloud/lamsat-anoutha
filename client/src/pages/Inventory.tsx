@@ -78,6 +78,8 @@ function BalancesTab() {
               <TableHead>{t("products.variant_size")}</TableHead>
               <TableHead className="text-right">{t("inv_balances.qty_on_hand")}</TableHead>
               <TableHead className="text-right">{t("products.table_price")}</TableHead>
+              <TableHead className="text-right">{t("products.last_purchase_price")}</TableHead>
+              <TableHead>{t("inventory.last_receipt_date")}</TableHead>
               <TableHead>{t("inv_balances.location")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -93,6 +95,10 @@ function BalancesTab() {
                   {b.qtyOnHand < 5 && <Badge variant="destructive" className="ml-2 text-[10px] h-4">{t("inv_balances.low_stock")}</Badge>}
                 </TableCell>
                 <TableCell className="text-right font-mono">{Number(b.price).toFixed(3)}</TableCell>
+                <TableCell className="text-right font-mono">{Number(b.lastPurchasePrice || 0).toFixed(3)}</TableCell>
+                <TableCell className="text-xs">
+                  {b.lastReceiptDate ? new Date(b.lastReceiptDate).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US") : "-"}
+                </TableCell>
                 <TableCell>{b.full_location_name || b.locationName}</TableCell>
               </TableRow>
             ))}
@@ -350,20 +356,28 @@ function LedgerTab() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>{t("common.date")}</TableHead>
+              <TableHead>{t("common.type")}</TableHead>
               <TableHead>{t("inv_balances.product")}</TableHead>
               <TableHead>{t("products.barcode")}</TableHead>
+              <TableHead>{t("products.variant_color")}</TableHead>
+              <TableHead>{t("products.variant_size")}</TableHead>
               <TableHead>{t("inv_balances.location")}</TableHead>
               <TableHead className="text-right">{t("ledger.qty_change")}</TableHead>
               <TableHead>{t("ledger.reason")}</TableHead>
-              <TableHead>{t("ledger.date")}</TableHead>
               <TableHead>{t("common.employee")}</TableHead>
+              <TableHead>{t("common.reference")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {ledger.map((entry, i) => (
               <TableRow key={i}>
+                <TableCell className="text-xs">{new Date(entry.createdAt).toLocaleString(lang === "ar" ? "ar-EG" : "en-US")}</TableCell>
+                <TableCell>{t(`ledger.${entry.reason}`)}</TableCell>
                 <TableCell className="font-medium">{entry.productName}</TableCell>
                 <TableCell className="font-mono text-xs">{entry.barcode}</TableCell>
+                <TableCell>{entry.color || "-"}</TableCell>
+                <TableCell>{entry.size || "-"}</TableCell>
                 <TableCell>{entry.locationName}</TableCell>
                 <TableCell className={`text-right font-bold ${entry.qtyChange > 0 ? "text-green-600" : "text-red-600"}`}>
                   {entry.qtyChange > 0 ? `+${entry.qtyChange}` : entry.qtyChange}
@@ -373,8 +387,8 @@ function LedgerTab() {
                     {t(`ledger.${entry.reason}`)}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-xs">{new Date(entry.createdAt).toLocaleString("en-US")}</TableCell>
                 <TableCell>{entry.userName}</TableCell>
+                <TableCell className="text-xs font-mono">{entry.reference || "-"}</TableCell>
               </TableRow>
             ))}
           </TableBody>
