@@ -48,6 +48,7 @@ import MobileProducts from "@/pages/mobile/MobileProducts";
 import MobileInventory from "@/pages/mobile/MobileInventory";
 
 import { ReactNode } from "react";
+import { useEnglishDigits } from "@/lib/useEnglishDigits";
 
 function RequireOwner({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -207,6 +208,7 @@ function AuthenticatedRouter() {
   const { user, isLoading } = useAuth();
   const { t } = useI18n();
   const isMobile = useIsMobile();
+  useEnglishDigits();
 
   if (isLoading) {
     return (
