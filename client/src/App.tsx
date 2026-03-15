@@ -29,6 +29,7 @@ import Returns from "@/pages/Returns";
 import AuditLog from "@/pages/AuditLog";
 import Operations from "@/pages/Operations";
 import StockControl from "@/pages/StockControl";
+import BranchStock from "@/pages/BranchStock";
 import Customers from "@/pages/Customers";
 import Accounts from "@/pages/Accounts";
 import JournalEntries from "@/pages/JournalEntries";
@@ -102,6 +103,7 @@ function MobileRouter() {
           <RequireMobileOwner><MobileInventory /></RequireMobileOwner>
         </Route>
         <Route path="/customers" component={MobileCustomers} />
+        <Route path="/branch-stock" component={BranchStock} />
         <Route path="/settings">
           <MobileMore />
         </Route>
@@ -145,6 +147,7 @@ function DesktopRouter() {
         <Route path="/products">
           <RequireOwner><Products /></RequireOwner>
         </Route>
+        <Route path="/branch-stock" component={BranchStock} />
         <Route path="/inventory">
           <RequireOwner><Inventory /></RequireOwner>
         </Route>

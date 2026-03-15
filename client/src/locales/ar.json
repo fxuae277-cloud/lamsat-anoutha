@@ -28,7 +28,8 @@
     "ledger": "الأستاذ العام",
     "operations": "آخر العمليات",
     "auditLog": "سجل المراجعة",
-    "settings": "الإعدادات"
+    "settings": "الإعدادات",
+    "branchStock": "مخزن الفرع"
   },
   "sidebar": {
     "role_owner": "مالك",
@@ -427,6 +428,24 @@
     "total_qty": "وحدة",
     "summary_items": "عدد الأصناف",
     "summary_total_qty": "إجمالي القطع"
+  },
+  "branch_stock": {
+    "title": "مخزن الفرع",
+    "select_branch": "اختر الفرع",
+    "search_placeholder": "ابحث بالاسم أو الباركود...",
+    "all_categories": "جميع الفئات",
+    "total_variants": "عدد الأصناف",
+    "total_qty": "إجمالي القطع",
+    "no_stock": "لا توجد بضاعة في هذا الفرع",
+    "product": "المنتج",
+    "color": "اللون",
+    "size": "المقاس",
+    "barcode": "الباركود",
+    "qty": "الكمية",
+    "status_col": "الحالة",
+    "in_stock": "متوفر",
+    "low_stock": "منخفض",
+    "out_of_stock": "نفد"
   },
   "ledger": {
     "title": "سجل الأستاذ العام وميزان المراجعة",

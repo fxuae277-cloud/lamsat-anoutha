@@ -28,7 +28,8 @@
     "ledger": "General Ledger",
     "operations": "Recent Operations",
     "auditLog": "Audit Log",
-    "settings": "Settings"
+    "settings": "Settings",
+    "branchStock": "Branch Stock"
   },
   "sidebar": {
     "role_owner": "Owner",
@@ -427,6 +428,24 @@
     "total_qty": "units",
     "summary_items": "Items selected",
     "summary_total_qty": "Total units"
+  },
+  "branch_stock": {
+    "title": "Branch Stock",
+    "select_branch": "Select Branch",
+    "search_placeholder": "Search by name or barcode...",
+    "all_categories": "All Categories",
+    "total_variants": "Total Variants",
+    "total_qty": "Total Qty",
+    "no_stock": "No stock at this branch",
+    "product": "Product",
+    "color": "Color",
+    "size": "Size",
+    "barcode": "Barcode",
+    "qty": "Qty",
+    "status_col": "Status",
+    "in_stock": "In Stock",
+    "low_stock": "Low",
+    "out_of_stock": "Out"
   },
   "ledger": {
     "title": "General Ledger & Trial Balance",

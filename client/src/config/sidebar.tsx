@@ -19,6 +19,7 @@ import {
   BookOpen,
   FileSpreadsheet,
   BookMarked,
+  Warehouse,
 } from "lucide-react";
 
 export type SidebarItem = {
@@ -57,6 +58,7 @@ export const OWNER_SIDEBAR: SidebarSection[] = [
   {
     sectionKey: "sidebar.section_inventory",
     items: [
+      { labelKey: "nav.branchStock", icon: Warehouse, path: "/branch-stock" },
       { labelKey: "nav.inventory", icon: Boxes, path: "/inventory" },
       { labelKey: "nav.stockControl", icon: ClipboardCheck, path: "/stock-control" },
     ],
@@ -100,11 +102,12 @@ export const EMPLOYEE_SIDEBAR: SidebarSection[] = [
       { labelKey: "nav.orders", icon: ClipboardList, path: "/orders" },
       { labelKey: "nav.invoices", icon: ReceiptText, path: "/invoices" },
       { labelKey: "nav.customers", icon: Users, path: "/customers" },
+      { labelKey: "nav.branchStock", icon: Warehouse, path: "/branch-stock" },
     ],
   },
 ];
 
-export const EMPLOYEE_ALLOWED_PATHS = ["/pos", "/orders", "/invoices", "/customers"];
+export const EMPLOYEE_ALLOWED_PATHS = ["/pos", "/orders", "/invoices", "/customers", "/branch-stock"];
 
 export function getSidebarForRole(role: string): SidebarSection[] {
   if (role === "owner" || role === "admin") return OWNER_SIDEBAR;

@@ -915,6 +915,24 @@ export async function registerRoutes(
     res.json(await storage.getInventoryBalances(locationId));
   });
 
+  // ── Branch Stock ──
+  app.get("/api/branch-stock/:branchId", requireAuth, async (req, res) => {
+    const branchId = Number(req.params.branchId);
+    const result = await pool.query(`
+      SELECT pv.id as variant_id, SUM(ib.qty_on_hand) as qty_on_hand,
+             pv.barcode, pv.sku, pv.color, pv.size, pv.price,
+             p.name as product_name, p.id as product_id, p.category_id
+      FROM inventory_balances ib
+      JOIN locations l ON l.id = ib.location_id
+      JOIN product_variants pv ON pv.id = ib.variant_id
+      JOIN products p ON p.id = pv.product_id
+      WHERE l.branch_id = $1
+      GROUP BY pv.id, pv.barcode, pv.sku, pv.color, pv.size, pv.price, p.name, p.id, p.category_id
+      ORDER BY p.name, pv.color, pv.size
+    `, [branchId]);
+    res.json(result.rows);
+  });
+
   // ── Stock Transfers ──
   app.get("/api/transfer-locations", requireAuth, async (_req, res) => {
     const result = await pool.query(`
