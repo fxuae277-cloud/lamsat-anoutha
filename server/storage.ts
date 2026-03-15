@@ -751,7 +751,7 @@ export class DatabaseStorage implements IStorage {
           } else {
             await client.query(
               `INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand)
-               VALUES ($1, $2, -$3)`,
+               VALUES ($1, $2, (0 - $3::numeric))`,
               [branchLocationId, variantId, item.quantity]
             );
           }
@@ -764,8 +764,8 @@ export class DatabaseStorage implements IStorage {
 
         await client.query(
           `INSERT INTO location_inventory (location_id, product_id, qty_on_hand, reorder_level, updated_at)
-           VALUES ($1, $2, -$3, 5, now())
-           ON CONFLICT (location_id, product_id) DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand - $3, updated_at = now()`,
+           VALUES ($1, $2, (0 - $3::int), 5, now())
+           ON CONFLICT (location_id, product_id) DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand - $3::int, updated_at = now()`,
           [branchLocationId, item.productId, item.quantity]
         );
 
