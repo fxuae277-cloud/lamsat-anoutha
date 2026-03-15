@@ -915,19 +915,25 @@ export async function registerRoutes(
     res.json(await storage.getInventoryBalances(locationId));
   });
 
-  // ── Branch Stock ──
+  // ── Branch Stock (only items transferred from central warehouse) ──
   app.get("/api/branch-stock/:branchId", requireAuth, async (req, res) => {
     const branchId = Number(req.params.branchId);
     const result = await pool.query(`
-      SELECT pv.id as variant_id, SUM(ib.qty_on_hand) as qty_on_hand,
+      SELECT stl.variant_id,
+             SUM(stl.qty) as transferred_qty,
              pv.barcode, pv.sku, pv.color, pv.size, pv.price,
-             p.name as product_name, p.id as product_id, p.category_id
-      FROM inventory_balances ib
-      JOIN locations l ON l.id = ib.location_id
-      JOIN product_variants pv ON pv.id = ib.variant_id
+             p.name as product_name, p.id as product_id, p.category_id,
+             MAX(st.approved_at) as last_transfer_date
+      FROM stock_transfer_lines stl
+      JOIN stock_transfers st ON st.id = stl.transfer_id
+      JOIN locations from_loc ON from_loc.id = st.from_location_id
+      JOIN locations to_loc ON to_loc.id = st.to_location_id
+      JOIN product_variants pv ON pv.id = stl.variant_id
       JOIN products p ON p.id = pv.product_id
-      WHERE l.branch_id = $1
-      GROUP BY pv.id, pv.barcode, pv.sku, pv.color, pv.size, pv.price, p.name, p.id, p.category_id
+      WHERE from_loc.is_central = true
+        AND to_loc.branch_id = $1
+        AND st.status = 'approved'
+      GROUP BY stl.variant_id, pv.barcode, pv.sku, pv.color, pv.size, pv.price, p.name, p.id, p.category_id
       ORDER BY p.name, pv.color, pv.size
     `, [branchId]);
     res.json(result.rows);

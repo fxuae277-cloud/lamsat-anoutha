@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Package, Search, Barcode, MapPin } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Package, Search, MapPin, ArrowDownToLine } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +46,7 @@ export default function BranchStock() {
   });
 
   const totalVariants = filteredStock.length;
-  const totalQty = filteredStock.reduce((s: number, item: any) => s + Number(item.qty_on_hand), 0);
+  const totalQty = filteredStock.reduce((s: number, item: any) => s + Number(item.transferred_qty), 0);
 
   const branchName = isOwner
     ? branches.find((b: any) => String(b.id) === branchId)?.name || ""
@@ -57,14 +56,21 @@ export default function BranchStock() {
     setSearch(code);
   };
 
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "-";
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("en-GB");
+  };
+
   return (
     <div className="p-6 space-y-4" dir="rtl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-branch-stock-title">
-            <Package className="w-6 h-6" />
+            <ArrowDownToLine className="w-6 h-6" />
             {t("branch_stock.title")}
           </h1>
+          <p className="text-sm text-muted-foreground mt-1">{t("branch_stock.subtitle")}</p>
           {branchName && (
             <p className="text-muted-foreground flex items-center gap-1 mt-1">
               <MapPin className="w-4 h-4" />
@@ -156,12 +162,12 @@ export default function BranchStock() {
                       <TableHead>{t("branch_stock.size")}</TableHead>
                       <TableHead>{t("branch_stock.barcode")}</TableHead>
                       <TableHead className="text-center">{t("branch_stock.qty")}</TableHead>
-                      <TableHead className="text-center">{t("branch_stock.status_col")}</TableHead>
+                      <TableHead className="text-center">{t("branch_stock.last_transfer")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredStock.map((item: any) => {
-                      const qty = Number(item.qty_on_hand);
+                      const qty = Number(item.transferred_qty);
                       return (
                         <TableRow key={item.variant_id} data-testid={`row-stock-${item.variant_id}`}>
                           <TableCell className="font-medium">{item.product_name}</TableCell>
@@ -169,15 +175,7 @@ export default function BranchStock() {
                           <TableCell>{item.size || "-"}</TableCell>
                           <TableCell className="font-mono text-xs">{item.barcode || "-"}</TableCell>
                           <TableCell className="text-center font-semibold">{qty}</TableCell>
-                          <TableCell className="text-center">
-                            {qty <= 0 ? (
-                              <Badge variant="destructive" className="text-xs">{t("branch_stock.out_of_stock")}</Badge>
-                            ) : qty <= 3 ? (
-                              <Badge variant="outline" className="text-xs border-orange-400 text-orange-600 bg-orange-50">{t("branch_stock.low_stock")}</Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-xs border-green-400 text-green-600 bg-green-50">{t("branch_stock.in_stock")}</Badge>
-                            )}
-                          </TableCell>
+                          <TableCell className="text-center text-xs text-muted-foreground">{formatDate(item.last_transfer_date)}</TableCell>
                         </TableRow>
                       );
                     })}

@@ -431,21 +431,19 @@
   },
   "branch_stock": {
     "title": "Branch Stock",
+    "subtitle": "Items transferred from central warehouse only",
     "select_branch": "Select Branch",
     "search_placeholder": "Search by name or barcode...",
     "all_categories": "All Categories",
     "total_variants": "Total Variants",
-    "total_qty": "Total Qty",
-    "no_stock": "No stock at this branch",
+    "total_qty": "Total Transferred",
+    "no_stock": "No transfers from central warehouse to this branch",
     "product": "Product",
     "color": "Color",
     "size": "Size",
     "barcode": "Barcode",
-    "qty": "Qty",
-    "status_col": "Status",
-    "in_stock": "In Stock",
-    "low_stock": "Low",
-    "out_of_stock": "Out"
+    "qty": "Transferred Qty",
+    "last_transfer": "Last Transfer"
   },
   "ledger": {
     "title": "General Ledger & Trial Balance",
