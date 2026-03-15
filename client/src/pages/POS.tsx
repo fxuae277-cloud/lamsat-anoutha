@@ -308,7 +308,7 @@ export default function POS() {
 
   const isOwner = user?.role === "owner" || user?.role === "admin";
 
-  const { data: products = [] } = useQuery<Product[]>({
+  const { data: allProducts = [] } = useQuery<Product[]>({
     queryKey: ["/api/products"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
@@ -321,7 +321,19 @@ export default function POS() {
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const branchName = branchesList.find(b => b.id === user?.branchId)?.name || "";
+  const userBranchId = user?.branchId;
+  const { data: branchStock = [] } = useQuery<any[]>({
+    queryKey: [`/api/branch-stock/${userBranchId}`],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: !!userBranchId,
+  });
+
+  const branchProductIds = new Set(branchStock.map((s: any) => s.product_id));
+  const products = userBranchId
+    ? allProducts.filter(p => branchProductIds.has(p.id))
+    : allProducts;
+
+  const branchName = branchesList.find(b => b.id === userBranchId)?.name || "";
   const terminalName = user?.terminalName || "T1";
 
   const subtotal = cart.reduce((sum, item) => sum + (parseFloat(item.product.price) * item.qty), 0);

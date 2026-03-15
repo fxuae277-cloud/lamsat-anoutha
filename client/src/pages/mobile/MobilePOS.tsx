@@ -41,15 +41,31 @@ export default function MobilePOS() {
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const { data: products = [] } = useQuery<Product[]>({
+  const { data: allProducts = [] } = useQuery<Product[]>({
     queryKey: ["/api/products"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const { data: variants = [] } = useQuery<Variant[]>({
+  const { data: allVariants = [] } = useQuery<Variant[]>({
     queryKey: ["/api/variants"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
+
+  const userBranchId = user?.branchId;
+  const { data: branchStock = [] } = useQuery<any[]>({
+    queryKey: [`/api/branch-stock/${userBranchId}`],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: !!userBranchId,
+  });
+
+  const branchProductIds = new Set(branchStock.map((s: any) => s.product_id));
+  const branchVariantIds = new Set(branchStock.map((s: any) => s.variant_id));
+  const products = userBranchId
+    ? allProducts.filter(p => branchProductIds.has(p.id))
+    : allProducts;
+  const variants = userBranchId
+    ? allVariants.filter(v => branchVariantIds.has(v.id))
+    : allVariants;
 
   const addToCart = useCallback((item: CartItem) => {
     setCart(prev => {
