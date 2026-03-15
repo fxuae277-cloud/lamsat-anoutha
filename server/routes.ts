@@ -919,21 +919,22 @@ export async function registerRoutes(
   app.get("/api/branch-stock/:branchId", requireAuth, async (req, res) => {
     const branchId = Number(req.params.branchId);
     const result = await pool.query(`
-      SELECT stl.variant_id,
-             SUM(stl.qty) as transferred_qty,
+      SELECT ib.variant_id,
+             ib.qty_on_hand as current_qty,
              pv.barcode, pv.sku, pv.color, pv.size, pv.price,
              p.name as product_name, p.id as product_id, p.category_id,
-             MAX(st.approved_at) as last_transfer_date
-      FROM stock_transfer_lines stl
-      JOIN stock_transfers st ON st.id = stl.transfer_id
-      JOIN locations from_loc ON from_loc.id = st.from_location_id
-      JOIN locations to_loc ON to_loc.id = st.to_location_id
-      JOIN product_variants pv ON pv.id = stl.variant_id
+             (SELECT SUM(stl2.qty) FROM stock_transfer_lines stl2
+              JOIN stock_transfers st2 ON st2.id = stl2.transfer_id
+              JOIN locations fl2 ON fl2.id = st2.from_location_id
+              WHERE fl2.is_central = true AND st2.to_location_id = ib.location_id
+                AND st2.status = 'approved' AND stl2.variant_id = ib.variant_id
+             ) as transferred_qty,
+             l.name as location_name
+      FROM inventory_balances ib
+      JOIN locations l ON l.id = ib.location_id
+      JOIN product_variants pv ON pv.id = ib.variant_id
       JOIN products p ON p.id = pv.product_id
-      WHERE from_loc.is_central = true
-        AND to_loc.branch_id = $1
-        AND st.status = 'approved'
-      GROUP BY stl.variant_id, pv.barcode, pv.sku, pv.color, pv.size, pv.price, p.name, p.id, p.category_id
+      WHERE l.branch_id = $1 AND ib.qty_on_hand > 0
       ORDER BY p.name, pv.color, pv.size
     `, [branchId]);
     res.json(result.rows);

@@ -46,7 +46,7 @@ export default function BranchStock() {
   });
 
   const totalVariants = filteredStock.length;
-  const totalQty = filteredStock.reduce((s: number, item: any) => s + Number(item.transferred_qty), 0);
+  const totalQty = filteredStock.reduce((s: number, item: any) => s + Number(item.current_qty || item.transferred_qty), 0);
 
   const branchName = isOwner
     ? branches.find((b: any) => String(b.id) === branchId)?.name || ""
@@ -167,7 +167,7 @@ export default function BranchStock() {
                   </TableHeader>
                   <TableBody>
                     {filteredStock.map((item: any) => {
-                      const qty = Number(item.transferred_qty);
+                      const qty = Number(item.current_qty || item.transferred_qty);
                       return (
                         <TableRow key={item.variant_id} data-testid={`row-stock-${item.variant_id}`}>
                           <TableCell className="font-medium">{item.product_name}</TableCell>
