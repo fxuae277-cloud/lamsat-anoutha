@@ -160,6 +160,11 @@ export default function MobilePOS() {
       queryClient.invalidateQueries({ queryKey: ["/api/mobile/employee/home"] });
       queryClient.invalidateQueries({ queryKey: ["/api/mobile/my-invoices"] });
       queryClient.invalidateQueries({ queryKey: ["/api/shifts/current"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      if (user?.branchId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/branch-stock/${user.branchId}`] });
+      }
     },
     onError: (err: Error) => {
       toast({ title: t("mobile.sale_error"), description: err.message, variant: "destructive" });

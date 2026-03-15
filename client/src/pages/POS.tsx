@@ -514,6 +514,11 @@ export default function POS() {
       queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
       queryClient.invalidateQueries({ queryKey: ["/api/location-inventory"] });
       queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts/current"] });
+      if (user?.branchId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/branch-stock/${user.branchId}`] });
+      }
     },
     onError: (err: Error) => {
       toast({ title: t("common.error"), description: err.message, variant: "destructive" });
