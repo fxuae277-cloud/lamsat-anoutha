@@ -717,12 +717,18 @@ export class DatabaseStorage implements IStorage {
         const variantId = variantRes.rows[0]?.variant_id;
 
         if (variantId) {
+          await client.query(
+            `SELECT id FROM inventory_balances
+             WHERE variant_id = $1 AND location_id IN (SELECT id FROM locations WHERE branch_id = $2)
+             FOR UPDATE`,
+            [variantId, data.branchId]
+          );
+
           const invRow = await client.query(
             `SELECT COALESCE(SUM(ib.qty_on_hand), 0) as total_available
              FROM inventory_balances ib
              JOIN locations l ON l.id = ib.location_id
-             WHERE l.branch_id = $1 AND ib.variant_id = $2
-             FOR UPDATE`,
+             WHERE l.branch_id = $1 AND ib.variant_id = $2`,
             [data.branchId, variantId]
           );
           const available = Number(invRow.rows[0]?.total_available || 0);
