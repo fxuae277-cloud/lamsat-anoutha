@@ -718,35 +718,49 @@ export class DatabaseStorage implements IStorage {
 
         if (variantId) {
           const invRow = await client.query(
-            `SELECT qty_on_hand FROM inventory_balances
-             WHERE location_id = $1 AND variant_id = $2
+            `SELECT COALESCE(SUM(ib.qty_on_hand), 0) as total_available
+             FROM inventory_balances ib
+             JOIN locations l ON l.id = ib.location_id
+             WHERE l.branch_id = $1 AND ib.variant_id = $2
              FOR UPDATE`,
-            [branchLocationId, variantId]
+            [data.branchId, variantId]
           );
-          const available = invRow.rows.length > 0 ? Number(invRow.rows[0].qty_on_hand) : 0;
+          const available = Number(invRow.rows[0]?.total_available || 0);
           if (available < item.quantity) {
             const prodRes = await client.query(`SELECT name FROM products WHERE id = $1`, [item.productId]);
             const pName = prodRes.rows[0]?.name || `#${item.productId}`;
             throw new Error(`المخزون غير كاف للمنتج "${pName}" — المتوفر: ${available}، المطلوب: ${item.quantity}`);
           }
 
-          await client.query(
-            `UPDATE inventory_balances SET qty_on_hand = qty_on_hand - $1
-             WHERE location_id = $2 AND variant_id = $3`,
-            [item.quantity, branchLocationId, variantId]
+          const balRow = await client.query(
+            `SELECT qty_on_hand FROM inventory_balances WHERE location_id = $1 AND variant_id = $2`,
+            [branchLocationId, variantId]
           );
+          if (balRow.rows.length > 0) {
+            await client.query(
+              `UPDATE inventory_balances SET qty_on_hand = qty_on_hand - $1
+               WHERE location_id = $2 AND variant_id = $3`,
+              [item.quantity, branchLocationId, variantId]
+            );
+          } else {
+            await client.query(
+              `INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand)
+               VALUES ($1, $2, -$3)`,
+              [branchLocationId, variantId, item.quantity]
+            );
+          }
 
           await client.query(`
             INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by)
-            VALUES ($1, $2, $3, 'sale', 'sales', $4, $5)
+            VALUES ($1, $2, $3, 'sale_out', 'sales', $4, $5)
           `, [variantId, branchLocationId, -item.quantity, saleId, data.cashierId || null]);
         }
 
-        // Also sync old location_inventory for backward compatibility
         await client.query(
-          `UPDATE location_inventory SET qty_on_hand = qty_on_hand - $1, updated_at = now()
-           WHERE location_id = $2 AND product_id = $3`,
-          [item.quantity, branchLocationId, item.productId]
+          `INSERT INTO location_inventory (location_id, product_id, qty_on_hand, reorder_level, updated_at)
+           VALUES ($1, $2, -$3, 5, now())
+           ON CONFLICT (location_id, product_id) DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand - $3, updated_at = now()`,
+          [branchLocationId, item.productId, item.quantity]
         );
 
         const costRes = await client.query(
@@ -775,7 +789,7 @@ export class DatabaseStorage implements IStorage {
         await client.query(
           `INSERT INTO inventory_transactions
            (date, branch_id, from_location_id, to_location_id, product_id, type, qty, ref_table, ref_id, note, created_by, created_at)
-           VALUES (now(), $1, $2, NULL, $3, 'SALE', $4, 'sales', $5, $6, $7, now())`,
+           VALUES (now(), $1, $2, NULL, $3, 'sale_out', $4, 'sales', $5, $6, $7, now())`,
           [data.branchId, branchLocationId, item.productId, item.quantity, saleId, `بيع فاتورة ${sale.invoice_number}`, data.cashierId || null]
         );
       }
@@ -787,41 +801,45 @@ export class DatabaseStorage implements IStorage {
         [cogsTotal.toFixed(3), grossProfit.toFixed(3), saleId]
       );
 
+      const pm = data.paymentMethod || "cash";
+      const amount = sale.total || "0";
+
+      if (data.shiftId) {
+        if (pm === "cash") {
+          await client.query(
+            `UPDATE shifts SET total_sales = COALESCE(total_sales, '0')::numeric + $1::numeric,
+                               total_cash = COALESCE(total_cash, '0')::numeric + $1::numeric
+             WHERE id = $2`,
+            [amount, data.shiftId]
+          );
+        } else {
+          await client.query(
+            `UPDATE shifts SET total_sales = COALESCE(total_sales, '0')::numeric + $1::numeric,
+                               total_bank = COALESCE(total_bank, '0')::numeric + $1::numeric
+             WHERE id = $2`,
+            [amount, data.shiftId]
+          );
+        }
+      }
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if (pm === "cash") {
+        await client.query(
+          `INSERT INTO cash_ledger (date, branch_id, shift_id, type, amount_in, amount_out, category, note, created_by)
+           VALUES ($1, $2, $3, 'sale', $4, '0', 'sale', $5, $6)`,
+          [todayStr, data.branchId, data.shiftId || null, amount, `بيع فاتورة ${sale.invoice_number}`, data.cashierId || null]
+        );
+      } else {
+        await client.query(
+          `INSERT INTO bank_ledger (date, branch_id, shift_id, method, amount_in, amount_out, ref_id, category, note, created_by)
+           VALUES ($1, $2, $3, $4, $5, '0', $6, 'sale', $7, $8)`,
+          [todayStr, data.branchId, data.shiftId || null, pm, amount, data.bankTxnId || null, `بيع فاتورة ${sale.invoice_number}`, data.cashierId || null]
+        );
+      }
+
       await client.query("COMMIT");
 
       const [updatedSale] = await db.select().from(sales).where(eq(sales.id, saleId));
-
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const amount = sale.total || "0";
-      const pm = data.paymentMethod || "cash";
-
-      if (pm === "cash") {
-        await this.addCashLedgerEntry({
-          date: todayStr,
-          branchId: data.branchId,
-          shiftId: data.shiftId ?? null,
-          type: "sale",
-          amountIn: amount,
-          amountOut: "0",
-          category: "sale",
-          note: `بيع فاتورة ${sale.invoice_number}`,
-          createdBy: data.cashierId ?? null,
-        });
-      } else {
-        await this.addBankLedgerEntry({
-          date: todayStr,
-          branchId: data.branchId,
-          shiftId: data.shiftId ?? null,
-          method: pm,
-          amountIn: amount,
-          amountOut: "0",
-          refId: data.bankTxnId || null,
-          category: "sale",
-          note: `بيع فاتورة ${sale.invoice_number}`,
-          createdBy: data.cashierId ?? null,
-        });
-      }
-
       return updatedSale;
     } catch (err) {
       await client.query("ROLLBACK");
