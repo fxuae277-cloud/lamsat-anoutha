@@ -26,7 +26,7 @@ export default function Products() {
   const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(null);
 
   const [newProduct, setNewProduct] = useState({ name: "", categoryId: "", price: "", active: true });
-  const [variantForm, setVariantForm] = useState({ barcode: "", sku: "", color: "", size: "", price: "", cost: "" });
+  const [variantForm, setVariantForm] = useState({ productName: "", barcode: "", sku: "", color: "", size: "", price: "", cost: "" });
 
   const { user } = useAuth();
   const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
@@ -77,23 +77,26 @@ export default function Products() {
     if (variant) {
       setEditingVariant(variant);
       setVariantForm({ 
+        productName: selectedProduct?.name || "",
         barcode: variant.barcode || "", sku: variant.sku || "", color: variant.color || "", 
         size: variant.size || "", price: variant.price.toString(), cost: variant.costDefault?.toString() || "" 
       });
     } else {
       setEditingVariant(null);
-      setVariantForm({ barcode: "", sku: "", color: "", size: "", price: selectedProduct?.price.toString() || "", cost: "" });
+      setVariantForm({ productName: selectedProduct?.name || "", barcode: "", sku: "", color: "", size: "", price: selectedProduct?.price.toString() || "", cost: "" });
     }
     setVariantDialogOpen(true);
   };
 
   const upsertVariantMutation = useMutation({
     mutationFn: async (data: any) => {
-      const payload = {
-        ...data,
-        costDefault: data.cost || null,
-      };
+      const { productName, ...rest } = data;
+      const payload = { ...rest, costDefault: rest.cost || null };
       delete payload.cost;
+
+      if (productName && selectedProduct && productName !== selectedProduct.name) {
+        await apiRequest("PATCH", `/api/products/${selectedProduct.id}`, { name: productName });
+      }
 
       if (editingVariant) {
         return apiRequest("PATCH", `/api/variants/${editingVariant.id}`, payload);
@@ -262,7 +265,12 @@ export default function Products() {
             {selectedProduct && (
               <div className="col-span-2 space-y-2">
                 <label className="text-sm font-medium">{t("products.product_name")}</label>
-                <Input value={selectedProduct.name} readOnly className="bg-muted font-semibold" data-testid="input-variant-product-name" />
+                <Input
+                  value={variantForm.productName}
+                  onChange={e => setVariantForm({...variantForm, productName: e.target.value})}
+                  className="font-semibold"
+                  data-testid="input-variant-product-name"
+                />
               </div>
             )}
             <div className="col-span-2 space-y-2">

@@ -322,6 +322,13 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
   async deleteProduct(id: number) {
+    const variantRows = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, id));
+    const variantIds = variantRows.map(v => v.id);
+    if (variantIds.length > 0) {
+      await db.delete(inventoryBalances).where(sql`${inventoryBalances.variantId} = ANY(ARRAY[${sql.join(variantIds.map(vid => sql`${vid}`), sql`, `)}]::int[])`);
+      await db.delete(productVariants).where(eq(productVariants.productId, id));
+    }
+    await db.delete(locationInventory).where(eq(locationInventory.productId, id));
     await db.delete(products).where(eq(products.id, id));
   }
 

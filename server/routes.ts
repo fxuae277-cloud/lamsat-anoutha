@@ -819,8 +819,12 @@ export async function registerRoutes(
     res.json(row);
   });
   app.delete("/api/products/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
-    await storage.deleteProduct(Number(req.params.id));
-    res.json({ message: "تم حذف المنتج" });
+    try {
+      await storage.deleteProduct(Number(req.params.id));
+      res.json({ message: "تم حذف المنتج" });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "فشل حذف المنتج" });
+    }
   });
 
   // ── Product Variants ──
