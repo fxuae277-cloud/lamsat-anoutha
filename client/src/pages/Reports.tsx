@@ -17,6 +17,11 @@ import type { Branch } from "@shared/schema";
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
+function startOfMonthStr() {
+  const d = new Date();
+  d.setDate(1);
+  return d.toISOString().slice(0, 10);
+}
 
 function omr(val: string | number | null) {
   if (val === null || val === undefined) return "0.000";
@@ -884,7 +889,7 @@ export default function Reports() {
   const { user } = useAuth();
   const isOwner = user?.role === "owner" || user?.role === "admin";
 
-  const [fromDate, setFromDate] = useState(todayStr());
+  const [fromDate, setFromDate] = useState(startOfMonthStr());
   const [toDate, setToDate] = useState(todayStr());
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
   const [activeTab, setActiveTab] = useState("overview");

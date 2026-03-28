@@ -967,10 +967,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getExpenses() { return db.select().from(expenses).orderBy(desc(expenses.createdAt)); }
-  async getExpensesEnriched(branchId?: number, dateStr?: string) {
+  async getExpensesEnriched(branchId?: number, dateStr?: string, fromDate?: string, toDate?: string) {
     const conditions: any[] = [];
     if (branchId) conditions.push(eq(expenses.branchId, branchId));
-    if (dateStr) conditions.push(sql`${expenses.date} = ${dateStr}`);
+    if (fromDate && toDate) {
+      conditions.push(sql`${expenses.date} >= ${fromDate} AND ${expenses.date} <= ${toDate}`);
+    } else if (dateStr) {
+      conditions.push(sql`${expenses.date} = ${dateStr}`);
+    }
 
     const rows = await db.select({
       id: expenses.id,
@@ -992,10 +996,14 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(expenses.createdAt));
     return rows;
   }
-  async getExpensesSummary(branchId?: number, dateStr?: string) {
+  async getExpensesSummary(branchId?: number, dateStr?: string, fromDate?: string, toDate?: string) {
     const conditions: any[] = [];
     if (branchId) conditions.push(eq(expenses.branchId, branchId));
-    if (dateStr) conditions.push(sql`${expenses.date} = ${dateStr}`);
+    if (fromDate && toDate) {
+      conditions.push(sql`${expenses.date} >= ${fromDate} AND ${expenses.date} <= ${toDate}`);
+    } else if (dateStr) {
+      conditions.push(sql`${expenses.date} = ${dateStr}`);
+    }
 
     const [cashTotal] = await db.select({
       total: sql<string>`coalesce(sum(${expenses.amount}::numeric), 0)::text`,

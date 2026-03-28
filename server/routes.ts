@@ -1720,7 +1720,9 @@ export async function registerRoutes(
       const scope = req.branchScope!;
       const branchId = scope.mode === "branch" ? scope.branchId! : (req.query.branchId ? Number(req.query.branchId) : undefined);
       const dateStr = req.query.date as string | undefined;
-      const rows = await storage.getExpensesEnriched(branchId, dateStr);
+      const fromDate = req.query.from as string | undefined;
+      const toDate = req.query.to as string | undefined;
+      const rows = await storage.getExpensesEnriched(branchId, dateStr, fromDate, toDate);
       res.json(rows);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
@@ -1730,8 +1732,10 @@ export async function registerRoutes(
     try {
       const scope = req.branchScope!;
       const branchId = scope.mode === "branch" ? scope.branchId! : (req.query.branchId ? Number(req.query.branchId) : undefined);
-      const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
-      const summary = await storage.getExpensesSummary(branchId, dateStr);
+      const dateStr = req.query.date as string | undefined;
+      const fromDate = req.query.from as string | undefined;
+      const toDate = req.query.to as string | undefined;
+      const summary = await storage.getExpensesSummary(branchId, dateStr, fromDate, toDate);
       res.json(summary);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });

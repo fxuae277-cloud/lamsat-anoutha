@@ -16,9 +16,9 @@ import { useI18n } from "@/lib/i18n";
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
-function monthAgoStr() {
+function startOfMonthStr() {
   const d = new Date();
-  d.setMonth(d.getMonth() - 1);
+  d.setDate(1);
   return d.toISOString().slice(0, 10);
 }
 function omr(val: string | number | null) {
@@ -317,7 +317,7 @@ export default function Invoices() {
   const { user } = useAuth();
   const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
 
-  const [fromDate, setFromDate] = useState(monthAgoStr());
+  const [fromDate, setFromDate] = useState(startOfMonthStr());
   const [toDate, setToDate] = useState(todayStr());
   const [paymentMethod, setPaymentMethod] = useState<string>("all");
   const [selectedBranch, setSelectedBranch] = useState<string>("all");

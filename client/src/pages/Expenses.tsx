@@ -55,6 +55,11 @@ export default function Expenses() {
   function todayStr() {
     return new Date().toISOString().slice(0, 10);
   }
+  function startOfMonthStr() {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().slice(0, 10);
+  }
 
   function fmt(v: string | number | null | undefined) {
     return parseFloat(String(v || "0")).toFixed(3);
@@ -63,12 +68,13 @@ export default function Expenses() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [newExpense, setNewExpense] = useState({ category: "", amount: "", source: "cash", notes: "" });
-  const [filterDate, setFilterDate] = useState(todayStr());
+  const [fromDate, setFromDate] = useState(startOfMonthStr());
+  const [toDate, setToDate] = useState(todayStr());
   const [filterBranch, setFilterBranch] = useState("all");
 
   const queryBranchId = isOwnerAdmin && filterBranch !== "all" ? `&branchId=${filterBranch}` : "";
-  const expensesQuery = `/api/expenses?date=${filterDate}${queryBranchId}`;
-  const summaryQuery = `/api/expenses/summary?date=${filterDate}${queryBranchId}`;
+  const expensesQuery = `/api/expenses?from=${fromDate}&to=${toDate}${queryBranchId}`;
+  const summaryQuery = `/api/expenses/summary?from=${fromDate}&to=${toDate}${queryBranchId}`;
   const cashLedgerQuery = `/api/ledger/cash`;
   const bankLedgerQuery = `/api/ledger/bank`;
 
@@ -292,7 +298,9 @@ export default function Expenses() {
               </div>
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-muted-foreground" />
-                <Input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="w-44 bg-background" data-testid="input-filter-date" />
+                <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-36 bg-background" data-testid="input-filter-from" />
+                <span className="text-muted-foreground text-sm">—</span>
+                <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-36 bg-background" data-testid="input-filter-to" />
               </div>
               {isOwnerAdmin && (
                 <Select value={filterBranch} onValueChange={setFilterBranch}>
