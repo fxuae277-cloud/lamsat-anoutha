@@ -61,7 +61,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="border-none shadow-sm" data-testid="card-today-sales">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.today_sales")}</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.month_sales")}</CardTitle>
             <div className="p-2 bg-primary/10 rounded-full text-primary">
               <span className="text-xs font-bold">{t("common.omr")}</span>
             </div>
@@ -123,7 +123,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="col-span-1 lg:col-span-2 border-none shadow-sm">
           <CardHeader>
-            <CardTitle>{t("dashboard.sales_last_7_days")}</CardTitle>
+            <CardTitle>{t("dashboard.sales_last_30_days")}</CardTitle>
           </CardHeader>
           <CardContent className="h-[300px]">
             {chartData.length > 0 ? (

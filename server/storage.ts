@@ -858,13 +858,11 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(saleItems).where(eq(saleItems.saleId, saleId));
   }
   async getDailySalesTotal(branchId?: number) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
     const [row] = await db.select({
       total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
       vatTotal: sql<string>`coalesce(sum(${sales.vat}::numeric), 0)::text`,
       count: sql<number>`count(*)::int`,
-    }).from(sales).where(sql`${sales.createdAt} >= ${today}`);
+    }).from(sales).where(sql`date_trunc('month', ${sales.createdAt}) = date_trunc('month', now())`);
     return row;
   }
   async getWeeklySales() {
@@ -872,7 +870,7 @@ export class DatabaseStorage implements IStorage {
       date: sql<string>`to_char(${sales.createdAt}, 'YYYY-MM-DD')`,
       total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
     }).from(sales)
-      .where(sql`${sales.createdAt} >= now() - interval '7 days'`)
+      .where(sql`${sales.createdAt} >= now() - interval '30 days'`)
       .groupBy(sql`to_char(${sales.createdAt}, 'YYYY-MM-DD')`)
       .orderBy(sql`to_char(${sales.createdAt}, 'YYYY-MM-DD')`);
   }
