@@ -259,6 +259,12 @@ export default function Products() {
         <DialogContent>
           <DialogHeader><DialogTitle>{editingVariant ? t("products.edit_variant") : t("products.add_variant")}</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
+            {selectedProduct && (
+              <div className="col-span-2 space-y-2">
+                <label className="text-sm font-medium">{t("products.product_name")}</label>
+                <Input value={selectedProduct.name} readOnly className="bg-muted font-semibold" data-testid="input-variant-product-name" />
+              </div>
+            )}
             <div className="col-span-2 space-y-2">
               <label className="text-sm font-medium">{t("products.variant_barcode")}</label>
               <div className="flex gap-2">
