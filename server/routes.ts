@@ -385,26 +385,25 @@ export async function registerRoutes(
         GROUP BY payment_method ORDER BY amount DESC
       `);
 
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const yd = new Date(); yd.setDate(yd.getDate() - 1);
-      const yesterdayStr = yd.toISOString().slice(0, 10);
+      // Calculate previous period (same duration, immediately before `from`)
+      const periodDays = Math.round((new Date(to).getTime() - new Date(from + "T00:00:00").getTime()) / 86400000) + 1;
+      const prevToDate = new Date(from + "T00:00:00"); prevToDate.setDate(prevToDate.getDate() - 1);
+      const prevFromDate = new Date(prevToDate); prevFromDate.setDate(prevFromDate.getDate() - periodDays + 1);
+      const prevFromStr = prevFromDate.toISOString().slice(0, 10);
+      const prevToStr = prevToDate.toISOString().slice(0, 10);
 
-      const todayVsQ = await pool.query(`
+      const prevSalesQ = await pool.query(`
         SELECT
-          COALESCE(SUM(CASE WHEN DATE(created_at)='${todayStr}' THEN total ELSE 0 END),0) AS today_sales,
-          COALESCE(SUM(CASE WHEN DATE(created_at)='${todayStr}' THEN cogs_total ELSE 0 END),0) AS today_cogs,
-          COALESCE(SUM(CASE WHEN DATE(created_at)='${yesterdayStr}' THEN total ELSE 0 END),0) AS yesterday_sales,
-          COALESCE(SUM(CASE WHEN DATE(created_at)='${yesterdayStr}' THEN cogs_total ELSE 0 END),0) AS yesterday_cogs
+          COALESCE(SUM(total),0) AS sales,
+          COALESCE(SUM(total - cogs_total),0) AS gross_profit
         FROM sales
-        WHERE DATE(created_at) >= '${yesterdayStr}' ${bf}
+        WHERE DATE(created_at) >= '${prevFromStr}' AND DATE(created_at) <= '${prevToStr}' ${bf}
       `);
 
-      const todayExpQ = await pool.query(`
-        SELECT
-          COALESCE(SUM(CASE WHEN e.date='${todayStr}' THEN amount::numeric ELSE 0 END),0) AS today_exp,
-          COALESCE(SUM(CASE WHEN e.date='${yesterdayStr}' THEN amount::numeric ELSE 0 END),0) AS yesterday_exp
+      const prevExpPeriodQ = await pool.query(`
+        SELECT COALESCE(SUM(amount::numeric),0) AS expenses
         FROM expenses e
-        WHERE e.date >= '${yesterdayStr}' AND e.date <= '${todayStr}' ${ebf}
+        WHERE e.date >= '${prevFromStr}' AND e.date <= '${prevToStr}' ${ebf}
       `);
 
       const timeseriesQ = await pool.query(`
@@ -523,16 +522,9 @@ export async function registerRoutes(
       const cashExp = parseFloat(ex.cash_expenses);
       const netCash = cashSales - cashExp;
 
-      const tv = todayVsQ.rows[0];
-      const te = todayExpQ.rows[0];
-      const todaySalesVal = parseFloat(tv.today_sales);
-      const todayCogsVal = parseFloat(tv.today_cogs);
-      const todayExpVal = parseFloat(te.today_exp);
-      const todayNet = todaySalesVal - todayCogsVal - todayExpVal;
-      const yestSalesVal = parseFloat(tv.yesterday_sales);
-      const yestCogsVal = parseFloat(tv.yesterday_cogs);
-      const yestExpVal = parseFloat(te.yesterday_exp);
-      const yestNet = yestSalesVal - yestCogsVal - yestExpVal;
+      const prevSales = parseFloat(prevSalesQ.rows[0].sales);
+      const prevExpenses = parseFloat(prevExpPeriodQ.rows[0].expenses);
+      const prevNet = parseFloat(prevSalesQ.rows[0].gross_profit) - prevExpenses;
 
       res.json({
         kpi: {
@@ -549,8 +541,10 @@ export async function registerRoutes(
           lowStockCount: lowStockQ.rows.length,
         },
         todayVsYesterday: {
-          today: { sales: todaySalesVal, expenses: todayExpVal, net: todayNet },
-          yesterday: { sales: yestSalesVal, expenses: yestExpVal, net: yestNet },
+          today: { sales: parseFloat(k.revenue), expenses: totalExpenses, net: netProfit },
+          yesterday: { sales: prevSales, expenses: prevExpenses, net: prevNet },
+          prevFrom: prevFromStr,
+          prevTo: prevToStr,
         },
         paymentSplit: paymentQ.rows.map(r => ({ method: r.payment_method, amount: parseFloat(r.amount), count: r.cnt })),
         timeseries: timeseriesQ.rows.map(r => ({

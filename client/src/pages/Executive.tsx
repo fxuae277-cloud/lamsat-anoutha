@@ -160,7 +160,7 @@ export default function Executive() {
   }
 
   const kpi = data?.kpi || {};
-  const vs = data?.todayVsYesterday || { today: {}, yesterday: {} };
+  const vs = data?.todayVsYesterday || { today: {}, yesterday: {}, prevFrom: "", prevTo: "" };
   const paymentSplit = data?.paymentSplit || [];
   const timeseries = data?.timeseries || [];
   const branchPerf = data?.branchPerformance || [];
@@ -171,6 +171,11 @@ export default function Executive() {
   const salesChange = pct(vs.today?.sales || 0, vs.yesterday?.sales || 0);
   const expChange = pct(vs.today?.expenses || 0, vs.yesterday?.expenses || 0);
   const netChange = pct(vs.today?.net || 0, vs.yesterday?.net || 0);
+
+  const isToday = activePeriod === "today";
+  const vsCardTitle = isToday ? t("executive.today_vs_yesterday") : t("executive.period_vs_prev");
+  const currentLabel = isToday ? t("executive.today_label") : t("executive.current_period_label");
+  const prevLabel = isToday ? t("executive.yesterday_label") : (vs.prevFrom && vs.prevTo ? `${isoToDisplay(vs.prevFrom)} - ${isoToDisplay(vs.prevTo)}` : t("executive.prev_period_label"));
 
   const payTotal = paymentSplit.reduce((s: number, p: any) => s + p.amount, 0);
 
@@ -306,14 +311,14 @@ export default function Executive() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <BarChart3 className="w-5 h-5" />
-            {t("executive.today_vs_yesterday")}
+            {vsCardTitle}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-3 gap-4">
-            <VsCard label={t("executive.sales_label")} today={vs.today?.sales} yesterday={vs.yesterday?.sales} change={salesChange} />
-            <VsCard label={t("executive.expenses_label")} today={vs.today?.expenses} yesterday={vs.yesterday?.expenses} change={expChange} invert />
-            <VsCard label={t("executive.net_label")} today={vs.today?.net} yesterday={vs.yesterday?.net} change={netChange} />
+            <VsCard label={t("executive.sales_label")} today={vs.today?.sales} yesterday={vs.yesterday?.sales} change={salesChange} currentLabel={currentLabel} prevLabel={prevLabel} />
+            <VsCard label={t("executive.expenses_label")} today={vs.today?.expenses} yesterday={vs.yesterday?.expenses} change={expChange} invert currentLabel={currentLabel} prevLabel={prevLabel} />
+            <VsCard label={t("executive.net_label")} today={vs.today?.net} yesterday={vs.yesterday?.net} change={netChange} currentLabel={currentLabel} prevLabel={prevLabel} />
           </div>
         </CardContent>
       </Card>
@@ -590,10 +595,10 @@ function KpiCard({ icon: Icon, label, value, color, testId, hasData, isCount, is
   );
 }
 
-function VsCard({ label, today, yesterday, change, invert }: {
+function VsCard({ label, today, yesterday, change, invert, currentLabel, prevLabel }: {
   label: string; today: number; yesterday: number; change: number | null; invert?: boolean;
+  currentLabel: string; prevLabel: string;
 }) {
-  const { t } = useI18n();
   const isPositive = change !== null && (invert ? change < 0 : change > 0);
   const isNegative = change !== null && (invert ? change > 0 : change < 0);
 
@@ -602,11 +607,11 @@ function VsCard({ label, today, yesterday, change, invert }: {
       <p className="text-xs text-muted-foreground mb-2 font-medium">{label}</p>
       <div className="grid grid-cols-2 gap-2 text-sm mb-2">
         <div>
-          <p className="text-[10px] text-muted-foreground">{t("executive.today_label")}</p>
+          <p className="text-[10px] text-muted-foreground truncate">{currentLabel}</p>
           <p className="font-mono font-bold">{omr(today)}</p>
         </div>
         <div>
-          <p className="text-[10px] text-muted-foreground">{t("executive.yesterday_label")}</p>
+          <p className="text-[10px] text-muted-foreground truncate">{prevLabel}</p>
           <p className="font-mono">{omr(yesterday)}</p>
         </div>
       </div>
