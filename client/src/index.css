@@ -69,6 +69,14 @@
   font-feature-settings: "lnum" 1, "tnum" 1, "locl" 0;
 }
 
+/* Date/time inputs always use Western numerals regardless of document language */
+input[type="date"],
+input[type="datetime-local"],
+input[type="month"],
+input[type="time"] {
+  font-family: 'DigitsEN', 'Segoe UI', Arial, sans-serif;
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
