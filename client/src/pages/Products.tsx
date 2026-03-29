@@ -27,7 +27,7 @@ export default function Products() {
   const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(null);
 
   const [newProduct, setNewProduct] = useState({ name: "", categoryId: "", price: "", active: true });
-  const [variantForm, setVariantForm] = useState({ productName: "", productActive: true, barcode: "", sku: "", color: "", size: "", price: "", cost: "" });
+  const [variantForm, setVariantForm] = useState({ productName: "", productCategoryId: "", productActive: true, barcode: "", sku: "", color: "", size: "", price: "", cost: "" });
 
   const { user } = useAuth();
   const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
@@ -75,32 +75,42 @@ export default function Products() {
   };
 
   const openVariantDialog = (variant?: ProductVariant) => {
+    const base = {
+      productName: selectedProduct?.name || "",
+      productCategoryId: selectedProduct?.categoryId?.toString() || "",
+      productActive: selectedProduct?.active ?? true,
+    };
     if (variant) {
       setEditingVariant(variant);
       setVariantForm({ 
-        productName: selectedProduct?.name || "",
-        productActive: selectedProduct?.active ?? true,
+        ...base,
         barcode: variant.barcode || "", sku: variant.sku || "", color: variant.color || "", 
         size: variant.size || "", price: variant.price.toString(), cost: variant.costDefault?.toString() || "" 
       });
     } else {
       setEditingVariant(null);
-      setVariantForm({ productName: selectedProduct?.name || "", productActive: selectedProduct?.active ?? true, barcode: "", sku: "", color: "", size: "", price: selectedProduct?.price.toString() || "", cost: "" });
+      setVariantForm({ ...base, barcode: "", sku: "", color: "", size: "", price: selectedProduct?.price.toString() || "", cost: "" });
     }
     setVariantDialogOpen(true);
   };
 
   const upsertVariantMutation = useMutation({
     mutationFn: async (data: any) => {
-      const { productName, productActive, ...rest } = data;
+      const { productName, productActive, productCategoryId, ...rest } = data;
       const payload = { ...rest, costDefault: rest.cost || null };
       delete payload.cost;
 
+      const newCatId = productCategoryId ? parseInt(productCategoryId) : null;
       const productChanged =
         (productName && selectedProduct && productName !== selectedProduct.name) ||
-        (selectedProduct && productActive !== selectedProduct.active);
+        (selectedProduct && productActive !== selectedProduct.active) ||
+        (selectedProduct && newCatId !== (selectedProduct.categoryId ?? null));
       if (productChanged && selectedProduct) {
-        await apiRequest("PATCH", `/api/products/${selectedProduct.id}`, { name: productName, active: productActive });
+        await apiRequest("PATCH", `/api/products/${selectedProduct.id}`, {
+          name: productName,
+          active: productActive,
+          categoryId: newCatId,
+        });
       }
 
       if (editingVariant) {
@@ -296,6 +306,19 @@ export default function Products() {
                 </div>
               </>
             )}
+            <div className="col-span-2 space-y-2">
+              <label className="text-sm font-medium">{t("products.category")}</label>
+              <Select value={variantForm.productCategoryId} onValueChange={val => setVariantForm({...variantForm, productCategoryId: val})}>
+                <SelectTrigger data-testid="select-variant-category">
+                  <SelectValue placeholder={t("products.all_categories")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map(c => (
+                    <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="col-span-2 space-y-2">
               <label className="text-sm font-medium">{t("products.variant_barcode")}</label>
               <div className="flex gap-2">
