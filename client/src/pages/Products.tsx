@@ -28,6 +28,8 @@ export default function Products() {
 
   const [newProduct, setNewProduct] = useState({ name: "", categoryId: "", price: "", active: true });
   const [variantForm, setVariantForm] = useState({ productName: "", productCategoryId: "", productActive: true, barcode: "", sku: "", color: "", size: "", price: "", cost: "" });
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   const { user } = useAuth();
   const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
@@ -67,6 +69,18 @@ export default function Products() {
   const toggleProductActiveMutation = useMutation({
     mutationFn: async ({ id, active }: { id: number; active: boolean }) => apiRequest("PATCH", `/api/products/${id}`, { active }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/products"] })
+  });
+
+  const createCategoryMutation = useMutation({
+    mutationFn: async (name: string) => apiRequest("POST", "/api/categories", { name }),
+    onSuccess: async (newCat: any) => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      setVariantForm(f => ({ ...f, productCategoryId: newCat.id.toString() }));
+      setNewCategoryName("");
+      setShowAddCategory(false);
+      toast({ title: t("products.category_added") });
+    },
+    onError: (err: Error) => toast({ title: t("common.error"), description: err.message, variant: "destructive" })
   });
 
   const openManageVariants = (product: Product) => {
@@ -273,7 +287,7 @@ export default function Products() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={variantDialogOpen} onOpenChange={setVariantDialogOpen}>
+      <Dialog open={variantDialogOpen} onOpenChange={v => { setVariantDialogOpen(v); if (!v) { setShowAddCategory(false); setNewCategoryName(""); } }}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editingVariant ? t("products.edit_variant") : t("products.add_variant")}</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
@@ -307,17 +321,64 @@ export default function Products() {
               </>
             )}
             <div className="col-span-2 space-y-2">
-              <label className="text-sm font-medium">{t("products.category")}</label>
-              <Select value={variantForm.productCategoryId} onValueChange={val => setVariantForm({...variantForm, productCategoryId: val})}>
-                <SelectTrigger data-testid="select-variant-category">
-                  <SelectValue placeholder={t("products.all_categories")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map(c => (
-                    <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">{t("products.category")}</label>
+                {!showAddCategory && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-primary"
+                    onClick={() => setShowAddCategory(true)}
+                    data-testid="button-show-add-category"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    {t("products.add_category")}
+                  </Button>
+                )}
+              </div>
+              {showAddCategory ? (
+                <div className="flex gap-2">
+                  <Input
+                    autoFocus
+                    placeholder={t("products.category_name_placeholder")}
+                    value={newCategoryName}
+                    onChange={e => setNewCategoryName(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && newCategoryName.trim()) createCategoryMutation.mutate(newCategoryName.trim()); if (e.key === "Escape") { setShowAddCategory(false); setNewCategoryName(""); } }}
+                    className="flex-1"
+                    data-testid="input-new-category-name"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={!newCategoryName.trim() || createCategoryMutation.isPending}
+                    onClick={() => createCategoryMutation.mutate(newCategoryName.trim())}
+                    data-testid="button-save-category"
+                  >
+                    {t("common.save")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setShowAddCategory(false); setNewCategoryName(""); }}
+                    data-testid="button-cancel-add-category"
+                  >
+                    {t("common.cancel")}
+                  </Button>
+                </div>
+              ) : (
+                <Select value={variantForm.productCategoryId} onValueChange={val => setVariantForm({...variantForm, productCategoryId: val})}>
+                  <SelectTrigger data-testid="select-variant-category">
+                    <SelectValue placeholder={t("products.all_categories")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map(c => (
+                      <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="col-span-2 space-y-2">
               <label className="text-sm font-medium">{t("products.variant_barcode")}</label>
