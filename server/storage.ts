@@ -325,7 +325,10 @@ export class DatabaseStorage implements IStorage {
     const variantRows = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, id));
     const variantIds = variantRows.map(v => v.id);
     if (variantIds.length > 0) {
-      await db.delete(inventoryBalances).where(sql`${inventoryBalances.variantId} = ANY(ARRAY[${sql.join(variantIds.map(vid => sql`${vid}`), sql`, `)}]::int[])`);
+      const anyVariant = sql`= ANY(ARRAY[${sql.join(variantIds.map(vid => sql`${vid}::int`), sql`, `)}])`;
+      await db.execute(sql`DELETE FROM inventory_ledger WHERE variant_id ${anyVariant}`);
+      await db.execute(sql`DELETE FROM stock_transfer_lines WHERE variant_id ${anyVariant}`);
+      await db.execute(sql`DELETE FROM inventory_balances WHERE variant_id ${anyVariant}`);
       await db.delete(productVariants).where(eq(productVariants.productId, id));
     }
     await db.delete(locationInventory).where(eq(locationInventory.productId, id));
@@ -4304,6 +4307,9 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
   async deleteVariant(id: number) {
+    await db.execute(sql`DELETE FROM inventory_ledger WHERE variant_id = ${id}`);
+    await db.execute(sql`DELETE FROM stock_transfer_lines WHERE variant_id = ${id}`);
+    await db.execute(sql`DELETE FROM inventory_balances WHERE variant_id = ${id}`);
     await db.delete(productVariants).where(eq(productVariants.id, id));
   }
 
