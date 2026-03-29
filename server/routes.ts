@@ -346,10 +346,8 @@ export async function registerRoutes(
       const branchId = req.query.branch_id ? Number(req.query.branch_id) : null;
       const from = (req.query.from as string) || new Date().toISOString().slice(0, 10);
       const to = (req.query.to as string) || new Date().toISOString().slice(0, 10);
-      const bf = branchId ? `AND branch_id = ${branchId}` : "";
-      const sbf = branchId ? `AND s.branch_id = ${branchId}` : "";
-      const lbf = branchId ? `AND l.branch_id = ${branchId}` : "";
-      const ebf = branchId ? `AND e.branch_id = ${branchId}` : "";
+      // $1=from, $2=to, $3=branchId (null = all branches)
+      const p3 = [from, to, branchId];
 
       const kpiQ = await pool.query(`
         SELECT
@@ -361,29 +359,34 @@ export async function registerRoutes(
           ROUND(COALESCE(AVG(total),0),3) AS avg_invoice,
           COUNT(*)::int AS invoice_count
         FROM sales
-        WHERE DATE(created_at) >= '${from}' AND DATE(created_at) <= '${to}' ${bf}
-      `);
+        WHERE DATE(created_at) >= $1::date AND DATE(created_at) <= $2::date
+          AND ($3::int IS NULL OR branch_id = $3::int)
+      `, p3);
 
       const expQ = await pool.query(`
         SELECT
           COALESCE(SUM(amount::numeric),0) AS total_expenses,
           COALESCE(SUM(CASE WHEN source='cash' THEN amount::numeric ELSE 0 END),0) AS cash_expenses
         FROM expenses e
-        WHERE (e.date >= '${from}'::date AND e.date <= '${to}'::date) ${ebf}
-      `);
+        WHERE e.date >= $1::date AND e.date <= $2::date
+          AND ($3::int IS NULL OR e.branch_id = $3::int)
+      `, p3);
 
       const cashSalesQ = await pool.query(`
         SELECT COALESCE(SUM(total),0) AS cash_sales
         FROM sales
-        WHERE payment_method='cash' AND DATE(created_at) >= '${from}' AND DATE(created_at) <= '${to}' ${bf}
-      `);
+        WHERE payment_method='cash'
+          AND DATE(created_at) >= $1::date AND DATE(created_at) <= $2::date
+          AND ($3::int IS NULL OR branch_id = $3::int)
+      `, p3);
 
       const paymentQ = await pool.query(`
         SELECT payment_method, COALESCE(SUM(total),0) AS amount, COUNT(*)::int AS cnt
         FROM sales
-        WHERE DATE(created_at) >= '${from}' AND DATE(created_at) <= '${to}' ${bf}
+        WHERE DATE(created_at) >= $1::date AND DATE(created_at) <= $2::date
+          AND ($3::int IS NULL OR branch_id = $3::int)
         GROUP BY payment_method ORDER BY amount DESC
-      `);
+      `, p3);
 
       // Calculate previous period (same duration, immediately before `from`)
       const periodDays = Math.round((new Date(to).getTime() - new Date(from + "T00:00:00").getTime()) / 86400000) + 1;
@@ -391,35 +394,40 @@ export async function registerRoutes(
       const prevFromDate = new Date(prevToDate); prevFromDate.setDate(prevFromDate.getDate() - periodDays + 1);
       const prevFromStr = prevFromDate.toISOString().slice(0, 10);
       const prevToStr = prevToDate.toISOString().slice(0, 10);
+      const pPrev = [prevFromStr, prevToStr, branchId];
 
       const prevSalesQ = await pool.query(`
         SELECT
           COALESCE(SUM(total),0) AS sales,
           COALESCE(SUM(total - cogs_total),0) AS gross_profit
         FROM sales
-        WHERE DATE(created_at) >= '${prevFromStr}' AND DATE(created_at) <= '${prevToStr}' ${bf}
-      `);
+        WHERE DATE(created_at) >= $1::date AND DATE(created_at) <= $2::date
+          AND ($3::int IS NULL OR branch_id = $3::int)
+      `, pPrev);
 
       const prevExpPeriodQ = await pool.query(`
         SELECT COALESCE(SUM(amount::numeric),0) AS expenses
         FROM expenses e
-        WHERE e.date >= '${prevFromStr}' AND e.date <= '${prevToStr}' ${ebf}
-      `);
+        WHERE e.date >= $1::date AND e.date <= $2::date
+          AND ($3::int IS NULL OR e.branch_id = $3::int)
+      `, pPrev);
 
       const timeseriesQ = await pool.query(`
         WITH dates AS (
-          SELECT generate_series('${from}'::date, '${to}'::date, '1 day'::interval)::date AS d
+          SELECT generate_series($1::date, $2::date, '1 day'::interval)::date AS d
         ),
         daily_sales AS (
           SELECT DATE(created_at) AS d, COALESCE(SUM(total),0) AS sales, COALESCE(SUM(cogs_total),0) AS cogs
           FROM sales
-          WHERE DATE(created_at) >= '${from}' AND DATE(created_at) <= '${to}' ${bf}
+          WHERE DATE(created_at) >= $1::date AND DATE(created_at) <= $2::date
+            AND ($3::int IS NULL OR branch_id = $3::int)
           GROUP BY DATE(created_at)
         ),
         daily_exp AS (
           SELECT e.date::date AS d, COALESCE(SUM(amount::numeric),0) AS expenses
           FROM expenses e
-          WHERE e.date >= '${from}' AND e.date <= '${to}' ${ebf}
+          WHERE e.date >= $1::date AND e.date <= $2::date
+            AND ($3::int IS NULL OR e.branch_id = $3::int)
           GROUP BY e.date
         )
         SELECT dates.d::text AS date,
@@ -431,7 +439,7 @@ export async function registerRoutes(
         LEFT JOIN daily_sales ds ON ds.d=dates.d
         LEFT JOIN daily_exp de ON de.d=dates.d
         ORDER BY dates.d
-      `);
+      `, p3);
 
       const topProductsQ = await pool.query(`
         SELECT si.product_id, p.name,
@@ -442,10 +450,11 @@ export async function registerRoutes(
         FROM sale_items si
         JOIN sales s ON s.id=si.sale_id
         JOIN products p ON p.id=si.product_id
-        WHERE DATE(s.created_at) >= '${from}' AND DATE(s.created_at) <= '${to}' ${sbf}
+        WHERE DATE(s.created_at) >= $1::date AND DATE(s.created_at) <= $2::date
+          AND ($3::int IS NULL OR s.branch_id = $3::int)
         GROUP BY si.product_id, p.name
         ORDER BY revenue DESC LIMIT 10
-      `);
+      `, p3);
 
       const branchPerfQ = await pool.query(`
         SELECT s.branch_id, b.name AS branch_name,
@@ -456,16 +465,18 @@ export async function registerRoutes(
           ROUND(COALESCE(AVG(s.total),0),3) AS avg_invoice
         FROM sales s
         JOIN branches b ON b.id=s.branch_id
-        WHERE DATE(s.created_at) >= '${from}' AND DATE(s.created_at) <= '${to}' ${sbf}
+        WHERE DATE(s.created_at) >= $1::date AND DATE(s.created_at) <= $2::date
+          AND ($3::int IS NULL OR s.branch_id = $3::int)
         GROUP BY s.branch_id, b.name ORDER BY revenue DESC
-      `);
+      `, p3);
 
       const branchExpQ = await pool.query(`
         SELECT e.branch_id, COALESCE(SUM(e.amount::numeric),0) AS expenses
         FROM expenses e
-        WHERE e.date >= '${from}' AND e.date <= '${to}' ${ebf}
+        WHERE e.date >= $1::date AND e.date <= $2::date
+          AND ($3::int IS NULL OR e.branch_id = $3::int)
         GROUP BY e.branch_id
-      `);
+      `, p3);
       const branchExpMap: Record<number, number> = {};
       branchExpQ.rows.forEach((r: any) => { branchExpMap[r.branch_id] = parseFloat(r.expenses); });
 
@@ -475,9 +486,10 @@ export async function registerRoutes(
         FROM expenses e
         LEFT JOIN branches b ON b.id=e.branch_id
         LEFT JOIN users u ON u.id=e.created_by
-        WHERE e.date >= '${from}' AND e.date <= '${to}' ${ebf}
+        WHERE e.date >= $1::date AND e.date <= $2::date
+          AND ($3::int IS NULL OR e.branch_id = $3::int)
         ORDER BY e.created_at DESC LIMIT 20
-      `);
+      `, p3);
 
       const lowStockQ = await pool.query(`
         SELECT li.product_id, p.name,
@@ -486,11 +498,11 @@ export async function registerRoutes(
         FROM location_inventory li
         JOIN products p ON p.id=li.product_id
         JOIN locations l ON l.id=li.location_id
-        WHERE 1=1 ${lbf}
+        WHERE ($1::int IS NULL OR l.branch_id = $1::int)
         GROUP BY li.product_id, p.name
         HAVING SUM(li.qty_on_hand) <= MAX(li.reorder_level)
         ORDER BY total_qty ASC LIMIT 50
-      `);
+      `, [branchId]);
 
       const invValueQ = await pool.query(`
         WITH last_cost AS (
@@ -507,14 +519,15 @@ export async function registerRoutes(
           SELECT li.product_id, SUM(li.qty_on_hand) AS qty_on_hand
           FROM location_inventory li
           JOIN locations l ON l.id = li.location_id
-          WHERE li.qty_on_hand > 0 ${lbf}
+          WHERE li.qty_on_hand > 0
+            AND ($1::int IS NULL OR l.branch_id = $1::int)
           GROUP BY li.product_id
         )
         SELECT COALESCE(SUM(qty.qty_on_hand * COALESCE(last_cost.unit_cost, 0)), 0) AS value,
                COUNT(DISTINCT qty.product_id) AS product_count
         FROM qty
         LEFT JOIN last_cost ON last_cost.product_id = qty.product_id
-      `);
+      `, [branchId]);
 
       const k = kpiQ.rows[0];
       const ex = expQ.rows[0];
@@ -584,9 +597,8 @@ export async function registerRoutes(
   app.get("/api/dashboard/executive-plus", requireOwnerOrAdmin, async (req, res) => {
     try {
       const branchId = req.query.branch_id ? Number(req.query.branch_id) : null;
-      const bf = branchId ? `AND branch_id = ${branchId}` : "";
-      const sbf = branchId ? `AND s.branch_id = ${branchId}` : "";
-      const lbf = branchId ? `AND l.branch_id = ${branchId}` : "";
+      // $1=branchId (null = all branches)
+      const pb = [branchId];
 
       const todayKpi = await pool.query(`
         SELECT
@@ -597,26 +609,34 @@ export async function registerRoutes(
                ELSE (COALESCE(SUM(total - cogs_total),0)/SUM(total))*100 END, 2) AS margin_percent,
           ROUND(COALESCE(AVG(total),0),3) AS avg_invoice,
           COUNT(*)::int AS invoice_count
-        FROM sales WHERE DATE(created_at)=CURRENT_DATE ${bf}
-      `);
+        FROM sales
+        WHERE DATE(created_at)=CURRENT_DATE
+          AND ($1::int IS NULL OR branch_id = $1::int)
+      `, pb);
 
       const vsYesterday = await pool.query(`
         SELECT
           COALESCE(SUM(CASE WHEN DATE(created_at)=CURRENT_DATE THEN total ELSE 0 END),0) AS today_sales,
           COALESCE(SUM(CASE WHEN DATE(created_at)=CURRENT_DATE-1 THEN total ELSE 0 END),0) AS yesterday_sales
-        FROM sales WHERE DATE(created_at) >= CURRENT_DATE-1 ${bf}
-      `);
+        FROM sales
+        WHERE DATE(created_at) >= CURRENT_DATE-1
+          AND ($1::int IS NULL OR branch_id = $1::int)
+      `, pb);
 
       const monthRes = await pool.query(`
         SELECT COALESCE(SUM(total),0) AS revenue, COALESCE(SUM(total - cogs_total),0) AS profit
-        FROM sales WHERE DATE_TRUNC('month', created_at)=DATE_TRUNC('month', CURRENT_DATE) ${bf}
-      `);
+        FROM sales
+        WHERE DATE_TRUNC('month', created_at)=DATE_TRUNC('month', CURRENT_DATE)
+          AND ($1::int IS NULL OR branch_id = $1::int)
+      `, pb);
 
       const paymentRes = await pool.query(`
         SELECT payment_method, COALESCE(SUM(total),0) AS amount
-        FROM sales WHERE DATE(created_at)=CURRENT_DATE ${bf}
+        FROM sales
+        WHERE DATE(created_at)=CURRENT_DATE
+          AND ($1::int IS NULL OR branch_id = $1::int)
         GROUP BY payment_method ORDER BY amount DESC
-      `);
+      `, pb);
 
       const trend7d = await pool.query(`
         SELECT d::date AS day,
@@ -625,9 +645,10 @@ export async function registerRoutes(
           ROUND(CASE WHEN COALESCE(SUM(s.total),0)=0 THEN 0
                ELSE (COALESCE(SUM(s.total - s.cogs_total),0)/SUM(s.total))*100 END,2) AS margin
         FROM generate_series(CURRENT_DATE - 6, CURRENT_DATE, '1 day') d
-        LEFT JOIN sales s ON DATE(s.created_at) = d ${bf}
+        LEFT JOIN sales s ON DATE(s.created_at) = d
+          AND ($1::int IS NULL OR s.branch_id = $1::int)
         GROUP BY d ORDER BY d
-      `);
+      `, pb);
 
       const invValue = await pool.query(`
         WITH last_cost AS (
@@ -639,17 +660,19 @@ export async function registerRoutes(
         qty AS (
           SELECT li.product_id, SUM(li.qty_on_hand) AS qty_on_hand
           FROM location_inventory li JOIN locations l ON l.id=li.location_id
-          WHERE 1=1 ${lbf} GROUP BY li.product_id
+          WHERE ($1::int IS NULL OR l.branch_id = $1::int)
+          GROUP BY li.product_id
         )
         SELECT COALESCE(SUM(qty.qty_on_hand * COALESCE(last_cost.unit_cost,0)),0) AS value
         FROM qty LEFT JOIN last_cost ON last_cost.product_id=qty.product_id
-      `);
+      `, pb);
 
       const turnover30 = await pool.query(`
         WITH cogs30 AS (
           SELECT COALESCE(SUM(si.line_cogs),0) AS total_cogs
           FROM sale_items si JOIN sales s ON s.id=si.sale_id
-          WHERE s.created_at >= CURRENT_DATE - 30 ${sbf}
+          WHERE s.created_at >= CURRENT_DATE - 30
+            AND ($1::int IS NULL OR s.branch_id = $1::int)
         ),
         avg_inv AS (
           WITH last_cost AS (
@@ -661,7 +684,8 @@ export async function registerRoutes(
           qty AS (
             SELECT li.product_id, SUM(li.qty_on_hand) AS qty_on_hand
             FROM location_inventory li JOIN locations l ON l.id=li.location_id
-            WHERE 1=1 ${lbf} GROUP BY li.product_id
+            WHERE ($1::int IS NULL OR l.branch_id = $1::int)
+            GROUP BY li.product_id
           )
           SELECT COALESCE(SUM(qty.qty_on_hand * COALESCE(last_cost.unit_cost,0)),0) AS avg_value
           FROM qty LEFT JOIN last_cost ON last_cost.product_id=qty.product_id
@@ -669,7 +693,7 @@ export async function registerRoutes(
         SELECT CASE WHEN avg_inv.avg_value = 0 THEN 0
              ELSE ROUND((cogs30.total_cogs / avg_inv.avg_value)::numeric, 2) END AS turnover
         FROM cogs30, avg_inv
-      `);
+      `, pb);
 
       const topProfit7d = await pool.query(`
         SELECT si.product_id, p.name,
@@ -680,10 +704,11 @@ export async function registerRoutes(
         FROM sale_items si
         JOIN sales s ON s.id=si.sale_id
         JOIN products p ON p.id=si.product_id
-        WHERE s.created_at >= CURRENT_DATE - 7 ${sbf}
+        WHERE s.created_at >= CURRENT_DATE - 7
+          AND ($1::int IS NULL OR s.branch_id = $1::int)
         GROUP BY si.product_id, p.name
         ORDER BY profit DESC LIMIT 3
-      `);
+      `, pb);
 
       const cashiers = await pool.query(`
         SELECT s.cashier_id, u.name AS cashier_name,
@@ -692,9 +717,10 @@ export async function registerRoutes(
           COALESCE(SUM(s.cogs_total),0) AS cogs,
           COALESCE(SUM(s.total - s.cogs_total),0) AS profit
         FROM sales s LEFT JOIN users u ON u.id=s.cashier_id
-        WHERE DATE(s.created_at)=CURRENT_DATE ${sbf}
+        WHERE DATE(s.created_at)=CURRENT_DATE
+          AND ($1::int IS NULL OR s.branch_id = $1::int)
         GROUP BY s.cashier_id, u.name ORDER BY revenue DESC
-      `);
+      `, pb);
 
       const lowStock = await pool.query(`
         SELECT li.product_id, p.name,
@@ -703,19 +729,20 @@ export async function registerRoutes(
         FROM location_inventory li
         JOIN products p ON p.id=li.product_id
         JOIN locations l ON l.id=li.location_id
-        WHERE 1=1 ${lbf}
+        WHERE ($1::int IS NULL OR l.branch_id = $1::int)
         GROUP BY li.product_id, p.name
         HAVING SUM(li.qty_on_hand) <= MAX(li.reorder_level)
         ORDER BY total_qty ASC LIMIT 50
-      `);
+      `, pb);
 
       const missingCogsToday = await pool.query(`
         SELECT
           COUNT(DISTINCT si.id) FILTER (WHERE COALESCE(si.unit_cost_at_sale,0) = 0) AS missing_count,
           COUNT(DISTINCT si.id) AS total_count
         FROM sale_items si JOIN sales s ON s.id=si.sale_id
-        WHERE DATE(s.created_at)=CURRENT_DATE ${sbf}
-      `);
+        WHERE DATE(s.created_at)=CURRENT_DATE
+          AND ($1::int IS NULL OR s.branch_id = $1::int)
+      `, pb);
 
       const missingCostProducts = await pool.query(`
         WITH last_cost AS (
