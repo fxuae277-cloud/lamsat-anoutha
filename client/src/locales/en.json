@@ -361,6 +361,7 @@
     "no_products": "No products found",
     "active": "Active",
     "inactive": "Inactive",
+    "product_status": "Product Status",
     "added_success": "Added",
     "added_desc": "Product added successfully.",
     "deleted": "Deleted",

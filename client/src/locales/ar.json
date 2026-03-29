@@ -361,6 +361,7 @@
     "no_products": "لا توجد منتجات",
     "active": "نشط",
     "inactive": "غير نشط",
+    "product_status": "حالة المنتج",
     "added_success": "تمت الإضافة",
     "added_desc": "تم إضافة المنتج بنجاح.",
     "deleted": "تم الحذف",

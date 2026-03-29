@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus, Search, Package, Palette, Ruler, Barcode, Edit2, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -26,7 +27,7 @@ export default function Products() {
   const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(null);
 
   const [newProduct, setNewProduct] = useState({ name: "", categoryId: "", price: "", active: true });
-  const [variantForm, setVariantForm] = useState({ productName: "", barcode: "", sku: "", color: "", size: "", price: "", cost: "" });
+  const [variantForm, setVariantForm] = useState({ productName: "", productActive: true, barcode: "", sku: "", color: "", size: "", price: "", cost: "" });
 
   const { user } = useAuth();
   const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
@@ -78,24 +79,28 @@ export default function Products() {
       setEditingVariant(variant);
       setVariantForm({ 
         productName: selectedProduct?.name || "",
+        productActive: selectedProduct?.active ?? true,
         barcode: variant.barcode || "", sku: variant.sku || "", color: variant.color || "", 
         size: variant.size || "", price: variant.price.toString(), cost: variant.costDefault?.toString() || "" 
       });
     } else {
       setEditingVariant(null);
-      setVariantForm({ productName: selectedProduct?.name || "", barcode: "", sku: "", color: "", size: "", price: selectedProduct?.price.toString() || "", cost: "" });
+      setVariantForm({ productName: selectedProduct?.name || "", productActive: selectedProduct?.active ?? true, barcode: "", sku: "", color: "", size: "", price: selectedProduct?.price.toString() || "", cost: "" });
     }
     setVariantDialogOpen(true);
   };
 
   const upsertVariantMutation = useMutation({
     mutationFn: async (data: any) => {
-      const { productName, ...rest } = data;
+      const { productName, productActive, ...rest } = data;
       const payload = { ...rest, costDefault: rest.cost || null };
       delete payload.cost;
 
-      if (productName && selectedProduct && productName !== selectedProduct.name) {
-        await apiRequest("PATCH", `/api/products/${selectedProduct.id}`, { name: productName });
+      const productChanged =
+        (productName && selectedProduct && productName !== selectedProduct.name) ||
+        (selectedProduct && productActive !== selectedProduct.active);
+      if (productChanged && selectedProduct) {
+        await apiRequest("PATCH", `/api/products/${selectedProduct.id}`, { name: productName, active: productActive });
       }
 
       if (editingVariant) {
@@ -263,15 +268,33 @@ export default function Products() {
           <DialogHeader><DialogTitle>{editingVariant ? t("products.edit_variant") : t("products.add_variant")}</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
             {selectedProduct && (
-              <div className="col-span-2 space-y-2">
-                <label className="text-sm font-medium">{t("products.product_name")}</label>
-                <Input
-                  value={variantForm.productName}
-                  onChange={e => setVariantForm({...variantForm, productName: e.target.value})}
-                  className="font-semibold"
-                  data-testid="input-variant-product-name"
-                />
-              </div>
+              <>
+                <div className="col-span-2 space-y-2">
+                  <label className="text-sm font-medium">{t("products.product_name")}</label>
+                  <Input
+                    value={variantForm.productName}
+                    onChange={e => setVariantForm({...variantForm, productName: e.target.value})}
+                    className="font-semibold"
+                    data-testid="input-variant-product-name"
+                  />
+                </div>
+                <div className="col-span-2 flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium cursor-pointer" htmlFor="product-active-switch">
+                      {t("products.product_status")}
+                    </label>
+                    <p className={`text-xs font-medium ${variantForm.productActive ? "text-green-600" : "text-muted-foreground"}`}>
+                      {variantForm.productActive ? t("products.active") : t("products.inactive")}
+                    </p>
+                  </div>
+                  <Switch
+                    id="product-active-switch"
+                    checked={variantForm.productActive}
+                    onCheckedChange={val => setVariantForm({...variantForm, productActive: val})}
+                    data-testid="switch-product-active"
+                  />
+                </div>
+              </>
             )}
             <div className="col-span-2 space-y-2">
               <label className="text-sm font-medium">{t("products.variant_barcode")}</label>
