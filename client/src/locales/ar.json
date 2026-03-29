@@ -2144,6 +2144,8 @@
     "inventory_value": "قيمة المخزون",
     "low_stock_items": "أصناف منخفضة",
     "cogs_note": "الربح يعتمد على أسعار الشراء المسجلة",
+    "sales_trend": "مسار المبيعات اليومية",
+    "last_updated": "آخر تحديث",
     "today_vs_yesterday": "اليوم مقابل أمس",
     "period_vs_prev": "الفترة الحالية مقابل السابقة",
     "current_period_label": "الفترة الحالية",

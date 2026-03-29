@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -16,7 +16,7 @@ import {
   Download, ArrowUpRight, ArrowDownRight, Minus, Info, CalendarIcon
 } from "lucide-react";
 import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
 import type { Branch } from "@shared/schema";
@@ -124,8 +124,10 @@ export default function Executive() {
     }
   }
 
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
   const qs = `from=${fromDate}&to=${toDate}${branchId !== "all" ? `&branch_id=${branchId}` : ""}`;
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading, dataUpdatedAt } = useQuery<any>({
     queryKey: ["/api/dashboard/executive", fromDate, toDate, branchId],
     queryFn: async () => {
       const res = await fetch(`/api/dashboard/executive?${qs}`, { credentials: "include" });
@@ -135,6 +137,10 @@ export default function Executive() {
     enabled: isAdmin,
     refetchInterval: 60000,
   });
+
+  useEffect(() => {
+    if (dataUpdatedAt) setLastUpdated(new Date(dataUpdatedAt));
+  }, [dataUpdatedAt]);
 
   const sortedProducts = useMemo(() => {
     if (!data?.topProducts) return [];
@@ -192,8 +198,15 @@ export default function Executive() {
     <div className="p-4 md:p-6 space-y-6">
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pb-4 -mt-4 pt-4 border-b">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-          <h1 className="text-2xl font-bold" data-testid="text-executive-title">{t("executive.title")}</h1>
-          <div className="min-w-[200px]">
+          <div>
+            <h1 className="text-2xl font-bold" data-testid="text-executive-title">{t("executive.title")}</h1>
+            {lastUpdated && (
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {t("executive.last_updated")}: {lastUpdated.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              </p>
+            )}
+          </div>
+          <div className="min-w-[180px] max-w-[220px] w-full sm:w-auto">
             <Select value={branchId} onValueChange={setBranchId}>
               <SelectTrigger data-testid="select-exec-branch"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -203,7 +216,7 @@ export default function Executive() {
             </Select>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full">
           {quickButtons.map(q => (
             <Button
               key={q.id}
@@ -216,7 +229,7 @@ export default function Executive() {
               {q.label}
             </Button>
           ))}
-          <div className="flex items-center gap-2 ltr:ml-auto rtl:mr-auto">
+          <div className="flex items-center gap-2 ltr:ml-auto rtl:mr-auto flex-wrap sm:flex-nowrap w-full sm:w-auto mt-1 sm:mt-0">
             <div className="relative flex items-center">
               <Input
                 type="text"
@@ -306,6 +319,43 @@ export default function Executive() {
         <KpiCard icon={AlertTriangle} label={t("executive.low_stock_items")} value={kpi.lowStockCount} isCount color="text-red-600" testId="kpi-low" hasData />
       </div>
 
+      {/* SALES TREND LINE CHART */}
+      {timeseries.length > 1 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-primary" />
+              {t("executive.sales_trend")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={timeseries} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(d: string) => d.slice(5)}
+                />
+                <YAxis tick={{ fontSize: 11 }} width={55} tickFormatter={(v: number) => omr(v)} />
+                <Tooltip
+                  formatter={(v: number) => [`${omr(v)} OMR`, t("executive.sales_label")]}
+                  labelFormatter={(d: string) => isoToDisplay(d)}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="sales"
+                  stroke="#f43f5e"
+                  strokeWidth={2.5}
+                  dot={timeseries.length <= 14 ? { r: 3, fill: "#f43f5e" } : false}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
       {/* TODAY vs YESTERDAY */}
       <Card>
         <CardHeader className="pb-3">
@@ -342,7 +392,7 @@ export default function Executive() {
                     labelFormatter={(d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-US")}
                   />
                   <Legend />
-                  <Area type="monotone" dataKey="sales" name={t("executive.sales_label")} stroke="#22c55e" fill="#22c55e" fillOpacity={0.15} strokeWidth={2} />
+                  <Area type="monotone" dataKey="sales" name={t("executive.sales_label")} stroke="#f43f5e" fill="#f43f5e" fillOpacity={0.15} strokeWidth={2} />
                   <Area type="monotone" dataKey="expenses" name={t("executive.expenses_label")} stroke="#ef4444" fill="#ef4444" fillOpacity={0.1} strokeWidth={2} />
                   <Area type="monotone" dataKey="net" name={t("executive.net_label")} stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.1} strokeWidth={2} />
                 </AreaChart>

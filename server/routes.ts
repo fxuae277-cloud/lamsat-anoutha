@@ -369,7 +369,7 @@ export async function registerRoutes(
           COALESCE(SUM(amount::numeric),0) AS total_expenses,
           COALESCE(SUM(CASE WHEN source='cash' THEN amount::numeric ELSE 0 END),0) AS cash_expenses
         FROM expenses e
-        WHERE e.date >= '${from}' AND e.date <= '${to}' ${ebf}
+        WHERE (e.date >= '${from}'::date AND e.date <= '${to}'::date) ${ebf}
       `);
 
       const cashSalesQ = await pool.query(`
@@ -495,22 +495,25 @@ export async function registerRoutes(
       const invValueQ = await pool.query(`
         WITH last_cost AS (
           SELECT DISTINCT ON (pi.product_id)
-            pi.product_id, pi.unit_cost_final AS unit_cost
+            pi.product_id,
+            COALESCE(NULLIF(pi.unit_cost_final::numeric, 0), pi.unit_cost_base::numeric, 0) AS unit_cost
           FROM purchase_items pi
-          JOIN purchase_invoices pv ON pv.id=pi.purchase_id
-          WHERE pv.status='approved'
+          JOIN purchase_invoices pv ON pv.id = pi.purchase_id
+          WHERE pv.status = 'approved'
+            AND (pi.unit_cost_final IS NOT NULL OR pi.unit_cost_base IS NOT NULL)
           ORDER BY pi.product_id, pv.invoice_date DESC, pv.id DESC, pi.id DESC
         ),
         qty AS (
           SELECT li.product_id, SUM(li.qty_on_hand) AS qty_on_hand
           FROM location_inventory li
-          JOIN locations l ON l.id=li.location_id
-          WHERE 1=1 ${lbf}
+          JOIN locations l ON l.id = li.location_id
+          WHERE li.qty_on_hand > 0 ${lbf}
           GROUP BY li.product_id
         )
-        SELECT COALESCE(SUM(qty.qty_on_hand * COALESCE(last_cost.unit_cost,0)),0) AS value
+        SELECT COALESCE(SUM(qty.qty_on_hand * COALESCE(last_cost.unit_cost, 0)), 0) AS value,
+               COUNT(DISTINCT qty.product_id) AS product_count
         FROM qty
-        LEFT JOIN last_cost ON last_cost.product_id=qty.product_id
+        LEFT JOIN last_cost ON last_cost.product_id = qty.product_id
       `);
 
       const k = kpiQ.rows[0];
