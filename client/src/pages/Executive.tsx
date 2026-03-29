@@ -621,7 +621,7 @@ function VsCard({ label, today, yesterday, change, invert, currentLabel, prevLab
           {change > 0 ? "+" : ""}{change.toFixed(1)}%
         </div>
       ) : (
-        <p className="text-xs text-muted-foreground">{t("executive.no_data")}</p>
+        <p className="text-xs text-muted-foreground">—</p>
       )}
     </div>
   );
