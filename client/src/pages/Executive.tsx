@@ -60,6 +60,7 @@ export default function Executive() {
   const [fromDate, setFromDate] = useState(todayStr());
   const [toDate, setToDate] = useState(todayStr());
   const [productMode, setProductMode] = useState<"revenue" | "qty">("revenue");
+  const [activePeriod, setActivePeriod] = useState<string>("today");
 
   const { data: branches = [] } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
@@ -67,6 +68,7 @@ export default function Executive() {
   });
 
   function applyQuick(preset: string) {
+    setActivePeriod(preset);
     const now = new Date();
     const td = todayStr();
     switch (preset) {
@@ -172,14 +174,21 @@ export default function Executive() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {quickButtons.map(q => (
-            <Button key={q.id} variant="outline" size="sm" className="text-xs" onClick={() => applyQuick(q.id)} data-testid={`quick-${q.id}`}>
+            <Button
+              key={q.id}
+              variant={activePeriod === q.id ? "default" : "outline"}
+              size="sm"
+              className={`text-xs ${activePeriod === q.id ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""}`}
+              onClick={() => applyQuick(q.id)}
+              data-testid={`quick-${q.id}`}
+            >
               {q.label}
             </Button>
           ))}
           <div className="flex items-center gap-2 ltr:ml-auto rtl:mr-auto">
-            <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-36 h-8 text-xs" data-testid="input-exec-from" />
+            <Input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setActivePeriod(""); }} className="w-36 h-8 text-xs" data-testid="input-exec-from" />
             <span className="text-xs text-muted-foreground">→</span>
-            <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-36 h-8 text-xs" data-testid="input-exec-to" />
+            <Input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setActivePeriod(""); }} className="w-36 h-8 text-xs" data-testid="input-exec-to" />
           </div>
         </div>
       </div>
