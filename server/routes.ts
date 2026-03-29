@@ -17,6 +17,15 @@ import {
   PAYMENT_METHODS, type PaymentMethod,
   insertPayrollRunSchema, insertEmployeeAdvanceSchema, insertEmployeeDeductionSchema,
 } from "@shared/schema";
+import {
+  formatZodError,
+  loginSchema,
+  createUserSchema, updateUserSchema,
+  updateProductSchema,
+  createProductVariantSchema, updateProductVariantSchema, quickCreateVariantSchema,
+  updateCustomerSchema,
+  orderItemSchema, orderStatusSchema,
+} from "./validation";
 import { registerExportRoutes } from "./exports";
 import { journalForSale, journalForExpense, journalForPurchase, journalForSaleReturn, journalForSupplierPayment, journalForSalaryPayment } from "./autoJournal";
 import { registerBackupRoutes } from "./backup";
@@ -101,10 +110,9 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   app.post("/api/auth/login", async (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) {
-      return res.status(400).json({ message: "اسم المستخدم وكلمة المرور مطلوبان" });
-    }
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+    const { username, password } = parsed.data;
     const user = await storage.getUserByUsername(username);
     if (!user) {
       return res.status(401).json({ message: "اسم المستخدم أو كلمة المرور غير صحيحة" });
@@ -250,13 +258,9 @@ export async function registerRoutes(
     res.json(allUsers.map(({ password: _, ...u }) => u));
   });
   app.post("/api/users", requireOwnerOrAdmin, async (req, res) => {
-    const { name, username, password, role, branchId, terminalName, isActive, pin, phone, salary } = req.body;
-    if (!name || !username || !password) {
-      return res.status(400).json({ message: "الاسم واسم المستخدم وكلمة المرور مطلوبة" });
-    }
-    if (password.length < 6) {
-      return res.status(400).json({ message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" });
-    }
+    const parsed = createUserSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+    const { name, username, password, role, branchId, terminalName, isActive, pin, phone, salary } = parsed.data;
     const existing = await storage.getUserByUsername(username);
     if (existing) {
       return res.status(409).json({ message: "اسم المستخدم مستخدم بالفعل" });
@@ -282,10 +286,12 @@ export async function registerRoutes(
   });
   app.patch("/api/users/:id", requireOwnerOrAdmin, async (req, res) => {
     const id = Number(req.params.id);
+    const parsed = updateUserSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
     const { name, role, branchId, terminalName, isActive, pin, phone, salary, salaryType, commissionRate, employmentStatus, openingAdvanceBalance, openingPayableBalance } = req.body;
     const updateData: any = {};
-    if (name !== undefined) updateData.name = name;
-    if (role !== undefined) updateData.role = role;
+    if (name !== undefined) updateData.name = parsed.data.name;
+    if (role !== undefined) updateData.role = parsed.data.role;
     if (branchId !== undefined) updateData.branchId = Number(branchId);
     if (terminalName !== undefined) updateData.terminalName = terminalName;
     if (isActive !== undefined) updateData.isActive = isActive;
@@ -834,11 +840,13 @@ export async function registerRoutes(
   });
   app.post("/api/products", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     const parsed = insertProductSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
     res.status(201).json(await storage.createProduct(parsed.data));
   });
   app.patch("/api/products/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
-    const row = await storage.updateProduct(Number(req.params.id), req.body);
+    const parsed = updateProductSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+    const row = await storage.updateProduct(Number(req.params.id), parsed.data);
     if (!row) return res.status(404).json({ message: "المنتج غير موجود" });
     res.json(row);
   });
@@ -858,17 +866,19 @@ export async function registerRoutes(
   app.post("/api/products/:id/variants", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const productId = Number(req.params.id);
+      const parsed = createProductVariantSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
       const product = await storage.getProduct(productId);
       if (!product) return res.status(404).json({ message: "المنتج غير موجود" });
-      if (req.body.barcode) {
-        const existing = await storage.getVariantByBarcode(req.body.barcode);
+      if (parsed.data.barcode) {
+        const existing = await storage.getVariantByBarcode(parsed.data.barcode);
         if (existing) return res.status(400).json({ message: "الباركود مستخدم بالفعل" });
       }
-      if (req.body.sku) {
-        const existing = await storage.getVariantBySku(req.body.sku);
+      if (parsed.data.sku) {
+        const existing = await storage.getVariantBySku(parsed.data.sku);
         if (existing) return res.status(400).json({ message: "رمز SKU مستخدم بالفعل" });
       }
-      const variant = await storage.createVariant({ ...req.body, productId });
+      const variant = await storage.createVariant({ ...parsed.data, productId });
       res.status(201).json(variant);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ" });
@@ -885,15 +895,17 @@ export async function registerRoutes(
   app.patch("/api/variants/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const id = Number(req.params.id);
-      if (req.body.barcode) {
-        const existing = await storage.getVariantByBarcode(req.body.barcode);
+      const parsed = updateProductVariantSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      if (parsed.data.barcode) {
+        const existing = await storage.getVariantByBarcode(parsed.data.barcode);
         if (existing && existing.id !== id) return res.status(400).json({ message: "الباركود مستخدم بالفعل" });
       }
-      if (req.body.sku) {
-        const existing = await storage.getVariantBySku(req.body.sku);
+      if (parsed.data.sku) {
+        const existing = await storage.getVariantBySku(parsed.data.sku);
         if (existing && existing.id !== id) return res.status(400).json({ message: "رمز SKU مستخدم بالفعل" });
       }
-      const variant = await storage.updateVariant(id, req.body);
+      const variant = await storage.updateVariant(id, parsed.data);
       if (!variant) return res.status(404).json({ message: "المتغير غير موجود" });
       res.json(variant);
     } catch (err: any) {
@@ -906,8 +918,9 @@ export async function registerRoutes(
   });
   app.post("/api/variants/quick-create", requireAuth, async (req, res) => {
     try {
-      const { productName, categoryId, barcode, sku, color, size, price, costDefault } = req.body;
-      if (!productName) return res.status(400).json({ message: "اسم المنتج مطلوب" });
+      const parsed = quickCreateVariantSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      const { productName, categoryId, barcode, sku, color, size, price, costDefault } = parsed.data;
       if (barcode) {
         const existing = await storage.getVariantByBarcode(barcode);
         if (existing) return res.status(400).json({ message: "الباركود مستخدم بالفعل" });
@@ -1361,7 +1374,7 @@ export async function registerRoutes(
   app.post("/api/customers", requireAuth, async (req, res) => {
     try {
       const parsed = insertCustomerSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
       if (parsed.data.phone) {
         const existing = await storage.getCustomerByPhone(parsed.data.phone);
         if (existing) return res.status(409).json({ message: "phone_exists" });
@@ -1378,13 +1391,15 @@ export async function registerRoutes(
   app.put("/api/customers/:id", requireAuth, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { name, phone, notes, active, branchId } = req.body;
+      const parsed = updateCustomerSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      const { name, phone, notes, active, branchId } = parsed.data;
       if (phone) {
         const existing = await storage.getCustomerByPhone(phone);
-        if (existing && existing.id !== id) return res.status(409).json({ message: "phone_exists" });
+        if (existing && existing.id !== id) return res.status(409).json({ message: "رقم الهاتف مستخدم بالفعل" });
       }
       const updated = await storage.updateCustomer(id, { name, phone, notes, active, branchId });
-      if (!updated) return res.status(404).json({ message: "Customer not found" });
+      if (!updated) return res.status(404).json({ message: "العميل غير موجود" });
       res.json(updated);
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
@@ -1406,7 +1421,7 @@ export async function registerRoutes(
   });
   app.post("/api/suppliers", requireAuth, requireManager, async (req, res) => {
     const parsed = insertSupplierSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
     if (!parsed.data.name || !parsed.data.name.trim()) {
       return res.status(400).json({ message: "اسم المورد مطلوب" });
     }
@@ -1515,9 +1530,15 @@ export async function registerRoutes(
       cashierId: user.id,
       shiftId,
     });
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "لا توجد منتجات في الفاتورة" });
+    }
+    for (let i = 0; i < (items as any[]).length; i++) {
+      const itemParsed = orderItemSchema.safeParse((items as any[])[i]);
+      if (!itemParsed.success) {
+        return res.status(400).json({ message: `بند ${i + 1}: ${formatZodError(itemParsed.error)}` });
+      }
     }
     try {
       const sale = await storage.createSale(parsed.data, items);
@@ -1568,9 +1589,15 @@ export async function registerRoutes(
     try {
       const { items, ...orderData } = req.body;
       const parsed = insertOrderSchema.safeParse(orderData);
-      if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-      if (!items || !Array.isArray(items)) {
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      if (!items || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ message: "لا توجد منتجات في الطلب" });
+      }
+      for (let i = 0; i < (items as any[]).length; i++) {
+        const itemParsed = orderItemSchema.safeParse((items as any[])[i]);
+        if (!itemParsed.success) {
+          return res.status(400).json({ message: `بند ${i + 1}: ${formatZodError(itemParsed.error)}` });
+        }
       }
       const branchId = parsed.data.branchId;
       let shiftId = parsed.data.shiftId ?? null;
@@ -1594,28 +1621,44 @@ export async function registerRoutes(
     }
   });
   app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
-    const { status } = req.body;
-    if (!status) return res.status(400).json({ message: "الحالة مطلوبة" });
-    const existing = await storage.getOrder(Number(req.params.id));
-    if (!existing) return res.status(404).json({ message: "الطلب غير موجود" });
-    const oldStatus = existing.status;
-    const row = await storage.updateOrderStatus(Number(req.params.id), status);
-    if (!row) return res.status(404).json({ message: "الطلب غير موجود" });
-    const user = req.session?.user;
-    if (status === "cancelled" || oldStatus !== status) {
-      await storage.addAuditLog({
-        action: status === "cancelled" ? "order_cancel" : "order_status_change",
-        entityType: "order",
-        entityId: row.id,
-        branchId: row.branchId ?? null,
-        userId: user?.id ?? null,
-        userName: user?.name ?? null,
-        details: `تغيير حالة الطلب ${row.orderNumber} من ${oldStatus} إلى ${status}`,
-        oldValue: JSON.stringify({ status: oldStatus }),
-        newValue: JSON.stringify({ status }),
-      });
+    try {
+      const statusParsed = orderStatusSchema.safeParse(req.body);
+      if (!statusParsed.success) return res.status(400).json({ message: formatZodError(statusParsed.error) });
+      const { status } = statusParsed.data;
+      const existing = await storage.getOrder(Number(req.params.id));
+      if (!existing) return res.status(404).json({ message: "الطلب غير موجود" });
+      const oldStatus = existing.status;
+      const row = await storage.updateOrderStatus(Number(req.params.id), status);
+      if (!row) return res.status(404).json({ message: "الطلب غير موجود" });
+
+      // Deduct inventory when order is completed for the first time
+      if (status === "completed" && oldStatus !== "completed") {
+        await storage.deductOrderInventory(row.id, req.session.userId ?? null);
+      }
+
+      // Restore inventory if a completed order is cancelled via status change
+      if (status === "cancelled" && oldStatus === "completed") {
+        await storage.restoreOrderInventory(row.id, req.session.userId ?? null);
+      }
+
+      const user = req.session?.user;
+      if (status === "cancelled" || oldStatus !== status) {
+        await storage.addAuditLog({
+          action: status === "cancelled" ? "order_cancel" : "order_status_change",
+          entityType: "order",
+          entityId: row.id,
+          branchId: row.branchId ?? null,
+          userId: user?.id ?? null,
+          userName: user?.name ?? null,
+          details: `تغيير حالة الطلب ${row.orderNumber} من ${oldStatus} إلى ${status}`,
+          oldValue: JSON.stringify({ status: oldStatus }),
+          newValue: JSON.stringify({ status }),
+        });
+      }
+      res.json(row);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
     }
-    res.json(row);
   });
   app.post("/api/orders/:id/pay", requireAuth, async (req, res) => {
     const { paymentMethod, bankTxnId } = req.body;

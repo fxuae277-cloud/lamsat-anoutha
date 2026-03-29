@@ -161,6 +161,8 @@ export interface IStorage {
   getSaleReturn(id: number): Promise<SaleReturn | undefined>;
   getSaleReturnItems(returnId: number): Promise<SaleReturnItem[]>;
   cancelOrderFull(orderId: number, userId: number, userName: string, reason: string): Promise<Order | undefined>;
+  deductOrderInventory(orderId: number, changedBy: number | null): Promise<void>;
+  restoreOrderInventory(orderId: number, changedBy: number | null): Promise<void>;
   addAuditLog(data: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(filters?: { entityType?: string; branchId?: number; from?: string; to?: string }): Promise<any[]>;
   getPayrollRuns(): Promise<PayrollRun[]>;
@@ -891,11 +893,218 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
   async createOrder(data: InsertOrder, items: InsertOrderItem[]) {
-    const [order] = await db.insert(orders).values(data).returning();
-    for (const item of items) {
-      await db.insert(orderItems).values({ ...item, orderId: order.id });
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      // Availability check only — deduction happens on status → completed
+      for (const item of items) {
+        const variantRes = await client.query(
+          `SELECT pv.id as variant_id FROM product_variants pv WHERE pv.product_id = $1 ORDER BY pv.id LIMIT 1`,
+          [item.productId]
+        );
+        const variantId = variantRes.rows[0]?.variant_id;
+        if (variantId) {
+          // Lock rows to prevent concurrent orders from bypassing the check
+          await client.query(
+            `SELECT id FROM inventory_balances
+             WHERE variant_id = $1 AND location_id IN (SELECT id FROM locations WHERE branch_id = $2)
+             FOR UPDATE`,
+            [variantId, data.branchId]
+          );
+          const invRow = await client.query(
+            `SELECT COALESCE(SUM(ib.qty_on_hand), 0) as total_available
+             FROM inventory_balances ib
+             JOIN locations l ON l.id = ib.location_id
+             WHERE l.branch_id = $1 AND ib.variant_id = $2`,
+            [data.branchId, variantId]
+          );
+          const available = Number(invRow.rows[0]?.total_available || 0);
+          if (available < item.quantity) {
+            const prodRes = await client.query(`SELECT name FROM products WHERE id = $1`, [item.productId]);
+            const pName = prodRes.rows[0]?.name || `#${item.productId}`;
+            throw new Error(`المخزون غير كاف للمنتج "${pName}" — المتوفر: ${available}، المطلوب: ${item.quantity}`);
+          }
+        }
+      }
+
+      const orderRes = await client.query(
+        `INSERT INTO orders (order_number, customer_name, customer_phone, city, address, branch_id, shift_id, employee_id, delivery_type, status, payment_method, bank_txn_id, total, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+        [
+          data.orderNumber, data.customerName, data.customerPhone || null,
+          data.city || null, data.address || null, data.branchId || null,
+          data.shiftId || null, data.employeeId || null, data.deliveryType || "pickup",
+          data.status || "new", data.paymentMethod || "cash",
+          data.bankTxnId || null, data.total || "0", data.notes || null,
+        ]
+      );
+      const order = orderRes.rows[0];
+      const orderId = order.id;
+
+      for (const item of items) {
+        await client.query(
+          `INSERT INTO order_items (order_id, product_id, quantity, unit_price, total)
+           VALUES ($1,$2,$3,$4,$5)`,
+          [orderId, item.productId, item.quantity, item.unitPrice || "0", item.total || "0"]
+        );
+      }
+
+      await client.query("COMMIT");
+      return order;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
     }
-    return order;
+  }
+
+  async deductOrderInventory(orderId: number, changedBy: number | null): Promise<void> {
+    const order = await this.getOrder(orderId);
+    if (!order || !order.branchId) return;
+    const items = await this.getOrderItems(orderId);
+    if (items.length === 0) return;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const branchLocRes = await client.query(
+        `SELECT id FROM locations WHERE branch_id = $1 AND is_branch_default = true ORDER BY id LIMIT 1`,
+        [order.branchId]
+      );
+      if (branchLocRes.rows.length === 0) throw new Error("لا يوجد مخزن افتراضي للفرع");
+      const branchLocationId = branchLocRes.rows[0].id;
+
+      for (const item of items) {
+        const variantRes = await client.query(
+          `SELECT pv.id as variant_id FROM product_variants pv WHERE pv.product_id = $1 ORDER BY pv.id LIMIT 1`,
+          [item.productId]
+        );
+        const variantId = variantRes.rows[0]?.variant_id;
+
+        if (variantId) {
+          // Lock + verify availability one more time
+          await client.query(
+            `SELECT id FROM inventory_balances
+             WHERE variant_id = $1 AND location_id IN (SELECT id FROM locations WHERE branch_id = $2)
+             FOR UPDATE`,
+            [variantId, order.branchId]
+          );
+          const invRow = await client.query(
+            `SELECT COALESCE(SUM(ib.qty_on_hand), 0) as total_available
+             FROM inventory_balances ib
+             JOIN locations l ON l.id = ib.location_id
+             WHERE l.branch_id = $1 AND ib.variant_id = $2`,
+            [order.branchId, variantId]
+          );
+          const available = Number(invRow.rows[0]?.total_available || 0);
+          if (available < item.quantity) {
+            const prodRes = await client.query(`SELECT name FROM products WHERE id = $1`, [item.productId]);
+            const pName = prodRes.rows[0]?.name || `#${item.productId}`;
+            throw new Error(`المخزون غير كاف للمنتج "${pName}" — المتوفر: ${available}، المطلوب: ${item.quantity}`);
+          }
+
+          // Deduct from inventory_balances
+          const balRow = await client.query(
+            `SELECT qty_on_hand FROM inventory_balances WHERE location_id = $1 AND variant_id = $2`,
+            [branchLocationId, variantId]
+          );
+          if (balRow.rows.length > 0) {
+            await client.query(
+              `UPDATE inventory_balances SET qty_on_hand = qty_on_hand - $1
+               WHERE location_id = $2 AND variant_id = $3`,
+              [item.quantity, branchLocationId, variantId]
+            );
+          } else {
+            await client.query(
+              `INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand)
+               VALUES ($1, $2, (0 - $3::numeric))`,
+              [branchLocationId, variantId, item.quantity]
+            );
+          }
+
+          await client.query(`
+            INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by)
+            VALUES ($1, $2, $3, 'order_completed', 'orders', $4, $5)
+          `, [variantId, branchLocationId, -item.quantity, orderId, changedBy]);
+        }
+
+        // Deduct from location_inventory (product-level)
+        await client.query(
+          `INSERT INTO location_inventory (location_id, product_id, qty_on_hand, reorder_level, updated_at)
+           VALUES ($1, $2, (0 - $3::int), 5, now())
+           ON CONFLICT (location_id, product_id) DO UPDATE
+           SET qty_on_hand = location_inventory.qty_on_hand - $3::int, updated_at = now()`,
+          [branchLocationId, item.productId, item.quantity]
+        );
+      }
+
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async restoreOrderInventory(orderId: number, changedBy: number | null): Promise<void> {
+    const order = await this.getOrder(orderId);
+    if (!order || !order.branchId) return;
+    const items = await this.getOrderItems(orderId);
+    if (items.length === 0) return;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const branchLocRes = await client.query(
+        `SELECT id FROM locations WHERE branch_id = $1 AND is_branch_default = true ORDER BY id LIMIT 1`,
+        [order.branchId]
+      );
+      if (branchLocRes.rows.length === 0) throw new Error("لا يوجد مخزن افتراضي للفرع");
+      const branchLocationId = branchLocRes.rows[0].id;
+
+      for (const item of items) {
+        const variantRes = await client.query(
+          `SELECT pv.id as variant_id FROM product_variants pv WHERE pv.product_id = $1 ORDER BY pv.id LIMIT 1`,
+          [item.productId]
+        );
+        const variantId = variantRes.rows[0]?.variant_id;
+
+        if (variantId) {
+          // Restore to inventory_balances
+          await client.query(
+            `UPDATE inventory_balances SET qty_on_hand = qty_on_hand + $1
+             WHERE location_id = $2 AND variant_id = $3`,
+            [item.quantity, branchLocationId, variantId]
+          );
+
+          await client.query(`
+            INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by)
+            VALUES ($1, $2, $3, 'order_cancelled', 'orders', $4, $5)
+          `, [variantId, branchLocationId, item.quantity, orderId, changedBy]);
+        }
+
+        // Restore to location_inventory (product-level)
+        await client.query(
+          `INSERT INTO location_inventory (location_id, product_id, qty_on_hand, reorder_level, updated_at)
+           VALUES ($1, $2, $3::int, 5, now())
+           ON CONFLICT (location_id, product_id) DO UPDATE
+           SET qty_on_hand = location_inventory.qty_on_hand + $3::int, updated_at = now()`,
+          [branchLocationId, item.productId, item.quantity]
+        );
+      }
+
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   }
   async updateOrderStatus(id: number, status: string) {
     const [row] = await db.update(orders).set({ status }).where(eq(orders.id, id)).returning();
@@ -3137,6 +3346,11 @@ export class DatabaseStorage implements IStorage {
     if (!order) return undefined;
 
     const oldStatus = order.status;
+
+    // Restore inventory if it was already deducted (only happens after completed)
+    if (oldStatus === "completed") {
+      await this.restoreOrderInventory(orderId, userId);
+    }
 
     if (order.status === "paid") {
       const todayStr = new Date().toISOString().slice(0, 10);
