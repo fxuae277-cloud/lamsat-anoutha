@@ -8,7 +8,8 @@
   font-style: normal;
   font-weight: 300;
   font-display: swap;
-  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuOKfMZg.ttf) format('truetype');
+  src: local('Segoe UI'), local('Arial'), local('Helvetica Neue'),
+       url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuOKfMZg.ttf) format('truetype');
   unicode-range: U+0020-007F;
 }
 @font-face {
@@ -16,7 +17,8 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf) format('truetype');
+  src: local('Segoe UI'), local('Arial'), local('Helvetica Neue'),
+       url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf) format('truetype');
   unicode-range: U+0020-007F;
 }
 @font-face {
@@ -24,7 +26,8 @@
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuI6fMZg.ttf) format('truetype');
+  src: local('Segoe UI'), local('Arial'), local('Helvetica Neue'),
+       url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuI6fMZg.ttf) format('truetype');
   unicode-range: U+0020-007F;
 }
 @font-face {
@@ -32,7 +35,8 @@
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuGKYMZg.ttf) format('truetype');
+  src: local('Segoe UI Semibold'), local('Arial'), local('Helvetica Neue'),
+       url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuGKYMZg.ttf) format('truetype');
   unicode-range: U+0020-007F;
 }
 @font-face {
@@ -40,7 +44,8 @@
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf) format('truetype');
+  src: local('Segoe UI Bold'), local('Arial Bold'), local('Helvetica Neue Bold'),
+       url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf) format('truetype');
   unicode-range: U+0020-007F;
 }
 @font-face {
@@ -48,13 +53,20 @@
   font-style: normal;
   font-weight: 800;
   font-display: swap;
-  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuDyYMZg.ttf) format('truetype');
+  src: local('Segoe UI Bold'), local('Arial Bold'), local('Helvetica Neue Bold'),
+       url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuDyYMZg.ttf) format('truetype');
   unicode-range: U+0020-007F;
 }
 
 * {
   font-variant-numeric: lining-nums tabular-nums;
   font-feature-settings: "lnum" 1, "tnum" 1;
+}
+
+/* Force Western (Latin) digits in Arabic context — prevents Cairo font from
+   substituting Eastern Arabic-Indic numerals via OpenType locl feature */
+:lang(ar) {
+  font-feature-settings: "lnum" 1, "tnum" 1, "locl" 0;
 }
 
 @theme inline {
