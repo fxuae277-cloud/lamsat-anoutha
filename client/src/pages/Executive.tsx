@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -13,7 +13,7 @@ import { useLocation } from "wouter";
 import {
   TrendingUp, TrendingDown, DollarSign, BarChart3, Receipt,
   Package, AlertTriangle, Warehouse, CreditCard, Banknote, Building2,
-  Download, ArrowUpRight, ArrowDownRight, Minus, Info
+  Download, ArrowUpRight, ArrowDownRight, Minus, Info, CalendarIcon
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -78,6 +78,8 @@ export default function Executive() {
   const [toDate, setToDate] = useState(todayStr());
   const [fromDisplay, setFromDisplay] = useState(() => isoToDisplay(todayStr()));
   const [toDisplay, setToDisplay] = useState(() => isoToDisplay(todayStr()));
+  const fromPickerRef = useRef<HTMLInputElement>(null);
+  const toPickerRef = useRef<HTMLInputElement>(null);
   const [productMode, setProductMode] = useState<"revenue" | "qty">("revenue");
   const [activePeriod, setActivePeriod] = useState<string>("today");
 
@@ -210,35 +212,77 @@ export default function Executive() {
             </Button>
           ))}
           <div className="flex items-center gap-2 ltr:ml-auto rtl:mr-auto">
-            <Input
-              type="text"
-              inputMode="numeric"
-              placeholder="DD/MM/YYYY"
-              pattern="\d{2}/\d{2}/\d{4}"
-              value={fromDisplay}
-              onChange={e => {
-                setFromDisplay(e.target.value);
-                const iso = displayToIso(e.target.value);
-                if (iso) { setFromDate(iso); setActivePeriod(""); }
-              }}
-              className="w-32 h-8 text-xs"
-              data-testid="input-exec-from"
-            />
+            <div className="relative flex items-center">
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="DD/MM/YYYY"
+                pattern="\d{2}/\d{2}/\d{4}"
+                value={fromDisplay}
+                onChange={e => {
+                  setFromDisplay(e.target.value);
+                  const iso = displayToIso(e.target.value);
+                  if (iso) { setFromDate(iso); setActivePeriod(""); }
+                }}
+                className="w-32 h-8 text-xs pr-7"
+                data-testid="input-exec-from"
+              />
+              <button
+                type="button"
+                onClick={() => fromPickerRef.current?.showPicker?.()}
+                className="absolute ltr:right-1 rtl:left-1 text-muted-foreground hover:text-foreground"
+              >
+                <CalendarIcon className="w-3.5 h-3.5" />
+              </button>
+              <input
+                ref={fromPickerRef}
+                type="date"
+                lang="en-US"
+                value={fromDate}
+                onChange={e => {
+                  const iso = e.target.value;
+                  if (iso) { setFromDate(iso); setFromDisplay(isoToDisplay(iso)); setActivePeriod(""); }
+                }}
+                className="absolute opacity-0 w-0 h-0 pointer-events-none"
+                tabIndex={-1}
+              />
+            </div>
             <span className="text-xs text-muted-foreground">→</span>
-            <Input
-              type="text"
-              inputMode="numeric"
-              placeholder="DD/MM/YYYY"
-              pattern="\d{2}/\d{2}/\d{4}"
-              value={toDisplay}
-              onChange={e => {
-                setToDisplay(e.target.value);
-                const iso = displayToIso(e.target.value);
-                if (iso) { setToDate(iso); setActivePeriod(""); }
-              }}
-              className="w-32 h-8 text-xs"
-              data-testid="input-exec-to"
-            />
+            <div className="relative flex items-center">
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="DD/MM/YYYY"
+                pattern="\d{2}/\d{2}/\d{4}"
+                value={toDisplay}
+                onChange={e => {
+                  setToDisplay(e.target.value);
+                  const iso = displayToIso(e.target.value);
+                  if (iso) { setToDate(iso); setActivePeriod(""); }
+                }}
+                className="w-32 h-8 text-xs pr-7"
+                data-testid="input-exec-to"
+              />
+              <button
+                type="button"
+                onClick={() => toPickerRef.current?.showPicker?.()}
+                className="absolute ltr:right-1 rtl:left-1 text-muted-foreground hover:text-foreground"
+              >
+                <CalendarIcon className="w-3.5 h-3.5" />
+              </button>
+              <input
+                ref={toPickerRef}
+                type="date"
+                lang="en-US"
+                value={toDate}
+                onChange={e => {
+                  const iso = e.target.value;
+                  if (iso) { setToDate(iso); setToDisplay(isoToDisplay(iso)); setActivePeriod(""); }
+                }}
+                className="absolute opacity-0 w-0 h-0 pointer-events-none"
+                tabIndex={-1}
+              />
+            </div>
           </div>
         </div>
       </div>
