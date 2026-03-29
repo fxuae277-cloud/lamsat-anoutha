@@ -23,6 +23,23 @@ import type { Branch } from "@shared/schema";
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 
+/** YYYY-MM-DD → DD/MM/YYYY */
+function isoToDisplay(iso: string): string {
+  if (!iso || iso.length !== 10) return iso;
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+/** DD/MM/YYYY → YYYY-MM-DD, returns null if invalid */
+function displayToIso(display: string): string | null {
+  const match = display.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return null;
+  const [, d, m, y] = match;
+  const date = new Date(`${y}-${m}-${d}`);
+  if (isNaN(date.getTime())) return null;
+  return `${y}-${m}-${d}`;
+}
+
 function omr(v: number | string | null) {
   if (v === null || v === undefined) return "0.000";
   return parseFloat(String(v)).toFixed(3);
@@ -59,6 +76,8 @@ export default function Executive() {
   const [branchId, setBranchId] = useState<string>("all");
   const [fromDate, setFromDate] = useState(todayStr());
   const [toDate, setToDate] = useState(todayStr());
+  const [fromDisplay, setFromDisplay] = useState(() => isoToDisplay(todayStr()));
+  const [toDisplay, setToDisplay] = useState(() => isoToDisplay(todayStr()));
   const [productMode, setProductMode] = useState<"revenue" | "qty">("revenue");
   const [activePeriod, setActivePeriod] = useState<string>("today");
 
@@ -67,33 +86,38 @@ export default function Executive() {
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
+  function setDateRange(from: string, to: string) {
+    setFromDate(from); setToDate(to);
+    setFromDisplay(isoToDisplay(from)); setToDisplay(isoToDisplay(to));
+  }
+
   function applyQuick(preset: string) {
     setActivePeriod(preset);
     const now = new Date();
     const td = todayStr();
     switch (preset) {
-      case "today": setFromDate(td); setToDate(td); break;
+      case "today": setDateRange(td, td); break;
       case "yesterday": {
         const y = new Date(); y.setDate(y.getDate() - 1);
         const ys = y.toISOString().slice(0, 10);
-        setFromDate(ys); setToDate(ys); break;
+        setDateRange(ys, ys); break;
       }
       case "7d": {
         const d = new Date(); d.setDate(d.getDate() - 6);
-        setFromDate(d.toISOString().slice(0, 10)); setToDate(td); break;
+        setDateRange(d.toISOString().slice(0, 10), td); break;
       }
       case "30d": {
         const d = new Date(); d.setDate(d.getDate() - 29);
-        setFromDate(d.toISOString().slice(0, 10)); setToDate(td); break;
+        setDateRange(d.toISOString().slice(0, 10), td); break;
       }
       case "this_month": {
         const first = new Date(now.getFullYear(), now.getMonth(), 1);
-        setFromDate(first.toISOString().slice(0, 10)); setToDate(td); break;
+        setDateRange(first.toISOString().slice(0, 10), td); break;
       }
       case "last_month": {
         const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         const last = new Date(now.getFullYear(), now.getMonth(), 0);
-        setFromDate(first.toISOString().slice(0, 10)); setToDate(last.toISOString().slice(0, 10)); break;
+        setDateRange(first.toISOString().slice(0, 10), last.toISOString().slice(0, 10)); break;
       }
     }
   }
@@ -186,9 +210,35 @@ export default function Executive() {
             </Button>
           ))}
           <div className="flex items-center gap-2 ltr:ml-auto rtl:mr-auto">
-            <Input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setActivePeriod(""); }} className="w-36 h-8 text-xs" data-testid="input-exec-from" />
+            <Input
+              type="text"
+              inputMode="numeric"
+              placeholder="DD/MM/YYYY"
+              pattern="\d{2}/\d{2}/\d{4}"
+              value={fromDisplay}
+              onChange={e => {
+                setFromDisplay(e.target.value);
+                const iso = displayToIso(e.target.value);
+                if (iso) { setFromDate(iso); setActivePeriod(""); }
+              }}
+              className="w-32 h-8 text-xs"
+              data-testid="input-exec-from"
+            />
             <span className="text-xs text-muted-foreground">→</span>
-            <Input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setActivePeriod(""); }} className="w-36 h-8 text-xs" data-testid="input-exec-to" />
+            <Input
+              type="text"
+              inputMode="numeric"
+              placeholder="DD/MM/YYYY"
+              pattern="\d{2}/\d{2}/\d{4}"
+              value={toDisplay}
+              onChange={e => {
+                setToDisplay(e.target.value);
+                const iso = displayToIso(e.target.value);
+                if (iso) { setToDate(iso); setActivePeriod(""); }
+              }}
+              className="w-32 h-8 text-xs"
+              data-testid="input-exec-to"
+            />
           </div>
         </div>
       </div>
