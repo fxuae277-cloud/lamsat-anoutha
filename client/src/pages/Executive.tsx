@@ -247,7 +247,7 @@ export default function Executive() {
               />
               <button
                 type="button"
-                onClick={() => fromPickerRef.current?.showPicker?.()}
+                onClick={() => { try { fromPickerRef.current?.showPicker?.(); } catch { fromPickerRef.current?.click(); } }}
                 className="absolute ltr:right-1 rtl:left-1 text-muted-foreground hover:text-foreground"
               >
                 <CalendarIcon className="w-3.5 h-3.5" />
@@ -283,7 +283,7 @@ export default function Executive() {
               />
               <button
                 type="button"
-                onClick={() => toPickerRef.current?.showPicker?.()}
+                onClick={() => { try { toPickerRef.current?.showPicker?.(); } catch { toPickerRef.current?.click(); } }}
                 className="absolute ltr:right-1 rtl:left-1 text-muted-foreground hover:text-foreground"
               >
                 <CalendarIcon className="w-3.5 h-3.5" />
