@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(psql:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(sort -t: -k1 -n)",
+      "Bash(head -30 grep -n \"res\\\\.status\\\\|\\\\.json\\({\" /home/runner/workspace/server/mobile-routes.ts)",
+      "Bash(head -30 grep -n \"res\\\\.status\\\\|\\\\.json\\({\" /home/runner/workspace/server/backup.ts)",
+      "Bash(npm install:*)",
+      "Bash(node:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
