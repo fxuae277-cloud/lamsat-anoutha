@@ -72,6 +72,8 @@ export type User = typeof users.$inferSelect;
 export const categories = pgTable("categories", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
+  parentId: integer("parent_id").references((): any => categories.id),
+  sortOrder: integer("sort_order").default(0),
 });
 export const insertCategorySchema = createInsertSchema(categories).omit({ id: true });
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
@@ -89,6 +91,10 @@ export const products = pgTable("products", {
   avgCost: decimal("avg_cost", { precision: 10, scale: 3 }).default("0"),
   stockQty: integer("stock_qty").default(0),
   lastPurchasePrice: decimal("last_purchase_price", { precision: 10, scale: 3 }).default("0"),
+  productType: text("product_type").notNull().default("simple"),
+  unitOfMeasure: text("unit_of_measure").notNull().default("piece"),
+  minPrice: decimal("min_price", { precision: 10, scale: 3 }).default("0"),
+  isComposite: boolean("is_composite").notNull().default(false),
 });
 export const insertProductSchema = createInsertSchema(products).omit({ id: true });
 export type InsertProduct = z.infer<typeof insertProductSchema>;
@@ -670,6 +676,9 @@ export const productVariants = pgTable("product_variants", {
   createdAt: timestamp("created_at").defaultNow(),
   lastPurchasePrice: decimal("last_purchase_price", { precision: 10, scale: 3 }).default("0"),
   lastReceiptDate: timestamp("last_receipt_date"),
+  isDefault: boolean("is_default").notNull().default(false),
+  weight: decimal("weight", { precision: 8, scale: 3 }),
+  imageUrl: text("image_url"),
 });
 export const insertProductVariantSchema = createInsertSchema(productVariants).omit({ id: true, createdAt: true });
 export type InsertProductVariant = z.infer<typeof insertProductVariantSchema>;
@@ -836,3 +845,56 @@ export const supplierOcrTemplates = pgTable("supplier_ocr_templates", {
 export const insertSupplierOcrTemplateSchema = createInsertSchema(supplierOcrTemplates).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSupplierOcrTemplate = z.infer<typeof insertSupplierOcrTemplateSchema>;
 export type SupplierOcrTemplate = typeof supplierOcrTemplates.$inferSelect;
+
+// ── Professional POS additions (Migration 0005) ───────────────────────────────
+
+export const productCompositeItems = pgTable("product_composite_items", {
+  id:          integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  parentId:    integer("parent_id").references(() => products.id).notNull(),
+  componentId: integer("component_id").references(() => products.id).notNull(),
+  qty:         decimal("qty", { precision: 10, scale: 3 }).notNull().default("1"),
+});
+export const insertProductCompositeItemSchema = createInsertSchema(productCompositeItems).omit({ id: true });
+export type InsertProductCompositeItem = z.infer<typeof insertProductCompositeItemSchema>;
+export type ProductCompositeItem = typeof productCompositeItems.$inferSelect;
+
+export const priceLists = pgTable("price_lists", {
+  id:          integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name:        text("name").notNull().unique(),
+  description: text("description"),
+  active:      boolean("active").notNull().default(true),
+  createdAt:   timestamp("created_at").defaultNow(),
+});
+export const insertPriceListSchema = createInsertSchema(priceLists).omit({ id: true, createdAt: true });
+export type InsertPriceList = z.infer<typeof insertPriceListSchema>;
+export type PriceList = typeof priceLists.$inferSelect;
+
+export const priceListItems = pgTable("price_list_items", {
+  id:            integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  priceListId:   integer("price_list_id").references(() => priceLists.id).notNull(),
+  productId:     integer("product_id").references(() => products.id).notNull(),
+  variantId:     integer("variant_id").references(() => productVariants.id),
+  overridePrice: decimal("override_price", { precision: 10, scale: 3 }).notNull(),
+});
+export const insertPriceListItemSchema = createInsertSchema(priceListItems).omit({ id: true });
+export type InsertPriceListItem = z.infer<typeof insertPriceListItemSchema>;
+export type PriceListItem = typeof priceListItems.$inferSelect;
+
+export const discountRules = pgTable("discount_rules", {
+  id:         integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name:       text("name").notNull(),
+  type:       text("type").notNull().default("percentage"),
+  value:      decimal("value", { precision: 10, scale: 3 }).notNull(),
+  appliesTo:  text("applies_to").notNull().default("all"),
+  categoryId: integer("category_id").references(() => categories.id),
+  productId:  integer("product_id").references(() => products.id),
+  minQty:     integer("min_qty").default(1),
+  minAmount:  decimal("min_amount", { precision: 10, scale: 3 }).default("0"),
+  startsAt:   timestamp("starts_at"),
+  endsAt:     timestamp("ends_at"),
+  active:     boolean("active").notNull().default(true),
+  createdAt:  timestamp("created_at").defaultNow(),
+});
+export const insertDiscountRuleSchema = createInsertSchema(discountRules).omit({ id: true, createdAt: true });
+export type InsertDiscountRule = z.infer<typeof insertDiscountRuleSchema>;
+export type DiscountRule = typeof discountRules.$inferSelect;
