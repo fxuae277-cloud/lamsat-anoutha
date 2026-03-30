@@ -10,7 +10,9 @@
       "Bash(head -30 grep -n \"res\\\\.status\\\\|\\\\.json\\({\" /home/runner/workspace/server/backup.ts)",
       "Bash(npm install:*)",
       "Bash(node:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(wc -l echo \"---\" grep -rn \"console\\\\.\\\\\\(log\\\\|error\\\\|warn\\\\|info\\\\\\)\" /home/runner/workspace/server/ --include=\"*.ts\")",
+      "Bash(python3:*)"
     ]
   }
 }
