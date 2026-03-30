@@ -31,6 +31,7 @@ import { journalForSale, journalForExpense, journalForPurchase, journalForSaleRe
 import { registerBackupRoutes } from "./backup";
 import { registerMobileRoutes } from "./mobile-routes";
 import { saveUploadedFile, parseInvoiceFile } from "./ocr";
+import { authLimiter, passwordLimiter, uploadLimiter } from "./middleware/rateLimiter";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -109,7 +110,7 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", authLimiter, async (req, res) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
     const { username, password } = parsed.data;
@@ -236,7 +237,7 @@ export async function registerRoutes(
     res.status(201).json(await storage.createCity(parsed.data));
   });
 
-  app.post("/api/auth/change-password", requireAuth, async (req, res) => {
+  app.post("/api/auth/change-password", requireAuth, passwordLimiter, async (req, res) => {
     const { oldPassword, newPassword } = req.body;
     if (!oldPassword || !newPassword) {
       return res.status(400).json({ message: "كلمة المرور القديمة والجديدة مطلوبتان" });
@@ -322,7 +323,7 @@ export async function registerRoutes(
     const { password: _, ...safeUser } = user;
     res.json(safeUser);
   });
-  app.patch("/api/users/:id/reset-password", requireOwnerOrAdmin, async (req, res) => {
+  app.patch("/api/users/:id/reset-password", requireOwnerOrAdmin, passwordLimiter, async (req, res) => {
     const id = Number(req.params.id);
     const { newPassword } = req.body;
     if (!newPassword || newPassword.length < 6) {
@@ -2278,7 +2279,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/purchases/:purchaseId/invoice-image", requireAuth, upload.single("file"), async (req: any, res) => {
+  app.post("/api/purchases/:purchaseId/invoice-image", requireAuth, uploadLimiter, upload.single("file"), async (req: any, res) => {
     try {
       if (!req.file) {
         return res.json({ ok: false, stage: "upload", error: "لم يتم رفع صورة" });

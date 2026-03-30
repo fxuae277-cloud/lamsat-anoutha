@@ -6,6 +6,8 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seed";
 import { initBackupScheduler } from "./backup";
+import { apiLimiter } from "./middleware/rateLimiter";
+import { globalErrorHandler } from "./middleware/errorHandler";
 
 const app = express();
 const httpServer = createServer(app);
@@ -31,6 +33,7 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+app.use(apiLimiter);
 
 const PgStore = connectPgSimple(session);
 app.use(
@@ -93,18 +96,7 @@ app.use((req, res, next) => {
   await registerRoutes(httpServer, app);
   initBackupScheduler();
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    console.error("Internal Server Error:", err);
-
-    if (res.headersSent) {
-      return next(err);
-    }
-
-    return res.status(status).json({ message });
-  });
+  app.use(globalErrorHandler);
 
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
