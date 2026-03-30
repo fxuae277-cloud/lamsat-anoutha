@@ -916,7 +916,7 @@ export async function registerRoutes(
     await storage.deleteVariant(Number(req.params.id));
     res.json({ message: "تم حذف المتغير" });
   });
-  app.post("/api/variants/quick-create", requireAuth, async (req, res) => {
+  app.post("/api/variants/quick-create", requireAuth, requireManager, async (req, res) => {
     try {
       const parsed = quickCreateVariantSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
@@ -1066,7 +1066,7 @@ export async function registerRoutes(
       lines,
     });
   });
-  app.post("/api/stock-transfers", requireAuth, async (req, res) => {
+  app.post("/api/stock-transfers", requireAuth, requireManager, async (req, res) => {
     try {
       const transfer = await storage.createStockTransfer({
         fromLocationId: req.body.fromLocationId,
@@ -1080,7 +1080,7 @@ export async function registerRoutes(
       res.status(500).json({ message: err?.message ?? "خطأ" });
     }
   });
-  app.post("/api/stock-transfers/:id/lines", requireAuth, async (req, res) => {
+  app.post("/api/stock-transfers/:id/lines", requireAuth, requireManager, async (req, res) => {
     try {
       const transfer = await storage.getStockTransfer(Number(req.params.id));
       if (!transfer || transfer.status !== "draft") return res.status(400).json({ message: "لا يمكن التعديل" });
@@ -1122,11 +1122,11 @@ export async function registerRoutes(
       res.status(500).json({ message: err?.message ?? "خطأ" });
     }
   });
-  app.delete("/api/stock-transfer-lines/:id", requireAuth, async (req, res) => {
+  app.delete("/api/stock-transfer-lines/:id", requireAuth, requireManager, async (req, res) => {
     await storage.deleteStockTransferLine(Number(req.params.id));
     res.json({ message: "تم الحذف" });
   });
-  app.post("/api/stock-transfers/execute", requireAuth, async (req, res) => {
+  app.post("/api/stock-transfers/execute", requireAuth, requireManager, async (req, res) => {
     const { fromLocationId, toLocationId, lines } = req.body;
     if (!fromLocationId || !toLocationId || !lines?.length) {
       return res.status(400).json({ message: "بيانات ناقصة" });
@@ -1178,7 +1178,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/stock-transfers/:id/approve", requireAuth, async (req, res) => {
+  app.post("/api/stock-transfers/:id/approve", requireAuth, requireManager, async (req, res) => {
     try {
       const result = await storage.approveStockTransfer(Number(req.params.id), req.session.userId!);
       if (!result) return res.status(400).json({ message: "لا يمكن اعتماد التحويل" });
@@ -1189,7 +1189,7 @@ export async function registerRoutes(
   });
 
   // ── Inventory Ledger ──
-  app.get("/api/inventory-ledger", requireAuth, async (req, res) => {
+  app.get("/api/inventory-ledger", requireAuth, requireManager, async (req, res) => {
     const filters: any = {};
     if (req.query.variantId) filters.variantId = Number(req.query.variantId);
     if (req.query.locationId) filters.locationId = Number(req.query.locationId);
@@ -1479,7 +1479,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/suppliers/:id/statement", requireAuth, async (req, res) => {
+  app.get("/api/suppliers/:id/statement", requireAuth, requireManager, async (req, res) => {
     try {
       const id = Number(req.params.id);
       const from = req.query.from as string;
@@ -1505,7 +1505,7 @@ export async function registerRoutes(
     }
     res.json(await storage.getSalesFiltered(filters));
   });
-  app.get("/api/sales/:id", requireAuth, async (req, res) => {
+  app.get("/api/sales/:id", requireAuth, enforceBranchScope, async (req, res) => {
     const detail = await storage.getSaleWithDetails(Number(req.params.id));
     if (!detail) return res.status(404).json({ message: "الفاتورة غير موجودة" });
     const user = await storage.getUser(req.session.userId!);
@@ -1565,7 +1565,7 @@ export async function registerRoutes(
     res.json(await storage.getDailySalesTotal());
   });
 
-  app.get("/api/orders", requireAuth, async (req, res) => {
+  app.get("/api/orders", requireAuth, enforceBranchScope, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
     if (!user) return res.status(401).json({ message: "غير مصرح" });
     const isManager = ["owner", "admin", "manager"].includes(user.role);
@@ -1579,7 +1579,7 @@ export async function registerRoutes(
     }
     res.json(filtered);
   });
-  app.get("/api/orders/:id", requireAuth, async (req, res) => {
+  app.get("/api/orders/:id", requireAuth, enforceBranchScope, async (req, res) => {
     const order = await storage.getOrder(Number(req.params.id));
     if (!order) return res.status(404).json({ message: "الطلب غير موجود" });
     const items = await storage.getOrderItems(order.id);
@@ -1620,7 +1620,7 @@ export async function registerRoutes(
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
     }
   });
-  app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
+  app.patch("/api/orders/:id/status", requireAuth, requireManager, async (req, res) => {
     try {
       const statusParsed = orderStatusSchema.safeParse(req.body);
       if (!statusParsed.success) return res.status(400).json({ message: formatZodError(statusParsed.error) });
@@ -1670,7 +1670,7 @@ export async function registerRoutes(
     res.json(row);
   });
 
-  app.post("/api/orders/:id/cancel", requireAuth, async (req, res) => {
+  app.post("/api/orders/:id/cancel", requireAuth, requireManager, async (req, res) => {
     try {
       const orderId = Number(req.params.id);
       const { reason } = req.body;
@@ -1688,7 +1688,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/sales/:id/return", requireAuth, async (req, res) => {
+  app.post("/api/sales/:id/return", requireAuth, requireManager, enforceBranchScope, async (req, res) => {
     try {
       const saleId = Number(req.params.id);
       const user = req.session?.user;
@@ -1765,7 +1765,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/sale-returns/:id", requireAuth, async (req, res) => {
+  app.get("/api/sale-returns/:id", requireAuth, enforceBranchScope, async (req, res) => {
     const ret = await storage.getSaleReturn(Number(req.params.id));
     if (!ret) return res.status(404).json({ message: "المرتجع غير موجود" });
     const items = await storage.getSaleReturnItems(ret.id);
@@ -1812,7 +1812,7 @@ export async function registerRoutes(
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
     }
   });
-  app.post("/api/expenses", requireAuth, async (req, res) => {
+  app.post("/api/expenses", requireAuth, requireManager, enforceBranchScope, async (req, res) => {
     try {
       const { amount, notes, source, category } = req.body;
       if (!amount) {
@@ -1912,7 +1912,7 @@ export async function registerRoutes(
     res.status(201).json(await storage.createEmployee(parsed.data));
   });
 
-  app.get("/api/shifts/current", requireAuth, async (req, res) => {
+  app.get("/api/shifts/current", requireAuth, enforceBranchScope, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
     if (!user || !user.branchId || !user.terminalName) {
       return res.status(400).json({ message: "بيانات المستخدم ناقصة (الفرع أو الجهاز)" });
@@ -1922,7 +1922,7 @@ export async function registerRoutes(
     res.json({ shift });
   });
 
-  app.get("/api/shifts", requireAuth, async (_req, res) => {
+  app.get("/api/shifts", requireAuth, enforceBranchScope, async (_req, res) => {
     res.json(await storage.getShifts());
   });
   app.post("/api/shifts", requireAuth, async (req, res) => {
@@ -1945,7 +1945,7 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     res.status(201).json(await storage.createShift(parsed.data));
   });
-  app.patch("/api/shifts/:id/close", requireAuth, async (req, res) => {
+  app.patch("/api/shifts/:id/close", requireAuth, enforceBranchScope, async (req, res) => {
     const shiftId = Number(req.params.id);
     const pendingOrders = await storage.getPendingOrdersByShift(shiftId);
     if (pendingOrders.length > 0) {
@@ -2129,19 +2129,19 @@ export async function registerRoutes(
     res.json(await storage.getProfitByProducts(from, to, branchId));
   });
 
-  app.get("/api/purchases", requireAuth, async (_req, res) => {
+  app.get("/api/purchases", requireAuth, requireManager, async (_req, res) => {
     const invoices = await storage.getPurchaseInvoices();
     res.json(invoices);
   });
 
-  app.get("/api/purchases/:id", requireAuth, async (req, res) => {
+  app.get("/api/purchases/:id", requireAuth, requireManager, async (req, res) => {
     const invoice = await storage.getPurchaseInvoice(Number(req.params.id));
     if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
     const items = await storage.getPurchaseItems(invoice.id);
     res.json({ ...invoice, items });
   });
 
-  app.post("/api/purchases", requireAuth, async (req, res) => {
+  app.post("/api/purchases", requireAuth, requireManager, async (req, res) => {
     try {
       const { supplierId, invoiceDate, shippingCost, customsCost, clearanceCost, otherCost, notes } = req.body;
       if (!invoiceDate) {
@@ -2169,7 +2169,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/purchases/:id", requireAuth, async (req, res) => {
+  app.patch("/api/purchases/:id", requireAuth, requireManager, async (req, res) => {
     const id = Number(req.params.id);
     const invoice = await storage.getPurchaseInvoice(id);
     if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
@@ -2188,7 +2188,7 @@ export async function registerRoutes(
     res.json(row);
   });
 
-  app.post("/api/purchases/:id/items", requireAuth, async (req, res) => {
+  app.post("/api/purchases/:id/items", requireAuth, requireManager, async (req, res) => {
     try {
       const purchaseId = Number(req.params.id);
       const invoice = await storage.getPurchaseInvoice(purchaseId);
@@ -2216,7 +2216,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/purchases/:purchaseId/items/:itemId", requireAuth, async (req, res) => {
+  app.patch("/api/purchases/:purchaseId/items/:itemId", requireAuth, requireManager, async (req, res) => {
     const purchaseId = Number(req.params.purchaseId);
     const invoice = await storage.getPurchaseInvoice(purchaseId);
     if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
@@ -2247,7 +2247,7 @@ export async function registerRoutes(
     res.json(updated);
   });
 
-  app.delete("/api/purchases/:purchaseId/items/:itemId", requireAuth, async (req, res) => {
+  app.delete("/api/purchases/:purchaseId/items/:itemId", requireAuth, requireManager, async (req, res) => {
     const purchaseId = Number(req.params.purchaseId);
     const invoice = await storage.getPurchaseInvoice(purchaseId);
     if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
@@ -2291,7 +2291,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/purchases/:purchaseId/parse-invoice", requireAuth, async (req, res) => {
+  app.post("/api/purchases/:purchaseId/parse-invoice", requireAuth, requireManager, async (req, res) => {
     try {
       const { fileId } = req.body;
       if (!fileId) {
@@ -2894,7 +2894,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/payroll-runs/:id/reopen", requireAuth, async (req, res) => {
+  app.post("/api/payroll-runs/:id/reopen", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
       if (!user || user.role !== "owner") return res.status(403).json({ message: "فقط المالك يمكنه إعادة فتح الكشف" });
@@ -2911,7 +2911,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/payroll-runs/:id/cancel", requireAuth, async (req, res) => {
+  app.post("/api/payroll-runs/:id/cancel", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
       if (!user || user.role !== "owner") return res.status(403).json({ message: "فقط المالك يمكنه إلغاء الكشف" });
@@ -3273,7 +3273,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/employees/:id/opening-balances", requireAuth, async (req, res) => {
+  app.post("/api/employees/:id/opening-balances", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
       if (!user || user.role !== "owner") return res.status(403).json({ message: "فقط المالك يمكنه تعديل الأرصدة الافتتاحية" });
@@ -3361,7 +3361,7 @@ export async function registerRoutes(
   });
 
   // ============ Journal Entries ============
-  app.get("/api/journal-entries", requireAuth, async (req, res) => {
+  app.get("/api/journal-entries", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const entries = await storage.getJournalEntries({
         from: req.query.from as string,
@@ -3375,7 +3375,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/journal-entries/:id", requireAuth, async (req, res) => {
+  app.get("/api/journal-entries/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const entry = await storage.getJournalEntry(parseInt(req.params.id));
       if (!entry) return res.status(404).json({ message: "القيد غير موجود" });
