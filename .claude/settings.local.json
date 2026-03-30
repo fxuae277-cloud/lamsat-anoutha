@@ -12,7 +12,9 @@
       "Bash(node:*)",
       "Bash(npx tsc:*)",
       "Bash(wc -l echo \"---\" grep -rn \"console\\\\.\\\\\\(log\\\\|error\\\\|warn\\\\|info\\\\\\)\" /home/runner/workspace/server/ --include=\"*.ts\")",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npm run:*)"
     ]
   }
 }
