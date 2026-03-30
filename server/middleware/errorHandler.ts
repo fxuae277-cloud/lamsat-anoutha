@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { logger } from "../logger";
 
 export class AppError extends Error {
   statusCode: number;
@@ -43,7 +44,9 @@ export function globalErrorHandler(
   const details    = err.details   ?? null;
 
   if (statusCode >= 500) {
-    console.error("[ERROR]", err);
+    logger.error(message, { code, details, stack: err?.stack });
+  } else if (statusCode === 401 || statusCode === 403) {
+    logger.warn(message, { code, path: _req.path, method: _req.method });
   }
 
   return res.status(statusCode).json({ success: false, message, code, details });

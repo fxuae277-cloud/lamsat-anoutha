@@ -1,5 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
+import { logger } from "./logger";
 import { storage } from "./storage";
 import { db, pool } from "./db";
 import { and, eq, desc } from "drizzle-orm";
@@ -116,10 +117,12 @@ export async function registerRoutes(
     const { username, password } = parsed.data;
     const user = await storage.getUserByUsername(username);
     if (!user) {
+      logger.warn("failed_login", { username, reason: "user_not_found", ip: req.ip });
       return res.status(401).json({ message: "اسم المستخدم أو كلمة المرور غير صحيحة" });
     }
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
+      logger.warn("failed_login", { username, reason: "wrong_password", ip: req.ip });
       return res.status(401).json({ message: "اسم المستخدم أو كلمة المرور غير صحيحة" });
     }
     if (!user.isActive) {
@@ -847,8 +850,23 @@ export async function registerRoutes(
   app.patch("/api/products/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     const parsed = updateProductSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
-    const row = await storage.updateProduct(Number(req.params.id), parsed.data);
+    const productId = Number(req.params.id);
+    const oldProduct = await storage.getProduct(productId);
+    const row = await storage.updateProduct(productId, parsed.data);
     if (!row) return res.status(404).json({ message: "المنتج غير موجود" });
+    if (oldProduct && parsed.data.price !== undefined && oldProduct.price !== parsed.data.price) {
+      storage.addAuditLog({
+        action: "product_price_change",
+        entityType: "product",
+        entityId: productId,
+        branchId: null,
+        userId: req.session.userId ?? null,
+        userName: null,
+        details: `تغيير سعر المنتج "${row.name}"`,
+        oldValue: JSON.stringify({ price: oldProduct.price }),
+        newValue: JSON.stringify({ price: row.price }),
+      }).catch(() => {});
+    }
     res.json(row);
   });
   app.delete("/api/products/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
@@ -1642,15 +1660,14 @@ export async function registerRoutes(
         await storage.restoreOrderInventory(row.id, req.session.userId ?? null);
       }
 
-      const user = req.session?.user;
       if (status === "cancelled" || oldStatus !== status) {
         await storage.addAuditLog({
           action: status === "cancelled" ? "order_cancel" : "order_status_change",
           entityType: "order",
           entityId: row.id,
           branchId: row.branchId ?? null,
-          userId: user?.id ?? null,
-          userName: user?.name ?? null,
+          userId: req.session.userId ?? null,
+          userName: null,
           details: `تغيير حالة الطلب ${row.orderNumber} من ${oldStatus} إلى ${status}`,
           oldValue: JSON.stringify({ status: oldStatus }),
           newValue: JSON.stringify({ status }),
@@ -2723,6 +2740,18 @@ export async function registerRoutes(
          VALUES ($1, $2, $3, $4, 'manual_adjustment', $5, $6, $7)`,
         [todayStr, branchId, locationId, productId, Math.abs(Number(qtyChange)), reason, req.session.userId]
       );
+
+      storage.addAuditLog({
+        action: "inventory_adjustment",
+        entityType: "inventory",
+        entityId: adj.id,
+        branchId: Number(branchId),
+        userId: req.session.userId ?? null,
+        userName: null,
+        details: `تعديل مخزون المنتج ${productId}: ${qtyBefore} → ${qtyAfter} (${reason})`,
+        oldValue: JSON.stringify({ qty: qtyBefore }),
+        newValue: JSON.stringify({ qty: qtyAfter }),
+      }).catch(() => {});
 
       res.status(201).json(adj);
     } catch (err: any) {

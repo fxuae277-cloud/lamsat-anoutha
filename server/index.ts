@@ -8,6 +8,7 @@ import { seedDatabase } from "./seed";
 import { initBackupScheduler } from "./backup";
 import { apiLimiter } from "./middleware/rateLimiter";
 import { globalErrorHandler } from "./middleware/errorHandler";
+import { logger } from "./logger";
 
 const app = express();
 const httpServer = createServer(app);
@@ -54,37 +55,25 @@ app.use(
   })
 );
 
-export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
-}
-
 app.use((req, res, next) => {
   const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
+  const reqPath = req.path;
 
   res.on("finish", () => {
+    if (!reqPath.startsWith("/api")) return;
     const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      log(logLine);
+    const meta = {
+      method: req.method,
+      path: reqPath,
+      status: res.statusCode,
+      duration,
+      userId: req.session?.userId ?? null,
+      ip: req.ip,
+    };
+    if (duration > 500) {
+      logger.warn("SLOW_REQUEST", meta);
+    } else {
+      logger.info("request", meta);
     }
   });
 
@@ -113,7 +102,7 @@ app.use((req, res, next) => {
       reusePort: true,
     },
     () => {
-      log(`serving on port ${port}`);
+      logger.info(`serving on port ${port}`);
     },
   );
 })();
