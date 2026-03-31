@@ -50,7 +50,7 @@ export default function BranchStock() {
 
   const branchName = isOwner
     ? branches.find((b: any) => String(b.id) === branchId)?.name || ""
-    : user?.branchName || "";
+    : (user as any)?.branchName || "";
 
   const handleBarcodeScan = (code: string) => {
     setSearch(code);

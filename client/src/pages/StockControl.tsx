@@ -39,7 +39,7 @@ export default function StockControl() {
         <p className="text-muted-foreground mt-1">{t("stock_control.subtitle")}</p>
       </div>
 
-      <Tabs defaultValue="stocktakes" dir={t("dir")}>
+      <Tabs defaultValue="stocktakes" dir={t("dir") as "ltr" | "rtl"}>
         <TabsList className="grid w-full grid-cols-3 max-w-lg">
           <TabsTrigger value="stocktakes" className="gap-1 text-xs">
             <ClipboardCheck className="w-4 h-4" />
@@ -253,7 +253,7 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ClipboardCheck className="w-5 h-5 text-primary" />
-              {t("stock_control.stocktake_details_title", [selectedSt?.id, selectedSt?.location_name])}
+              {t("stock_control.stocktake_details_title")}
               {selectedSt?.status === "draft" && (
                 <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs mr-2">{t("common.open")}</Badge>
               )}

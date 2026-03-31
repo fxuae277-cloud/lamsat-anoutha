@@ -824,7 +824,7 @@ export async function registerRoutes(
     });
   });
   app.get("/api/products/barcode/:barcode", requireAuth, async (req, res) => {
-    const row = await storage.getProductByBarcode(req.params.barcode);
+    const row = await storage.getProductByBarcode(req.params.barcode as string);
     if (!row) return res.status(404).json({ message: "المنتج غير موجود" });
     res.json(row);
   });
@@ -846,7 +846,7 @@ export async function registerRoutes(
     const oldProduct = await storage.getProduct(productId);
     const row = await storage.updateProduct(productId, parsed.data);
     if (!row) return res.status(404).json({ message: "المنتج غير موجود" });
-    if (oldProduct && parsed.data.price !== undefined && oldProduct.price !== parsed.data.price) {
+    if (oldProduct && parsed.data.price !== undefined && (oldProduct.price as any) !== parsed.data.price) {
       storage.addAuditLog({
         action: "product_price_change",
         entityType: "product",
@@ -899,7 +899,7 @@ export async function registerRoutes(
     res.json(await storage.getAllVariants());
   });
   app.get("/api/variants/barcode/:barcode", requireAuth, async (req, res) => {
-    const variant = await storage.getVariantByBarcode(req.params.barcode);
+    const variant = await storage.getVariantByBarcode(req.params.barcode as string);
     if (!variant) return res.status(404).json({ message: "الباركود غير موجود" });
     res.json(variant);
   });
@@ -964,7 +964,8 @@ export async function registerRoutes(
   // ── Inventory Balances ──
   app.get("/api/inventory-balances", requireAuth, async (req, res) => {
     const locationId = req.query.locationId ? Number(req.query.locationId) : undefined;
-    res.json(await storage.getInventoryBalances(locationId));
+    const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+    res.json(await storage.getInventoryBalances(locationId, branchId));
   });
 
   // ── Branch Stock (only items transferred from central warehouse) ──
@@ -1387,14 +1388,14 @@ export async function registerRoutes(
     res.json(await storage.getCustomers());
   });
   app.get("/api/customers/:id", requireAuth, async (req, res) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id as string);
     const result = await storage.getCustomerWithInvoices(id);
     if (!result) return res.status(404).json({ message: "Customer not found" });
     res.json(result);
   });
   app.get("/api/customers/:id/statement", requireAuth, async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const from = req.query.from as string | undefined;
       const to = req.query.to as string | undefined;
       const result = await storage.getCustomerStatement(id, from, to);
@@ -1406,8 +1407,8 @@ export async function registerRoutes(
     try {
       const parsed = insertCustomerSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
-      if (parsed.data.phone) {
-        const existing = await storage.getCustomerByPhone(parsed.data.phone);
+      if ((parsed.data as any).phone) {
+        const existing = await storage.getCustomerByPhone((parsed.data as any).phone);
         if (existing) return res.status(409).json({ message: "phone_exists" });
       }
       res.status(201).json(await storage.createCustomer(parsed.data));
@@ -1421,7 +1422,7 @@ export async function registerRoutes(
   });
   app.put("/api/customers/:id", requireAuth, async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const parsed = updateCustomerSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
       const { name, phone, notes, active, branchId } = parsed.data;
@@ -1436,7 +1437,7 @@ export async function registerRoutes(
   });
   app.delete("/api/customers/:id", requireAuth, requireManager, async (req, res) => {
     try {
-      await storage.deleteCustomer(parseInt(req.params.id));
+      await storage.deleteCustomer(parseInt(req.params.id as string));
       res.json({ success: true });
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
@@ -1453,10 +1454,10 @@ export async function registerRoutes(
   app.post("/api/suppliers", requireAuth, requireManager, async (req, res) => {
     const parsed = insertSupplierSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
-    if (!parsed.data.name || !parsed.data.name.trim()) {
+    if (!(parsed.data as any).name || !(parsed.data as any).name.trim()) {
       return res.status(400).json({ message: "اسم المورد مطلوب" });
     }
-    const existing = await storage.getSupplierByName(parsed.data.name.trim());
+    const existing = await storage.getSupplierByName((parsed.data as any).name.trim());
     if (existing) {
       return res.status(409).json({ message: "يوجد مورد بنفس الاسم" });
     }
@@ -1573,8 +1574,8 @@ export async function registerRoutes(
     }
     try {
       const sale = await storage.createSale(parsed.data, items);
-      if (parsed.data.customerId) {
-        storage.updateCustomerAfterSale(parsed.data.customerId, String(parsed.data.total || "0")).catch(() => {});
+      if ((parsed.data as any).customerId) {
+        storage.updateCustomerAfterSale((parsed.data as any).customerId, String((parsed.data as any).total || "0")).catch(() => {});
       }
       journalForSale({
         id: sale.id,
@@ -1585,7 +1586,7 @@ export async function registerRoutes(
         branchId: sale.branchId,
         cashierId: sale.cashierId,
         cogsTotal: sale.cogsTotal || "0",
-        createdAt: sale.createdAt,
+        createdAt: sale.createdAt ?? undefined,
       }).catch(err => console.error("[AutoJournal] Sale error:", err.message));
       res.status(201).json(sale);
     } catch (e: any) {
@@ -1630,8 +1631,8 @@ export async function registerRoutes(
           return res.status(400).json({ message: `بند ${i + 1}: ${formatZodError(itemParsed.error)}` });
         }
       }
-      const branchId = parsed.data.branchId;
-      let shiftId = parsed.data.shiftId ?? null;
+      const branchId = (parsed.data as any).branchId;
+      let shiftId = (parsed.data as any).shiftId ?? null;
       if (!shiftId && branchId) {
         const [openShift] = await db
           .select({ id: shifts.id })
@@ -1642,8 +1643,8 @@ export async function registerRoutes(
         if (openShift) shiftId = openShift.id;
       }
       const order = await storage.createOrder({ ...parsed.data, shiftId, employeeId: req.session.userId }, items);
-      if (parsed.data.customerPhone) {
-        storage.findOrCreateCustomerByPhone(parsed.data.customerPhone, parsed.data.customerName || undefined).catch(() => {});
+      if ((parsed.data as any).customerPhone) {
+        storage.findOrCreateCustomerByPhone((parsed.data as any).customerPhone, (parsed.data as any).customerName || undefined).catch(() => {});
       }
       res.status(201).json(order);
     } catch (err: any) {
@@ -1775,7 +1776,7 @@ export async function registerRoutes(
         branchId: sale.branchId,
         createdBy: user.id,
         saleInvoiceNumber: sale.invoiceNumber || "",
-        createdAt: result.createdAt,
+        createdAt: result.createdAt ?? undefined,
       }).catch(err => console.error("[AutoJournal] Return error:", err.message));
 
       res.status(201).json(result);
@@ -2173,7 +2174,7 @@ export async function registerRoutes(
 
   app.post("/api/purchases", requireAuth, requireManager, async (req, res) => {
     try {
-      const { supplierId, invoiceDate, shippingCost, customsCost, clearanceCost, otherCost, notes } = req.body;
+      const { supplierId, invoiceDate, shippingCost, customsCost, clearanceCost, otherCost, notes, branchId } = req.body;
       if (!invoiceDate) {
         return res.status(400).json({ message: "تاريخ الفاتورة مطلوب" });
       }
@@ -2181,7 +2182,7 @@ export async function registerRoutes(
       const data = {
         invoiceNumber,
         supplierId: supplierId || null,
-        branchId: null as any,
+        branchId: branchId ? Number(branchId) : null,
         invoiceDate,
         shippingCost: String(shippingCost || 0),
         customsCost: String(customsCost || 0),
@@ -2414,7 +2415,7 @@ export async function registerRoutes(
 
   app.get("/api/cash-ledger", requireAuth, enforceBranchScope, async (req, res) => {
     const { date } = req.query;
-    const branchId = req.branchScope!.mode === "branch" ? req.branchScope!.branchId : (req.query.branchId ? Number(req.query.branchId) : undefined);
+    const branchId = req.branchScope!.mode === "branch" ? (req.branchScope!.branchId ?? undefined) : (req.query.branchId ? Number(req.query.branchId) : undefined);
     const filterDate = date ? String(date) : new Date().toISOString().slice(0, 10);
     const entries = await storage.getCashLedgerByDate(branchId, filterDate);
     res.json(entries);
@@ -2422,7 +2423,7 @@ export async function registerRoutes(
 
   app.get("/api/bank-ledger", requireAuth, enforceBranchScope, async (req, res) => {
     const { date } = req.query;
-    const branchId = req.branchScope!.mode === "branch" ? req.branchScope!.branchId : (req.query.branchId ? Number(req.query.branchId) : undefined);
+    const branchId = req.branchScope!.mode === "branch" ? (req.branchScope!.branchId ?? undefined) : (req.query.branchId ? Number(req.query.branchId) : undefined);
     const filterDate = date ? String(date) : new Date().toISOString().slice(0, 10);
     const entries = await storage.getBankLedgerByDate(branchId, filterDate);
     res.json(entries);
@@ -2430,7 +2431,7 @@ export async function registerRoutes(
 
   app.get("/api/cash-ledger/summary", requireAuth, enforceBranchScope, async (req, res) => {
     const { date } = req.query;
-    const branchId = req.branchScope!.mode === "branch" ? req.branchScope!.branchId : (req.query.branchId ? Number(req.query.branchId) : undefined);
+    const branchId = req.branchScope!.mode === "branch" ? (req.branchScope!.branchId ?? undefined) : (req.query.branchId ? Number(req.query.branchId) : undefined);
     const filterDate = date ? String(date) : new Date().toISOString().slice(0, 10);
     const summary = await storage.getDailyCashSummary(branchId, filterDate);
     res.json(summary);
@@ -2494,7 +2495,7 @@ export async function registerRoutes(
 
   app.get("/api/shifts/closed", requireAuth, enforceBranchScope, async (req, res) => {
     const { date } = req.query;
-    const branchId = req.branchScope!.mode === "branch" ? req.branchScope!.branchId : (req.query.branchId ? Number(req.query.branchId) : undefined);
+    const branchId = req.branchScope!.mode === "branch" ? (req.branchScope!.branchId ?? undefined) : (req.query.branchId ? Number(req.query.branchId) : undefined);
     const filterDate = date ? String(date) : new Date().toISOString().slice(0, 10);
     const closedShifts = await storage.getClosedShiftsByDate(branchId, filterDate);
     res.json(closedShifts);
@@ -3421,7 +3422,7 @@ export async function registerRoutes(
 
   app.patch("/api/accounts/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
-      const acc = await storage.updateAccount(parseInt(req.params.id), req.body);
+      const acc = await storage.updateAccount(parseInt(req.params.id as string), req.body);
       if (!acc) return res.status(404).json({ message: "الحساب غير موجود" });
       res.json(acc);
     } catch (err: any) {
@@ -3456,7 +3457,7 @@ export async function registerRoutes(
 
   app.get("/api/journal-entries/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
-      const entry = await storage.getJournalEntry(parseInt(req.params.id));
+      const entry = await storage.getJournalEntry(parseInt(req.params.id as string));
       if (!entry) return res.status(404).json({ message: "القيد غير موجود" });
       res.json(entry);
     } catch (err: any) {
@@ -3496,7 +3497,7 @@ export async function registerRoutes(
 
   app.post("/api/journal-entries/:id/post", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
-      const entry = await storage.postJournalEntry(parseInt(req.params.id));
+      const entry = await storage.postJournalEntry(parseInt(req.params.id as string));
       if (!entry) return res.status(404).json({ message: "القيد غير موجود" });
       res.json(entry);
     } catch (err: any) {

@@ -22,6 +22,8 @@ declare module "http" {
 declare module "express-session" {
   interface SessionData {
     userId: number;
+    user?: { id: number; name: string; role: string; branchId?: number | null; [key: string]: any };
+    userName?: string;
   }
 }
 

@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { storage } from "./storage";
 import { pool } from "./db";
 import XLSX from "xlsx";
+// @ts-ignore
 import PDFDocument from "pdfkit";
 import path from "path";
 import fs from "fs";
@@ -312,12 +313,12 @@ export function registerExportRoutes(app: Express) {
 
       const pageW = doc.page.width - 80;
 
-      function drawRTLText(text: string, x: number, y: number, opts: any = {}) {
+      const drawRTLText = (text: string, x: number, y: number, opts: any = {}) => {
         const w = opts.width || pageW;
         doc.text(text, x, y, { ...opts, width: w, align: opts.align || "right", features: ["rtla", "arab"] });
-      }
+      };
 
-      function drawTableRow(cols: string[], y: number, isHeader = false) {
+      const drawTableRow = (cols: string[], y: number, isHeader = false) => {
         const colWidths = cols.length <= 3
           ? [pageW * 0.5, pageW * 0.25, pageW * 0.25]
           : Array(cols.length).fill(pageW / cols.length);
@@ -336,7 +337,7 @@ export function registerExportRoutes(app: Express) {
           doc.text(cols[i], xPos, y, { width: colWidths[i], align: "center" });
         }
         return y + 20;
-      }
+      };
 
       doc.fontSize(18).fillColor("#8b5a7a");
       drawRTLText("لمسة أنوثة - التقرير اليومي", 40, 40);
@@ -572,7 +573,7 @@ export function registerExportRoutes(app: Express) {
       const totalsX = 40;
       const totalsW = 280;
 
-      function drawTotalRow(label: string, value: string, bold = false, color = "#333") {
+      const drawTotalRow = (label: string, value: string, bold = false, color = "#333") => {
         doc.fontSize(bold ? 13 : 11).fillColor(color);
         if (bold) {
           doc.moveTo(totalsX, y).lineTo(totalsX + totalsW, y).strokeColor("#e8d5e0").lineWidth(1.5).stroke();
@@ -581,7 +582,7 @@ export function registerExportRoutes(app: Express) {
         doc.text(value + " OMR", totalsX, y, { width: totalsW / 2, align: "left", features: ["rtla", "arab"] });
         doc.text(label, totalsX + totalsW / 2, y, { width: totalsW / 2, align: "right", features: ["rtla", "arab"] });
         y += bold ? 22 : 18;
-      }
+      };
 
       drawTotalRow("المجموع الفرعي", omr(detail.subtotal));
       if (parseFloat(detail.discount || "0") > 0) {

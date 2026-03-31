@@ -35,7 +35,7 @@ export default function MobileProducts() {
     enabled: !!expandedId,
   });
 
-  const categories = [...new Set(products.map(p => p.category).filter(Boolean))];
+  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
 
   const filtered = products.filter(p => {
     if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
