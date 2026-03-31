@@ -4592,26 +4592,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ── Inventory Balances ──
-  async getInventoryBalances(locationId?: number) {
+  async getInventoryBalances(locationId?: number, branchId?: number) {
     let query = `
       SELECT ib.*, pv.barcode, pv.sku, pv.color, pv.size, pv.price,
              pv.last_purchase_price, pv.last_receipt_date,
-             p.name as product_name, p.category_id, c.name as category_name,
+             p.name as product_name, p.product_type, p.category_id, c.name as category_name,
              l.name as location_name, l.type as location_type,
-             b.name as branch_name,
-             CASE WHEN l.is_central THEN l.name ELSE COALESCE(b.name || ' - ', '') || l.name END as full_location_name
+             b.id as branch_id, b.name as branch_name,
+             CASE WHEN l.is_central THEN l.name ELSE COALESCE(b.name || ' - ', '') || l.name END as full_location_name,
+             COALESCE(li.reorder_level, 5) as reorder_level
       FROM inventory_balances ib
       JOIN product_variants pv ON pv.id = ib.variant_id
       JOIN products p ON p.id = pv.product_id
       LEFT JOIN categories c ON c.id = p.category_id
       JOIN locations l ON l.id = ib.location_id
       LEFT JOIN branches b ON b.id = l.branch_id
+      LEFT JOIN location_inventory li ON li.location_id = ib.location_id AND li.product_id = pv.product_id
       WHERE 1=1
     `;
     const params: any[] = [];
     if (locationId) {
-      query += ` AND ib.location_id = $1`;
       params.push(locationId);
+      query += ` AND ib.location_id = $${params.length}`;
+    }
+    if (branchId) {
+      params.push(branchId);
+      query += ` AND b.id = $${params.length}`;
     }
     query += ` ORDER BY p.name, pv.color, pv.size`;
     const result = await pool.query(query, params);
@@ -5109,10 +5115,12 @@ export class DatabaseStorage implements IStorage {
         refId:          inventoryTransactions.refId,
         note:           inventoryTransactions.note,
         createdBy:      inventoryTransactions.createdBy,
+        createdByName:  users.name,
         createdAt:      inventoryTransactions.createdAt,
       })
       .from(inventoryTransactions)
       .innerJoin(products, eq(inventoryTransactions.productId, products.id))
+      .leftJoin(users, eq(inventoryTransactions.createdBy, users.id))
       .where(cond)
       .orderBy(desc(inventoryTransactions.createdAt))
       .limit(filters?.limit ?? 200);

@@ -27,6 +27,12 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+import { PageHeader }         from "@/components/payroll/shared/PageHeader";
+import { StatCard }           from "@/components/payroll/shared/StatCard";
+import { EmptyState }         from "@/components/payroll/shared/EmptyState";
+import { PaymentStatusBadge } from "@/components/payroll/shared/PayrollBadge";
+import { usePayrollToast }    from "@/components/payroll/shared/usePayrollToast";
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MONTHS_AR = [
@@ -43,57 +49,19 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
   cheque:        "شيك",
 };
 
-const BLUE  = "#2196F3";
-const RED   = "#F44336";
-const GREEN = "#4CAF50";
 const PINK  = "#E91E63";
+const GREEN = "#4CAF50";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function omr(n: number)     { return `${n.toFixed(3)} ر.ع`; }
-function pct(a: number, b: number) { return b > 0 ? Math.min(100, Math.round((a / b) * 100)) : 0; }
-
-function PaymentBadge({ status }: { status: PayrollRow["paymentStatus"] }) {
-  switch (status) {
-    case "paid":
-      return <Badge className="bg-blue-100 text-blue-700 border-blue-200 border text-xs">مدفوع</Badge>;
-    case "partial":
-      return <Badge className="bg-orange-100 text-orange-700 border-orange-200 border text-xs">جزئي</Badge>;
-    case "unpaid":
-      return <Badge className="bg-red-100 text-red-700 border-red-200 border text-xs">غير مدفوع</Badge>;
-  }
-}
-
-function StatCard({
-  title, value, icon, iconBg, iconColor, sub,
-}: {
-  title: string; value: string; icon: React.ReactNode;
-  iconBg: string; iconColor: string; sub?: React.ReactNode;
-}) {
-  return (
-    <Card className="shadow-sm">
-      <CardContent className="p-4 flex items-center gap-3">
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
-          style={{ backgroundColor: iconBg, color: iconColor }}
-        >
-          {icon}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs text-muted-foreground truncate">{title}</p>
-          <p className="text-base font-bold tabular-nums mt-0.5">{value}</p>
-          {sub}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+function omr(n: number)             { return `${n.toFixed(3)} ر.ع`; }
+function pct(a: number, b: number)  { return b > 0 ? Math.min(100, Math.round((a / b) * 100)) : 0; }
 
 // ─── Payment Dialog ───────────────────────────────────────────────────────────
 
 interface PaymentDialogProps {
   open: boolean;
-  preRow: PayrollRow | null;          // pre-filled row (from row button) or null (from header button)
+  preRow: PayrollRow | null;
   month: number;
   year: number;
   onClose: () => void;
@@ -101,14 +69,15 @@ interface PaymentDialogProps {
 
 function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProps) {
   const { employees, payrollRows, addPayment } = usePayroll();
+  const toast = usePayrollToast();
 
-  const [empId,   setEmpId]   = useState<string>(preRow ? String(preRow.employee.id) : "");
-  const [amount,  setAmount]  = useState<string>("");
-  const [method,  setMethod]  = useState<PaymentMethod>("bank_transfer");
-  const [note,    setNote]    = useState("");
-  const [error,   setError]   = useState("");
+  const [empId,        setEmpId]       = useState<string>(preRow ? String(preRow.employee.id) : "");
+  const [amount,       setAmount]      = useState<string>("");
+  const [method,       setMethod]      = useState<PaymentMethod>("bank_transfer");
+  const [note,         setNote]        = useState("");
+  const [error,        setError]       = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Derive the live row for the selected employee
   const liveRow = useMemo(
     () => payrollRows.find((r) => String(r.employee.id) === empId) ?? null,
     [payrollRows, empId]
@@ -116,7 +85,6 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
 
   const remaining = liveRow ? Math.max(0, liveRow.netSalary - liveRow.amountPaid) : 0;
 
-  // Default amount to remaining whenever employee changes
   function handleEmpChange(id: string) {
     setEmpId(id);
     const row = payrollRows.find((r) => String(r.employee.id) === id);
@@ -135,6 +103,7 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
     setMethod("bank_transfer");
     setNote("");
     setError("");
+    setIsSubmitting(false);
     onClose();
   }
 
@@ -145,6 +114,9 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
       setError("يرجى إدخال مبلغ صحيح أكبر من صفر");
       return;
     }
+
+    setIsSubmitting(true);
+    const empName = liveRow?.employee.name;
     addPayment({
       employeeId: parseInt(empId),
       month, year,
@@ -152,6 +124,8 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
       method,
       paidBy: "المستخدم الحالي",
     });
+    toast.successPayment(empName, omr(parsed));
+    setIsSubmitting(false);
     handleClose();
   }
 
@@ -266,13 +240,14 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
         <DialogFooter className="gap-2 flex-row-reverse">
           <Button
             onClick={handleSubmit}
+            disabled={isSubmitting}
             className="text-white gap-1.5"
             style={{ backgroundColor: PINK }}
           >
             <CheckCircle2 className="h-4 w-4" />
-            تأكيد الدفع
+            {isSubmitting ? "جاري التسجيل..." : "تأكيد الدفع"}
           </Button>
-          <Button variant="outline" onClick={handleClose}>إلغاء</Button>
+          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>إلغاء</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -291,22 +266,24 @@ interface BulkPartialDialogProps {
 
 function BulkPartialDialog({ open, unpaidRows, month, year, onClose }: BulkPartialDialogProps) {
   const { addPayment } = usePayroll();
+  const toast = usePayrollToast();
 
   type Mode = "percentage" | "fixed";
-  const [mode,    setMode]    = useState<Mode>("percentage");
-  const [value,   setValue]   = useState<string>("50");
-  const [method,  setMethod]  = useState<PaymentMethod>("bank_transfer");
-  const [error,   setError]   = useState("");
+  const [mode,         setMode]        = useState<Mode>("percentage");
+  const [value,        setValue]       = useState<string>("50");
+  const [method,       setMethod]      = useState<PaymentMethod>("bank_transfer");
+  const [error,        setError]       = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function handleClose() {
     setMode("percentage");
     setValue("50");
     setMethod("bank_transfer");
     setError("");
+    setIsSubmitting(false);
     onClose();
   }
 
-  // Preview: compute amount per employee
   const preview = useMemo(() => {
     const num = parseFloat(value);
     if (isNaN(num) || num <= 0) return [];
@@ -329,6 +306,7 @@ function BulkPartialDialog({ open, unpaidRows, month, year, onClose }: BulkParti
     if (isNaN(num) || num <= 0) { setError("يرجى إدخال قيمة صحيحة"); return; }
     if (preview.length === 0)   { setError("لا توجد رواتب غير مدفوعة"); return; }
 
+    setIsSubmitting(true);
     for (const { row, pay } of preview) {
       addPayment({
         employeeId: row.employee.id,
@@ -338,6 +316,8 @@ function BulkPartialDialog({ open, unpaidRows, month, year, onClose }: BulkParti
         paidBy: "المستخدم الحالي",
       });
     }
+    toast.successBulkPay(preview.length);
+    setIsSubmitting(false);
     handleClose();
   }
 
@@ -447,13 +427,13 @@ function BulkPartialDialog({ open, unpaidRows, month, year, onClose }: BulkParti
         <DialogFooter className="gap-2 flex-row-reverse">
           <Button
             onClick={handleConfirm}
+            disabled={preview.length === 0 || isSubmitting}
             className="text-white gap-1.5 bg-orange-500 hover:bg-orange-600"
-            disabled={preview.length === 0}
           >
             <CheckCircle2 className="h-4 w-4" />
-            تأكيد الدفع الجزئي ({preview.length})
+            {isSubmitting ? "جاري الدفع..." : `تأكيد الدفع الجزئي (${preview.length})`}
           </Button>
-          <Button variant="outline" onClick={handleClose}>إلغاء</Button>
+          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>إلغاء</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -471,12 +451,12 @@ export default function SalaryPaymentsPage() {
     setSelectedYear,
     bulkPayUnpaid,
   } = usePayroll();
+  const toast = usePayrollToast();
 
   // Dialogs
-  const [singleOpen, setSingleOpen]   = useState(false);
-  const [singleKey,  setSingleKey]    = useState(0);
-  const [singleRow,  setSingleRow]    = useState<PayrollRow | null>(null);
-
+  const [singleOpen,      setSingleOpen]      = useState(false);
+  const [singleKey,       setSingleKey]       = useState(0);
+  const [singleRow,       setSingleRow]       = useState<PayrollRow | null>(null);
   const [bulkPartialOpen, setBulkPartialOpen] = useState(false);
   const [bulkPartialKey,  setBulkPartialKey]  = useState(0);
 
@@ -495,7 +475,6 @@ export default function SalaryPaymentsPage() {
     setBulkPartialOpen(true);
   }
 
-  // Rows not yet fully paid (for bulk partial preview)
   const unpaidRows = useMemo(
     () => payrollRows.filter(
       (r) => r.employee.status === "active" && r.paymentStatus !== "paid" && r.netSalary > 0
@@ -503,85 +482,87 @@ export default function SalaryPaymentsPage() {
     [payrollRows]
   );
 
-  // Summary totals
   const summary = useMemo(() => {
-    const paid      = payrollRows.reduce((s, r) => s + r.amountPaid, 0);
-    const net       = payrollRows.reduce((s, r) => s + r.netSalary, 0);
-    const remaining = Math.max(0, net - paid);
+    const paid         = payrollRows.reduce((s, r) => s + r.amountPaid, 0);
+    const net          = payrollRows.reduce((s, r) => s + r.netSalary, 0);
+    const remaining    = Math.max(0, net - paid);
     const pendingCount = payrollRows.filter(
       (r) => r.employee.status === "active" && r.paymentStatus !== "paid"
     ).length;
     return { paid, remaining, pendingCount };
   }, [payrollRows]);
 
-  // Filtered table rows
   const filtered = useMemo(() => {
     return payrollRows.filter((r) => {
-      if (search && !r.employee.name.includes(search)) return false;
+      if (search     && !r.employee.name.includes(search)) return false;
       if (statusFilt !== "all" && r.paymentStatus !== statusFilt) return false;
       return true;
     });
   }, [payrollRows, search, statusFilt]);
 
+  function handleBulkFull(method: PaymentMethod) {
+    const count = unpaidRows.length;
+    bulkPayUnpaid(method, "المستخدم الحالي");
+    toast.successBulkPay(count);
+  }
+
+  const monthYearSelectors = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Select
+        value={String(selectedMonth)}
+        onValueChange={(v) => setSelectedMonth(parseInt(v))}
+      >
+        <SelectTrigger className="w-[130px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {MONTHS_AR.map((name, i) => (
+            <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={String(selectedYear)}
+        onValueChange={(v) => setSelectedYear(parseInt(v))}
+      >
+        <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {YEARS.map((y) => (
+            <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
   return (
     <div dir="rtl" className="font-sans min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
-        {/* ── Header ── */}
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">متابعة دفع الرواتب</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {MONTHS_AR[selectedMonth - 1]} {selectedYear}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={String(selectedMonth)}
-              onValueChange={(v) => setSelectedMonth(parseInt(v))}
-            >
-              <SelectTrigger className="w-[130px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MONTHS_AR.map((name, i) => (
-                  <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={String(selectedYear)}
-              onValueChange={(v) => setSelectedYear(parseInt(v))}
-            >
-              <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {YEARS.map((y) => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+        <PageHeader
+          title="متابعة دفع الرواتب"
+          subtitle={`${MONTHS_AR[selectedMonth - 1]} ${selectedYear}`}
+          actions={monthYearSelectors}
+        />
 
         {/* ── Summary cards ── */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard
             title="إجمالي المدفوع"
             value={omr(summary.paid)}
-            iconBg="#e3f2fd" iconColor={BLUE}
+            color="blue"
             icon={<CheckCircle2 className="h-4 w-4" />}
           />
           <StatCard
             title="إجمالي المتبقي"
             value={omr(summary.remaining)}
-            iconBg={summary.remaining > 0 ? "#ffebee" : "#f5f5f5"}
-            iconColor={summary.remaining > 0 ? RED : "#9E9E9E"}
+            color={summary.remaining > 0 ? "red" : "grey"}
             icon={<AlertCircle className="h-4 w-4" />}
           />
           <StatCard
             title="غير مدفوع / جزئي"
             value={`${summary.pendingCount} موظف`}
-            iconBg="#fff3e0" iconColor="#FF9800"
+            color="orange"
             icon={<Users className="h-4 w-4" />}
             sub={
               summary.pendingCount > 0 && (
@@ -595,7 +576,6 @@ export default function SalaryPaymentsPage() {
 
         {/* ── Action buttons ── */}
         <div className="flex flex-wrap gap-3">
-          {/* تسجيل دفعة */}
           <Button
             className="gap-2 text-white"
             style={{ backgroundColor: PINK }}
@@ -605,12 +585,11 @@ export default function SalaryPaymentsPage() {
             تسجيل دفعة
           </Button>
 
-          {/* Bulk full */}
           <Button
             className="gap-2 text-white"
             style={{ backgroundColor: GREEN }}
             disabled={unpaidRows.length === 0}
-            onClick={() => bulkPayUnpaid("bank_transfer", "المستخدم الحالي")}
+            onClick={() => handleBulkFull("bank_transfer")}
           >
             <CheckCircle2 className="h-4 w-4" />
             دفعة جماعية كاملة
@@ -621,7 +600,6 @@ export default function SalaryPaymentsPage() {
             )}
           </Button>
 
-          {/* Bulk partial */}
           <Button
             variant="outline"
             className="gap-2 border-orange-400 text-orange-600 hover:bg-orange-50"
@@ -632,7 +610,6 @@ export default function SalaryPaymentsPage() {
             دفعة جماعية جزئية
           </Button>
 
-          {/* Method dropdown for bulk full (convenience) */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="gap-1 text-sm">
@@ -645,7 +622,7 @@ export default function SalaryPaymentsPage() {
                 <DropdownMenuItem
                   key={m}
                   disabled={unpaidRows.length === 0}
-                  onSelect={() => bulkPayUnpaid(m, "المستخدم الحالي")}
+                  onSelect={() => handleBulkFull(m)}
                 >
                   {METHOD_LABELS[m]}
                 </DropdownMenuItem>
@@ -707,8 +684,8 @@ export default function SalaryPaymentsPage() {
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                      لا توجد بيانات تطابق الفلتر
+                    <TableCell colSpan={8}>
+                      <EmptyState message="لا توجد بيانات تطابق الفلتر" />
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -761,7 +738,7 @@ export default function SalaryPaymentsPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <PaymentBadge status={row.paymentStatus} />
+                          <PaymentStatusBadge status={row.paymentStatus} />
                         </TableCell>
                         <TableCell>
                           <Button

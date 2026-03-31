@@ -1791,7 +1791,12 @@
     "create_invoice_desc": "إنشاء مسودة فاتورة مشتريات جديدة",
     "select_supplier": "اختر المورد...",
     "invoice_date": "تاريخ الفاتورة",
-    "price_updated_on_approval": "تم تحديث السعر عند الاعتماد"
+    "price_updated_on_approval": "تم تحديث السعر عند الاعتماد",
+    "branch_label": "الفرع",
+    "select_branch": "اختر الفرع...",
+    "table_branch": "الفرع",
+    "table_actions": "إجراءات",
+    "open_invoice": "فتح الفاتورة"
   },
   "returns": {
     "title": "المرتجعات",
@@ -2482,5 +2487,39 @@
     "admin": "مدير",
     "employee": "موظف",
     "logout": "تسجيل الخروج"
+  },
+  "inv_overview": {
+    "title": "نظرة عامة على المخزون",
+    "subtitle": "رصيد المخزون الحالي وحركات الأصناف عبر الفروع",
+    "tab_stock": "المخزون الحالي",
+    "tab_movements": "حركات المخزون",
+    "search_placeholder": "ابحث باسم المنتج أو الكود...",
+    "all_branches": "كل الفروع",
+    "all_types": "كل الأنواع",
+    "col_product": "المنتج",
+    "col_variant": "اللون",
+    "col_size": "المقاس",
+    "col_branch": "الفرع / الموقع",
+    "col_qty": "الكمية",
+    "col_reorder": "الحد الأدنى",
+    "col_status": "الحالة",
+    "status_ok": "متوفر",
+    "status_low": "منخفض",
+    "col_date": "التاريخ",
+    "col_type": "نوع الحركة",
+    "col_qty_change": "التغيير",
+    "col_ref": "مرجع",
+    "col_user": "المستخدم",
+    "type_sale": "بيع",
+    "type_purchase": "شراء",
+    "type_transfer": "تحويل",
+    "type_adjustment": "تسوية",
+    "type_stocktake_adjustment": "تسوية جرد",
+    "type_receive": "استلام",
+    "filter_type": "نوع الحركة",
+    "filter_from": "من تاريخ",
+    "filter_to": "إلى تاريخ",
+    "no_stock": "لا توجد أصناف في المخزون",
+    "no_movements": "لا توجد حركات مخزون"
   }
 }

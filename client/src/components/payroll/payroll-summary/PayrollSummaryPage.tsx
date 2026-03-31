@@ -1,19 +1,23 @@
 import { useState, useMemo } from "react";
 import { Search, Printer, Wallet, TrendingUp, CheckCircle2, AlertCircle } from "lucide-react";
 
-import { usePayroll }          from "@/hooks/usePayroll";
-import type { PayrollRow }     from "@/lib/payroll-types";
+import { usePayroll }      from "@/hooks/usePayroll";
+import type { PayrollRow } from "@/lib/payroll-types";
 
-import { Button }              from "@/components/ui/button";
-import { Input }               from "@/components/ui/input";
-import { Badge }               from "@/components/ui/badge";
-import { Card, CardContent }   from "@/components/ui/card";
+import { Button }          from "@/components/ui/button";
+import { Input }           from "@/components/ui/input";
+import { Card }            from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+
+import { PageHeader }        from "@/components/payroll/shared/PageHeader";
+import { StatCard }          from "@/components/payroll/shared/StatCard";
+import { EmptyState }        from "@/components/payroll/shared/EmptyState";
+import { PaymentStatusBadge } from "@/components/payroll/shared/PayrollBadge";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -35,46 +39,6 @@ function num(n: number): string {
   return n > 0 ? omr(n) : "—";
 }
 
-function PaymentBadge({ status }: { status: PayrollRow["paymentStatus"] }) {
-  switch (status) {
-    case "paid":
-      return <Badge className="bg-blue-100 text-blue-700 border-blue-200 border text-xs">مدفوع</Badge>;
-    case "partial":
-      return <Badge className="bg-orange-100 text-orange-700 border-orange-200 border text-xs">جزئي</Badge>;
-    case "unpaid":
-      return <Badge className="bg-red-100 text-red-700 border-red-200 border text-xs">غير مدفوع</Badge>;
-  }
-}
-
-// ─── Summary Card ─────────────────────────────────────────────────────────────
-
-interface StatCardProps {
-  title: string;
-  value: string;
-  icon: React.ReactNode;
-  iconBg: string;
-  iconColor: string;
-}
-
-function StatCard({ title, value, icon, iconBg, iconColor }: StatCardProps) {
-  return (
-    <Card className="shadow-sm">
-      <CardContent className="p-4 flex items-center gap-3">
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
-          style={{ backgroundColor: iconBg, color: iconColor }}
-        >
-          {icon}
-        </div>
-        <div className="min-w-0">
-          <p className="text-xs text-muted-foreground truncate">{title}</p>
-          <p className="text-base font-bold tabular-nums mt-0.5 truncate">{value}</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PayrollSummaryPage() {
@@ -88,7 +52,6 @@ export default function PayrollSummaryPage() {
 
   const [search, setSearch] = useState("");
 
-  // Filter by name only — all data still comes from payrollRows
   const filtered = useMemo(
     () =>
       search.trim()
@@ -97,26 +60,61 @@ export default function PayrollSummaryPage() {
     [payrollRows, search]
   );
 
-  // Summary totals over ALL rows (not filtered)
   const totals = useMemo(() => {
-    const gross    = payrollRows.reduce((s, r) => s + r.employee.baseSalary, 0);
-    const net      = payrollRows.reduce((s, r) => s + r.netSalary, 0);
-    const paid     = payrollRows.reduce((s, r) => s + r.amountPaid, 0);
+    const gross     = payrollRows.reduce((s, r) => s + r.employee.baseSalary, 0);
+    const net       = payrollRows.reduce((s, r) => s + r.netSalary, 0);
+    const paid      = payrollRows.reduce((s, r) => s + r.amountPaid, 0);
     const remaining = net - paid;
     return { gross, net, paid, remaining };
   }, [payrollRows]);
 
-  // Footer totals over FILTERED rows
   const footer = useMemo(() => ({
-    base:       filtered.reduce((s, r) => s + r.employee.baseSalary, 0),
-    bonus:      filtered.reduce((s, r) => s + r.totalBonus, 0),
-    overtime:   filtered.reduce((s, r) => s + r.totalOvertime, 0),
-    deduction:  filtered.reduce((s, r) => s + r.totalDeduction, 0),
-    advance:    filtered.reduce((s, r) => s + r.totalAdvance, 0),
-    net:        filtered.reduce((s, r) => s + r.netSalary, 0),
-    paid:       filtered.reduce((s, r) => s + r.amountPaid, 0),
-    remaining:  filtered.reduce((s, r) => s + Math.max(0, r.netSalary - r.amountPaid), 0),
+    base:      filtered.reduce((s, r) => s + r.employee.baseSalary, 0),
+    bonus:     filtered.reduce((s, r) => s + r.totalBonus, 0),
+    overtime:  filtered.reduce((s, r) => s + r.totalOvertime, 0),
+    deduction: filtered.reduce((s, r) => s + r.totalDeduction, 0),
+    advance:   filtered.reduce((s, r) => s + r.totalAdvance, 0),
+    net:       filtered.reduce((s, r) => s + r.netSalary, 0),
+    paid:      filtered.reduce((s, r) => s + r.amountPaid, 0),
+    remaining: filtered.reduce((s, r) => s + Math.max(0, r.netSalary - r.amountPaid), 0),
   }), [filtered]);
+
+  const monthYearSelectors = (
+    <div className="flex flex-wrap items-center gap-2 no-print">
+      <Select
+        value={String(selectedMonth)}
+        onValueChange={(v) => setSelectedMonth(parseInt(v))}
+      >
+        <SelectTrigger className="w-[130px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {MONTHS_AR.map((name, i) => (
+            <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={String(selectedYear)}
+        onValueChange={(v) => setSelectedYear(parseInt(v))}
+      >
+        <SelectTrigger className="w-[100px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {YEARS.map((y) => (
+            <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Button variant="outline" className="gap-1.5" onClick={() => window.print()}>
+        <Printer className="h-4 w-4" />
+        طباعة
+      </Button>
+    </div>
+  );
 
   return (
     <>
@@ -134,79 +132,36 @@ export default function PayrollSummaryPage() {
       <div dir="rtl" className="font-sans min-h-screen bg-background">
         <div className="max-w-7xl mx-auto px-4 py-6 space-y-6" id="summary-print-area">
 
-          {/* ── Header ── */}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold">ملخص الرواتب</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {MONTHS_AR[selectedMonth - 1]} {selectedYear}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 no-print">
-              <Select
-                value={String(selectedMonth)}
-                onValueChange={(v) => setSelectedMonth(parseInt(v))}
-              >
-                <SelectTrigger className="w-[130px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MONTHS_AR.map((name, i) => (
-                    <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={String(selectedYear)}
-                onValueChange={(v) => setSelectedYear(parseInt(v))}
-              >
-                <SelectTrigger className="w-[100px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {YEARS.map((y) => (
-                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Button variant="outline" className="gap-1.5" onClick={() => window.print()}>
-                <Printer className="h-4 w-4" />
-                طباعة
-              </Button>
-            </div>
-          </div>
+          <PageHeader
+            title="ملخص الرواتب"
+            subtitle={`${MONTHS_AR[selectedMonth - 1]} ${selectedYear}`}
+            actions={monthYearSelectors}
+          />
 
           {/* ── Summary cards ── */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               title="إجمالي الراتب الإجمالي"
               value={omr(totals.gross)}
-              iconBg="#f5f5f5"
-              iconColor="#616161"
+              color="grey"
               icon={<Wallet className="h-4 w-4" />}
             />
             <StatCard
               title="إجمالي الصافي"
               value={omr(totals.net)}
-              iconBg="#e8f5e9"
-              iconColor="#4CAF50"
+              color="green"
               icon={<TrendingUp className="h-4 w-4" />}
             />
             <StatCard
               title="إجمالي المدفوع"
               value={omr(totals.paid)}
-              iconBg="#e3f2fd"
-              iconColor="#2196F3"
+              color="blue"
               icon={<CheckCircle2 className="h-4 w-4" />}
             />
             <StatCard
               title="إجمالي المتبقي"
               value={omr(totals.remaining)}
-              iconBg={totals.remaining > 0 ? "#ffebee" : "#f5f5f5"}
-              iconColor={totals.remaining > 0 ? "#F44336" : "#9E9E9E"}
+              color={totals.remaining > 0 ? "red" : "grey"}
               icon={<AlertCircle className="h-4 w-4" />}
             />
           </div>
@@ -246,12 +201,12 @@ export default function PayrollSummaryPage() {
                 <TableBody>
                   {filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
-                        لا توجد بيانات تطابق البحث
+                      <TableCell colSpan={12}>
+                        <EmptyState message="لا توجد بيانات تطابق البحث" />
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filtered.map((row) => {
+                    filtered.map((row: PayrollRow) => {
                       const remaining = Math.max(0, row.netSalary - row.amountPaid);
                       return (
                         <TableRow
@@ -260,12 +215,10 @@ export default function PayrollSummaryPage() {
                             row.employee.status !== "active" ? "opacity-50" : ""
                           }`}
                         >
-                          {/* Name */}
                           <TableCell>
                             <p className="font-medium leading-tight">{row.employee.name}</p>
                           </TableCell>
 
-                          {/* Branch / Role */}
                           <TableCell className="text-muted-foreground">
                             <p className="text-xs leading-tight truncate max-w-[160px]">
                               {row.employee.branch}
@@ -275,42 +228,34 @@ export default function PayrollSummaryPage() {
                             </p>
                           </TableCell>
 
-                          {/* Base salary */}
                           <TableCell className="tabular-nums">{omr(row.employee.baseSalary)}</TableCell>
 
-                          {/* Bonus */}
                           <TableCell className="tabular-nums text-green-700">
                             {num(row.totalBonus)}
                           </TableCell>
 
-                          {/* Overtime */}
                           <TableCell className="tabular-nums text-green-700">
                             {num(row.totalOvertime)}
                           </TableCell>
 
-                          {/* Deduction */}
                           <TableCell className="tabular-nums text-orange-600">
                             {num(row.totalDeduction)}
                           </TableCell>
 
-                          {/* Advance */}
                           <TableCell className="tabular-nums text-orange-600">
                             {num(row.totalAdvance)}
                           </TableCell>
 
-                          {/* Net (highlighted green) */}
                           <TableCell>
                             <span className="font-bold tabular-nums px-2 py-0.5 rounded bg-green-50 text-green-700">
                               {omr(row.netSalary)}
                             </span>
                           </TableCell>
 
-                          {/* Paid */}
                           <TableCell className="tabular-nums text-blue-600">
                             {num(row.amountPaid)}
                           </TableCell>
 
-                          {/* Remaining (highlighted red if > 0) */}
                           <TableCell>
                             {remaining > 0 ? (
                               <span className="font-semibold tabular-nums px-2 py-0.5 rounded bg-red-50 text-red-600">
@@ -321,12 +266,10 @@ export default function PayrollSummaryPage() {
                             )}
                           </TableCell>
 
-                          {/* Status badge */}
                           <TableCell>
-                            <PaymentBadge status={row.paymentStatus} />
+                            <PaymentStatusBadge status={row.paymentStatus} />
                           </TableCell>
 
-                          {/* Print row */}
                           <TableCell className="no-print">
                             <Button
                               size="icon"

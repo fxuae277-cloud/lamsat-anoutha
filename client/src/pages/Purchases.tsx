@@ -517,6 +517,7 @@ function PurchasesTab() {
   const [showOcrRawText, setShowOcrRawText] = useState(false);
 
   const [newSupplierId, setNewSupplierId] = useState("");
+  const [newBranchId, setNewBranchId] = useState("");
   const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
   const [newShipping, setNewShipping] = useState("0");
   const [newCustoms, setNewCustoms] = useState("0");
@@ -557,6 +558,11 @@ function PurchasesTab() {
 
   const { data: categories = [] } = useQuery<any[]>({
     queryKey: ["/api/categories"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const { data: branches = [] } = useQuery<any[]>({
+    queryKey: ["/api/branches"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
@@ -601,6 +607,7 @@ function PurchasesTab() {
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/purchases", {
         supplierId: Number(newSupplierId),
+        branchId: newBranchId ? Number(newBranchId) : null,
         invoiceDate: newDate,
         shippingCost: Number(newShipping) || 0,
         customsCost: Number(newCustoms) || 0,
@@ -615,7 +622,7 @@ function PurchasesTab() {
       setShowCreate(false);
       setSelectedInvoice(inv.id);
       toast({ title: t("purchases.invoice_created") });
-      setNewSupplierId(""); setNewNotes("");
+      setNewSupplierId(""); setNewBranchId(""); setNewNotes("");
       setNewShipping("0"); setNewCustoms("0"); setNewClearance("0"); setNewOther("0");
     },
     onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
@@ -1689,12 +1696,13 @@ function PurchasesTab() {
                 <TableHead>{t("purchases.date")}</TableHead>
                 <TableHead>{t("purchases.grand_total")}</TableHead>
                 <TableHead>{t("purchases.status")}</TableHead>
+                <TableHead>{t("purchases.table_actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {invoices.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">{t("common.no_data")}</TableCell>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">{t("common.no_data")}</TableCell>
                 </TableRow>
               )}
               {invoices.map((inv) => (
@@ -1707,6 +1715,11 @@ function PurchasesTab() {
                     <Badge variant={inv.status === "pending" ? "outline" : "default"} className={inv.status === "pending" ? "border-amber-400 text-amber-600" : inv.status === "approved" ? "bg-green-600" : inv.status === "received" ? "bg-blue-600" : "bg-red-500"}>
                       {inv.status === "pending" ? t("purchases.pending") : inv.status === "approved" ? t("purchases.approved") : inv.status === "received" ? t("purchases.received") : t("purchases.cancelled")}
                     </Badge>
+                  </TableCell>
+                  <TableCell onClick={e => e.stopPropagation()}>
+                    <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => setSelectedInvoice(inv.id)}>
+                      <FileText className="w-3.5 h-3.5" /> {t("purchases.open_invoice")}
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -1723,7 +1736,7 @@ function PurchasesTab() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
+              <div className="space-y-1 col-span-2">
                 <label className="text-sm font-medium">{t("purchases.supplier")} *</label>
                 <div className="flex gap-1">
                   <Select value={newSupplierId} onValueChange={setNewSupplierId}>
@@ -1737,10 +1750,19 @@ function PurchasesTab() {
                   </Button>
                 </div>
               </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">{t("purchases.date")} *</label>
-              <Input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} data-testid="input-new-date" />
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{t("purchases.branch_label")}</label>
+                <Select value={newBranchId} onValueChange={setNewBranchId}>
+                  <SelectTrigger data-testid="select-new-branch"><SelectValue placeholder={t("purchases.select_branch")} /></SelectTrigger>
+                  <SelectContent>
+                    {branches.map((b: any) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{t("purchases.date")} *</label>
+                <Input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} data-testid="input-new-date" />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
@@ -1865,19 +1887,7 @@ export default function PurchasesPage() {
         <h1 className="text-3xl font-bold tracking-tight">{t("purchases.title")}</h1>
         <p className="text-muted-foreground">{t("purchases.subtitle")}</p>
       </div>
-
-      <Tabs defaultValue="purchases" className="space-y-4">
-        <TabsList className="flex justify-start">
-          <TabsTrigger value="purchases" className="gap-2"><FileText className="w-4 h-4" /> {t("purchases.tab_purchases")}</TabsTrigger>
-          <TabsTrigger value="suppliers" className="gap-2"><Truck className="w-4 h-4" /> {t("purchases.tab_suppliers")}</TabsTrigger>
-        </TabsList>
-        <TabsContent value="purchases" className="border-none p-0 outline-none">
-          <PurchasesTab />
-        </TabsContent>
-        <TabsContent value="suppliers" className="border-none p-0 outline-none">
-          <SuppliersTab />
-        </TabsContent>
-      </Tabs>
+      <PurchasesTab />
     </div>
   );
 }
