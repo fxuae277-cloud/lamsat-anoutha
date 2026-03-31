@@ -49,6 +49,8 @@ import {
   journalEntryLines, type InsertJournalEntryLine, type JournalEntryLine,
   salaryPayments, type InsertSalaryPayment, type SalaryPayment,
   employeeFinancialLedger, type InsertEmployeeFinancialLedger, type EmployeeFinancialLedger,
+  employeeCommissions, type InsertEmployeeCommission, type EmployeeCommission,
+  employeeEntitlements, type InsertEmployeeEntitlement, type EmployeeEntitlement,
   type PaymentMethod, PAYMENT_METHODS,
 } from "@shared/schema";
 
@@ -272,6 +274,22 @@ export interface IStorage {
     to?: string;
     limit?: number;
   }): Promise<any[]>;
+
+  // Payroll UI helpers
+  getPayrollEmployees(branchId?: number): Promise<any[]>;
+  getPayrollMovements(month: number, year: number, branchId?: number): Promise<any[]>;
+  getPayrollPayments(month: number, year: number, branchId?: number): Promise<any[]>;
+  addPayrollPayment(data: {
+    employeeId: number;
+    month: number;
+    year: number;
+    amount: number | string;
+    paymentMethod: string;
+    paidBy: number;
+    branchId?: number;
+    note?: string;
+    referenceNo?: string;
+  }): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5124,6 +5142,180 @@ export class DatabaseStorage implements IStorage {
       .where(cond)
       .orderBy(desc(inventoryTransactions.createdAt))
       .limit(filters?.limit ?? 200);
+  }
+
+  // ── Payroll UI helpers ─────────────────────────────────────────────────────
+
+  async getPayrollEmployees(branchId?: number): Promise<any[]> {
+    let query = `
+      SELECT u.id, u.name, u.role, u.branch_id, b.name as branch_name,
+             u.salary, u.salary_type, u.employment_status, u.commission_rate
+      FROM users u
+      LEFT JOIN branches b ON b.id = u.branch_id
+      WHERE u.is_active = true AND u.employment_status != 'terminated'
+    `;
+    const params: any[] = [];
+    if (branchId) {
+      query += ` AND u.branch_id = $1`;
+      params.push(branchId);
+    }
+    query += ` ORDER BY u.name`;
+    const result = await pool.query(query, params);
+    return result.rows;
+  }
+
+  async getPayrollMovements(month: number, year: number, branchId?: number): Promise<any[]> {
+    const paddedMonth = month.toString().padStart(2, '0');
+    const lastDay = new Date(year, month, 0).getDate();
+    const dateFrom = `${year}-${paddedMonth}-01`;
+    const dateTo   = `${year}-${paddedMonth}-${lastDay}`;
+    const params: any[] = [dateFrom, dateTo, paddedMonth, year];
+    let branchFilter = '';
+    if (branchId) {
+      branchFilter = `AND u.branch_id = $5`;
+      params.push(branchId);
+    }
+
+    const result = await pool.query(`
+      SELECT src.id, src.employee_id, u.name AS employee_name,
+             src.source_table, src.type, src.amount::numeric AS amount,
+             src.reason, src.date, src.created_by,
+             uc.name AS created_by_name, src.status
+      FROM (
+        SELECT id, employee_id, 'advance'              AS type, amount, date,
+               note                                    AS reason,
+               created_by, 'employee_advances'         AS source_table,
+               CASE WHEN settled THEN 'cancelled' ELSE 'active' END AS status
+        FROM employee_advances
+        WHERE date >= $1 AND date <= $2
+
+        UNION ALL
+
+        SELECT id, employee_id, 'deduction'            AS type, amount, date,
+               reason, created_by, 'employee_deductions' AS source_table,
+               CASE WHEN applied_in_payroll_id IS NOT NULL THEN 'cancelled' ELSE 'active' END AS status
+        FROM employee_deductions
+        WHERE date >= $1 AND date <= $2
+
+        UNION ALL
+
+        SELECT id, employee_id, 'commission'           AS type, amount, date,
+               note                                    AS reason,
+               created_by, 'employee_commissions'      AS source_table,
+               status
+        FROM employee_commissions
+        WHERE month = $3 AND year = $4
+
+        UNION ALL
+
+        SELECT id, employee_id, 'bonus'                AS type, amount, date,
+               note                                    AS reason,
+               created_by, 'employee_entitlements'     AS source_table,
+               status
+        FROM employee_entitlements
+        WHERE month = $3 AND year = $4
+      ) src
+      JOIN   users u  ON u.id  = src.employee_id
+      LEFT JOIN users uc ON uc.id = src.created_by
+      WHERE 1=1 ${branchFilter}
+      ORDER BY src.date DESC
+    `, params);
+
+    return result.rows;
+  }
+
+  async getPayrollPayments(month: number, year: number, branchId?: number): Promise<any[]> {
+    const paddedMonth = month.toString().padStart(2, '0');
+    const params: any[] = [paddedMonth, year];
+    let branchFilter = '';
+    if (branchId) {
+      branchFilter = `AND (sp.branch_id = $3 OR u.branch_id = $3)`;
+      params.push(branchId);
+    }
+
+    const result = await pool.query(`
+      SELECT sp.*, u.name AS employee_name, b.name AS branch_name,
+             ub.name AS paid_by_name, pr.month, pr.year
+      FROM salary_payments sp
+      JOIN  payroll_runs pr ON pr.id  = sp.payroll_id
+      JOIN  users u         ON u.id   = sp.employee_id
+      LEFT JOIN branches b  ON b.id   = sp.branch_id
+      LEFT JOIN users ub    ON ub.id  = sp.paid_by
+      WHERE pr.month = $1 AND pr.year = $2
+      ${branchFilter}
+      ORDER BY sp.created_at DESC
+    `, params);
+
+    return result.rows;
+  }
+
+  async addPayrollPayment(data: {
+    employeeId: number;
+    month: number;
+    year: number;
+    amount: number | string;
+    paymentMethod: string;
+    paidBy: number;
+    branchId?: number;
+    note?: string;
+    referenceNo?: string;
+  }): Promise<any> {
+    const paddedMonth = data.month.toString().padStart(2, '0');
+
+    // 1. Find or create a payroll_run for this period
+    const runResult = await pool.query(
+      `SELECT id FROM payroll_runs WHERE month = $1 AND year = $2 AND status != 'cancelled' LIMIT 1`,
+      [paddedMonth, data.year]
+    );
+    let payrollId: number;
+    if (runResult.rows.length === 0) {
+      const [newRun] = await db.insert(payrollRuns).values({
+        month: paddedMonth,
+        year: data.year,
+        status: 'approved',
+        createdBy: data.paidBy,
+      }).returning();
+      payrollId = newRun.id;
+    } else {
+      payrollId = runResult.rows[0].id;
+    }
+
+    // 2. Find or create a payroll_detail for this employee in this run
+    const detailResult = await pool.query(
+      `SELECT id FROM payroll_details WHERE payroll_id = $1 AND employee_id = $2 LIMIT 1`,
+      [payrollId, data.employeeId]
+    );
+    let payrollDetailId: number;
+    if (detailResult.rows.length === 0) {
+      const empResult = await pool.query(
+        `SELECT salary FROM users WHERE id = $1`,
+        [data.employeeId]
+      );
+      const empSalary = parseFloat(empResult.rows[0]?.salary ?? '0');
+      const [newDetail] = await db.insert(payrollDetails).values({
+        payrollId,
+        employeeId: data.employeeId,
+        basicSalary: empSalary.toFixed(3),
+        netSalary: empSalary.toFixed(3),
+      }).returning();
+      payrollDetailId = newDetail.id;
+    } else {
+      payrollDetailId = detailResult.rows[0].id;
+    }
+
+    // 3. Record the payment (handles ledger + run status update)
+    return this.createSalaryPayment({
+      payrollId,
+      payrollDetailId,
+      employeeId: data.employeeId,
+      amount: typeof data.amount === 'number' ? data.amount.toFixed(3) : data.amount,
+      paymentDate: new Date().toISOString().split('T')[0],
+      paymentMethod: data.paymentMethod,
+      referenceNo: data.referenceNo ?? null,
+      branchId: data.branchId ?? null,
+      paidBy: data.paidBy,
+      note: data.note ?? null,
+    });
   }
 }
 

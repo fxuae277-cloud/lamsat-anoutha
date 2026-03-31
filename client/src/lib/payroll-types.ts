@@ -1,18 +1,23 @@
 // ─── Payroll Types ────────────────────────────────────────────────────────────
+// Kept backwards-compatible with existing page components.
+// The PayrollProvider transforms DB responses (snake_case) to these types.
 
 export type EmployeeStatus = "active" | "inactive" | "suspended";
 
 export interface Employee {
   id: number;
   name: string;
-  position: string;
-  branch: string;
-  baseSalary: number;
+  position: string;    // mapped from users.role
+  branch: string;      // mapped from branches.name
+  branch_id?: number;  // optional; used for filtering
+  baseSalary: number;  // parsed float from users.salary
   status: EmployeeStatus;
 }
 
 // ─── Financial Movements ──────────────────────────────────────────────────────
 
+// DB "commission" movements are mapped to "bonus" at the frontend layer.
+// DB has no "overtime" table; legacy overtime movements stay in dummy data.
 export type MovementType = "bonus" | "deduction" | "advance" | "overtime";
 export type MovementStatus = "active" | "cancelled";
 
@@ -22,9 +27,10 @@ export interface FinancialMovement {
   type: MovementType;
   amount: number;
   reason: string;
-  date: string; // ISO date string "YYYY-MM-DD"
-  createdBy: string;
+  date: string;           // "YYYY-MM-DD"
+  createdBy: string;      // display name of creator
   status: MovementStatus;
+  sourceTable?: string;   // DB origin table (optional; used by Provider for cancel)
 }
 
 // ─── Payroll Payments ─────────────────────────────────────────────────────────
@@ -34,12 +40,12 @@ export type PaymentMethod = "bank_transfer" | "cash" | "cheque";
 export interface PayrollPayment {
   id: number;
   employeeId: number;
-  month: number; // 1–12
+  month: number;
   year: number;
   amount: number;
   method: PaymentMethod;
-  paidAt: string; // ISO date string
-  paidBy: string;
+  paidAt: string;    // ISO date string
+  paidBy: string;    // display name of payer
 }
 
 // ─── Computed Payroll Row ─────────────────────────────────────────────────────
@@ -48,10 +54,10 @@ export type PaymentStatus = "paid" | "unpaid" | "partial";
 
 export interface PayrollRow {
   employee: Employee;
-  totalBonus: number;
+  totalBonus: number;      // includes DB commissions mapped as bonuses
   totalDeduction: number;
   totalAdvance: number;
-  totalOvertime: number;
+  totalOvertime: number;   // always 0 from DB (no overtime table); kept for page compat
   netSalary: number;
   paymentStatus: PaymentStatus;
   amountPaid: number;
@@ -64,15 +70,15 @@ export interface PayrollRow {
 export interface AuditLog {
   id: number;
   action: string;
-  entityType: "movement" | "payment" | "employee";
+  entityType: string;
   entityId: number;
   oldValue: Record<string, unknown> | null;
   newValue: Record<string, unknown> | null;
   userId: string;
-  timestamp: string; // ISO datetime string
+  timestamp: string;
 }
 
-// ─── Context Type ─────────────────────────────────────────────────────────────
+// ─── Input types ──────────────────────────────────────────────────────────────
 
 export interface AddMovementInput {
   employeeId: number;
@@ -80,7 +86,7 @@ export interface AddMovementInput {
   amount: number;
   reason: string;
   date: string;
-  createdBy: string;
+  createdBy: string;  // name string as used by pages; Provider converts to ID
 }
 
 export interface AddPaymentInput {
@@ -89,18 +95,21 @@ export interface AddPaymentInput {
   year: number;
   amount: number;
   method: PaymentMethod;
-  paidBy: string;
+  paidBy: string;   // name string as used by pages; Provider uses default user ID
 }
+
+// ─── Context Type ─────────────────────────────────────────────────────────────
 
 export interface PayrollContextType {
   // State
   employees: Employee[];
   movements: FinancialMovement[];
   payments: PayrollPayment[];
-  auditLogs: AuditLog[];
+  auditLogs: AuditLog[];     // kept for backwards compat (always empty — use DB reports)
   payrollRows: PayrollRow[];
   selectedMonth: number;
   selectedYear: number;
+  isLoading: boolean;
 
   // Navigation
   setSelectedMonth: (month: number) => void;

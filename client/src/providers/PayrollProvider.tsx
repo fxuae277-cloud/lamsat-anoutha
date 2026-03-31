@@ -1,102 +1,72 @@
-import { createContext, useReducer, useMemo, type ReactNode } from "react";
+import { createContext, useState, useMemo, type ReactNode } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   Employee,
   FinancialMovement,
   PayrollPayment,
-  AuditLog,
   PayrollRow,
+  AuditLog,
   PayrollContextType,
   AddMovementInput,
   AddPaymentInput,
   PaymentMethod,
-  MovementStatus,
 } from "../lib/payroll-types";
-import {
-  dummyEmployees,
-  dummyMovements,
-  dummyPayments,
-} from "../lib/payroll-dummy-data";
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 export const PayrollContext = createContext<PayrollContextType | null>(null);
 
-// ─── State Shape ──────────────────────────────────────────────────────────────
+// ─── DB → Frontend transformers ───────────────────────────────────────────────
 
-interface PayrollState {
-  employees: Employee[];
-  movements: FinancialMovement[];
-  payments: PayrollPayment[];
-  auditLogs: AuditLog[];
-  selectedMonth: number;
-  selectedYear: number;
-  nextMovementId: number;
-  nextPaymentId: number;
-  nextAuditId: number;
+function toEmployee(row: any): Employee {
+  const empStatus = row.employment_status;
+  const status =
+    empStatus === "active" ? "active" :
+    empStatus === "suspended" ? "suspended" : "inactive";
+  return {
+    id:         row.id,
+    name:       row.name,
+    position:   row.role ?? "",
+    branch:     row.branch_name ?? "",
+    branch_id:  row.branch_id,
+    baseSalary: parseFloat(row.salary ?? "0"),
+    status,
+  };
 }
 
-// ─── Actions ─────────────────────────────────────────────────────────────────
+function toMovement(row: any): FinancialMovement {
+  // DB "commission" (from employee_commissions) maps to "bonus" at the frontend layer,
+  // since both are positive additions and there is no "commission" MovementType in the UI.
+  const type: FinancialMovement["type"] =
+    row.type === "commission" ? "bonus"    :
+    row.type === "bonus"      ? "bonus"    :
+    row.type === "advance"    ? "advance"  :
+    row.type === "deduction"  ? "deduction": "bonus";
+  return {
+    id:          row.id,
+    employeeId:  row.employee_id,
+    type,
+    amount:      typeof row.amount === "number" ? row.amount : parseFloat(row.amount ?? "0"),
+    reason:      row.reason ?? "",
+    date:        row.date,
+    createdBy:   row.created_by_name ?? "",
+    status:      (row.status === "cancelled" ? "cancelled" : "active") as FinancialMovement["status"],
+    sourceTable: row.source_table,
+  };
+}
 
-type Action =
-  | { type: "SET_MONTH"; payload: number }
-  | { type: "SET_YEAR"; payload: number }
-  | { type: "ADD_MOVEMENT"; payload: FinancialMovement; audit: AuditLog }
-  | { type: "CANCEL_MOVEMENT"; movementId: number; audit: AuditLog }
-  | { type: "ADD_PAYMENT"; payload: PayrollPayment; audit: AuditLog }
-  | { type: "BULK_PAY"; payments: PayrollPayment[]; audits: AuditLog[] };
-
-// ─── Reducer ──────────────────────────────────────────────────────────────────
-
-function reducer(state: PayrollState, action: Action): PayrollState {
-  switch (action.type) {
-    case "SET_MONTH":
-      return { ...state, selectedMonth: action.payload };
-
-    case "SET_YEAR":
-      return { ...state, selectedYear: action.payload };
-
-    case "ADD_MOVEMENT":
-      return {
-        ...state,
-        movements: [...state.movements, action.payload],
-        auditLogs: [...state.auditLogs, action.audit],
-        nextMovementId: state.nextMovementId + 1,
-        nextAuditId: state.nextAuditId + 1,
-      };
-
-    case "CANCEL_MOVEMENT":
-      return {
-        ...state,
-        movements: state.movements.map((m) =>
-          m.id === action.movementId
-            ? { ...m, status: "cancelled" as MovementStatus }
-            : m
-        ),
-        auditLogs: [...state.auditLogs, action.audit],
-        nextAuditId: state.nextAuditId + 1,
-      };
-
-    case "ADD_PAYMENT":
-      return {
-        ...state,
-        payments: [...state.payments, action.payload],
-        auditLogs: [...state.auditLogs, action.audit],
-        nextPaymentId: state.nextPaymentId + 1,
-        nextAuditId: state.nextAuditId + 1,
-      };
-
-    case "BULK_PAY":
-      return {
-        ...state,
-        payments: [...state.payments, ...action.payments],
-        auditLogs: [...state.auditLogs, ...action.audits],
-        nextPaymentId: state.nextPaymentId + action.payments.length,
-        nextAuditId: state.nextAuditId + action.audits.length,
-      };
-
-    default:
-      return state;
-  }
+function toPayment(row: any): PayrollPayment {
+  const monthNum = typeof row.month === "string" ? parseInt(row.month, 10) : (row.month ?? 0);
+  return {
+    id:         row.id,
+    employeeId: row.employee_id,
+    month:      monthNum,
+    year:       row.year,
+    amount:     typeof row.amount === "number" ? row.amount : parseFloat(row.amount ?? "0"),
+    method:     row.payment_method as PayrollPayment["method"],
+    paidAt:     row.payment_date ?? row.created_at ?? new Date().toISOString(),
+    paidBy:     row.paid_by_name ?? "",
+  };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -104,235 +74,178 @@ function reducer(state: PayrollState, action: Action): PayrollState {
 function computePayrollRows(
   employees: Employee[],
   movements: FinancialMovement[],
-  payments: PayrollPayment[],
-  month: number,
-  year: number
+  payments: PayrollPayment[]
 ): PayrollRow[] {
   return employees.map((employee) => {
     const empMovements = movements.filter(
-      (m) =>
-        m.employeeId === employee.id &&
-        m.status === "active" &&
-        new Date(m.date).getMonth() + 1 === month &&
-        new Date(m.date).getFullYear() === year
+      (m) => m.employeeId === employee.id && m.status === "active"
     );
+    const empPayments = payments.filter((p) => p.employeeId === employee.id);
 
-    const empPayments = payments.filter(
-      (p) =>
-        p.employeeId === employee.id &&
-        p.month === month &&
-        p.year === year
-    );
+    const totalBonus     = empMovements.filter((m) => m.type === "bonus").reduce((s, m) => s + m.amount, 0);
+    const totalDeduction = empMovements.filter((m) => m.type === "deduction").reduce((s, m) => s + m.amount, 0);
+    const totalAdvance   = empMovements.filter((m) => m.type === "advance").reduce((s, m) => s + m.amount, 0);
 
-    const totalBonus = empMovements
-      .filter((m) => m.type === "bonus")
-      .reduce((sum, m) => sum + m.amount, 0);
-
-    const totalOvertime = empMovements
-      .filter((m) => m.type === "overtime")
-      .reduce((sum, m) => sum + m.amount, 0);
-
-    const totalDeduction = empMovements
-      .filter((m) => m.type === "deduction")
-      .reduce((sum, m) => sum + m.amount, 0);
-
-    const totalAdvance = empMovements
-      .filter((m) => m.type === "advance")
-      .reduce((sum, m) => sum + m.amount, 0);
-
-    const netSalary = Math.max(
-      0,
-      employee.baseSalary + totalBonus + totalOvertime - totalDeduction - totalAdvance
-    );
-
-    const amountPaid = empPayments.reduce((sum, p) => sum + p.amount, 0);
+    const netSalary  = Math.max(0, employee.baseSalary + totalBonus - totalDeduction - totalAdvance);
+    const amountPaid = empPayments.reduce((s, p) => s + p.amount, 0);
 
     let paymentStatus: PayrollRow["paymentStatus"] = "unpaid";
-    if (netSalary === 0 || amountPaid >= netSalary) {
-      paymentStatus = "paid";
-    } else if (amountPaid > 0) {
-      paymentStatus = "partial";
-    }
+    if (netSalary === 0 || amountPaid >= netSalary) paymentStatus = "paid";
+    else if (amountPaid > 0) paymentStatus = "partial";
 
     return {
       employee,
       totalBonus,
       totalDeduction,
       totalAdvance,
-      totalOvertime,
+      totalOvertime: 0,  // no overtime table in DB; kept for page compat
       netSalary,
       paymentStatus,
       amountPaid,
       movements: empMovements,
-      payments: empPayments,
+      payments:  empPayments,
     };
   });
 }
 
-// ─── Initial State ────────────────────────────────────────────────────────────
-
-const now = new Date();
-const initialState: PayrollState = {
-  employees: dummyEmployees,
-  movements: dummyMovements,
-  payments: dummyPayments,
-  auditLogs: [],
-  selectedMonth: now.getMonth() + 1,
-  selectedYear: now.getFullYear(),
-  nextMovementId:
-    Math.max(0, ...dummyMovements.map((m) => m.id)) + 1,
-  nextPaymentId:
-    Math.max(0, ...dummyPayments.map((p) => p.id)) + 1,
-  nextAuditId: 1,
-};
-
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
+const FALLBACK_USER_ID = 1; // used when pages pass string names instead of IDs
+
 export function PayrollProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const qc = useQueryClient();
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
+  const [selectedYear,  setSelectedYear]  = useState(now.getFullYear());
+
+  // ── Queries ──────────────────────────────────────────────────────────────
+
+  const { data: rawEmployees = [], isLoading: loadingEmp } = useQuery<any[]>({
+    queryKey: ["payroll-employees"],
+    queryFn: () => fetch("/api/payroll/ui/employees").then((r) => r.json()),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: rawMovements = [], isLoading: loadingMov } = useQuery<any[]>({
+    queryKey: ["payroll-movements", selectedMonth, selectedYear],
+    queryFn: () =>
+      fetch(`/api/payroll/ui/movements?month=${selectedMonth}&year=${selectedYear}`).then((r) => r.json()),
+    staleTime: 60 * 1000,
+  });
+
+  const { data: rawPayments = [], isLoading: loadingPay } = useQuery<any[]>({
+    queryKey: ["payroll-payments", selectedMonth, selectedYear],
+    queryFn: () =>
+      fetch(`/api/payroll/ui/payments?month=${selectedMonth}&year=${selectedYear}`).then((r) => r.json()),
+    staleTime: 60 * 1000,
+  });
+
+  const isLoading = loadingEmp || loadingMov || loadingPay;
+
+  // ── Transformed data ──────────────────────────────────────────────────────
+
+  const employees = useMemo(() => rawEmployees.map(toEmployee), [rawEmployees]);
+  const movements = useMemo(() => rawMovements.map(toMovement), [rawMovements]);
+  const payments  = useMemo(() => rawPayments.map(toPayment),   [rawPayments]);
+  const auditLogs: AuditLog[] = []; // kept for backwards compat; use DB reports for audit
 
   const payrollRows = useMemo(
-    () =>
-      computePayrollRows(
-        state.employees,
-        state.movements,
-        state.payments,
-        state.selectedMonth,
-        state.selectedYear
-      ),
-    [
-      state.employees,
-      state.movements,
-      state.payments,
-      state.selectedMonth,
-      state.selectedYear,
-    ]
+    () => computePayrollRows(employees, movements, payments),
+    [employees, movements, payments]
   );
 
-  const setSelectedMonth = (month: number) =>
-    dispatch({ type: "SET_MONTH", payload: month });
+  // ── Mutations ─────────────────────────────────────────────────────────────
 
-  const setSelectedYear = (year: number) =>
-    dispatch({ type: "SET_YEAR", payload: year });
+  const movPeriodKeys = ["payroll-movements", selectedMonth, selectedYear] as const;
+  const payPeriodKeys = ["payroll-payments",  selectedMonth, selectedYear] as const;
 
-  const addMovement = (input: AddMovementInput) => {
-    const movement: FinancialMovement = {
-      id: state.nextMovementId,
-      ...input,
-      status: "active",
-    };
-    const audit: AuditLog = {
-      id: state.nextAuditId,
-      action: "add_movement",
-      entityType: "movement",
-      entityId: movement.id,
-      oldValue: null,
-      newValue: movement as unknown as Record<string, unknown>,
-      userId: input.createdBy,
-      timestamp: new Date().toISOString(),
-    };
-    dispatch({ type: "ADD_MOVEMENT", payload: movement, audit });
-  };
+  const addMovementMut = useMutation({
+    mutationFn: (input: AddMovementInput) => {
+      const createdBy = isNaN(parseInt(input.createdBy)) ? FALLBACK_USER_ID : parseInt(input.createdBy);
+      return fetch("/api/payroll/ui/movements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type:       input.type,
+          employeeId: input.employeeId,
+          amount:     input.amount,
+          reason:     input.reason,
+          date:       input.date,
+          createdBy,
+        }),
+      }).then((r) => r.json());
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: movPeriodKeys }),
+  });
 
-  const cancelMovement = (movementId: number, cancelledBy: string) => {
-    const existing = state.movements.find((m) => m.id === movementId);
-    if (!existing) return;
-    const audit: AuditLog = {
-      id: state.nextAuditId,
-      action: "cancel_movement",
-      entityType: "movement",
-      entityId: movementId,
-      oldValue: existing as unknown as Record<string, unknown>,
-      newValue: { ...existing, status: "cancelled" } as unknown as Record<string, unknown>,
-      userId: cancelledBy,
-      timestamp: new Date().toISOString(),
-    };
-    dispatch({ type: "CANCEL_MOVEMENT", movementId, audit });
-  };
+  const cancelMovementMut = useMutation({
+    mutationFn: ({ movementId, cancelledBy }: { movementId: number; cancelledBy: string }) => {
+      const movement = movements.find((m) => m.id === movementId);
+      const sourceTable = movement?.sourceTable ?? "employee_advances";
+      const cancelledById = isNaN(parseInt(cancelledBy)) ? FALLBACK_USER_ID : parseInt(cancelledBy);
+      return fetch(`/api/payroll/ui/movements/${sourceTable}/${movementId}/cancel`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cancelledBy: cancelledById }),
+      }).then((r) => r.json());
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: movPeriodKeys }),
+  });
 
-  const addPayment = (input: AddPaymentInput) => {
-    const payment: PayrollPayment = {
-      id: state.nextPaymentId,
-      ...input,
-      paidAt: new Date().toISOString(),
-    };
-    const audit: AuditLog = {
-      id: state.nextAuditId,
-      action: "add_payment",
-      entityType: "payment",
-      entityId: payment.id,
-      oldValue: null,
-      newValue: payment as unknown as Record<string, unknown>,
-      userId: input.paidBy,
-      timestamp: new Date().toISOString(),
-    };
-    dispatch({ type: "ADD_PAYMENT", payload: payment, audit });
-  };
+  const addPaymentMut = useMutation({
+    mutationFn: (input: AddPaymentInput) => {
+      const paidBy = isNaN(parseInt(input.paidBy)) ? FALLBACK_USER_ID : parseInt(input.paidBy);
+      return fetch("/api/payroll/ui/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeId:    input.employeeId,
+          month:         input.month,
+          year:          input.year,
+          amount:        input.amount,
+          paymentMethod: input.method,
+          paidBy,
+        }),
+      }).then((r) => r.json());
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: payPeriodKeys }),
+  });
 
-  const bulkPayUnpaid = (method: PaymentMethod, paidBy: string, employeeIds?: number[]) => {
-    const unpaidRows = payrollRows.filter(
-      (row) =>
-        row.employee.status === "active" &&
-        row.paymentStatus !== "paid" &&
-        row.netSalary > 0 &&
-        (employeeIds === undefined || employeeIds.includes(row.employee.id))
-    );
+  const bulkPayMut = useMutation({
+    mutationFn: (payload: { method: PaymentMethod; paidBy: string; employeeIds?: number[] }) => {
+      const paidBy = isNaN(parseInt(payload.paidBy)) ? FALLBACK_USER_ID : parseInt(payload.paidBy);
+      return fetch("/api/payroll/ui/bulk-pay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeIds:   payload.employeeIds ?? employees.map((e) => e.id),
+          month:         selectedMonth,
+          year:          selectedYear,
+          paymentMethod: payload.method,
+          paidBy,
+        }),
+      }).then((r) => r.json());
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: payPeriodKeys }),
+  });
 
-    let paymentIdCounter = state.nextPaymentId;
-    let auditIdCounter = state.nextAuditId;
-
-    const newPayments: PayrollPayment[] = [];
-    const newAudits: AuditLog[] = [];
-
-    for (const row of unpaidRows) {
-      const remaining = row.netSalary - row.amountPaid;
-      if (remaining <= 0) continue;
-
-      const payment: PayrollPayment = {
-        id: paymentIdCounter++,
-        employeeId: row.employee.id,
-        month: state.selectedMonth,
-        year: state.selectedYear,
-        amount: remaining,
-        method,
-        paidAt: new Date().toISOString(),
-        paidBy,
-      };
-
-      const audit: AuditLog = {
-        id: auditIdCounter++,
-        action: "bulk_pay",
-        entityType: "payment",
-        entityId: payment.id,
-        oldValue: null,
-        newValue: payment as unknown as Record<string, unknown>,
-        userId: paidBy,
-        timestamp: new Date().toISOString(),
-      };
-
-      newPayments.push(payment);
-      newAudits.push(audit);
-    }
-
-    if (newPayments.length > 0) {
-      dispatch({ type: "BULK_PAY", payments: newPayments, audits: newAudits });
-    }
-  };
+  // ── Context value ─────────────────────────────────────────────────────────
 
   const value: PayrollContextType = {
-    employees: state.employees,
-    movements: state.movements,
-    payments: state.payments,
-    auditLogs: state.auditLogs,
+    employees,
+    movements,
+    payments,
+    auditLogs,
     payrollRows,
-    selectedMonth: state.selectedMonth,
-    selectedYear: state.selectedYear,
+    selectedMonth,
+    selectedYear,
+    isLoading,
     setSelectedMonth,
     setSelectedYear,
-    addMovement,
-    cancelMovement,
-    addPayment,
-    bulkPayUnpaid,
+    addMovement:    (input) => { addMovementMut.mutate(input); },
+    cancelMovement: (movementId, cancelledBy) => { cancelMovementMut.mutate({ movementId, cancelledBy }); },
+    addPayment:     (input) => { addPaymentMut.mutate(input); },
+    bulkPayUnpaid:  (method, paidBy, employeeIds) => { bulkPayMut.mutate({ method, paidBy, employeeIds }); },
   };
 
   return (
