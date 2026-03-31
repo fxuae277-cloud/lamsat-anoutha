@@ -147,6 +147,7 @@ export const createProductSchema = z.object({
   productType:   z.enum(["simple", "variable", "composite"]).default("simple"),
   unitOfMeasure: z.string().default("piece"),
   isComposite:   z.boolean().default(false),
+  active:        z.boolean().optional().default(true),
   image:         z.string().optional().nullable(),
   variants: z.array(z.object({
     price:       z.coerce.number().min(0, "السعر لا يمكن أن يكون سالباً"),

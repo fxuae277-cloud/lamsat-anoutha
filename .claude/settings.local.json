@@ -14,7 +14,22 @@
       "Bash(wc -l echo \"---\" grep -rn \"console\\\\.\\\\\\(log\\\\|error\\\\|warn\\\\|info\\\\\\)\" /home/runner/workspace/server/ --include=\"*.ts\")",
       "Bash(python3:*)",
       "Bash(npx vitest:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(echo $DATABASE_URL)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(wc:*)",
+      "Bash(curl -s http://localhost:5000/api/auth/me)",
+      "Bash(curl -s -c /tmp/test_cookies.txt -X POST http://localhost:5000/api/auth/login -H \"Content-Type: application/json\" -d '{\"\"\"\"username\"\"\"\":\"\"\"\"owner\"\"\"\",\"\"\"\"password\"\"\"\":\"\"\"\"Owner@12345\"\"\"\"}')",
+      "Bash(curl -sv -c /tmp/test_cookies.txt -X POST http://localhost:5000/api/auth/login -H \"Content-Type: application/json\" -d '{\"\"\"\"username\"\"\"\":\"\"\"\"owner\"\"\"\",\"\"\"\"password\"\"\"\":\"\"\"\"Owner@12345\"\"\"\"}')",
+      "Bash(pkill -f \"tsx server/index.ts\")",
+      "Bash(lsof -ti:5000)",
+      "Bash(xargs kill:*)",
+      "Bash(fuser -k 5000/tcp)",
+      "Bash(npx tsx:*)",
+      "Bash(PRODUCT_ID=94 echo \"\" echo \"╔══════════════════════════════════════════════════╗\" echo \"║   TEST 2: GET /api/products?q=تجريبي             ║\" echo \"╚══════════════════════════════════════════════════╝\" curl -s -b /tmp/test_cookies.txt \"http://localhost:5000/api/products?q=%D8%AA%D8%AC%D8%B1%D9%8A%D8%A8%D9%8A\")",
+      "Bash(PRODUCT_ID=94 echo \"\" echo \"╔══════════════════════════════════════════════════╗\" echo \"║   TEST 3: GET /api/products/94                   ║\" echo \"╚══════════════════════════════════════════════════╝\" curl -s -b /tmp/test_cookies.txt \"http://localhost:5000/api/products/$PRODUCT_ID\")",
+      "Bash(PRODUCT_ID=94 echo \"\" echo \"╔══════════════════════════════════════════════════╗\" echo \"║   TEST 7: GET /api/inventory/transactions        ║\" echo \"╚══════════════════════════════════════════════════╝\" echo \"\" echo \"  -- filter by productId=94 --\" curl -s -b /tmp/test_cookies.txt \"http://localhost:5000/api/inventory/transactions?productId=$PRODUCT_ID\")",
+      "Bash(grep -rn requireOwnerOrAdmin /home/runner/workspace/server/ --include=*.ts)"
     ]
   }
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Search, Package, Palette, Ruler, Barcode, Edit2, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Search, Package, Palette, Ruler, Barcode, Edit2, Trash2, ChevronDown, ChevronUp, Eye, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -26,7 +26,8 @@ export default function Products() {
   const [variantDialogOpen, setVariantDialogOpen] = useState(false);
   const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(null);
 
-  const [newProduct, setNewProduct] = useState({ name: "", categoryId: "", price: "", active: true });
+  const [newProduct, setNewProduct] = useState({ name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true });
+  const [detailProductId, setDetailProductId] = useState<number | null>(null);
   const [variantForm, setVariantForm] = useState({ productName: "", productCategoryId: "", productActive: true, barcode: "", sku: "", color: "", size: "", price: "", cost: "" });
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -34,7 +35,18 @@ export default function Products() {
   const { user } = useAuth();
   const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
 
-  const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"], queryFn: getQueryFn({ on401: "throw" }) });
+  const { data: products = [] } = useQuery<any[]>({
+    queryKey: ["/api/products", search, filterCat],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (search.trim()) params.set("q", search.trim());
+      if (filterCat !== "all") params.set("categoryId", filterCat);
+      const qs = params.toString();
+      const res = await fetch(`/api/products${qs ? "?" + qs : ""}`, { credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+  });
   const { data: categories = [] } = useQuery<Category[]>({ queryKey: ["/api/categories"], queryFn: getQueryFn({ on401: "throw" }) });
   const { data: variants = [] } = useQuery<ProductVariant[]>({ 
     queryKey: [`/api/products/${selectedProduct?.id}/variants`], 
@@ -42,20 +54,24 @@ export default function Products() {
     enabled: !!selectedProduct 
   });
 
-  const filteredProducts = products.filter(p => {
-    const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
-    const matchCat = filterCat === "all" || p.categoryId === parseInt(filterCat);
-    return matchSearch && matchCat;
+  const { data: productDetail } = useQuery<any>({
+    queryKey: [`/api/products/${detailProductId}`],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: !!detailProductId,
   });
 
   const createProductMutation = useMutation({
-    mutationFn: async (data: any) => apiRequest("POST", "/api/products", data),
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/products", data);
+      return res.json();
+    },
     onSuccess: () => {
       toast({ title: t("products.added_success") });
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       setAddOpen(false);
-      setNewProduct({ name: "", categoryId: "", price: "", active: true });
-    }
+      setNewProduct({ name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true });
+    },
+    onError: (err: Error) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
 
   const deleteProductMutation = useMutation({
@@ -192,7 +208,7 @@ export default function Products() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredProducts.map(p => (
+            {products.map(p => (
               <TableRow key={p.id}>
                 <TableCell className="font-medium">{p.name}</TableCell>
                 <TableCell>{categories.find(c => c.id === p.categoryId)?.name || "-"}</TableCell>
@@ -208,6 +224,7 @@ export default function Products() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="icon" onClick={() => setDetailProductId(p.id)} data-testid={`button-detail-product-${p.id}`}><Eye className="w-4 h-4" /></Button>
                     <Button variant="ghost" size="sm" onClick={() => openManageVariants(p)} data-testid={`button-manage-variants-${p.id}`}>{t("products.manage_variants")}</Button>
                     <Button variant="ghost" size="icon" onClick={() => deleteProductMutation.mutate(p.id)} data-testid={`button-delete-product-${p.id}`}><Trash2 className="w-4 h-4 text-destructive" /></Button>
                   </div>
@@ -237,10 +254,117 @@ export default function Products() {
               <label className="text-sm font-medium">{t("products.price_omr")}</label>
               <Input type="number" step="0.001" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} data-testid="input-price" />
             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("products.variant_barcode")}</label>
+              <Input value={newProduct.barcode} onChange={e => setNewProduct({...newProduct, barcode: e.target.value})} data-testid="input-product-barcode" placeholder={t("products.optional")} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("products.product_type")}</label>
+              <Select value={newProduct.productType} onValueChange={v => setNewProduct({...newProduct, productType: v})}>
+                <SelectTrigger data-testid="select-product-type"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="simple">{t("products.type_simple")}</SelectItem>
+                  <SelectItem value="variable">{t("products.type_variable")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => createProductMutation.mutate({...newProduct, categoryId: parseInt(newProduct.categoryId)})} data-testid="button-save-product">{t("common.save")}</Button>
+            <Button
+              onClick={() => createProductMutation.mutate({
+                name: newProduct.name,
+                price: parseFloat(newProduct.price) || 0,
+                barcode: newProduct.barcode || null,
+                categoryId: newProduct.categoryId ? parseInt(newProduct.categoryId) : null,
+                productType: newProduct.productType,
+                active: newProduct.active,
+                variants: [],
+              })}
+              disabled={createProductMutation.isPending || newProduct.name.trim().length < 2 || !newProduct.price}
+              data-testid="button-save-product"
+            >{t("common.save")}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Product Detail Modal */}
+      <Dialog open={!!detailProductId} onOpenChange={open => { if (!open) setDetailProductId(null); }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Package className="w-5 h-5" />{productDetail?.name || "..."}</DialogTitle>
+          </DialogHeader>
+          {productDetail && (
+            <div className="space-y-6 py-2">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div><span className="text-muted-foreground">{t("products.default_price")}:</span> <span className="font-medium">{parseFloat(productDetail.price).toFixed(3)}</span></div>
+                <div><span className="text-muted-foreground">{t("products.category")}:</span> <span className="font-medium">{categories.find(c => c.id === productDetail.categoryId)?.name || "-"}</span></div>
+                <div><span className="text-muted-foreground">{t("products.product_type")}:</span> <span className="font-medium">{productDetail.productType || "simple"}</span></div>
+                <div><span className="text-muted-foreground">{t("products.table_status")}:</span> <Badge variant={productDetail.active ? "default" : "secondary"}>{productDetail.active ? t("products.active") : t("products.inactive")}</Badge></div>
+              </div>
+
+              {productDetail.variants && productDetail.variants.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-2 flex items-center gap-2"><Barcode className="w-4 h-4" />{t("products.variants")}</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t("products.variant_barcode")}</TableHead>
+                        <TableHead>{t("products.variant_sku")}</TableHead>
+                        <TableHead>{t("products.variant_color")}</TableHead>
+                        <TableHead>{t("products.variant_size")}</TableHead>
+                        <TableHead>{t("products.variant_price")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {productDetail.variants.map((v: any) => (
+                        <TableRow key={v.id}>
+                          <TableCell className="font-mono text-xs">{v.barcode || "-"}</TableCell>
+                          <TableCell>{v.sku || "-"}</TableCell>
+                          <TableCell>{v.color || "-"}</TableCell>
+                          <TableCell>{v.size || "-"}</TableCell>
+                          <TableCell>{parseFloat(v.price).toFixed(3)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {productDetail.locationInventory && productDetail.locationInventory.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-2 flex items-center gap-2"><MapPin className="w-4 h-4" />{t("products.inventory_locations")}</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t("products.location_name")}</TableHead>
+                        <TableHead>{t("products.branch")}</TableHead>
+                        <TableHead>{t("products.qty_on_hand")}</TableHead>
+                        <TableHead>{t("products.reorder_level")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {productDetail.locationInventory.map((loc: any) => (
+                        <TableRow key={loc.locationId}>
+                          <TableCell>{loc.locationName}</TableCell>
+                          <TableCell>{loc.branchName || t("products.central")}</TableCell>
+                          <TableCell>
+                            <Badge variant={loc.qtyOnHand <= (loc.reorderLevel || 0) ? "destructive" : "outline"}>
+                              {loc.qtyOnHand}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{loc.reorderLevel ?? "-"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {(!productDetail.locationInventory || productDetail.locationInventory.length === 0) && (
+                <p className="text-sm text-muted-foreground text-center py-2">{t("products.no_inventory_data")}</p>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

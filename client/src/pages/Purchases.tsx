@@ -755,7 +755,7 @@ function PurchasesTab() {
 
   const approveMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/purchase-invoices/${selectedInvoice}/approve`);
+      const res = await apiRequest("PATCH", `/api/purchases/${selectedInvoice}/status`, { status: "approved" });
       return res.json();
     },
     onSuccess: () => {
@@ -769,6 +769,20 @@ function PurchasesTab() {
       setShowPostConfirm(false);
       toast({ title: t("purchases.approve_failed"), description: e.message, variant: "destructive" });
     },
+  });
+
+  const receiveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", `/api/purchases/${selectedInvoice}/status`, { status: "received" });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/purchases"] });
+      qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
+      qc.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({ title: t("purchases.invoice_received"), description: t("purchases.invoice_received_desc") });
+    },
+    onError: (e: Error) => toast({ title: t("purchases.approve_failed"), description: e.message, variant: "destructive" }),
   });
 
   async function handleOcrUpload(file: File) {
@@ -974,7 +988,7 @@ function PurchasesTab() {
   });
   const profitMargin = parseFloat(settings?.default_profit_margin || "50");
 
-  const statusLabel = invoiceDetail?.status === "pending" ? t("purchases.pending") : invoiceDetail?.status === "approved" ? t("purchases.approved") : t("purchases.cancelled");
+  const statusLabel = invoiceDetail?.status === "pending" ? t("purchases.pending") : invoiceDetail?.status === "approved" ? t("purchases.approved") : invoiceDetail?.status === "received" ? t("purchases.received") : t("purchases.cancelled");
   const itemsSubtotal = items.reduce((s: number, it: any) => s + parseFloat(it.lineSubtotal || "0"), 0);
   const extraTotal = invoiceDetail
     ? parseFloat(invoiceDetail.shippingCost || "0") + parseFloat(invoiceDetail.customsCost || "0") +
@@ -1006,7 +1020,7 @@ function PurchasesTab() {
                 </Button>
               </label>
             )}
-            <Badge variant={isPending ? "outline" : "default"} className={isPending ? "border-amber-400 text-amber-600" : invoiceDetail?.status === "approved" ? "bg-green-600" : "bg-red-500"}>
+            <Badge variant={isPending ? "outline" : "default"} className={isPending ? "border-amber-400 text-amber-600" : invoiceDetail?.status === "approved" ? "bg-green-600" : invoiceDetail?.status === "received" ? "bg-blue-600" : "bg-red-500"}>
               {statusLabel}
             </Badge>
             <Button variant="outline" onClick={() => setSelectedInvoice(null)} data-testid="button-back-to-list">{t("purchases.back_to_list")}</Button>
@@ -1364,6 +1378,25 @@ function PurchasesTab() {
           </div>
         )}
 
+        {invoiceDetail?.status === "approved" && canManage && (
+          <div className="flex justify-end">
+            <Button size="lg" className="gap-2 bg-blue-600 hover:bg-blue-700" onClick={() => receiveMutation.mutate()} disabled={receiveMutation.isPending} data-testid="button-receive-invoice">
+              <FileCheck className="w-5 h-5" /> {t("purchases.receive_invoice")}
+            </Button>
+          </div>
+        )}
+
+        {(invoiceDetail?.status === "approved" || invoiceDetail?.status === "received") && (
+          <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800 p-4 flex items-center gap-3 text-sm text-green-800 dark:text-green-300">
+            <FileCheck className="w-5 h-5 shrink-0" />
+            <span>
+              {invoiceDetail.status === "received"
+                ? t("purchases.inventory_updated_received")
+                : t("purchases.inventory_updated_approved")}
+            </span>
+          </div>
+        )}
+
         <Dialog open={ocrStage === "review"} onOpenChange={(open) => { if (!open) { setOcrStage("idle"); setOcrItems([]); setOcrValidation(null); setOcrMeta(null); } }}>
           <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto">
             <DialogHeader>
@@ -1671,8 +1704,8 @@ function PurchasesTab() {
                   <TableCell>{inv.invoiceDate}</TableCell>
                   <TableCell className="font-mono">{omr(inv.grandTotal)} {t("common.omr")}</TableCell>
                   <TableCell>
-                    <Badge variant={inv.status === "pending" ? "outline" : "default"} className={inv.status === "pending" ? "border-amber-400 text-amber-600" : inv.status === "approved" ? "bg-green-600" : "bg-red-500"}>
-                      {inv.status === "pending" ? t("purchases.pending") : inv.status === "approved" ? t("purchases.approved") : t("purchases.cancelled")}
+                    <Badge variant={inv.status === "pending" ? "outline" : "default"} className={inv.status === "pending" ? "border-amber-400 text-amber-600" : inv.status === "approved" ? "bg-green-600" : inv.status === "received" ? "bg-blue-600" : "bg-red-500"}>
+                      {inv.status === "pending" ? t("purchases.pending") : inv.status === "approved" ? t("purchases.approved") : inv.status === "received" ? t("purchases.received") : t("purchases.cancelled")}
                     </Badge>
                   </TableCell>
                 </TableRow>
