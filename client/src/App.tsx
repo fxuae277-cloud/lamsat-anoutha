@@ -34,6 +34,11 @@ import Customers from "@/pages/Customers";
 import Accounts from "@/pages/Accounts";
 import JournalEntries from "@/pages/JournalEntries";
 import GeneralLedger from "@/pages/GeneralLedger";
+import Categories from "@/pages/Categories";
+import InventoryAlerts from "@/pages/InventoryAlerts";
+import Branches from "@/pages/Branches";
+import PurchaseReturns from "@/pages/PurchaseReturns";
+import InventoryOverview from "@/pages/InventoryOverview";
 
 import MobileEmployeeHome from "@/pages/mobile/MobileEmployeeHome";
 import MobileOwnerHome from "@/pages/mobile/MobileOwnerHome";
@@ -199,7 +204,22 @@ function DesktopRouter() {
           <RequireOwner><Inventory /></RequireOwner>
         </Route>
         <Route path="/stocktake">
-          <RequireOwner><Inventory /></RequireOwner>
+          <RequireOwner><StockControl /></RequireOwner>
+        </Route>
+        <Route path="/categories">
+          <RequireOwner><Categories /></RequireOwner>
+        </Route>
+        <Route path="/inventory-alerts">
+          <RequireOwner><InventoryAlerts /></RequireOwner>
+        </Route>
+        <Route path="/branches">
+          <RequireOwner><Branches /></RequireOwner>
+        </Route>
+        <Route path="/purchase-returns">
+          <RequireOwner><PurchaseReturns /></RequireOwner>
+        </Route>
+        <Route path="/inventory-overview">
+          <RequireOwner><InventoryOverview /></RequireOwner>
         </Route>
         <Route component={NotFound} />
       </Switch>

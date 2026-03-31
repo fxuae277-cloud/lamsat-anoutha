@@ -29,7 +29,14 @@
     "operations": "Recent Operations",
     "auditLog": "Audit Log",
     "settings": "Settings",
-    "branchStock": "Branch Stock"
+    "branchStock": "Branch Stock",
+    "categories": "Categories",
+    "inventoryAlerts": "Inventory Alerts",
+    "branches": "Branches",
+    "purchases": "Purchase Invoices",
+    "purchaseReturns": "Purchase Returns",
+    "transfers": "Transfers",
+    "inventoryOverview": "Overview"
   },
   "sidebar": {
     "role_owner": "Owner",
@@ -45,7 +52,10 @@
     "section_purchasing": "Purchasing",
     "section_finance": "Finance",
     "section_audit": "Audit & Monitoring",
-    "section_settings": "Settings"
+    "section_settings": "Settings",
+    "section_basic_data": "Master Data",
+    "section_wh_operations": "Operations",
+    "section_wh_stock": "Inventory"
   },
   "settings": {
     "title": "Settings",
@@ -218,6 +228,7 @@
     "error": "Error",
     "success": "Success",
     "saved": "Saved",
+    "deleted": "Deleted",
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",
@@ -400,7 +411,17 @@
     "qty_on_hand": "Qty on Hand",
     "reorder_level": "Reorder Level",
     "central": "Central",
-    "no_inventory_data": "No inventory data for this product"
+    "no_inventory_data": "No inventory data for this product",
+    "total_stock": "Total Stock",
+    "last_supplier": "Last Supplier",
+    "edit_product": "Edit Product",
+    "all_types": "All Types",
+    "tab_basic": "Basic",
+    "tab_pricing": "Pricing",
+    "tab_variants": "Variants",
+    "tab_stock": "Stock",
+    "code": "Code",
+    "image": "Image"
   },
   "inv_balances": {
     "title": "Inventory Balances",

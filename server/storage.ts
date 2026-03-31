@@ -322,28 +322,43 @@ export class DatabaseStorage implements IStorage {
     const [row] = await db.insert(categories).values(data).returning();
     return row;
   }
+  async updateCategory(id: number, name: string) {
+    const [row] = await db.update(categories).set({ name }).where(eq(categories.id, id)).returning();
+    return row;
+  }
+  async deleteCategory(id: number) {
+    await db.delete(categories).where(eq(categories.id, id));
+  }
 
   async getProducts(filters?: { q?: string; barcode?: string; categoryId?: number; productType?: string }) {
+    let rows: Product[];
     if (!filters || (!filters.q && !filters.barcode && !filters.categoryId && !filters.productType)) {
-      return db.select().from(products).orderBy(desc(products.id));
+      rows = await db.select().from(products).orderBy(desc(products.id));
+    } else {
+      const conditions: SQL[] = [];
+      if (filters.barcode) conditions.push(eq(products.barcode, filters.barcode));
+      if (filters.categoryId) conditions.push(eq(products.categoryId, filters.categoryId));
+      if (filters.productType) conditions.push(eq(products.productType, filters.productType));
+      if (filters.q) {
+        conditions.push(or(
+          ilike(products.name, `%${filters.q}%`),
+          ilike(products.barcode, `%${filters.q}%`),
+        )!);
+      }
+      rows = await db.select().from(products).where(and(...conditions)).orderBy(desc(products.id));
     }
-    const conditions: SQL[] = [];
-    if (filters.barcode) {
-      conditions.push(eq(products.barcode, filters.barcode));
-    }
-    if (filters.categoryId) {
-      conditions.push(eq(products.categoryId, filters.categoryId));
-    }
-    if (filters.productType) {
-      conditions.push(eq(products.productType, filters.productType));
-    }
-    if (filters.q) {
-      conditions.push(or(
-        ilike(products.name, `%${filters.q}%`),
-        ilike(products.barcode, `%${filters.q}%`),
-      )!);
-    }
-    return db.select().from(products).where(and(...conditions)).orderBy(desc(products.id));
+    if (rows.length === 0) return rows.map(r => ({ ...r, totalStock: 0 }));
+    const ids = rows.map(r => r.id);
+    const stockResult = await db.execute(sql`
+      SELECT pv.product_id, COALESCE(SUM(ib.qty_on_hand), 0)::int AS total_stock
+      FROM product_variants pv
+      LEFT JOIN inventory_balances ib ON ib.variant_id = pv.id
+      WHERE pv.product_id = ANY(ARRAY[${sql.join(ids.map(id => sql`${id}::int`), sql`, `)}])
+      GROUP BY pv.product_id
+    `);
+    const stockMap = new Map<number, number>();
+    for (const r of stockResult.rows as any[]) stockMap.set(Number(r.product_id), Number(r.total_stock));
+    return rows.map(r => ({ ...r, totalStock: stockMap.get(r.id) ?? 0 }));
   }
   async getProduct(id: number) {
     const [row] = await db.select().from(products).where(eq(products.id, id));

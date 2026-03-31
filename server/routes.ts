@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { logger } from "./logger";
 import { storage } from "./storage";
 import { db, pool } from "./db";
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import multer from "multer";
 import path from "path";
@@ -777,6 +777,17 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     res.status(201).json(await storage.createCategory(parsed.data));
   });
+  app.patch("/api/categories/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    const { name } = req.body;
+    if (!name?.trim()) return res.status(400).json({ message: "الاسم مطلوب" });
+    const row = await storage.updateCategory(Number(req.params.id), name.trim());
+    if (!row) return res.status(404).json({ message: "الفئة غير موجودة" });
+    res.json(row);
+  });
+  app.delete("/api/categories/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    await storage.deleteCategory(Number(req.params.id));
+    res.json({ ok: true });
+  });
 
   app.get("/api/products", requireAuth, async (req, res) => {
     const { q, barcode, categoryId, productType } = req.query;
@@ -790,11 +801,27 @@ export async function registerRoutes(
   app.get("/api/products/:id", requireAuth, async (req, res) => {
     const product = await storage.getProduct(Number(req.params.id));
     if (!product) return res.status(404).json({ message: "المنتج غير موجود" });
-    const [variants, locationInventory] = await Promise.all([
+    const [variants, locationInventory, lastPurchaseResult] = await Promise.all([
       storage.getVariantsByProduct(product.id),
       storage.getLocationInventoryByProduct(product.id),
+      db.execute(sql`
+        SELECT pi.unit_cost_final AS last_purchase_price, s.name AS last_supplier
+        FROM purchase_items pi
+        JOIN purchase_invoices inv ON inv.id = pi.purchase_id
+        JOIN suppliers s ON s.id = inv.supplier_id
+        WHERE pi.product_id = ${product.id} AND inv.status = 'approved'
+        ORDER BY inv.invoice_date DESC, inv.id DESC
+        LIMIT 1
+      `),
     ]);
-    res.json({ ...product, variants, locationInventory });
+    const lp = (lastPurchaseResult.rows[0] as any) || null;
+    res.json({
+      ...product,
+      variants,
+      locationInventory,
+      lastPurchasePrice: lp?.last_purchase_price ?? null,
+      lastSupplier: lp?.last_supplier ?? null,
+    });
   });
   app.get("/api/products/barcode/:barcode", requireAuth, async (req, res) => {
     const row = await storage.getProductByBarcode(req.params.barcode);

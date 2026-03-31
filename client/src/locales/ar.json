@@ -29,7 +29,14 @@
     "operations": "آخر العمليات",
     "auditLog": "سجل المراجعة",
     "settings": "الإعدادات",
-    "branchStock": "مخزن الفرع"
+    "branchStock": "مخزن الفرع",
+    "categories": "الفئات",
+    "inventoryAlerts": "تنبيهات المخزون",
+    "branches": "الفروع",
+    "purchases": "فواتير الشراء",
+    "purchaseReturns": "مرتجعات الشراء",
+    "transfers": "التحويلات",
+    "inventoryOverview": "نظرة عامة"
   },
   "sidebar": {
     "role_owner": "مالك",
@@ -45,7 +52,10 @@
     "section_purchasing": "المشتريات",
     "section_finance": "المالية",
     "section_audit": "الرقابة",
-    "section_settings": "الإعدادات"
+    "section_settings": "الإعدادات",
+    "section_basic_data": "البيانات الأساسية",
+    "section_wh_operations": "العمليات",
+    "section_wh_stock": "المخزون"
   },
   "settings": {
     "title": "الإعدادات",
@@ -218,6 +228,7 @@
     "error": "خطأ",
     "success": "تم بنجاح",
     "saved": "تم الحفظ",
+    "deleted": "تم الحذف",
     "save": "حفظ",
     "cancel": "إلغاء",
     "delete": "حذف",
@@ -400,7 +411,17 @@
     "qty_on_hand": "الكمية المتاحة",
     "reorder_level": "حد إعادة الطلب",
     "central": "مركزي",
-    "no_inventory_data": "لا توجد بيانات مخزون لهذا المنتج"
+    "no_inventory_data": "لا توجد بيانات مخزون لهذا المنتج",
+    "total_stock": "المخزون الكلي",
+    "last_supplier": "آخر مورد",
+    "edit_product": "تعديل المنتج",
+    "all_types": "كل الأنواع",
+    "tab_basic": "الأساسيات",
+    "tab_pricing": "التسعير",
+    "tab_variants": "المتغيرات",
+    "tab_stock": "المخزون",
+    "code": "الكود",
+    "image": "الصورة"
   },
   "inv_balances": {
     "title": "أرصدة المخزون",
