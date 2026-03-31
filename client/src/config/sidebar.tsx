@@ -26,6 +26,9 @@ import {
   ArrowLeftRight,
   PackageSearch,
   PackageX,
+  Wallet,
+  TrendingUp,
+  CreditCard,
 } from "lucide-react";
 
 export type SidebarItem = {
@@ -110,6 +113,16 @@ export const OWNER_SIDEBAR: SidebarSection[] = [
     items: [
       { labelKey: "nav.settings", icon: Settings, path: "/settings" },
       { labelKey: "nav.hr",       icon: UserCog,  path: "/hr" },
+    ],
+  },
+  {
+    sectionKey: "sidebar.section_payroll",
+    items: [
+      { labelKey: "nav.payrollEmployees",  icon: Users,        path: "/payroll/employees" },
+      { labelKey: "nav.payrollMovements",  icon: TrendingUp,   path: "/payroll/movements" },
+      { labelKey: "nav.payrollSheet",      icon: FileSpreadsheet, path: "/payroll/sheet" },
+      { labelKey: "nav.payrollSummary",    icon: Wallet,       path: "/payroll/summary" },
+      { labelKey: "nav.payrollPayments",   icon: CreditCard,   path: "/payroll/payments" },
     ],
   },
 ];

@@ -40,6 +40,12 @@ import Branches from "@/pages/Branches";
 import PurchaseReturns from "@/pages/PurchaseReturns";
 import InventoryOverview from "@/pages/InventoryOverview";
 import SuppliersPage from "@/pages/Suppliers";
+import { PayrollProvider } from "@/providers/PayrollProvider";
+import EmployeesPage from "@/components/payroll/employees/EmployeesPage";
+import FinancialMovementsPage from "@/components/payroll/financial-movements/FinancialMovementsPage";
+import PayrollSummaryPage from "@/components/payroll/payroll-summary/PayrollSummaryPage";
+import SalaryPaymentsPage from "@/components/payroll/salary-payments/SalaryPaymentsPage";
+import PayrollSheetPage from "@/components/payroll/payroll-sheet/PayrollSheetPage";
 
 import MobileEmployeeHome from "@/pages/mobile/MobileEmployeeHome";
 import MobileOwnerHome from "@/pages/mobile/MobileOwnerHome";
@@ -137,6 +143,7 @@ function MobileRouter() {
 
 function DesktopRouter() {
   return (
+    <PayrollProvider>
     <AppLayout>
       <Switch>
         <Route path="/pos" component={POS}/>
@@ -222,9 +229,25 @@ function DesktopRouter() {
         <Route path="/inventory-overview">
           <RequireOwner><InventoryOverview /></RequireOwner>
         </Route>
+        <Route path="/payroll/employees">
+          <RequireOwner><EmployeesPage /></RequireOwner>
+        </Route>
+        <Route path="/payroll/movements">
+          <RequireOwner><FinancialMovementsPage /></RequireOwner>
+        </Route>
+        <Route path="/payroll/summary">
+          <RequireOwner><PayrollSummaryPage /></RequireOwner>
+        </Route>
+        <Route path="/payroll/payments">
+          <RequireOwner><SalaryPaymentsPage /></RequireOwner>
+        </Route>
+        <Route path="/payroll/sheet">
+          <RequireOwner><PayrollSheetPage /></RequireOwner>
+        </Route>
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
+    </PayrollProvider>
   );
 }
 

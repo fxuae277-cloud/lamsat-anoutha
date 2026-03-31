@@ -36,7 +36,12 @@
     "purchases": "فواتير الشراء",
     "purchaseReturns": "مرتجعات الشراء",
     "transfers": "التحويلات",
-    "inventoryOverview": "نظرة عامة"
+    "inventoryOverview": "نظرة عامة",
+    "payrollEmployees": "الموظفون",
+    "payrollMovements": "الحركات المالية",
+    "payrollSheet": "كشف الرواتب",
+    "payrollSummary": "ملخص الرواتب",
+    "payrollPayments": "متابعة الدفع"
   },
   "sidebar": {
     "role_owner": "مالك",
@@ -55,7 +60,8 @@
     "section_settings": "الإعدادات",
     "section_basic_data": "البيانات الأساسية",
     "section_wh_operations": "العمليات",
-    "section_wh_stock": "المخزون"
+    "section_wh_stock": "المخزون",
+    "section_payroll": "الرواتب والموظفين"
   },
   "settings": {
     "title": "الإعدادات",
@@ -1795,7 +1801,6 @@
     "branch_label": "الفرع",
     "select_branch": "اختر الفرع...",
     "table_branch": "الفرع",
-    "table_actions": "إجراءات",
     "open_invoice": "فتح الفاتورة"
   },
   "returns": {

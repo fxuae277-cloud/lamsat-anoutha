@@ -36,7 +36,12 @@
     "purchases": "Purchase Invoices",
     "purchaseReturns": "Purchase Returns",
     "transfers": "Transfers",
-    "inventoryOverview": "Overview"
+    "inventoryOverview": "Overview",
+    "payrollEmployees": "Employees",
+    "payrollMovements": "Financial Movements",
+    "payrollSheet": "Payroll Sheet",
+    "payrollSummary": "Payroll Summary",
+    "payrollPayments": "Payment Tracking"
   },
   "sidebar": {
     "role_owner": "Owner",
@@ -55,7 +60,8 @@
     "section_settings": "Settings",
     "section_basic_data": "Master Data",
     "section_wh_operations": "Operations",
-    "section_wh_stock": "Inventory"
+    "section_wh_stock": "Inventory",
+    "section_payroll": "Payroll & HR"
   },
   "settings": {
     "title": "Settings",
@@ -1795,7 +1801,6 @@
     "branch_label": "Branch",
     "select_branch": "Select branch...",
     "table_branch": "Branch",
-    "table_actions": "Actions",
     "open_invoice": "Open Invoice"
   },
   "returns": {
