@@ -22,8 +22,9 @@ import {
   formatZodError,
   loginSchema,
   createUserSchema, updateUserSchema,
-  updateProductSchema,
+  createProductSchema, updateProductSchema,
   createProductVariantSchema, updateProductVariantSchema, quickCreateVariantSchema,
+  addPurchaseItemSchema, patchPurchaseStatusSchema,
   updateCustomerSchema,
   orderItemSchema, orderStatusSchema,
 } from "./validation";
@@ -777,13 +778,23 @@ export async function registerRoutes(
     res.status(201).json(await storage.createCategory(parsed.data));
   });
 
-  app.get("/api/products", requireAuth, async (_req, res) => {
-    res.json(await storage.getProducts());
+  app.get("/api/products", requireAuth, async (req, res) => {
+    const { q, barcode, categoryId, productType } = req.query;
+    res.json(await storage.getProducts({
+      q:           q           ? String(q)           : undefined,
+      barcode:     barcode     ? String(barcode)     : undefined,
+      categoryId:  categoryId  ? Number(categoryId)  : undefined,
+      productType: productType ? String(productType) : undefined,
+    }));
   });
   app.get("/api/products/:id", requireAuth, async (req, res) => {
-    const row = await storage.getProduct(Number(req.params.id));
-    if (!row) return res.status(404).json({ message: "المنتج غير موجود" });
-    res.json(row);
+    const product = await storage.getProduct(Number(req.params.id));
+    if (!product) return res.status(404).json({ message: "المنتج غير موجود" });
+    const [variants, locationInventory] = await Promise.all([
+      storage.getVariantsByProduct(product.id),
+      storage.getLocationInventoryByProduct(product.id),
+    ]);
+    res.json({ ...product, variants, locationInventory });
   });
   app.get("/api/products/barcode/:barcode", requireAuth, async (req, res) => {
     const row = await storage.getProductByBarcode(req.params.barcode);
@@ -791,9 +802,15 @@ export async function registerRoutes(
     res.json(row);
   });
   app.post("/api/products", requireAuth, requireOwnerOrAdmin, async (req, res) => {
-    const parsed = insertProductSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
-    res.status(201).json(await storage.createProduct(parsed.data));
+    try {
+      const parsed = createProductSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      const { variants, ...productData } = parsed.data;
+      const result = await storage.createProductWithVariants(productData as any, variants ?? []);
+      res.status(201).json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في إنشاء المنتج" });
+    }
   });
   app.patch("/api/products/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     const parsed = updateProductSchema.safeParse(req.body);
@@ -1173,11 +1190,31 @@ export async function registerRoutes(
     res.status(201).json(await storage.createWarehouse(parsed.data));
   });
 
-  app.get("/api/inventory", requireAuth, requireManager, async (_req, res) => {
-    res.json(await storage.getInventory());
+  app.get("/api/inventory", requireAuth, requireManager, async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    const branchId = req.query.branchId
+      ? Number(req.query.branchId)
+      : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId ?? undefined);
+    res.json(await storage.getBranchInventory(branchId));
   });
   app.get("/api/inventory/low-stock", requireAuth, async (_req, res) => {
     res.json(await storage.getLowStockAlerts());
+  });
+  app.get("/api/inventory/transactions", requireAuth, requireManager, async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    const branchId = req.query.branchId
+      ? Number(req.query.branchId)
+      : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId ?? undefined);
+    res.json(await storage.getInventoryTransactions({
+      branchId,
+      productId: req.query.productId ? Number(req.query.productId) : undefined,
+      type:      req.query.type      ? String(req.query.type)      : undefined,
+      from:      req.query.from      ? String(req.query.from)      : undefined,
+      to:        req.query.to        ? String(req.query.to)        : undefined,
+      limit:     req.query.limit     ? Number(req.query.limit)     : undefined,
+    }));
   });
   app.post("/api/inventory/receive", requireAuth, requireManager, async (req, res) => {
     const { productId, warehouseId, quantity } = req.body;
@@ -2159,22 +2196,23 @@ export async function registerRoutes(
       const purchaseId = Number(req.params.id);
       const invoice = await storage.getPurchaseInvoice(purchaseId);
       if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
-      if (invoice.status !== "pending") {
-        return res.status(400).json({ message: "لا يمكن إضافة أصناف لفاتورة معتمدة أو ملغاة" });
-      }
-      const { productId, qty, unitCostBase } = req.body;
-      if (!productId || !qty || !unitCostBase) {
-        return res.status(400).json({ message: "المنتج والكمية وسعر التكلفة مطلوبة" });
-      }
-      const lineSubtotal = Number(qty) * Number(unitCostBase);
+      if (invoice.status !== "pending")
+        return res.status(400).json({ message: "لا يمكن إضافة أصناف لفاتورة معتمدة أو مستلمة" });
+
+      const parsed = addPurchaseItemSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+
+      const { productId, qty, unitCostBase, variantId } = parsed.data;
+      const lineSubtotal = qty * unitCostBase;
       const item = await storage.addPurchaseItem({
         purchaseId,
-        productId: Number(productId),
-        qty: Number(qty),
-        unitCostBase: String(unitCostBase),
-        lineSubtotal: lineSubtotal.toFixed(3),
+        productId,
+        variantId: variantId ?? null,
+        qty,
+        unitCostBase:      unitCostBase.toFixed(3),
+        lineSubtotal:      lineSubtotal.toFixed(3),
         allocatedExtraCost: "0",
-        unitCostFinal: "0",
+        unitCostFinal:      "0",
       });
       res.status(201).json(item);
     } catch (err: any) {
@@ -2222,6 +2260,42 @@ export async function registerRoutes(
     }
     await storage.deletePurchaseItem(Number(req.params.itemId));
     res.json({ message: "تم الحذف" });
+  });
+
+  app.patch("/api/purchases/:id/status", requireAuth, requireManager, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const parsed = patchPurchaseStatusSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+
+      const invoice = await storage.getPurchaseInvoice(id);
+      if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
+
+      if (parsed.data.status === "approved") {
+        if (invoice.status !== "pending")
+          return res.status(400).json({ message: "يمكن اعتماد الفواتير بحالة (pending) فقط" });
+        const result = await storage.approvePurchaseInvoice(id);
+        journalForPurchase({
+          id: result.id,
+          invoiceNumber: result.invoiceNumber || "",
+          grandTotal:    result.grandTotal    || "0",
+          supplierId:    result.supplierId,
+          branchId:      result.branchId,
+          createdBy:     result.createdBy,
+          invoiceDate:   result.invoiceDate   || new Date().toISOString().slice(0, 10),
+        }).catch(err => console.error("[AutoJournal] Purchase error:", err.message));
+        return res.json(result);
+      }
+
+      if (parsed.data.status === "received") {
+        if (invoice.status !== "approved")
+          return res.status(400).json({ message: "يجب اعتماد الفاتورة أولاً قبل الاستلام" });
+        const result = await storage.receivePurchaseInvoice(id);
+        return res.json(result);
+      }
+    } catch (err: any) {
+      res.status(400).json({ message: err?.message ?? "فشل تحديث الحالة" });
+    }
   });
 
   app.post("/api/purchase-invoices/:id/approve", requireAuth, requireManager, async (req, res) => {

@@ -1,5 +1,5 @@
 import { db, pool } from "./db";
-import { eq, desc, sql, and, lte, gte } from "drizzle-orm";
+import { eq, desc, sql, and, lte, gte, ilike, or } from "drizzle-orm";
 import {
   branches, type InsertBranch, type Branch,
   cities, type InsertCity, type City,
@@ -255,6 +255,23 @@ export interface IStorage {
   // General Ledger
   getGeneralLedger(accountId: number, from?: string, to?: string): Promise<any[]>;
   getTrialBalance(from?: string, to?: string): Promise<any[]>;
+
+  // Products (extended)
+  createProductWithVariants(
+    productData: InsertProduct,
+    variants: Omit<InsertProductVariant, "productId">[]
+  ): Promise<{ product: Product; variants: ProductVariant[] }>;
+  getLocationInventoryByProduct(productId: number): Promise<any[]>;
+
+  // Inventory Transactions (extended)
+  getInventoryTransactions(filters?: {
+    branchId?: number;
+    productId?: number;
+    type?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+  }): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -306,7 +323,28 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getProducts() { return db.select().from(products).orderBy(desc(products.id)); }
+  async getProducts(filters?: { q?: string; barcode?: string; categoryId?: number; productType?: string }) {
+    if (!filters || (!filters.q && !filters.barcode && !filters.categoryId && !filters.productType)) {
+      return db.select().from(products).orderBy(desc(products.id));
+    }
+    const conditions: SQL[] = [];
+    if (filters.barcode) {
+      conditions.push(eq(products.barcode, filters.barcode));
+    }
+    if (filters.categoryId) {
+      conditions.push(eq(products.categoryId, filters.categoryId));
+    }
+    if (filters.productType) {
+      conditions.push(eq(products.productType, filters.productType));
+    }
+    if (filters.q) {
+      conditions.push(or(
+        ilike(products.name, `%${filters.q}%`),
+        ilike(products.barcode, `%${filters.q}%`),
+      )!);
+    }
+    return db.select().from(products).where(and(...conditions)).orderBy(desc(products.id));
+  }
   async getProduct(id: number) {
     const [row] = await db.select().from(products).where(eq(products.id, id));
     return row;
@@ -4951,6 +4989,107 @@ export class DatabaseStorage implements IStorage {
                ORDER BY a.code`;
     const result = await pool.query(query, params);
     return result.rows;
+  }
+
+  // ── Products (extended) ───────────────────────────────────────────────────
+
+  async createProductWithVariants(
+    productData: InsertProduct,
+    variants: Omit<InsertProductVariant, "productId">[]
+  ): Promise<{ product: Product; variants: ProductVariant[] }> {
+    return db.transaction(async (tx) => {
+      const [product] = await tx.insert(products).values(productData).returning();
+
+      let createdVariants: ProductVariant[] = [];
+
+      if (variants.length > 0) {
+        createdVariants = await tx
+          .insert(productVariants)
+          .values(variants.map((v) => ({ ...v, productId: product.id })))
+          .returning();
+      } else if (productData.productType === "variable") {
+        // auto-create a default variant for variable products with no variants supplied
+        const sku = `SKU-${product.id}-${Date.now()}`;
+        const [defaultVariant] = await tx
+          .insert(productVariants)
+          .values({
+            productId: product.id,
+            sku,
+            price: productData.price,
+            isDefault: true,
+            active: true,
+          })
+          .returning();
+        createdVariants = [defaultVariant];
+      }
+
+      return { product, variants: createdVariants };
+    });
+  }
+
+  async getLocationInventoryByProduct(productId: number): Promise<any[]> {
+    return db
+      .select({
+        locationId:   locationInventory.locationId,
+        locationName: locations.name,
+        locationCode: locations.code,
+        branchId:     locations.branchId,
+        branchName:   branches.name,
+        qtyOnHand:    locationInventory.qtyOnHand,
+        reorderLevel: locationInventory.reorderLevel,
+        updatedAt:    locationInventory.updatedAt,
+      })
+      .from(locationInventory)
+      .innerJoin(locations, eq(locationInventory.locationId, locations.id))
+      .leftJoin(branches, eq(locations.branchId, branches.id))
+      .where(eq(locationInventory.productId, productId))
+      .orderBy(locations.name);
+  }
+
+  // ── Inventory Transactions (extended) ─────────────────────────────────────
+
+  async getInventoryTransactions(filters?: {
+    branchId?: number;
+    productId?: number;
+    type?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+  }): Promise<any[]> {
+    const conditions: any[] = [];
+    if (filters?.branchId)  conditions.push(eq(inventoryTransactions.branchId, filters.branchId));
+    if (filters?.productId) conditions.push(eq(inventoryTransactions.productId, filters.productId));
+    if (filters?.type)      conditions.push(eq(inventoryTransactions.type, filters.type));
+    if (filters?.from)
+      conditions.push(gte(inventoryTransactions.createdAt, new Date(filters.from + "T00:00:00")));
+    if (filters?.to)
+      conditions.push(lte(inventoryTransactions.createdAt, new Date(filters.to + "T23:59:59.999")));
+
+    const cond = conditions.length > 0 ? and(...conditions) : undefined;
+
+    return db
+      .select({
+        id:             inventoryTransactions.id,
+        date:           inventoryTransactions.date,
+        branchId:       inventoryTransactions.branchId,
+        productId:      inventoryTransactions.productId,
+        productName:    products.name,
+        productBarcode: products.barcode,
+        type:           inventoryTransactions.type,
+        qty:            inventoryTransactions.qty,
+        fromLocationId: inventoryTransactions.fromLocationId,
+        toLocationId:   inventoryTransactions.toLocationId,
+        refTable:       inventoryTransactions.refTable,
+        refId:          inventoryTransactions.refId,
+        note:           inventoryTransactions.note,
+        createdBy:      inventoryTransactions.createdBy,
+        createdAt:      inventoryTransactions.createdAt,
+      })
+      .from(inventoryTransactions)
+      .innerJoin(products, eq(inventoryTransactions.productId, products.id))
+      .where(cond)
+      .orderBy(desc(inventoryTransactions.createdAt))
+      .limit(filters?.limit ?? 200);
   }
 }
 

@@ -14,7 +14,6 @@ const FIELD_NAMES_AR: Record<string, string> = {
   price:              "السعر",
   unitPrice:          "سعر الوحدة",
   costDefault:        "التكلفة الافتراضية",
-  unitCostBase:       "تكلفة الوحدة",
   barcode:            "الباركود",
   sku:                "رمز SKU",
   productId:          "المنتج",
@@ -28,6 +27,12 @@ const FIELD_NAMES_AR: Record<string, string> = {
   customerPhone:      "هاتف العميل",
   status:             "الحالة",
   terminalName:       "اسم الطرفية",
+  productType:        "نوع المنتج",
+  unitOfMeasure:      "وحدة القياس",
+  isComposite:        "منتج مركب",
+  unitCostBase:       "تكلفة الوحدة الأساسية",
+  supplierId:         "المورد",
+  invoiceDate:        "تاريخ الفاتورة",
 };
 
 // ── Arabic error formatter ────────────────────────────────────────────────────
@@ -130,6 +135,44 @@ export const updateCustomerSchema = z.object({
   notes:    z.string().optional().nullable(),
   active:   z.boolean().optional(),
   branchId: z.number().int().positive().optional().nullable(),
+});
+
+// ── Products (create) ─────────────────────────────────────────────────────────
+export const createProductSchema = z.object({
+  name:          z.string({ required_error: "الاسم مطلوب" }).min(2, "الاسم يجب أن يحتوي على حرفين على الأقل"),
+  price:         z.coerce.number({ required_error: "السعر مطلوب" }).min(0, "السعر لا يمكن أن يكون سالباً"),
+  barcode:       z.string().max(50, "الباركود 50 حرفاً كحد أقصى").optional().nullable(),
+  categoryId:    z.number().int().positive().optional().nullable(),
+  branchId:      z.number().int().positive().optional().nullable(),
+  productType:   z.enum(["simple", "variable", "composite"]).default("simple"),
+  unitOfMeasure: z.string().default("piece"),
+  isComposite:   z.boolean().default(false),
+  image:         z.string().optional().nullable(),
+  variants: z.array(z.object({
+    price:       z.coerce.number().min(0, "السعر لا يمكن أن يكون سالباً"),
+    barcode:     z.string().max(50).optional().nullable(),
+    sku:         z.string().max(50).optional().nullable(),
+    color:       z.string().optional().nullable(),
+    size:        z.string().optional().nullable(),
+    costDefault: z.coerce.number().min(0).optional().nullable(),
+    isDefault:   z.boolean().optional(),
+  })).optional().default([]),
+});
+
+// ── Purchase Items ────────────────────────────────────────────────────────────
+export const addPurchaseItemSchema = z.object({
+  productId:    z.number({ required_error: "المنتج مطلوب" }).int().positive("رقم المنتج يجب أن يكون موجباً"),
+  qty:          z.number({ required_error: "الكمية مطلوبة" }).int().min(1, "الكمية يجب أن تكون 1 على الأقل"),
+  unitCostBase: z.coerce.number({ required_error: "تكلفة الوحدة مطلوبة" }).min(0, "التكلفة لا يمكن أن تكون سالبة"),
+  variantId:    z.number().int().positive().optional().nullable(),
+});
+
+// ── Purchase Status ───────────────────────────────────────────────────────────
+export const patchPurchaseStatusSchema = z.object({
+  status: z.enum(["approved", "received"], {
+    errorMap: () => ({ message: "الحالة غير صالحة. القيم المسموحة: approved, received" }),
+  }),
+  note: z.string().optional(),
 });
 
 // ── Orders ────────────────────────────────────────────────────────────────────
