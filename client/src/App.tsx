@@ -39,6 +39,7 @@ import InventoryAlerts from "@/pages/InventoryAlerts";
 import Branches from "@/pages/Branches";
 import PurchaseReturns from "@/pages/PurchaseReturns";
 import InventoryOverview from "@/pages/InventoryOverview";
+import SuppliersPage from "@/pages/Suppliers";
 
 import MobileEmployeeHome from "@/pages/mobile/MobileEmployeeHome";
 import MobileOwnerHome from "@/pages/mobile/MobileOwnerHome";
@@ -163,7 +164,7 @@ function DesktopRouter() {
           <RequireOwner><Settings /></RequireOwner>
         </Route>
         <Route path="/suppliers">
-          <RequireOwner><Purchases /></RequireOwner>
+          <RequireOwner><SuppliersPage /></RequireOwner>
         </Route>
         <Route path="/purchases">
           <RequireOwner><Purchases /></RequireOwner>

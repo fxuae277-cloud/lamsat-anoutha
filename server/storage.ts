@@ -638,10 +638,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSuppliers(activeOnly?: boolean) {
-    if (activeOnly) {
-      return db.select().from(suppliers).where(eq(suppliers.active, true)).orderBy(desc(suppliers.createdAt));
-    }
-    return db.select().from(suppliers).orderBy(desc(suppliers.createdAt));
+    const rows = activeOnly
+      ? await db.select().from(suppliers).where(eq(suppliers.active, true)).orderBy(desc(suppliers.createdAt))
+      : await db.select().from(suppliers).orderBy(desc(suppliers.createdAt));
+    if (rows.length === 0) return rows.map(r => ({ ...r, lastPurchaseDate: null }));
+    const ids = rows.map(r => r.id);
+    const lpResult = await db.execute(sql`
+      SELECT supplier_id, MAX(invoice_date) AS last_purchase_date
+      FROM purchase_invoices
+      WHERE supplier_id = ANY(ARRAY[${sql.join(ids.map(id => sql`${id}::int`), sql`, `)}])
+        AND status = 'approved'
+      GROUP BY supplier_id
+    `);
+    const lpMap = new Map<number, string>();
+    for (const r of lpResult.rows as any[]) lpMap.set(Number(r.supplier_id), r.last_purchase_date);
+    return rows.map(r => ({ ...r, lastPurchaseDate: lpMap.get(r.id) ?? null }));
   }
   async getSupplier(id: number) {
     const [row] = await db.select().from(suppliers).where(eq(suppliers.id, id));

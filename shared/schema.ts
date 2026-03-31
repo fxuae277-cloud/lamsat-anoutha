@@ -157,6 +157,7 @@ export const suppliers = pgTable("suppliers", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull().unique(),
   phone: text("phone"),
+  whatsapp: text("whatsapp"),
   email: text("email"),
   address: text("address"),
   city: text("city"),
