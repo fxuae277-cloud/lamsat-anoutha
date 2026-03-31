@@ -14,13 +14,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PageHeader }          from "@/components/payroll/shared/PageHeader";
 import { StatCard }            from "@/components/payroll/shared/StatCard";
 import { EmptyState }          from "@/components/payroll/shared/EmptyState";
-import { EmployeeStatusBadge, PaymentStatusBadge, employeeStatusLabel, paymentStatusLabel } from "@/components/payroll/shared/PayrollBadge";
+import { EmployeeStatusBadge, PaymentStatusBadge } from "@/components/payroll/shared/PayrollBadge";
 import { usePayrollToast }     from "@/components/payroll/shared/usePayrollToast";
+import { formatOMR }           from "@/components/payroll/shared/payrollUtils";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PINK = "#E91E63";
-function omr(n: number) { return `${n.toFixed(3)} ر.ع`; }
+function omr(n: number) { return formatOMR(n); }
 
 // ─── Mobile Card ──────────────────────────────────────────────────────────────
 
@@ -104,8 +105,11 @@ export default function EmployeesPage() {
   function clearSelection() { setSelected(new Set()); }
 
   function handleBulkPay() {
-    const count = payrollRows.filter((r) => r.employee.status === "active" && r.paymentStatus !== "paid").length;
-    bulkPayUnpaid("bank_transfer", "المدير العام");
+    const ids = Array.from(selected);
+    const count = payrollRows.filter(
+      (r) => ids.includes(r.employee.id) && r.paymentStatus !== "paid"
+    ).length;
+    bulkPayUnpaid("bank_transfer", "المستخدم الحالي", ids);
     toast.successBulkPay(count);
     clearSelection();
   }
@@ -277,5 +281,3 @@ export default function EmployeesPage() {
   );
 }
 
-// Keep named exports — used by PayrollSheetPage
-export { employeeStatusLabel as statusLabel, paymentStatusLabel };

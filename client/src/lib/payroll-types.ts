@@ -112,5 +112,5 @@ export interface PayrollContextType {
 
   // Payment actions
   addPayment: (input: AddPaymentInput) => void;
-  bulkPayUnpaid: (method: PaymentMethod, paidBy: string) => void;
+  bulkPayUnpaid: (method: PaymentMethod, paidBy: string, employeeIds?: number[]) => void;
 }

@@ -32,29 +32,16 @@ import { StatCard }           from "@/components/payroll/shared/StatCard";
 import { EmptyState }         from "@/components/payroll/shared/EmptyState";
 import { PaymentStatusBadge } from "@/components/payroll/shared/PayrollBadge";
 import { usePayrollToast }    from "@/components/payroll/shared/usePayrollToast";
+import { MONTHS_AR, YEARS, formatOMR, METHOD_LABELS } from "@/components/payroll/shared/payrollUtils";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const MONTHS_AR = [
-  "يناير","فبراير","مارس","أبريل","مايو","يونيو",
-  "يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر",
-];
-
-const NOW   = new Date();
-const YEARS = [NOW.getFullYear() - 1, NOW.getFullYear(), NOW.getFullYear() + 1];
-
-const METHOD_LABELS: Record<PaymentMethod, string> = {
-  cash:          "نقداً",
-  bank_transfer: "تحويل بنكي",
-  cheque:        "شيك",
-};
 
 const PINK  = "#E91E63";
 const GREEN = "#4CAF50";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function omr(n: number)             { return `${n.toFixed(3)} ر.ع`; }
+function omr(n: number)             { return formatOMR(n); }
 function pct(a: number, b: number)  { return b > 0 ? Math.min(100, Math.round((a / b) * 100)) : 0; }
 
 // ─── Payment Dialog ───────────────────────────────────────────────────────────

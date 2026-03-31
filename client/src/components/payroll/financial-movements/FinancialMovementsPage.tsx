@@ -39,13 +39,9 @@ import { StatCard }         from "@/components/payroll/shared/StatCard";
 import { EmptyState }       from "@/components/payroll/shared/EmptyState";
 import { MovementTypeBadge, MovementStatusBadge } from "@/components/payroll/shared/PayrollBadge";
 import { usePayrollToast }  from "@/components/payroll/shared/usePayrollToast";
+import { MONTHS_AR, YEARS, formatOMR } from "@/components/payroll/shared/payrollUtils";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const MONTHS_AR = [
-  "يناير","فبراير","مارس","أبريل","مايو","يونيو",
-  "يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر",
-];
 
 const MOVEMENT_META: Record<MovementType, { label: string; color: string; bg: string; icon: ReactNode }> = {
   bonus:     { label: "مستحق",  color: "#4CAF50", bg: "#e8f5e9", icon: <TrendingUp  className="h-4 w-4" /> },
@@ -53,10 +49,6 @@ const MOVEMENT_META: Record<MovementType, { label: string; color: string; bg: st
   deduction: { label: "خصم",    color: "#FF9800", bg: "#fff3e0", icon: <TrendingDown className="h-4 w-4" /> },
   advance:   { label: "سلفة",   color: "#F44336", bg: "#ffebee", icon: <Banknote    className="h-4 w-4" /> },
 };
-
-function formatOMR(n: number) {
-  return `${n.toFixed(3)} ر.ع`;
-}
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -72,9 +64,6 @@ function formatDateTime(iso: string) {
     hour: "2-digit", minute: "2-digit",
   });
 }
-
-const NOW = new Date();
-const YEARS = [NOW.getFullYear() - 1, NOW.getFullYear(), NOW.getFullYear() + 1];
 
 // ─── Add Movement Dialog ──────────────────────────────────────────────────────
 

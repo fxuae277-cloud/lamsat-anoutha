@@ -18,22 +18,11 @@ import { PageHeader }        from "@/components/payroll/shared/PageHeader";
 import { StatCard }          from "@/components/payroll/shared/StatCard";
 import { EmptyState }        from "@/components/payroll/shared/EmptyState";
 import { PaymentStatusBadge } from "@/components/payroll/shared/PayrollBadge";
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const MONTHS_AR = [
-  "يناير","فبراير","مارس","أبريل","مايو","يونيو",
-  "يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر",
-];
-
-const NOW   = new Date();
-const YEARS = [NOW.getFullYear() - 1, NOW.getFullYear(), NOW.getFullYear() + 1];
+import { MONTHS_AR, YEARS, formatOMR } from "@/components/payroll/shared/payrollUtils";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function omr(n: number): string {
-  return `${n.toFixed(3)} ر.ع`;
-}
+function omr(n: number): string { return formatOMR(n); }
 
 function num(n: number): string {
   return n > 0 ? omr(n) : "—";

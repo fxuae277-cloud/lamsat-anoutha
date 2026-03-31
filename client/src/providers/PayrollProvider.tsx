@@ -140,17 +140,15 @@ function computePayrollRows(
       .filter((m) => m.type === "advance")
       .reduce((sum, m) => sum + m.amount, 0);
 
-    const netSalary =
-      employee.baseSalary +
-      totalBonus +
-      totalOvertime -
-      totalDeduction -
-      totalAdvance;
+    const netSalary = Math.max(
+      0,
+      employee.baseSalary + totalBonus + totalOvertime - totalDeduction - totalAdvance
+    );
 
     const amountPaid = empPayments.reduce((sum, p) => sum + p.amount, 0);
 
     let paymentStatus: PayrollRow["paymentStatus"] = "unpaid";
-    if (amountPaid >= netSalary) {
+    if (netSalary === 0 || amountPaid >= netSalary) {
       paymentStatus = "paid";
     } else if (amountPaid > 0) {
       paymentStatus = "partial";
@@ -271,12 +269,13 @@ export function PayrollProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "ADD_PAYMENT", payload: payment, audit });
   };
 
-  const bulkPayUnpaid = (method: PaymentMethod, paidBy: string) => {
+  const bulkPayUnpaid = (method: PaymentMethod, paidBy: string, employeeIds?: number[]) => {
     const unpaidRows = payrollRows.filter(
       (row) =>
         row.employee.status === "active" &&
         row.paymentStatus !== "paid" &&
-        row.netSalary > 0
+        row.netSalary > 0 &&
+        (employeeIds === undefined || employeeIds.includes(row.employee.id))
     );
 
     let paymentIdCounter = state.nextPaymentId;
