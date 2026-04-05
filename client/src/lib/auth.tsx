@@ -39,10 +39,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginMutation = useMutation({
     mutationFn: async ({ username, password }: { username: string; password: string }) => {
       const res = await apiRequest("POST", "/api/auth/login", { username, password });
-      return res.json();
+      return res.json() as Promise<{ user: SafeUser }>;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    onSuccess: (data) => {
+      // Set the auth cache directly from the login response — no extra round-trip.
+      // invalidateQueries was unreliable: it scheduled a background /api/auth/me
+      // refetch that could race with cookie propagation and return 401.
+      queryClient.setQueryData(["/api/auth/me"], data);
     },
   });
 
