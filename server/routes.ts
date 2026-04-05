@@ -79,7 +79,13 @@ export async function registerRoutes(
     }
     req.session.userId = user.id;
     const { password: _, ...safeUser } = user;
-    res.json({ user: safeUser });
+    req.session.save((err) => {
+      if (err) {
+        logger.error("session_save_error", { err });
+        return res.status(500).json({ message: "خطأ في حفظ الجلسة" });
+      }
+      res.json({ user: safeUser });
+    });
   });
 
   app.post("/api/auth/logout", (req, res) => {

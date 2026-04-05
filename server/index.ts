@@ -13,6 +13,11 @@ import { logger } from "./logger";
 const app = express();
 const httpServer = createServer(app);
 
+// Required for Railway (and any reverse proxy): trust X-Forwarded-* headers
+// so req.ip is the real client IP (fixes rate limiter buckets) and
+// secure cookies are set correctly over HTTPS.
+app.set("trust proxy", 1);
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
@@ -50,7 +55,7 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       maxAge: 24 * 60 * 60 * 1000,
       sameSite: "lax",
     },
