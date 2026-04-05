@@ -64,7 +64,18 @@ export async function registerRoutes(
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
     const { username, password } = parsed.data;
+
+    // Diagnostic: raw SQL query to bypass Drizzle ORM entirely
+    const raw = await pool.query(
+      `SELECT id, username, is_active FROM users WHERE username = $1`,
+      [username]
+    );
+    console.log("[login] raw SQL result for username=%s → rows=%d, found=%j",
+      username, raw.rowCount, raw.rows[0] ?? null);
+
     const user = await storage.getUserByUsername(username);
+    console.log("[login] Drizzle ORM result:", user ? `id=${user.id} active=${user.isActive}` : "undefined");
+
     if (!user) {
       logger.warn("failed_login", { username, reason: "user_not_found", ip: req.ip });
       return res.status(401).json({ message: "اسم المستخدم أو كلمة المرور غير صحيحة" });
