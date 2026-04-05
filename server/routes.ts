@@ -1,3 +1,4 @@
+// cache-bust: 2026-04-05
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { logger } from "./logger";
