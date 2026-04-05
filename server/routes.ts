@@ -65,16 +65,26 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
     const { username, password } = parsed.data;
 
-    // Diagnostic: raw SQL query to bypass Drizzle ORM entirely
-    const raw = await pool.query(
-      `SELECT id, username, is_active FROM users WHERE username = $1`,
-      [username]
+    // Bypass Drizzle ORM — use raw pool query with .trim() on username
+    // Aliases map DB snake_case columns to the camelCase shape the rest of the
+    // code and the frontend expect (same shape Drizzle would return).
+    const rawResult = await pool.query(
+      `SELECT id, username, password, name, role, pin, phone, salary,
+              salary_type            AS "salaryType",
+              commission_rate        AS "commissionRate",
+              branch_id              AS "branchId",
+              terminal_name          AS "terminalName",
+              is_active              AS "isActive",
+              ui_language            AS "uiLanguage",
+              employment_status      AS "employmentStatus",
+              opening_advance_balance AS "openingAdvanceBalance",
+              opening_payable_balance AS "openingPayableBalance"
+       FROM users WHERE username = $1`,
+      [username.trim()]
     );
-    console.log("[login] raw SQL result for username=%s → rows=%d, found=%j",
-      username, raw.rowCount, raw.rows[0] ?? null);
-
-    const user = await storage.getUserByUsername(username);
-    console.log("[login] Drizzle ORM result:", user ? `id=${user.id} active=${user.isActive}` : "undefined");
+    const user = rawResult.rows[0];
+    console.log("[login] raw pool query for username=%j → found=%s",
+      username.trim(), user ? `id=${user.id} isActive=${user.isActive}` : "null");
 
     if (!user) {
       logger.warn("failed_login", { username, reason: "user_not_found", ip: req.ip });
