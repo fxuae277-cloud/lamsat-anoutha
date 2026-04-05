@@ -1,14 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 async function loginRequest(data: { username: string; password: string }) {
-  console.log("[auth] POST /api/auth/login", { username: data.username });
   const res = await fetch("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     body: JSON.stringify(data),
   });
-  console.log("[auth] login response status:", res.status);
   if (!res.ok) {
     let message = "Login failed";
     try {

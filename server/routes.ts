@@ -84,8 +84,6 @@ export async function registerRoutes(
       [username.trim()]
     );
     const user = rawResult.rows[0];
-    console.log("[login] raw pool query for username=%j → found=%s",
-      username.trim(), user ? `id=${user.id} isActive=${user.isActive}` : "null");
 
     if (!user) {
       logger.warn("failed_login", { username, reason: "user_not_found", ip: req.ip });
