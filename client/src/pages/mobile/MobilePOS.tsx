@@ -28,7 +28,8 @@ type Variant = { id: number; productId: number; barcode: string; price: string; 
 
 export default function MobilePOS() {
   const { t } = useI18n();
-  const { user } = useAuth();
+  const { data: authData } = useAuth();
+  const user = authData?.user;
   const { toast } = useToast();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");

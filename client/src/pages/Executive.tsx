@@ -68,7 +68,8 @@ function pmLabel(m: string, t: (k: string) => string) {
 }
 
 export default function Executive() {
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   const { t, lang } = useI18n();
   const [, navigate] = useLocation();
   const isAdmin = user?.role === "owner" || user?.role === "admin";

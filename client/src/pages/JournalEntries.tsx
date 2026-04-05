@@ -30,7 +30,8 @@ type EntryDetail = JournalEntry & {
 
 export default function JournalEntries() {
   const { t, lang } = useI18n();
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   const { toast } = useToast();
 
   const [from, setFrom] = useState("");

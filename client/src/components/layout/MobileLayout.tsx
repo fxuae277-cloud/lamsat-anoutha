@@ -30,7 +30,8 @@ const OWNER_NAV: NavItem[] = [
 ];
 
 export function MobileLayout({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   const { t } = useI18n();
   const [location, setLocation] = useLocation();
 

@@ -12,7 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/lib/auth";
+import { useAuth, useLogout } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import type { Product, Branch, Shift } from "@shared/schema";
 
@@ -273,7 +273,9 @@ interface HeldInvoice {
 
 export default function POS() {
   const { toast } = useToast();
-  const { user, logout } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
+  const logoutMutation = useLogout();
   const { t, lang, dir } = useI18n();
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [closedReport, setClosedReport] = useState<any>(null);
@@ -776,7 +778,7 @@ export default function POS() {
               {t("pos.close_shift")}
             </Button>
           )}
-          <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5" onClick={logout} data-testid="button-logout-pos">
+          <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5" onClick={() => logoutMutation.mutate()} data-testid="button-logout-pos">
             <LogOut className="w-4 h-4" />
           </Button>
         </div>

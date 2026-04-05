@@ -3,7 +3,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, useAuth } from "@/lib/auth";
+import { useAuth } from "@/lib/auth";
 import { I18nProvider, useI18n } from "@/lib/i18n";
 import { useIsMobile } from "@/hooks/use-mobile";
 import NotFound from "@/pages/not-found";
@@ -64,7 +64,8 @@ import { ReactNode } from "react";
 import { useEnglishDigits } from "@/lib/useEnglishDigits";
 
 function RequireOwner({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   if (user?.role !== "owner" && user?.role !== "admin") {
     return <Redirect to="/pos" />;
   }
@@ -72,7 +73,8 @@ function RequireOwner({ children }: { children: ReactNode }) {
 }
 
 function MobileHome() {
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   if (user?.role === "owner" || user?.role === "admin") {
     return <MobileOwnerHome />;
   }
@@ -80,7 +82,8 @@ function MobileHome() {
 }
 
 function RequireMobileOwner({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   if (user?.role !== "owner" && user?.role !== "admin") {
     return <Redirect to="/" />;
   }
@@ -252,7 +255,8 @@ function DesktopRouter() {
 }
 
 function AuthenticatedRouter() {
-  const { user, isLoading } = useAuth();
+  const { data, isLoading } = useAuth();
+  const user = data?.user;
   const { t } = useI18n();
   const isMobile = useIsMobile();
   useEnglishDigits();
@@ -285,9 +289,7 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <I18nProvider>
-          <AuthProvider>
             <AuthenticatedRouter />
-          </AuthProvider>
         </I18nProvider>
       </TooltipProvider>
     </QueryClientProvider>

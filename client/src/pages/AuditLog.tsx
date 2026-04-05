@@ -21,7 +21,8 @@ function weekAgoStr() {
 }
 
 export default function AuditLog() {
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   const { t, lang } = useI18n();
   const isOwnerAdmin = user?.role === "owner" || user?.role === "admin";
 

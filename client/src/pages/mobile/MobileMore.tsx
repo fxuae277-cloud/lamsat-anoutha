@@ -1,4 +1,4 @@
-import { useAuth } from "@/lib/auth";
+import { useAuth, useLogout } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,9 @@ import {
 } from "lucide-react";
 
 export default function MobileMore() {
-  const { user, logout } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
+  const logoutMutation = useLogout();
   const { t } = useI18n();
   const [, setLocation] = useLocation();
   const isOwner = user?.role === "owner" || user?.role === "admin";
@@ -67,7 +69,7 @@ export default function MobileMore() {
       <Button
         variant="destructive"
         className="w-full h-14 gap-2 mt-4 text-base"
-        onClick={async () => { await logout(); }}
+        onClick={() => logoutMutation.mutate()}
         data-testid="button-logout"
       >
         <LogOut className="w-5 h-5" />

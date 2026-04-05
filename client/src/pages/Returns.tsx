@@ -22,7 +22,8 @@ function fmt(v: string | number | null | undefined) {
 export default function Returns() {
   const { t, lang } = useI18n();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   const isManagerPlus = ["owner", "admin", "manager"].includes(user?.role || "");
 
   const [newReturnOpen, setNewReturnOpen] = useState(false);

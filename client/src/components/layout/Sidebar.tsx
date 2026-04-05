@@ -1,13 +1,15 @@
 import { Link, useLocation } from "wouter";
 import { LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/lib/auth";
+import { useAuth, useLogout } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { getSidebarForRole } from "@/config/sidebar";
 
 export function Sidebar() {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
+  const logoutMutation = useLogout();
   const { t } = useI18n();
 
   const initial = user?.name?.charAt(0) || "?";
@@ -67,7 +69,7 @@ export function Sidebar() {
             <p className="text-xs text-muted-foreground truncate" data-testid="text-sidebar-branch">{user?.terminalName}</p>
           </div>
           <button
-            onClick={logout}
+            onClick={() => logoutMutation.mutate()}
             className="p-1.5 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
             title={t("sidebar.logout")}
             data-testid="button-sidebar-logout"

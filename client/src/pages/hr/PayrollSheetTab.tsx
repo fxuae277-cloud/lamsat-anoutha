@@ -16,7 +16,8 @@ import { useMonthNames, statusBadgePayroll, paymentStatusBadge, fmt } from "./he
 export default function PayrollSheetTab({ usersList }: { usersList: any[] }) {
   const { t, lang } = useI18n();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   const MONTH_NAMES = useMonthNames();
   const printRef = useRef<HTMLDivElement>(null);
   const now = new Date();

@@ -886,7 +886,8 @@ function BranchesTab({ from, to }: { from: string; to: string }) {
 
 export default function Reports() {
   const { t } = useI18n();
-  const { user } = useAuth();
+  const { data: authData } = useAuth();
+  const user = authData?.user;
   const isOwner = user?.role === "owner" || user?.role === "admin";
 
   const [fromDate, setFromDate] = useState(startOfMonthStr());

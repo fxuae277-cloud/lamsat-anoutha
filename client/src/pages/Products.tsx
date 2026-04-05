@@ -19,7 +19,8 @@ import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 export default function Products() {
   const { t } = useI18n();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
 
   // ── filters ──────────────────────────────────────────────────────────

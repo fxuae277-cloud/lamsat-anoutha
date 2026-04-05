@@ -30,7 +30,8 @@ function formatNum(v: string | number | null | undefined) {
 }
 
 export default function Finance() {
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   const { toast } = useToast();
   const { t, lang } = useI18n();
   const isAdmin = user?.role === "owner" || user?.role === "admin";

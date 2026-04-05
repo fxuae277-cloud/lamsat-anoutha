@@ -314,7 +314,8 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
 
 export default function Invoices() {
   const { t, lang } = useI18n();
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
 
   const [fromDate, setFromDate] = useState(startOfMonthStr());

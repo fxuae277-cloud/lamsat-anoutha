@@ -18,7 +18,8 @@ import type { Branch, CashLedger, BankLedger } from "@shared/schema";
 export default function Expenses() {
   const { t, lang } = useI18n();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   const isOwnerAdmin = user?.role === "owner" || user?.role === "admin";
 
   const EXPENSE_CATEGORIES = [

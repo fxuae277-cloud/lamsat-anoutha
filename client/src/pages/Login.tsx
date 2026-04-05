@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useAuth } from "@/lib/auth";
+import { useLogin } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Lock, User, Eye, EyeOff } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 export default function Login() {
   const { t } = useI18n();
-  const { login } = useAuth();
+  const loginMutation = useLogin();
   const { toast } = useToast();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -20,7 +20,7 @@ export default function Login() {
     if (!username || !password) return;
     setLoading(true);
     try {
-      await login(username, password);
+      await loginMutation.mutateAsync({ username, password });
     } catch (err: any) {
       const msg = err.message || t("login.error");
       const cleaned = msg.replace(/^\d+:\s*/, "").replace(/^{.*"message":"/, "").replace(/".*$/, "");

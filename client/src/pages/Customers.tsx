@@ -66,7 +66,8 @@ const PAGE_SIZE = 15;
 
 export default function Customers() {
   const { t } = useI18n();
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   const { toast } = useToast();
   const isOwner = user?.role === "owner" || user?.role === "admin";
 

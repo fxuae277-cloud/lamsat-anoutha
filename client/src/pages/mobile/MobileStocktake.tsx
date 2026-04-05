@@ -25,7 +25,8 @@ type StocktakeItem = {
 
 export default function MobileStocktake() {
   const { t } = useI18n();
-  const { user } = useAuth();
+  const { data: authData } = useAuth();
+  const user = authData?.user;
   const { toast } = useToast();
   const [locationId, setLocationId] = useState("");
   const [items, setItems] = useState<StocktakeItem[]>([]);

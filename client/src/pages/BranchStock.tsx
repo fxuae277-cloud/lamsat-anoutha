@@ -13,7 +13,8 @@ import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 
 export default function BranchStock() {
   const { t } = useI18n();
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const isOwner = user?.role === "owner" || user?.role === "admin";

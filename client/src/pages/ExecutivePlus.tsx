@@ -23,7 +23,8 @@ function omr(v: number | string | null | undefined) {
 }
 
 export default function ExecutivePlus() {
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   const { t } = useI18n();
   const isAdmin = user?.role === "owner" || user?.role === "admin";
   const [branchId, setBranchId] = useState<string>("all");

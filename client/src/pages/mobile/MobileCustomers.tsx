@@ -35,7 +35,8 @@ type CustomerDetail = Customer & {
 
 export default function MobileCustomers() {
   const { t } = useI18n();
-  const { user } = useAuth();
+  const { data: authData } = useAuth();
+  const user = authData?.user;
   const { toast } = useToast();
   const isOwner = user?.role === "owner" || user?.role === "admin";
 

@@ -20,7 +20,8 @@ function fmt(v: string | number | null | undefined) {
 export default function Orders() {
   const { t, lang } = useI18n();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   const locale = "en-US";
 
   const isManager = ["owner", "admin", "manager"].includes(user?.role || "");

@@ -45,7 +45,8 @@ function SuppliersTab() {
   const [payMethod, setPayMethod] = useState<string>("cash");
   const [payNote, setPayNote] = useState("");
   const [payBranchId, setPayBranchId] = useState("");
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
 
   const { data: suppliers = [] } = useQuery<Supplier[]>({
     queryKey: ["/api/suppliers"],
@@ -494,7 +495,8 @@ function PurchasesTab() {
   const { t, lang } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const { user } = useAuth();
+  const { data } = useAuth();
+  const user = data?.user;
   const canManage = user?.role === "owner" || user?.role === "admin" || user?.role === "manager";
 
   const [showCreate, setShowCreate] = useState(false);

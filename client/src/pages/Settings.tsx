@@ -80,7 +80,8 @@ function isSettingsDirty(current: SettingsData, saved: SettingsData): boolean {
 
 export default function Settings() {
   const { toast } = useToast();
-  const { user: currentUser } = useAuth();
+  const { data } = useAuth();
+  const currentUser = data?.user;
   const { t, lang, setLang } = useI18n();
   const isOwnerOrAdmin = currentUser?.role === "owner" || currentUser?.role === "admin";
 
