@@ -9,6 +9,7 @@ import { initBackupScheduler } from "./backup";
 import { apiLimiter } from "./middleware/rateLimiter";
 import { globalErrorHandler } from "./middleware/errorHandler";
 import { logger } from "./logger";
+import { pool } from "./db";
 
 const app = express();
 const httpServer = createServer(app);
@@ -47,7 +48,7 @@ const PgStore = connectPgSimple(session);
 app.use(
   session({
     store: new PgStore({
-      conString: process.env.DATABASE_URL,
+      pool,
       createTableIfMissing: true,
     }),
     secret: process.env.SESSION_SECRET || "lamsat-onothah-secret-2024",
