@@ -89,6 +89,29 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Startup diagnostics — visible in Railway logs
+  console.log("[startup] NODE_ENV =", process.env.NODE_ENV);
+  console.log("[startup] DATABASE_URL set?", !!process.env.DATABASE_URL);
+  console.log("[startup] SESSION_SECRET set?", !!process.env.SESSION_SECRET);
+
+  // Explicitly create the session table before anything else.
+  // connect-pg-simple's createTableIfMissing runs silently and can fail on
+  // managed databases (Railway) without surfacing the error.
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "session" (
+        "sid"    varchar      NOT NULL,
+        "sess"   json         NOT NULL,
+        "expire" timestamp(6) NOT NULL,
+        CONSTRAINT "session_pkey" PRIMARY KEY ("sid")
+      );
+      CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
+    `);
+    console.log("[startup] session table ready");
+  } catch (err) {
+    console.error("[startup] FAILED to create session table:", err);
+  }
+
   await seedDatabase();
   await registerRoutes(httpServer, app);
   initBackupScheduler();

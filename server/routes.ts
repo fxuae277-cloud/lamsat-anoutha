@@ -81,8 +81,9 @@ export async function registerRoutes(
     const { password: _, ...safeUser } = user;
     req.session.save((err) => {
       if (err) {
-        logger.error("session_save_error", { err });
-        return res.status(500).json({ message: "خطأ في حفظ الجلسة" });
+        console.error("[login] session.save() FAILED:", err?.message, err?.stack);
+        logger.error("session_save_error", { message: err?.message, stack: err?.stack });
+        return res.status(500).json({ message: "خطأ في حفظ الجلسة", detail: err?.message });
       }
       res.json({ user: safeUser });
     });
