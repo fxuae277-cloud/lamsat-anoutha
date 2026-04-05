@@ -17,14 +17,19 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username || !password) return;
+    console.log("[Login] handleSubmit fired, username:", username, "password length:", password.length);
+    if (!username || !password) {
+      console.log("[Login] blocked: empty username or password");
+      return;
+    }
     setLoading(true);
     try {
       await loginMutation.mutateAsync({ username, password });
+      console.log("[Login] mutateAsync succeeded");
     } catch (err: any) {
-      const msg = err.message || t("login.error");
-      const cleaned = msg.replace(/^\d+:\s*/, "").replace(/^{.*"message":"/, "").replace(/".*$/, "");
-      toast({ title: t("common.error"), description: cleaned, variant: "destructive" });
+      console.error("[Login] mutateAsync error:", err);
+      const msg = err?.message || t("login.error");
+      toast({ title: t("common.error"), description: msg, variant: "destructive" });
     }
     setLoading(false);
   };
