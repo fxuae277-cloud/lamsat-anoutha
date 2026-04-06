@@ -23,6 +23,7 @@ export const authLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => process.env.NODE_ENV === 'development' || req.ip === '127.0.0.1' || req.ip === '::1',
   message: rateLimitedBody("محاولات دخول كثيرة جداً، حاول بعد 15 دقيقة"),
 });
 
