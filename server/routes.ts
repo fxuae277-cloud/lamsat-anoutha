@@ -117,7 +117,11 @@ export async function registerRoutes(
   });
 
   app.get("/api/auth/me", async (req, res) => {
+    // Debug: helps trace session issues on Railway
     if (!req.session.userId) {
+      console.log("[/api/auth/me] 401 — sessionID:", req.sessionID,
+        "| cookie header:", req.headers.cookie ? "PRESENT" : "MISSING",
+        "| session keys:", Object.keys(req.session));
       return res.status(401).json({ message: "غير مصرح" });
     }
     const user = await storage.getUser(req.session.userId);

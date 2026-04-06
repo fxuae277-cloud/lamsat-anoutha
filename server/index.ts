@@ -45,20 +45,25 @@ app.use(express.urlencoded({ extended: false }));
 app.use(apiLimiter);
 
 const PgStore = connectPgSimple(session);
+const isProduction = process.env.NODE_ENV === "production";
 app.use(
   session({
     store: new PgStore({
       pool,
       createTableIfMissing: true,
+      errorLog: (err: Error) => {
+        console.error("[session-store] ERROR:", err.message, err.stack);
+      },
     }),
     secret: process.env.SESSION_SECRET || "lamsat-onothah-secret-2024",
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 24 * 60 * 60 * 1000,
+      secure: isProduction,
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
       sameSite: "lax",
+      path: "/",
     },
   })
 );
