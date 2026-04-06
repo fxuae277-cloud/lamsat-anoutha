@@ -117,6 +117,27 @@ app.use((req, res, next) => {
     console.error("[startup] FAILED to create session table:", err);
   }
 
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key        TEXT PRIMARY KEY,
+        value      TEXT NOT NULL DEFAULT '',
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      INSERT INTO settings (key, value) VALUES
+        ('store_name',    'لمسة أنوثة'),
+        ('store_phone',   ''),
+        ('store_address', ''),
+        ('currency',      'ر.ع'),
+        ('vat_rate',      '5'),
+        ('invoice_notes', '')
+      ON CONFLICT (key) DO NOTHING;
+    `);
+    console.log("[startup] settings table ready");
+  } catch (err) {
+    console.error("[startup] FAILED to create settings table:", err);
+  }
+
   await seedDatabase();
   await registerRoutes(httpServer, app);
   initBackupScheduler();
@@ -135,7 +156,8 @@ app.use((req, res, next) => {
     {
       port,
       host: "0.0.0.0",
-      reusePort: true,
+      // reusePort not supported on Windows
+      ...(process.platform !== "win32" && { reusePort: true }),
     },
     () => {
       logger.info(`serving on port ${port}`);
