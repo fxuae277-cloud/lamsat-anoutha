@@ -112,22 +112,26 @@ export default function Categories() {
           <DialogHeader><DialogTitle>{t("products.add_category")}</DialogTitle></DialogHeader>
           <div className="py-4 space-y-2">
             <label className="text-sm font-medium">{t("products.category")}</label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder={t("products.category_name_placeholder")} />
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder={t("products.category_name_placeholder")}
+              onKeyDown={e => { if (e.key === "Enter" && name.trim()) createMutation.mutate(name); }} />
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setAddOpen(false); setName(""); }}>{t("common.cancel")}</Button>
             <Button onClick={() => createMutation.mutate(name)} disabled={!name.trim() || createMutation.isPending}>{t("common.save")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!editCategory} onOpenChange={open => { if (!open) setEditCategory(null); }}>
+      <Dialog open={!!editCategory} onOpenChange={open => { if (!open) { setEditCategory(null); setName(""); } }}>
         <DialogContent>
           <DialogHeader><DialogTitle>{t("common.edit")}</DialogTitle></DialogHeader>
           <div className="py-4 space-y-2">
             <label className="text-sm font-medium">{t("products.category")}</label>
-            <Input value={name} onChange={e => setName(e.target.value)} />
+            <Input value={name} onChange={e => setName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && name.trim() && editCategory) updateMutation.mutate({ id: editCategory.id, name }); }} />
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setEditCategory(null); setName(""); }}>{t("common.cancel")}</Button>
             <Button onClick={() => editCategory && updateMutation.mutate({ id: editCategory.id, name })} disabled={!name.trim() || updateMutation.isPending}>{t("common.save")}</Button>
           </DialogFooter>
         </DialogContent>
