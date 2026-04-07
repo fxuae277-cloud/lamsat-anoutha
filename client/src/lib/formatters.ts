@@ -29,11 +29,10 @@ export function fmtCurrency(v: string | number | null | undefined): string {
   }).format(num);
 }
 
-/** عرض المبلغ مع رمز الريال السعودي — مثال: 12.500 ر.س */
+/** عرض المبلغ مع رمز الريال العماني — مثال: 12.500 ر.ع */
 export function fmtOMR(v: string | number | null | undefined): string {
-  return `${fmtCurrency(v)} ر.س`;
+  return `${fmtCurrency(v)} ر.ع`;
 }
-export const fmtSAR = fmtOMR;
 
 export function fmtDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "\u2014";

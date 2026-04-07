@@ -318,7 +318,7 @@ export default function InventoryOverview() {
                       </TableHead>
                       <TableHead className="text-center">{t("inv_overview.col_reorder")}</TableHead>
                       <TableHead className="text-center">
-                        <SortBtn col="price" label="السعر (ر.س)" />
+                        <SortBtn col="price" label="السعر (ر.ع)" />
                       </TableHead>
                       <TableHead>{t("inv_overview.col_status")}</TableHead>
                     </TableRow>
