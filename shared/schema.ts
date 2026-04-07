@@ -70,10 +70,13 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
 export const categories = pgTable("categories", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  name: text("name").notNull(),
-  parentId: integer("parent_id").references((): any => categories.id),
-  sortOrder: integer("sort_order").default(0),
+  id:          integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name:        text("name").notNull(),
+  description: text("description"),
+  image:       text("image"),
+  parentId:    integer("parent_id").references((): any => categories.id),
+  isActive:    boolean("is_active").default(true).notNull(),
+  sortOrder:   integer("sort_order").default(0),
 });
 export const insertCategorySchema = createInsertSchema(categories).omit({ id: true });
 export type InsertCategory = z.infer<typeof insertCategorySchema>;

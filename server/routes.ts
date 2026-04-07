@@ -28,6 +28,7 @@ import {
   addPurchaseItemSchema, patchPurchaseStatusSchema,
   updateCustomerSchema,
   orderItemSchema, orderStatusSchema,
+  createCategorySchema, updateCategorySchema,
 } from "./validation";
 import { registerExportRoutes } from "./exports";
 import { journalForSale, journalForExpense, journalForPurchase, journalForSaleReturn, journalForSupplierPayment, journalForSalaryPayment } from "./autoJournal";
@@ -800,18 +801,29 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/categories", requireAuth, async (_req, res) => {
-    res.json(await storage.getCategories());
+  app.get("/api/categories", requireAuth, async (req, res) => {
+    const { search, parentId, isActive } = req.query;
+    const filters: { search?: string; parentId?: number | null; isActive?: boolean } = {};
+    if (search) filters.search = String(search);
+    if (parentId !== undefined) filters.parentId = parentId === "null" ? null : Number(parentId);
+    if (isActive !== undefined) filters.isActive = isActive === "true";
+    res.json(await storage.getCategories(filters));
   });
   app.post("/api/categories", requireAuth, requireOwnerOrAdmin, async (req, res) => {
-    const parsed = insertCategorySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    res.status(201).json(await storage.createCategory(parsed.data));
+    const parsed = createCategorySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+    res.status(201).json(await storage.createCategory(parsed.data as any));
+  });
+  // toggle قبل patch العام — مهم للترتيب في Express
+  app.patch("/api/categories/:id/toggle", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    const row = await storage.toggleCategoryActive(Number(req.params.id));
+    if (!row) return res.status(404).json({ message: "الفئة غير موجودة" });
+    res.json(row);
   });
   app.patch("/api/categories/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
-    const { name } = req.body;
-    if (!name?.trim()) return res.status(400).json({ message: "الاسم مطلوب" });
-    const row = await storage.updateCategory(Number(req.params.id), name.trim());
+    const parsed = updateCategorySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+    const row = await storage.updateCategory(Number(req.params.id), parsed.data as any);
     if (!row) return res.status(404).json({ message: "الفئة غير موجودة" });
     res.json(row);
   });

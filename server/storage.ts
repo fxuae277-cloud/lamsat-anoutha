@@ -1,5 +1,5 @@
 import { db, pool } from "./db";
-import { eq, desc, sql, and, lte, gte, ilike, or } from "drizzle-orm";
+import { eq, desc, sql, and, lte, gte, ilike, or, isNull, asc } from "drizzle-orm";
 import {
   branches, type InsertBranch, type Branch,
   cities, type InsertCity, type City,
@@ -68,8 +68,11 @@ export interface IStorage {
   createUser(data: InsertUser): Promise<User>;
   updateUser(id: number, data: Partial<InsertUser>): Promise<User | undefined>;
   getEmployeePerformance(employeeId: number, from: string, to: string): Promise<any>;
-  getCategories(): Promise<Category[]>;
+  getCategories(filters?: { search?: string; parentId?: number | null; isActive?: boolean }): Promise<Category[]>;
   createCategory(data: InsertCategory): Promise<Category>;
+  updateCategory(id: number, data: Partial<InsertCategory>): Promise<Category | undefined>;
+  deleteCategory(id: number): Promise<void>;
+  toggleCategoryActive(id: number): Promise<Category | undefined>;
   getProducts(): Promise<Product[]>;
   getProduct(id: number): Promise<Product | undefined>;
   getProductByBarcode(barcode: string): Promise<Product | undefined>;
@@ -335,17 +338,33 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getCategories() { return db.select().from(categories); }
+  async getCategories(filters?: { search?: string; parentId?: number | null; isActive?: boolean }) {
+    const conditions: any[] = [];
+    if (filters?.search)
+      conditions.push(ilike(categories.name, `%${filters.search}%`));
+    if (filters?.parentId !== undefined)
+      conditions.push(filters.parentId === null ? isNull(categories.parentId) : eq(categories.parentId, filters.parentId));
+    if (filters?.isActive !== undefined)
+      conditions.push(eq(categories.isActive, filters.isActive));
+    const base = db.select().from(categories).orderBy(asc(categories.sortOrder), asc(categories.name));
+    return conditions.length > 0 ? base.where(and(...conditions)) : base;
+  }
   async createCategory(data: InsertCategory) {
     const [row] = await db.insert(categories).values(data).returning();
     return row;
   }
-  async updateCategory(id: number, name: string) {
-    const [row] = await db.update(categories).set({ name }).where(eq(categories.id, id)).returning();
+  async updateCategory(id: number, data: Partial<InsertCategory>) {
+    const [row] = await db.update(categories).set(data).where(eq(categories.id, id)).returning();
     return row;
   }
   async deleteCategory(id: number) {
     await db.delete(categories).where(eq(categories.id, id));
+  }
+  async toggleCategoryActive(id: number) {
+    const [current] = await db.select({ isActive: categories.isActive }).from(categories).where(eq(categories.id, id));
+    if (!current) return undefined;
+    const [row] = await db.update(categories).set({ isActive: !current.isActive }).where(eq(categories.id, id)).returning();
+    return row;
   }
 
   async getProducts(filters?: { q?: string; barcode?: string; categoryId?: number; productType?: string }) {

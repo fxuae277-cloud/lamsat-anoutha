@@ -33,6 +33,11 @@ const FIELD_NAMES_AR: Record<string, string> = {
   unitCostBase:       "تكلفة الوحدة الأساسية",
   supplierId:         "المورد",
   invoiceDate:        "تاريخ الفاتورة",
+  description:        "الوصف",
+  image:              "الصورة",
+  isActive:           "الحالة",
+  parentId:           "الفئة الأب",
+  sortOrder:          "الترتيب",
 };
 
 // ── Arabic error formatter ────────────────────────────────────────────────────
@@ -127,6 +132,17 @@ export const quickCreateVariantSchema = z.object({
   price:        z.coerce.number().min(0).optional(),
   costDefault:  z.coerce.number().min(0).optional().nullable(),
 });
+
+// ── Categories ────────────────────────────────────────────────────────────────
+export const createCategorySchema = z.object({
+  name:        z.string({ required_error: "الاسم مطلوب" }).min(2, "الاسم يجب أن يحتوي على حرفين على الأقل").max(100),
+  description: z.string().max(500).optional().nullable(),
+  image:       z.string().optional().nullable(),
+  parentId:    z.number().int().positive().optional().nullable(),
+  isActive:    z.boolean().optional().default(true),
+  sortOrder:   z.number().int().min(0).optional().default(0),
+});
+export const updateCategorySchema = createCategorySchema.partial();
 
 // ── Customers ─────────────────────────────────────────────────────────────────
 export const updateCustomerSchema = z.object({
