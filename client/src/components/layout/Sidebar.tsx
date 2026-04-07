@@ -72,7 +72,7 @@ export function Sidebar() {
                 <Link
                   href={singleItem.path}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors text-sm font-medium",
+                    "flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors text-base font-semibold",
                     isActive
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -97,7 +97,7 @@ export function Sidebar() {
                     : "text-muted-foreground font-medium hover:text-sidebar-foreground hover:bg-sidebar-accent"
                 )}
               >
-                <span className="text-[11px] uppercase tracking-wider">
+                <span className="text-sm font-bold tracking-wide">
                   {t(section.sectionKey)}
                 </span>
                 <ChevronDown
@@ -128,13 +128,13 @@ export function Sidebar() {
                         key={item.path}
                         href={item.path}
                         className={cn(
-                          "flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium",
+                          "flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-base font-medium",
                           isActive
                             ? "bg-primary text-primary-foreground shadow-sm"
                             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                         )}
                       >
-                        <Icon className="w-4 h-4 shrink-0" />
+                        <Icon className="w-5 h-5 shrink-0" />
                         {t(item.labelKey)}
                       </Link>
                     );
