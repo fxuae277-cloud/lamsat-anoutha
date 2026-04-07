@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Edit2, Trash2, FolderOpen, Package, Search, ChevronDown, ChevronRight, Image } from "lucide-react";
+import { Plus, Edit2, Trash2, FolderOpen, Package, Search, ChevronDown, ChevronRight, Image as ImageIcon } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -471,7 +471,7 @@ function CategoryForm({
           <div className="w-14 h-14 rounded-lg border bg-muted flex items-center justify-center overflow-hidden shrink-0">
             {form.image
               ? <img src={form.image} alt="" className="w-full h-full object-cover" />
-              : <Image className="w-5 h-5 text-muted-foreground" />}
+              : <ImageIcon className="w-5 h-5 text-muted-foreground" />}
           </div>
           <div className="flex flex-col gap-1.5">
             <input type="file" accept="image/*" className="hidden" id="cat-img-input" onChange={onImageChange} />
