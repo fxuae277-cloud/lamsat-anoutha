@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+﻿import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, getQueryFn } from "@/lib/queryClient";
 import { useI18n } from "@/lib/i18n";
@@ -326,7 +326,7 @@ export default function JournalEntries() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                  {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

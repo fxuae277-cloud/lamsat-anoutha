@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Plus, Receipt, Search, Wallet, CreditCard, Building2, Calendar, UserCheck, Hash, TrendingDown, Banknote, PieChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -310,7 +310,7 @@ export default function Expenses() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">{t("expenses_page.all_branches")}</SelectItem>
-                    {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>)}
+                    {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
                   </SelectContent>
                 </Select>
               )}

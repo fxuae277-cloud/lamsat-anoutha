@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -562,7 +562,7 @@ export default function Settings() {
                           <Select value={newUser.branchId} onValueChange={v => setNewUser({...newUser, branchId: v})}>
                             <SelectTrigger data-testid="select-new-user-branch"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>)}
+                              {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </div>
@@ -1164,7 +1164,7 @@ export default function Settings() {
                   <Select value={editUser.branchId.toString()} onValueChange={v => setEditUser({...editUser, branchId: parseInt(v)})}>
                     <SelectTrigger data-testid="select-edit-user-branch"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>)}
+                      {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>

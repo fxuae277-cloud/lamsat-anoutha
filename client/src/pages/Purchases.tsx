@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
 import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle, Search, Edit, Building, UserPlus, FileSpreadsheet, X, Loader2, CheckCircle2, Upload, Printer } from "lucide-react";
@@ -279,7 +279,7 @@ function SuppliersTab() {
                 </SelectTrigger>
                 <SelectContent>
                   {branches.map((b: any) => (
-                    <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                    <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1827,7 +1827,7 @@ function PurchasesTab() {
                 <Select value={newBranchId} onValueChange={setNewBranchId}>
                   <SelectTrigger data-testid="select-new-branch"><SelectValue placeholder={t("purchases.select_branch")} /></SelectTrigger>
                   <SelectContent>
-                    {branches.map((b: any) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                    {branches.map((b: any) => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

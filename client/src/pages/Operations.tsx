@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Search, Filter, Calendar, Building2, Clock, ShoppingBag, Package, Receipt, DoorOpen, DoorClosed, RotateCcw, Truck, ShoppingCart, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -125,7 +125,7 @@ export default function Operations() {
             <SelectContent>
               <SelectItem value="__all__">{t("operations.all_branches")}</SelectItem>
               {branchesList.map(b => (
-                <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>
               ))}
             </SelectContent>
           </Select>

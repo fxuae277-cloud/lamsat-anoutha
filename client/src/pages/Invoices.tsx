@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { FileSpreadsheet, Search, Eye, Printer, Download, X, Banknote, CreditCard, Building2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -430,7 +430,7 @@ export default function Invoices() {
                   <SelectTrigger data-testid="select-invoices-branch"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">{t("common.all_branches")}</SelectItem>
-                    {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                    {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

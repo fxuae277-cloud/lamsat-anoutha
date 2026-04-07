@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Package, Search, MapPin, ArrowDownToLine } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -89,7 +89,7 @@ export default function BranchStock() {
             </SelectTrigger>
             <SelectContent>
               {branches.map((b: any) => (
-                <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>
               ))}
             </SelectContent>
           </Select>

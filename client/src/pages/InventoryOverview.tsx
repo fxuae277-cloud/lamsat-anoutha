@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PackageSearch, Boxes, TrendingDown, AlertTriangle, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -151,7 +151,7 @@ export default function InventoryOverview() {
               <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("inv_overview.all_branches")}</SelectItem>
-                {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={filterType} onValueChange={setFilterType}>
@@ -258,7 +258,7 @@ export default function InventoryOverview() {
               <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("inv_overview.all_branches")}</SelectItem>
-                {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

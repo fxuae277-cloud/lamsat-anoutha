@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+﻿import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, getQueryFn } from "@/lib/queryClient";
 import { useI18n } from "@/lib/i18n";
@@ -315,7 +315,7 @@ table{width:100%;border-collapse:collapse;margin:15px 0;font-size:12px}th,td{bor
           <SelectTrigger className="w-44" data-testid="select-branch-filter"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("customers.all_branches")}</SelectItem>
-            {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+            {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
@@ -569,7 +569,7 @@ table{width:100%;border-collapse:collapse;margin:15px 0;font-size:12px}th,td{bor
             <div><Label>{t("customers.default_branch")}</Label>
               <Select value={addForm.branchId} onValueChange={v => setAddForm(f => ({ ...f, branchId: v }))}>
                 <SelectTrigger><SelectValue placeholder={t("customers.select_branch")} /></SelectTrigger>
-                <SelectContent>{branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}</SelectContent>
+                <SelectContent>{branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           </div>
@@ -594,7 +594,7 @@ table{width:100%;border-collapse:collapse;margin:15px 0;font-size:12px}th,td{bor
             <div><Label>{t("customers.default_branch")}</Label>
               <Select value={editForm.branchId} onValueChange={v => setEditForm(f => ({ ...f, branchId: v }))}>
                 <SelectTrigger><SelectValue placeholder={t("customers.select_branch")} /></SelectTrigger>
-                <SelectContent>{branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}</SelectContent>
+                <SelectContent>{branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="flex items-center gap-2"><Label>{t("customers.status")}</Label>

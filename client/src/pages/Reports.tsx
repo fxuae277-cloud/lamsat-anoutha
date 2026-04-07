@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Calendar, Download, Banknote, CreditCard, Building2, TrendingUp, TrendingDown, DollarSign, BarChart3, Package, ShoppingBag, Eye, Layers, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -937,7 +937,7 @@ export default function Reports() {
                   <SelectTrigger data-testid="select-report-branch"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">{t("reports.all_branches")}</SelectItem>
-                    {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                    {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 import { useI18n } from "@/lib/i18n";
@@ -60,7 +60,7 @@ export default function MobileOwnerHome() {
           <SelectContent>
             <SelectItem value="all">{t("mobile.all_branches")}</SelectItem>
             {data?.branches?.map(b => (
-              <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+              <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>
             ))}
           </SelectContent>
         </Select>

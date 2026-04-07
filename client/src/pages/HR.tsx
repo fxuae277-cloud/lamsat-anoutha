@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Plus, Users, UserCheck, Wallet, TrendingUp, ShoppingBag, KeyRound, Shield, BarChart3, AlertCircle, ArrowRightLeft, FileText, CreditCard, FileSpreadsheet, Banknote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -314,7 +314,7 @@ export default function HR() {
                 <Select value={newUser.branchId} onValueChange={v => setNewUser({...newUser, branchId: v})}>
                   <SelectTrigger data-testid="select-emp-branch"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>)}
+                    {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -377,7 +377,7 @@ export default function HR() {
                   <Select value={String(selectedUser.branchId)} onValueChange={v => setSelectedUser({...selectedUser, branchId: Number(v)})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>)}
+                      {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>

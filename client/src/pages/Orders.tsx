@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Plus, Search, MapPin, Phone, MessageCircle, Eye, Clock, Package, CheckCircle2, XCircle, ChefHat, Truck, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -279,7 +279,7 @@ export default function Orders() {
               <SelectContent>
                 <SelectItem value="all">{t("orders.all_branches")}</SelectItem>
                 {branchesList.map(b => (
-                  <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                  <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

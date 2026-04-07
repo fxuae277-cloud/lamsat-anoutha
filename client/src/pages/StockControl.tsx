@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Plus, ClipboardCheck, Search, Package, ArrowUpDown, CheckCircle2, Eye, AlertTriangle, TrendingUp, TrendingDown, Minus, BarChart3, Building2, RefreshCw } from "lucide-react";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 import { Button } from "@/components/ui/button";
@@ -169,7 +169,7 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
                   <SelectTrigger data-testid="select-st-branch"><SelectValue placeholder={t("stock_control.select_branch_placeholder")} /></SelectTrigger>
                   <SelectContent>
                     {branchesList.map(b => (
-                      <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                      <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -448,7 +448,7 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
             <SelectContent>
               <SelectItem value="__all__">{t("stock_control.all_branches")}</SelectItem>
               {branchesList.map(b => (
-                <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -471,7 +471,7 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
                     <Select value={adjBranch} onValueChange={v => { setAdjBranch(v); setAdjLocation(""); }}>
                       <SelectTrigger data-testid="select-adj-branch"><SelectValue placeholder={t("stock_control.select_placeholder")} /></SelectTrigger>
                       <SelectContent>
-                        {branchesList.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                        {branchesList.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -575,7 +575,7 @@ function ReportTab({ branchesList }: { branchesList: any[] }) {
           <SelectContent>
             <SelectItem value="__all__">{t("stock_control.all_branches")}</SelectItem>
             {branchesList.map(b => (
-              <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+              <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>
             ))}
           </SelectContent>
         </Select>

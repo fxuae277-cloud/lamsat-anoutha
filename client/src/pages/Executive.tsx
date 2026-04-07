@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+﻿import { useState, useMemo, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -212,7 +212,7 @@ export default function Executive() {
               <SelectTrigger data-testid="select-exec-branch"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("executive.all_branches")}</SelectItem>
-                {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { RotateCcw, Search, Plus, Package, Calendar, Eye, FileText, ShoppingBag, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -190,7 +190,7 @@ export default function Returns() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("returns.all_branches")}</SelectItem>
-                {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>)}
+                {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
               </SelectContent>
             </Select>
           )}

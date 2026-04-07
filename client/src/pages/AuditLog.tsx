@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Shield, Search, Calendar, AlertTriangle, RotateCcw, ShoppingCart, User, FileText, Filter, Clock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -174,7 +174,7 @@ export default function AuditLog() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("common.all_branches")}</SelectItem>
-                {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>)}
+                {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
