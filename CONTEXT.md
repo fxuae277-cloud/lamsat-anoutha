@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-07 (جلسة 2)_
+_آخر تحديث: 2026-04-07 (جلسة 3)_
 
 ---
 
@@ -23,6 +23,31 @@ _آخر تحديث: 2026-04-07 (جلسة 2)_
 - [x] رفع صورة المنتج (base64) من نموذج الإضافة/التعديل
 - [x] عرض صورة المنتج في جدول المنتجات
 - [x] رفع حد JSON body إلى 10mb لدعم الصور
+- [x] ضغط الصور client-side (Canvas, 600px, JPEG 0.7)
+- [x] كاشف المنتجات المكررة (badge + modal تحذير)
+
+### الفئات (Categories) — محدّث جلسة 3
+- [x] إعادة تصميم كاملة لصفحة الفئات
+- [x] هرمية: فئات رئيسية + فئات فرعية مع expand/collapse
+- [x] رفع صورة لكل فئة (canvas compression)
+- [x] حقل وصف لكل فئة
+- [x] تبديل نشط/غير نشط (Switch) مباشرة من الجدول
+- [x] بحث + فلاتر (الحالة / الفئة الأب)
+- [x] عدد المنتجات قابل للنقر → يفتح صفحة المنتجات مفلترة
+- [x] تأكيد الحذف مع تحذير عدد المنتجات والفئات الفرعية
+- [x] DB migration: description, image, is_active columns
+- [x] createCategorySchema / updateCategorySchema (Zod + Arabic)
+- [x] storage: getCategories مع فلاتر، toggleCategoryActive
+- [x] routes: PATCH /toggle قبل /:id لتجنب تعارض Express
+
+### لوحة التحكم (Dashboard)
+- [x] فلاتر: تاريخ من/إلى، الفرع، طريقة الدفع
+- [x] إجمالي حي يتحدث بالفلاتر
+
+### واجهة المستخدم
+- [x] Sidebar: تكبير خطوط القائمة
+- [x] ترجمات عربية مكتملة (branch_address, branch_phone, branches_desc)
+- [x] SessionStart hook لقراءة CONTEXT.md تلقائياً
 
 ### نقطة البيع (POS)
 - [x] ضريبة 5% تلقائية
@@ -44,7 +69,6 @@ _آخر تحديث: 2026-04-07 (جلسة 2)_
 ---
 
 ## ⚠️ مشاكل مفتوحة
-- بيانات مكررة في جدول products
 - أسماء منتجات غير منظمة في DB
 - Inventory anomalies في بعض الفروع
 
@@ -52,9 +76,10 @@ _آخر تحديث: 2026-04-07 (جلسة 2)_
 
 ## ⏳ القادم
 - [ ] ربط WhatsApp automation
-- [ ] تنظيم بيانات المنتجات (أسماء مكررة وغير منظمة)
+- [ ] تنظيف بيانات المنتجات (أسماء مكررة وغير منظمة)
 - [ ] فلاتر Dashboard إضافية
-- [ ] ضغط الصور قبل رفعها (client-side) لتقليل حجم base64
+- [ ] صفحة تقارير مفصلة
+- [ ] تشغيل migration على Railway (0007_categories_enhancement.sql)
 
 ---
 
@@ -62,6 +87,8 @@ _آخر تحديث: 2026-04-07 (جلسة 2)_
 - Auth: Sessions → JWT
 - Hosting: Railway
 - Tool: Claude Code
+- Images: base64 في PostgreSQL (مضغوطة client-side)
+- Category Hierarchy: parentId self-reference
 
 ---
 
