@@ -33,7 +33,7 @@ export default function Products() {
   const [formProduct, setFormProduct] = useState<any>(null); // null = add
   const [formTab, setFormTab] = useState("basic");
   const [formData, setFormData] = useState({
-    name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true,
+    name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "",
   });
 
   // ── detail modal ──────────────────────────────────────────────────────
@@ -162,7 +162,7 @@ export default function Products() {
   // ── helpers ───────────────────────────────────────────────────────────
   function openAdd() {
     setFormProduct(null);
-    setFormData({ name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true });
+    setFormData({ name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "" });
     setFormTab("basic");
     setShowAddCategory(false);
     setNewCategoryName("");
@@ -178,6 +178,7 @@ export default function Products() {
       barcode: p.barcode || "",
       productType: p.productType || "simple",
       active: p.active ?? true,
+      image: p.image || "",
     });
     setFormTab("basic");
     setShowAddCategory(false);
@@ -193,6 +194,7 @@ export default function Products() {
       barcode: formData.barcode || null,
       productType: formData.productType,
       active: formData.active,
+      image: formData.image || null,
     };
     if (formProduct) {
       updateProductMutation.mutate({ id: formProduct.id, ...payload });
@@ -282,8 +284,10 @@ export default function Products() {
               return (
               <TableRow key={p.id}>
                 <TableCell>
-                  <div className="w-8 h-8 rounded bg-muted flex items-center justify-center">
-                    <Package className="w-4 h-4 text-muted-foreground" />
+                  <div className="w-8 h-8 rounded bg-muted flex items-center justify-center overflow-hidden">
+                    {p.image
+                      ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                      : <Package className="w-4 h-4 text-muted-foreground" />}
                   </div>
                 </TableCell>
                 <TableCell className="font-medium">{p.name}</TableCell>
@@ -404,6 +408,42 @@ export default function Products() {
                 <div className="flex gap-2">
                   <Input value={formData.barcode} onChange={e => setFormData(f => ({ ...f, barcode: e.target.value }))} placeholder={t("products.optional")} data-testid="input-product-barcode" />
                   <BarcodeScanButton onScan={code => setFormData(f => ({ ...f, barcode: code }))} />
+                </div>
+              </div>
+
+              {/* Image Upload */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t("products.image")}</label>
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-16 rounded-lg border bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                    {formData.image
+                      ? <img src={formData.image} alt="" className="w-full h-full object-cover" />
+                      : <Package className="w-6 h-6 text-muted-foreground" />}
+                  </div>
+                  <div className="flex flex-col gap-2 flex-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      id="product-image-input"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = ev => setFormData(f => ({ ...f, image: ev.target?.result as string }));
+                        reader.readAsDataURL(file);
+                        e.target.value = "";
+                      }}
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById("product-image-input")?.click()}>
+                      اختر صورة
+                    </Button>
+                    {formData.image && (
+                      <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setFormData(f => ({ ...f, image: "" }))}>
+                        حذف الصورة
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
 
