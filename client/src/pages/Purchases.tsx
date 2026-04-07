@@ -1680,10 +1680,80 @@ function PurchasesTab() {
     );
   }
 
+  // ── إحصائيات + فلاتر ──────────────────────────────────────────────────
+  const [invSearch,     setInvSearch]     = useState("");
+  const [invSupplier,   setInvSupplier]   = useState("all");
+  const [invStatus,     setInvStatus]     = useState("all");
+
+  const invoiceStats = {
+    total:    invoices.length,
+    amount:   invoices.reduce((s, i) => s + parseFloat(String(i.grandTotal || 0)), 0),
+    pending:  invoices.filter(i => i.status === "pending").length,
+    done:     invoices.filter(i => i.status === "approved" || i.status === "received").length,
+  };
+
+  const filteredInvoices = (invoices as PurchaseInvoice[]).filter(inv => {
+    if (invSearch) {
+      const q = invSearch.toLowerCase();
+      const name = supplierMap[inv.supplierId]?.toLowerCase() || "";
+      if (!inv.invoiceNumber.toLowerCase().includes(q) && !name.includes(q)) return false;
+    }
+    if (invSupplier !== "all" && String(inv.supplierId) !== invSupplier) return false;
+    if (invStatus   !== "all" && inv.status !== invStatus) return false;
+    return true;
+  });
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end">
-        <Button className="gap-2" onClick={() => setShowCreate(true)} data-testid="button-new-purchase">
+      {/* إحصائيات سريعة */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-card border rounded-lg p-3 text-center">
+          <p className="text-2xl font-bold">{invoiceStats.total}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">إجمالي الفواتير</p>
+        </div>
+        <div className="bg-card border rounded-lg p-3 text-center">
+          <p className="text-2xl font-bold text-primary">{omr(invoiceStats.amount)} <span className="text-sm">ر.ع</span></p>
+          <p className="text-xs text-muted-foreground mt-0.5">إجمالي المشتريات</p>
+        </div>
+        <div className="bg-card border rounded-lg p-3 text-center cursor-pointer hover:border-amber-400/50" onClick={() => setInvStatus("pending")}>
+          <p className="text-2xl font-bold text-amber-500">{invoiceStats.pending}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">معلقة</p>
+        </div>
+        <div className="bg-card border rounded-lg p-3 text-center cursor-pointer hover:border-green-400/50" onClick={() => setInvStatus("approved")}>
+          <p className="text-2xl font-bold text-green-600">{invoiceStats.done}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">مكتملة</p>
+        </div>
+      </div>
+
+      {/* شريط الفلاتر */}
+      <div className="flex flex-wrap gap-3 items-center bg-card p-4 border rounded-lg">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input className="pr-9" placeholder="بحث بالمورد أو رقم الفاتورة..." value={invSearch} onChange={e => setInvSearch(e.target.value)} />
+        </div>
+        <Select value={invSupplier} onValueChange={setInvSupplier}>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder="كل الموردين" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">كل الموردين</SelectItem>
+            {allSuppliers.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={invStatus} onValueChange={setInvStatus}>
+          <SelectTrigger className="w-[150px]"><SelectValue placeholder="كل الحالات" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">كل الحالات</SelectItem>
+            <SelectItem value="pending">معلقة</SelectItem>
+            <SelectItem value="approved">مؤكدة</SelectItem>
+            <SelectItem value="received">مستلمة</SelectItem>
+            <SelectItem value="cancelled">ملغاة</SelectItem>
+          </SelectContent>
+        </Select>
+        {(invSearch || invSupplier !== "all" || invStatus !== "all") && (
+          <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => { setInvSearch(""); setInvSupplier("all"); setInvStatus("all"); }}>
+            مسح الفلاتر ✕
+          </Button>
+        )}
+        <Button className="gap-2 ms-auto" onClick={() => setShowCreate(true)} data-testid="button-new-purchase">
           <Plus className="w-4 h-4" /> {t("purchases.new_purchase")}
         </Button>
       </div>
@@ -1702,12 +1772,12 @@ function PurchasesTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {invoices.length === 0 && (
+              {filteredInvoices.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-8">{t("common.no_data")}</TableCell>
                 </TableRow>
               )}
-              {invoices.map((inv) => (
+              {filteredInvoices.map((inv) => (
                 <TableRow key={inv.id} className="cursor-pointer hover:bg-muted/30" onClick={() => setSelectedInvoice(inv.id)} data-testid={`row-purchase-${inv.id}`}>
                   <TableCell className="font-mono">{inv.invoiceNumber}</TableCell>
                   <TableCell>{supplierMap[inv.supplierId] || "—"}</TableCell>
