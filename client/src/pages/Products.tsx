@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Search, Package, Edit2, Trash2, Eye, MapPin } from "lucide-react";
+import { Plus, Search, Package, Edit2, Trash2, Eye, MapPin, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -38,6 +38,7 @@ export default function Products() {
 
   // ── detail modal ──────────────────────────────────────────────────────
   const [detailProductId, setDetailProductId] = useState<number | null>(null);
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
 
   // ── variant sub-dialog ────────────────────────────────────────────────
   const [variantDialogOpen, setVariantDialogOpen] = useState(false);
@@ -226,9 +227,21 @@ export default function Products() {
           <h1 className="text-2xl font-bold" data-testid="text-products-title">{t("products.title")}</h1>
           <p className="text-muted-foreground">{t("products.subtitle")}</p>
         </div>
-        <Button onClick={openAdd} className="gap-2" data-testid="button-add-product">
-          <Plus className="w-4 h-4" /> {t("products.add_product")}
-        </Button>
+        <div className="flex gap-2">
+          {(() => {
+            const nameCount: Record<string, number> = {};
+            (products as any[]).forEach(p => { nameCount[p.name.trim()] = (nameCount[p.name.trim()] || 0) + 1; });
+            const dupCount = Object.values(nameCount).filter(c => c > 1).length;
+            return dupCount > 0 ? (
+              <Button variant="outline" className="gap-2 border-orange-400 text-orange-600 hover:bg-orange-50" onClick={() => setDuplicatesOpen(true)}>
+                <AlertCircle className="w-4 h-4" /> {dupCount} أسماء مكررة
+              </Button>
+            ) : null;
+          })()}
+          <Button onClick={openAdd} className="gap-2" data-testid="button-add-product">
+            <Plus className="w-4 h-4" /> {t("products.add_product")}
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -429,9 +442,22 @@ export default function Products() {
                       onChange={e => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = ev => setFormData(f => ({ ...f, image: ev.target?.result as string }));
-                        reader.readAsDataURL(file);
+                        const img = new Image();
+                        const url = URL.createObjectURL(file);
+                        img.onload = () => {
+                          const MAX = 600;
+                          let { width, height } = img;
+                          if (width > MAX || height > MAX) {
+                            if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+                            else { width = Math.round(width * MAX / height); height = MAX; }
+                          }
+                          const canvas = document.createElement("canvas");
+                          canvas.width = width; canvas.height = height;
+                          canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+                          setFormData(f => ({ ...f, image: canvas.toDataURL("image/jpeg", 0.7) }));
+                          URL.revokeObjectURL(url);
+                        };
+                        img.src = url;
                         e.target.value = "";
                       }}
                     />
@@ -581,6 +607,72 @@ export default function Products() {
             <Button onClick={handleSave} disabled={isSaving || !formValid} data-testid="button-save-product">
               {isSaving ? t("products.saving_product") : t("common.save")}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Duplicates Modal ──────────────────────────────────────────────── */}
+      <Dialog open={duplicatesOpen} onOpenChange={setDuplicatesOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-600">
+              <AlertCircle className="w-5 h-5" /> المنتجات ذات الأسماء المكررة
+            </DialogTitle>
+            <DialogDescription>
+              هذه المنتجات لها نفس الاسم — راجعها وادمجها أو احذف المكرر
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            {(() => {
+              const groups: Record<string, any[]> = {};
+              (products as any[]).forEach(p => {
+                const key = p.name.trim();
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(p);
+              });
+              const dups = Object.entries(groups).filter(([, arr]) => arr.length > 1);
+              return dups.map(([name, items]) => (
+                <div key={name} className="border rounded-lg p-3 space-y-2">
+                  <p className="font-semibold text-sm text-orange-700">{name} <Badge variant="secondary">{items.length} نسخ</Badge></p>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>ID</TableHead>
+                        <TableHead>الباركود</TableHead>
+                        <TableHead>السعر</TableHead>
+                        <TableHead>المخزون</TableHead>
+                        <TableHead className="text-right">إجراء</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map((p: any) => (
+                        <TableRow key={p.id}>
+                          <TableCell className="font-mono text-xs text-muted-foreground">#{p.id}</TableCell>
+                          <TableCell className="font-mono text-xs">{p.barcode || "—"}</TableCell>
+                          <TableCell>{parseFloat(p.price).toFixed(3)}</TableCell>
+                          <TableCell>
+                            <Badge variant={p.totalStock === 0 ? "destructive" : "outline"}>{p.totalStock ?? 0}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => { setDuplicatesOpen(false); openEdit(p); }}>
+                                <Edit2 className="w-3 h-3" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => deleteProductMutation.mutate(p.id)}>
+                                <Trash2 className="w-3 h-3 text-destructive" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ));
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDuplicatesOpen(false)}>إغلاق</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

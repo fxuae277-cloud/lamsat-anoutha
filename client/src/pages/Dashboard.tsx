@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ShoppingCart, AlertTriangle, Receipt, Store, Package, TrendingUp } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ShoppingCart, AlertTriangle, Receipt, Store, Package, TrendingUp, Filter } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 
@@ -49,15 +52,29 @@ interface Branch {
 
 // ─── component ───────────────────────────────────────────────────────────────
 export default function Dashboard() {
+  const [filterFrom, setFilterFrom] = useState(today());
+  const [filterTo, setFilterTo] = useState(today());
+  const [filterBranch, setFilterBranch] = useState("all");
+  const [filterPayment, setFilterPayment] = useState("all");
+
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
   const { data: salesData, isLoading: salesLoading } = useQuery<Sale[]>({
-    queryKey: ["/api/sales", today()],
-    queryFn: getQueryFn({ on401: "throw" }),
-    select: (rows) => rows.slice(0, 10),
+    queryKey: ["/api/sales", filterFrom, filterTo, filterBranch, filterPayment],
+    queryFn: async () => {
+      const p = new URLSearchParams();
+      if (filterFrom) p.set("from", filterFrom);
+      if (filterTo) p.set("to", filterTo);
+      if (filterBranch !== "all") p.set("branchId", filterBranch);
+      if (filterPayment !== "all") p.set("paymentMethod", filterPayment);
+      const res = await fetch(`/api/sales?${p.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    select: (rows) => rows.slice(0, 20),
   });
 
   const { data: shiftData } = useQuery<Shift>({
@@ -178,10 +195,52 @@ export default function Dashboard() {
       {/* ── الجزء السفلي: جدول المبيعات + تنبيهات المخزون ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* جدول آخر 10 مبيعات */}
+        {/* جدول المبيعات مع فلاتر */}
         <Card className="col-span-1 lg:col-span-2 border-none shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-base">آخر 10 مبيعات</CardTitle>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle className="text-base">المبيعات</CardTitle>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Filter className="w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="date"
+                  value={filterFrom}
+                  onChange={e => setFilterFrom(e.target.value)}
+                  className="h-8 w-36 text-xs"
+                />
+                <span className="text-xs text-muted-foreground">إلى</span>
+                <Input
+                  type="date"
+                  value={filterTo}
+                  onChange={e => setFilterTo(e.target.value)}
+                  className="h-8 w-36 text-xs"
+                />
+                <Select value={filterBranch} onValueChange={setFilterBranch}>
+                  <SelectTrigger className="h-8 w-32 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل الفروع</SelectItem>
+                    {branches?.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={filterPayment} onValueChange={setFilterPayment}>
+                  <SelectTrigger className="h-8 w-28 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل الدفع</SelectItem>
+                    <SelectItem value="cash">نقداً</SelectItem>
+                    <SelectItem value="bank">بطاقة</SelectItem>
+                    <SelectItem value="credit">آجل</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {salesData && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {salesData.length} فاتورة —
+                إجمالي: <span className="font-bold text-primary">
+                  {salesData.reduce((s, r) => s + parseFloat(r.total || "0"), 0).toFixed(3)} ر.ع
+                </span>
+              </p>
+            )}
           </CardHeader>
           <CardContent className="p-0">
             {salesLoading ? (
@@ -189,7 +248,7 @@ export default function Dashboard() {
                 <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
               </div>
             ) : !salesData?.length ? (
-              <p className="text-center text-muted-foreground py-10">لا توجد مبيعات بعد</p>
+              <p className="text-center text-muted-foreground py-10">لا توجد مبيعات في هذه الفترة</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
