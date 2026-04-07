@@ -138,6 +138,30 @@ app.use((req, res, next) => {
     console.error("[startup] FAILED to create settings table:", err);
   }
 
+  // Ensure every branch has exactly one is_branch_default location.
+  // This fixes "لا يوجد مخزن افتراضي للفرع" that blocks all POS sales.
+  try {
+    await pool.query(`
+      UPDATE locations l
+      SET    is_branch_default = true
+      WHERE  l.active = true
+        AND  l.branch_id IS NOT NULL
+        AND  l.id = (
+          SELECT id FROM locations l2
+          WHERE  l2.branch_id = l.branch_id AND l2.active = true
+          ORDER BY id ASC
+          LIMIT 1
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM locations l3
+          WHERE  l3.branch_id = l.branch_id AND l3.is_branch_default = true AND l3.active = true
+        );
+    `);
+    console.log("[startup] branch default locations ensured");
+  } catch (err) {
+    console.error("[startup] FAILED to set branch default locations:", err);
+  }
+
   await seedDatabase();
   await registerRoutes(httpServer, app);
   initBackupScheduler();

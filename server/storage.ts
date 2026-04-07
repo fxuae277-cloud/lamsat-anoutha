@@ -819,14 +819,19 @@ export class DatabaseStorage implements IStorage {
           );
 
           const invRow = await client.query(
-            `SELECT COALESCE(SUM(ib.qty_on_hand), 0) as total_available
+            `SELECT COALESCE(SUM(ib.qty_on_hand), 0) as total_available,
+                    COUNT(ib.id) as tracked_rows
              FROM inventory_balances ib
              JOIN locations l ON l.id = ib.location_id
              WHERE l.branch_id = $1 AND ib.variant_id = $2`,
             [data.branchId, variantId]
           );
           const available = Number(invRow.rows[0]?.total_available || 0);
-          if (available < item.quantity) {
+          const trackedRows = Number(invRow.rows[0]?.tracked_rows || 0);
+          // Only enforce when stock has been explicitly received.
+          // If trackedRows = 0 the product was never stocked, so allow the sale
+          // and record a negative balance to reconcile when stock arrives.
+          if (trackedRows > 0 && available < item.quantity) {
             const prodRes = await client.query(`SELECT name FROM products WHERE id = $1`, [item.productId]);
             const pName = prodRes.rows[0]?.name || `#${item.productId}`;
             throw new Error(`المخزون غير كاف للمنتج "${pName}" — المتوفر: ${available}، المطلوب: ${item.quantity}`);
@@ -995,14 +1000,16 @@ export class DatabaseStorage implements IStorage {
             [variantId, data.branchId]
           );
           const invRow = await client.query(
-            `SELECT COALESCE(SUM(ib.qty_on_hand), 0) as total_available
+            `SELECT COALESCE(SUM(ib.qty_on_hand), 0) as total_available,
+                    COUNT(ib.id) as tracked_rows
              FROM inventory_balances ib
              JOIN locations l ON l.id = ib.location_id
              WHERE l.branch_id = $1 AND ib.variant_id = $2`,
             [data.branchId, variantId]
           );
           const available = Number(invRow.rows[0]?.total_available || 0);
-          if (available < item.quantity) {
+          const trackedRows = Number(invRow.rows[0]?.tracked_rows || 0);
+          if (trackedRows > 0 && available < item.quantity) {
             const prodRes = await client.query(`SELECT name FROM products WHERE id = $1`, [item.productId]);
             const pName = prodRes.rows[0]?.name || `#${item.productId}`;
             throw new Error(`المخزون غير كاف للمنتج "${pName}" — المتوفر: ${available}، المطلوب: ${item.quantity}`);
