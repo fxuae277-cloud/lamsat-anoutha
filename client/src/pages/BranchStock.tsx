@@ -37,12 +37,18 @@ export default function BranchStock() {
     enabled: !!branchId,
   });
 
+  // عند اختيار فئة أم → تشمل الفلترة الفئات الفرعية أيضاً
+  const childCatIds = (parentId: string): string[] =>
+    categories.filter((c: any) => String(c.parentId) === parentId).map((c: any) => String(c.id));
+
   const filteredStock = stock.filter((item: any) => {
     const matchesSearch = !search ||
       (item.product_name || "").toLowerCase().includes(search.toLowerCase()) ||
       (item.barcode || "").toLowerCase().includes(search.toLowerCase()) ||
       (item.sku || "").toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = categoryFilter === "all" || String(item.category_id) === categoryFilter;
+    const matchesCategory = categoryFilter === "all" ||
+      String(item.category_id) === categoryFilter ||
+      childCatIds(categoryFilter).includes(String(item.category_id));
     return matchesSearch && matchesCategory;
   });
 
@@ -123,9 +129,19 @@ export default function BranchStock() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("branch_stock.all_categories")}</SelectItem>
-                {categories.map((c: any) => (
-                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                ))}
+                {categories.filter((c: any) => !c.parentId).map((parent: any) => [
+                  <SelectItem key={parent.id} value={String(parent.id)} className="font-semibold">
+                    {parent.name}
+                  </SelectItem>,
+                  ...categories.filter((c: any) => c.parentId === parent.id).map((child: any) => (
+                    <SelectItem key={child.id} value={String(child.id)} className="pr-6 text-muted-foreground">
+                      ↳ {child.name}
+                    </SelectItem>
+                  ))
+                ])}
+                {/* فئات بدون أب */}
+                {categories.filter((c: any) => c.parentId && !categories.some((p: any) => p.id === c.parentId))
+                  .map((c: any) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

@@ -1903,7 +1903,16 @@ function PurchasesTab() {
               <Select value={qpCategoryId} onValueChange={setQpCategoryId}>
                 <SelectTrigger data-testid="select-qp-category"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                  {(categories as any[]).filter(c => !c.parentId).map((parent: any) => [
+                    <SelectItem key={parent.id} value={String(parent.id)} className="font-semibold">
+                      {parent.name}
+                    </SelectItem>,
+                    ...(categories as any[]).filter(c => c.parentId === parent.id).map((child: any) => (
+                      <SelectItem key={child.id} value={String(child.id)} className="pr-6 text-muted-foreground">
+                        ↳ {child.name}
+                      </SelectItem>
+                    ))
+                  ])}
                 </SelectContent>
               </Select>
             </div>

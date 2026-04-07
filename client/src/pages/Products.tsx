@@ -367,7 +367,16 @@ export default function Products() {
           <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("products.all_categories")}</SelectItem>
-            {categories.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>)}
+            {categories.filter((c: any) => !c.parentId).map((parent: any) => [
+              <SelectItem key={parent.id} value={parent.id.toString()} className="font-semibold">
+                {parent.name}
+              </SelectItem>,
+              ...categories.filter((c: any) => c.parentId === parent.id).map((child: any) => (
+                <SelectItem key={child.id} value={child.id.toString()} className="pr-6 text-muted-foreground">
+                  ↳ {child.name}
+                </SelectItem>
+              ))
+            ])}
           </SelectContent>
         </Select>
         <Select value={filterType} onValueChange={setFilterType}>
@@ -554,7 +563,16 @@ export default function Products() {
                   <Select value={formData.categoryId} onValueChange={v => setFormData(f => ({ ...f, categoryId: v }))}>
                     <SelectTrigger><SelectValue placeholder={t("products.all_categories")} /></SelectTrigger>
                     <SelectContent>
-                      {categories.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>)}
+                      {categories.filter((c: any) => !c.parentId).map((parent: any) => [
+                        <SelectItem key={parent.id} value={parent.id.toString()} className="font-semibold">
+                          {parent.name}
+                        </SelectItem>,
+                        ...categories.filter((c: any) => c.parentId === parent.id).map((child: any) => (
+                          <SelectItem key={child.id} value={child.id.toString()} className="pr-6 text-muted-foreground">
+                            ↳ {child.name}
+                          </SelectItem>
+                        ))
+                      ])}
                     </SelectContent>
                   </Select>
                 )}

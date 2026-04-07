@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tag, Search, Loader2, Package, Barcode, Palette, Ruler, ChevronDown, ChevronUp } from "lucide-react";
 
 type Product = {
-  id: number; name: string; category: string; price: string;
+  id: number; name: string; category: string; categoryId: number | null; price: string;
   active: boolean; variants?: Variant[];
 };
 type Variant = {
@@ -35,11 +35,22 @@ export default function MobileProducts() {
     enabled: !!expandedId,
   });
 
-  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
+  const { data: categories = [] } = useQuery<any[]>({
+    queryKey: ["/api/categories"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  // عند اختيار فئة أم → تشمل الفلترة الفئات الفرعية أيضاً
+  const childCatIds = (parentId: string): number[] =>
+    categories.filter((c: any) => String(c.parentId) === parentId).map((c: any) => c.id);
 
   const filtered = products.filter(p => {
     if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (catFilter !== "all" && p.category !== catFilter) return false;
+    if (catFilter !== "all") {
+      const matches = String(p.categoryId) === catFilter ||
+        childCatIds(catFilter).includes(p.categoryId ?? -1);
+      if (!matches) return false;
+    }
     return true;
   });
 
@@ -65,7 +76,16 @@ export default function MobileProducts() {
           <SelectTrigger className="w-32 h-12" data-testid="select-category"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("customers.filter_all")}</SelectItem>
-            {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            {categories.filter((c: any) => !c.parentId).map((parent: any) => [
+              <SelectItem key={parent.id} value={String(parent.id)} className="font-semibold">
+                {parent.name}
+              </SelectItem>,
+              ...categories.filter((c: any) => c.parentId === parent.id).map((child: any) => (
+                <SelectItem key={child.id} value={String(child.id)} className="pr-5 text-muted-foreground">
+                  ↳ {child.name}
+                </SelectItem>
+              ))
+            ])}
           </SelectContent>
         </Select>
       </div>

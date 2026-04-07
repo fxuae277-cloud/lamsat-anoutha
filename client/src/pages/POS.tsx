@@ -631,11 +631,17 @@ export default function POS() {
   }
 
   const activeProducts = products.filter(p => p.active !== false);
+  // عند اختيار فئة أم → تشمل الفلترة الفئات الفرعية أيضاً
+  const childCatIdsInPOS = (parentId: string): number[] =>
+    categoriesList.filter((c: any) => String(c.parentId) === parentId).map((c: any) => c.id);
+
   const filteredProducts = activeProducts.filter(p => {
-    const matchSearch = !searchQuery || 
-      p.name.includes(searchQuery) || 
+    const matchSearch = !searchQuery ||
+      p.name.includes(searchQuery) ||
       (p.barcode && p.barcode.includes(searchQuery));
-    const matchCategory = filterCategory === "all" || p.categoryId === parseInt(filterCategory);
+    const matchCategory = filterCategory === "all" ||
+      p.categoryId === parseInt(filterCategory) ||
+      childCatIdsInPOS(filterCategory).includes(p.categoryId ?? -1);
     return matchSearch && matchCategory;
   });
 
@@ -818,14 +824,31 @@ export default function POS() {
             >
               {t("pos.all_categories")}
             </Button>
-            {categoriesList.map((cat: any) => (
-              <Button 
-                key={cat.id} 
-                variant={filterCategory === cat.id.toString() ? "default" : "secondary"} 
-                className="rounded-full"
-                onClick={() => setFilterCategory(cat.id.toString())}
+            {/* الفئات الرئيسية أولاً، ثم الفرعية */}
+            {categoriesList.filter((c: any) => !c.parentId).map((parent: any) => [
+              <Button
+                key={parent.id}
+                variant={filterCategory === parent.id.toString() ? "default" : "secondary"}
+                className="rounded-full font-semibold"
+                onClick={() => setFilterCategory(parent.id.toString())}
               >
-                {cat.name}
+                {parent.name}
+              </Button>,
+              ...categoriesList.filter((c: any) => c.parentId === parent.id).map((child: any) => (
+                <Button
+                  key={child.id}
+                  variant={filterCategory === child.id.toString() ? "default" : "outline"}
+                  className="rounded-full text-sm"
+                  onClick={() => setFilterCategory(child.id.toString())}
+                >
+                  ↳ {child.name}
+                </Button>
+              ))
+            ])}
+            {/* فئات بدون أب */}
+            {categoriesList.filter((c: any) => c.parentId && !categoriesList.some((p: any) => p.id === c.parentId)).map((c: any) => (
+              <Button key={c.id} variant={filterCategory === c.id.toString() ? "default" : "secondary"} className="rounded-full" onClick={() => setFilterCategory(c.id.toString())}>
+                {c.name}
               </Button>
             ))}
           </div>
