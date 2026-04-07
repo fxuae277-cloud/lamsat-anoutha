@@ -51,6 +51,8 @@ export default function Products() {
   // ── detail modal ──────────────────────────────────────────────────────
   const [detailProductId, setDetailProductId] = useState<number | null>(null);
   const [duplicatesOpen, setDuplicatesOpen] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const deleteConfirmProduct = (products as any[]).find(p => p.id === deleteConfirmId);
 
   // ── variant sub-dialog ────────────────────────────────────────────────
   const [variantDialogOpen, setVariantDialogOpen] = useState(false);
@@ -290,6 +292,7 @@ export default function Products() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-8 text-center">#</TableHead>
               <TableHead className="w-10">{t("products.image")}</TableHead>
               <TableHead>{t("products.table_name")}</TableHead>
               <TableHead>الفئة</TableHead>
@@ -302,14 +305,15 @@ export default function Products() {
           </TableHeader>
           <TableBody>
             {products.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-10 text-muted-foreground">{t("products.no_products")}</TableCell></TableRow>
-            ) : products.map(p => {
+              <TableRow><TableCell colSpan={9} className="text-center py-10 text-muted-foreground">{t("products.no_products")}</TableCell></TableRow>
+            ) : products.map((p, idx) => {
               const catName = categories.find((c: any) => c.id === p.categoryId)?.name ?? "—";
               const stock = p.totalStock ?? 0;
               return (
-              <TableRow key={p.id}>
+              <TableRow key={p.id} className={!p.active ? "opacity-60" : ""}>
+                <TableCell className="text-center text-xs text-muted-foreground">{idx + 1}</TableCell>
                 <TableCell>
-                  <div className="w-8 h-8 rounded bg-muted flex items-center justify-center overflow-hidden">
+                  <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
                     {p.image
                       ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
                       : <Package className="w-4 h-4 text-muted-foreground" />}
@@ -318,30 +322,34 @@ export default function Products() {
                 <TableCell className="font-medium">{p.name}</TableCell>
                 <TableCell><Badge variant="outline" className="text-xs">{catName}</Badge></TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">{p.barcode || "—"}</TableCell>
-                <TableCell>{parseFloat(p.price).toFixed(3)}</TableCell>
+                <TableCell className="font-medium">{parseFloat(p.price).toLocaleString("ar-SA", { minimumFractionDigits: 0 })} <span className="text-xs text-muted-foreground">ر.س</span></TableCell>
                 <TableCell>
                   <Badge variant={stock === 0 ? "destructive" : stock < 5 ? "secondary" : "outline"} className={stock > 0 && stock < 5 ? "border-orange-400 text-orange-600 bg-orange-50" : ""}>
                     {stock}
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <Badge
-                    variant={p.active ? "default" : "secondary"}
-                    className="cursor-pointer"
-                    onClick={() => toggleActiveMutation.mutate({ id: p.id, active: !p.active })}
-                  >
-                    {p.active ? t("products.active") : t("products.inactive")}
-                  </Badge>
+                  {isOwnerOrAdmin ? (
+                    <Switch
+                      checked={p.active ?? true}
+                      onCheckedChange={v => toggleActiveMutation.mutate({ id: p.id, active: v })}
+                      disabled={toggleActiveMutation.isPending}
+                    />
+                  ) : (
+                    <Badge variant={p.active ? "default" : "secondary"}>
+                      {p.active ? t("products.active") : t("products.inactive")}
+                    </Badge>
+                  )}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="icon" onClick={() => setDetailProductId(p.id)} data-testid={`button-detail-product-${p.id}`}>
+                    <Button variant="ghost" size="icon" title="التفاصيل" onClick={() => setDetailProductId(p.id)} data-testid={`button-detail-product-${p.id}`}>
                       <Eye className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(p)} data-testid={`button-edit-product-${p.id}`}>
+                    <Button variant="ghost" size="icon" title="تعديل" onClick={() => openEdit(p)} data-testid={`button-edit-product-${p.id}`}>
                       <Edit2 className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => deleteProductMutation.mutate(p.id)} data-testid={`button-delete-product-${p.id}`}>
+                    <Button variant="ghost" size="icon" title="حذف" onClick={() => setDeleteConfirmId(p.id)} data-testid={`button-delete-product-${p.id}`}>
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>
@@ -843,6 +851,38 @@ export default function Products() {
           <DialogFooter>
             <Button onClick={() => upsertVariantMutation.mutate(variantForm)} disabled={upsertVariantMutation.isPending} data-testid="button-save-variant">
               {t("common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── مودال تأكيد الحذف ── */}
+      <Dialog open={!!deleteConfirmId} onOpenChange={open => { if (!open) setDeleteConfirmId(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="w-5 h-5" /> تأكيد الحذف
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-1 pt-1">
+                <p>هل أنت متأكد من حذف المنتج <strong>"{deleteConfirmProduct?.name}"</strong>؟</p>
+                <p className="text-muted-foreground text-sm">لا يمكن التراجع عن هذا الإجراء.</p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>إلغاء</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteProductMutation.isPending}
+              onClick={() => {
+                if (deleteConfirmId) {
+                  deleteProductMutation.mutate(deleteConfirmId);
+                  setDeleteConfirmId(null);
+                }
+              }}
+            >
+              {deleteProductMutation.isPending ? "جارٍ الحذف..." : "نعم، احذف"}
             </Button>
           </DialogFooter>
         </DialogContent>
