@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
-import { Plus, Search, Package, Edit2, Trash2, Eye, MapPin, AlertCircle } from "lucide-react";
+import { Plus, Search, Package, Edit2, Trash2, Eye, MapPin, AlertCircle, Download, ArrowUpDown, ArrowUp, ArrowDown, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -31,7 +31,12 @@ export default function Products() {
     const params = new URLSearchParams(searchStr);
     return params.get("categoryId") || "all";
   });
-  const [filterType, setFilterType] = useState("all");
+  const [filterType, setFilterType]     = useState("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive">("all");
+  const [filterStock, setFilterStock]   = useState<"all" | "zero" | "low">("all");
+  const [sortBy, setSortBy]             = useState<"name" | "price" | "stock" | null>(null);
+  const [sortDir, setSortDir]           = useState<"asc" | "desc">("asc");
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // تحديث الفلتر عند تغيير الرابط
   useEffect(() => {
@@ -232,6 +237,73 @@ export default function Products() {
   const isSaving = createProductMutation.isPending || updateProductMutation.isPending;
   const formValid = formData.name.trim().length >= 2 && (formData.price !== "" && !isNaN(parseFloat(formData.price)));
 
+  // ── client-side filter + sort ─────────────────────────────────────────
+  const filteredProducts = (products as any[])
+    .filter(p => {
+      if (filterStatus === "active"   && !p.active) return false;
+      if (filterStatus === "inactive" &&  p.active) return false;
+      const stock = p.totalStock ?? 0;
+      if (filterStock === "zero" && stock !== 0) return false;
+      if (filterStock === "low"  && (stock === 0 || stock >= 5)) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (!sortBy) return 0;
+      let va: any = 0, vb: any = 0;
+      if (sortBy === "name")  { va = a.name;                    vb = b.name; }
+      if (sortBy === "price") { va = parseFloat(a.price) || 0;  vb = parseFloat(b.price) || 0; }
+      if (sortBy === "stock") { va = a.totalStock ?? 0;         vb = b.totalStock ?? 0; }
+      if (va < vb) return sortDir === "asc" ? -1 : 1;
+      if (va > vb) return sortDir === "asc" ?  1 : -1;
+      return 0;
+    });
+
+  // ── stats (من الكل بدون فلاتر الحالة والمخزون) ───────────────────────
+  const stats = {
+    total:    (products as any[]).length,
+    outStock: (products as any[]).filter(p => (p.totalStock ?? 0) === 0).length,
+    low:      (products as any[]).filter(p => { const s = p.totalStock ?? 0; return s > 0 && s < 5; }).length,
+    inactive: (products as any[]).filter(p => !p.active).length,
+  };
+
+  // ── toggle sort ───────────────────────────────────────────────────────
+  function toggleSort(field: "name" | "price" | "stock") {
+    if (sortBy === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortBy(field); setSortDir("asc"); }
+  }
+  function SortIcon({ field }: { field: "name" | "price" | "stock" }) {
+    if (sortBy !== field) return <ArrowUpDown className="w-3 h-3 opacity-40 inline ms-1" />;
+    return sortDir === "asc"
+      ? <ArrowUp className="w-3 h-3 inline ms-1 text-primary" />
+      : <ArrowDown className="w-3 h-3 inline ms-1 text-primary" />;
+  }
+
+  // ── export CSV ────────────────────────────────────────────────────────
+  function exportCSV() {
+    const headers = ["#", "الاسم", "الفئة", "الباركود", "السعر", "المخزون", "الحالة"];
+    const rows = filteredProducts.map((p, i) => [
+      i + 1,
+      `"${p.name}"`,
+      `"${categories.find((c: any) => c.id === p.categoryId)?.name ?? "—"}"`,
+      p.barcode || "",
+      parseFloat(p.price).toFixed(3),
+      p.totalStock ?? 0,
+      p.active ? "نشط" : "غير نشط",
+    ]);
+    const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "products.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ── copy barcode ──────────────────────────────────────────────────────
+  function copyBarcode(code: string) {
+    navigator.clipboard.writeText(code).then(() =>
+      toast({ title: "تم النسخ", description: code })
+    );
+  }
+
   // ── render ────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
@@ -255,6 +327,26 @@ export default function Products() {
           <Button onClick={openAdd} className="gap-2" data-testid="button-add-product">
             <Plus className="w-4 h-4" /> {t("products.add_product")}
           </Button>
+        </div>
+      </div>
+
+      {/* إحصائيات سريعة */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-card border rounded-lg p-3 text-center">
+          <p className="text-2xl font-bold">{stats.total}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">إجمالي المنتجات</p>
+        </div>
+        <div className="bg-card border rounded-lg p-3 text-center cursor-pointer hover:border-destructive/50 transition-colors" onClick={() => setFilterStock("zero")}>
+          <p className="text-2xl font-bold text-destructive">{stats.outStock}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">نفد المخزون</p>
+        </div>
+        <div className="bg-card border rounded-lg p-3 text-center cursor-pointer hover:border-orange-400/50 transition-colors" onClick={() => setFilterStock("low")}>
+          <p className="text-2xl font-bold text-orange-500">{stats.low}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">مخزون منخفض</p>
+        </div>
+        <div className="bg-card border rounded-lg p-3 text-center cursor-pointer hover:border-muted-foreground/50 transition-colors" onClick={() => setFilterStatus("inactive")}>
+          <p className="text-2xl font-bold text-muted-foreground">{stats.inactive}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">غير نشط</p>
         </div>
       </div>
 
@@ -285,6 +377,30 @@ export default function Products() {
             <SelectItem value="variable">{t("products.type_variable")}</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={filterStatus} onValueChange={v => setFilterStatus(v as any)}>
+          <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">كل الحالات</SelectItem>
+            <SelectItem value="active">النشطة فقط</SelectItem>
+            <SelectItem value="inactive">غير النشطة</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filterStock} onValueChange={v => setFilterStock(v as any)}>
+          <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">كل المخزون</SelectItem>
+            <SelectItem value="zero">نفد المخزون</SelectItem>
+            <SelectItem value="low">مخزون منخفض</SelectItem>
+          </SelectContent>
+        </Select>
+        {(filterStatus !== "all" || filterStock !== "all") && (
+          <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => { setFilterStatus("all"); setFilterStock("all"); }}>
+            مسح الفلاتر ✕
+          </Button>
+        )}
+        <Button variant="outline" size="sm" className="gap-1.5 ms-auto" onClick={exportCSV}>
+          <Download className="w-4 h-4" /> تصدير CSV
+        </Button>
       </div>
 
       {/* Table */}
@@ -294,26 +410,36 @@ export default function Products() {
             <TableRow>
               <TableHead className="w-8 text-center">#</TableHead>
               <TableHead className="w-10">{t("products.image")}</TableHead>
-              <TableHead>{t("products.table_name")}</TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("name")}>
+                {t("products.table_name")}<SortIcon field="name" />
+              </TableHead>
               <TableHead>الفئة</TableHead>
               <TableHead>{t("products.code")}</TableHead>
-              <TableHead>{t("products.default_price")}</TableHead>
-              <TableHead>الكمية</TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("price")}>
+                {t("products.default_price")}<SortIcon field="price" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("stock")}>
+                الكمية<SortIcon field="stock" />
+              </TableHead>
               <TableHead>{t("products.table_status")}</TableHead>
               <TableHead className="text-right">{t("products.table_actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {products.length === 0 ? (
+            {filteredProducts.length === 0 ? (
               <TableRow><TableCell colSpan={9} className="text-center py-10 text-muted-foreground">{t("products.no_products")}</TableCell></TableRow>
-            ) : products.map((p, idx) => {
+            ) : filteredProducts.map((p, idx) => {
               const catName = categories.find((c: any) => c.id === p.categoryId)?.name ?? "—";
               const stock = p.totalStock ?? 0;
               return (
               <TableRow key={p.id} className={!p.active ? "opacity-60" : ""}>
                 <TableCell className="text-center text-xs text-muted-foreground">{idx + 1}</TableCell>
                 <TableCell>
-                  <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
+                  <div
+                    className={`w-9 h-9 rounded-lg bg-muted flex items-center justify-center overflow-hidden ${p.image ? "cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all" : ""}`}
+                    onClick={() => p.image && setPreviewImage(p.image)}
+                    title={p.image ? "اضغط للمعاينة" : undefined}
+                  >
                     {p.image
                       ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
                       : <Package className="w-4 h-4 text-muted-foreground" />}
@@ -321,7 +447,15 @@ export default function Products() {
                 </TableCell>
                 <TableCell className="font-medium">{p.name}</TableCell>
                 <TableCell><Badge variant="outline" className="text-xs">{catName}</Badge></TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground">{p.barcode || "—"}</TableCell>
+                <TableCell
+                  className={`font-mono text-xs ${p.barcode ? "text-foreground cursor-pointer hover:text-primary transition-colors group" : "text-muted-foreground"}`}
+                  title={p.barcode ? "اضغط لنسخ الباركود" : undefined}
+                  onClick={() => p.barcode && copyBarcode(p.barcode)}
+                >
+                  {p.barcode
+                    ? <span className="flex items-center gap-1">{p.barcode} <Copy className="w-3 h-3 opacity-0 group-hover:opacity-50" /></span>
+                    : "—"}
+                </TableCell>
                 <TableCell className="font-medium">{parseFloat(p.price).toLocaleString("ar-SA", { minimumFractionDigits: 0 })} <span className="text-xs text-muted-foreground">ر.س</span></TableCell>
                 <TableCell>
                   <Badge variant={stock === 0 ? "destructive" : stock < 5 ? "secondary" : "outline"} className={stock > 0 && stock < 5 ? "border-orange-400 text-orange-600 bg-orange-50" : ""}>
@@ -853,6 +987,13 @@ export default function Products() {
               {t("common.save")}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── مودال معاينة الصورة ── */}
+      <Dialog open={!!previewImage} onOpenChange={open => { if (!open) setPreviewImage(null); }}>
+        <DialogContent className="max-w-sm p-2">
+          <img src={previewImage ?? ""} alt="" className="w-full rounded-lg object-contain max-h-[70vh]" />
         </DialogContent>
       </Dialog>
 
