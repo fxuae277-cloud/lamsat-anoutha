@@ -498,7 +498,7 @@ export default function JournalEntries() {
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">{t("common.branch")}</Label>
-                  <p className="font-medium">{branches.find(b => b.id === entryDetail.branchId)?.name || "---"}</p>
+                  <p className="font-medium">{(() => { const b = branches.find(b => b.id === entryDetail.branchId); return b ? (b.address ? `${b.name} - ${b.address}` : b.name) : "---"; })()}</p>
                 </div>
                 <div className="col-span-full">
                   <Label className="text-xs text-muted-foreground">{t("journal.description")}</Label>

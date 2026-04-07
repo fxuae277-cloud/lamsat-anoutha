@@ -110,7 +110,11 @@ export default function Finance() {
     onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
 
-  const branchName = (id: number) => branches.find(b => b.id === id)?.name || `${t("expenses_page.branch_label")} ${id}`;
+  const branchName = (id: number) => {
+    const b = branches.find(b => b.id === id);
+    if (!b) return `${t("expenses_page.branch_label")} ${id}`;
+    return b.address ? `${b.name} - ${b.address}` : b.name;
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-6">
