@@ -57,7 +57,6 @@ export default function Products() {
   const [detailProductId, setDetailProductId] = useState<number | null>(null);
   const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
-  const deleteConfirmProduct = (products as any[]).find(p => p.id === deleteConfirmId);
 
   // ── variant sub-dialog ────────────────────────────────────────────────
   const [variantDialogOpen, setVariantDialogOpen] = useState(false);
@@ -233,6 +232,8 @@ export default function Products() {
     }
     setVariantDialogOpen(true);
   }
+
+  const deleteConfirmProduct = (products as any[]).find(p => p.id === deleteConfirmId);
 
   const isSaving = createProductMutation.isPending || updateProductMutation.isPending;
   const formValid = formData.name.trim().length >= 2 && (formData.price !== "" && !isNaN(parseFloat(formData.price)));
