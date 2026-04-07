@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Package, Search, ArrowRightLeft, History, Plus, CheckCircle, Barcode, MapPin, AlertTriangle, TrendingUp, Layers } from "lucide-react";
+import { Package, Search, ArrowRightLeft, ArrowLeft, History, Plus, CheckCircle, Barcode, MapPin, AlertTriangle, TrendingUp, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -132,6 +132,7 @@ function TransfersTab() {
   const { toast } = useToast();
   const [mode, setMode] = useState<"list" | "create">("list");
   const [selectedTransfer, setSelectedTransfer] = useState<any>(null);
+  const [txSearch, setTxSearch] = useState("");
   const [fromLoc, setFromLoc] = useState("");
   const [toLoc, setToLoc] = useState("");
   const [scanBarcode, setScanBarcode] = useState("");
@@ -164,7 +165,7 @@ function TransfersTab() {
       return res.json();
     },
     onSuccess: (result) => {
-      toast({ title: t("transfers.transfer_approved"), description: `${result.from_location_name} → ${result.to_location_name}` });
+      toast({ title: t("transfers.transfer_approved"), description: `${result.from_location_name} ← ${result.to_location_name}` });
       queryClient.invalidateQueries({ queryKey: ["/api/stock-transfers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/inventory-balances"] });
       queryClient.invalidateQueries({ queryKey: ["/api/inventory-ledger"] });
@@ -236,9 +237,12 @@ function TransfersTab() {
           <Button variant="outline" onClick={() => { resetCreateForm(); setMode("list"); }}>{t("common.cancel")}</Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 items-end">
           <div className="space-y-2">
-            <label className="text-sm font-medium">{t("transfers.from_location")}</label>
+            <label className="text-sm font-medium flex items-center gap-1">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">م</span>
+              {t("transfers.from_location")}
+            </label>
             <Select value={fromLoc} onValueChange={(v) => { setFromLoc(v); setTransferQtys({}); if (v === toLoc) setToLoc(""); }}>
               <SelectTrigger data-testid="select-from-location"><SelectValue placeholder={t("transfers.select_source")} /></SelectTrigger>
               <SelectContent>
@@ -248,8 +252,17 @@ function TransfersTab() {
               </SelectContent>
             </Select>
           </div>
+          <div className="flex items-center justify-center pb-1">
+            <div className="flex flex-col items-center gap-1">
+              <ArrowLeft className="w-6 h-6 text-primary rotate-180" />
+              <span className="text-[10px] text-muted-foreground">اتجاه</span>
+            </div>
+          </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">{t("transfers.to_location")}</label>
+            <label className="text-sm font-medium flex items-center gap-1">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold">و</span>
+              {t("transfers.to_location")}
+            </label>
             <Select value={toLoc} onValueChange={setToLoc}>
               <SelectTrigger data-testid="select-to-location"><SelectValue placeholder={t("transfers.select_destination")} /></SelectTrigger>
               <SelectContent>
@@ -367,9 +380,9 @@ function TransfersTab() {
 
         {fromLoc && toLoc && totalItems > 0 && (
           <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-md">
-            <div className="text-sm">
+            <div className="text-sm flex items-center gap-2" dir="ltr">
               <span className="font-semibold">{fromLocLabel}</span>
-              <ArrowRightLeft className="inline w-4 h-4 mx-2 text-green-600" />
+              <ArrowLeft className="w-4 h-4 text-green-600 rotate-180" />
               <span className="font-semibold">{toLocLabel}</span>
               <span className="mx-2 text-muted-foreground">|</span>
               <span>{totalItems} {t("transfers.items_count")}, {totalQty} {t("transfers.total_qty")}</span>
@@ -388,15 +401,35 @@ function TransfersTab() {
     );
   }
 
+  const filteredTransfers = transfers.filter((tx: any) => {
+    if (!txSearch.trim()) return true;
+    const q = txSearch.toLowerCase();
+    return (
+      (tx.from_location_name || tx.fromLocationName || "").toLowerCase().includes(q) ||
+      (tx.to_location_name || tx.toLocationName || "").toLowerCase().includes(q) ||
+      (tx.creator_name || tx.creatorName || "").toLowerCase().includes(q) ||
+      String(tx.id).includes(q)
+    );
+  });
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap gap-3 items-center justify-between">
+        <div className="relative flex-1 min-w-[200px] md:max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="بحث بالموقع أو الموظف..."
+            className="pl-9"
+            value={txSearch}
+            onChange={e => setTxSearch(e.target.value)}
+          />
+        </div>
         <Button onClick={() => setMode("create")} data-testid="button-create-transfer">
           <Plus className="w-4 h-4 mr-2" /> {t("transfers.create_transfer")}
         </Button>
       </div>
 
-      {transfers.length === 0 ? (
+      {filteredTransfers.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <ArrowRightLeft className="w-12 h-12 mx-auto mb-3 opacity-30" />
           <p>{t("transfers.no_transfers")}</p>
@@ -409,17 +442,19 @@ function TransfersTab() {
                 <TableHead>#</TableHead>
                 <TableHead>{t("common.date")}</TableHead>
                 <TableHead>{t("transfers.from_location")}</TableHead>
+                <TableHead></TableHead>
                 <TableHead>{t("transfers.to_location")}</TableHead>
                 <TableHead>{t("common.status")}</TableHead>
                 <TableHead>{t("common.employee")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {transfers.map((tx: any) => (
+              {filteredTransfers.map((tx: any) => (
                 <TableRow key={tx.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedTransfer(tx)} data-testid={`row-transfer-${tx.id}`}>
                   <TableCell className="font-mono text-xs">{tx.id}</TableCell>
                   <TableCell>{new Date(tx.created_at || tx.createdAt).toLocaleDateString("en-US")}</TableCell>
                   <TableCell className="font-medium">{tx.from_location_name || tx.fromLocationName}</TableCell>
+                  <TableCell className="text-center text-muted-foreground"><ArrowLeft className="w-4 h-4 inline rotate-180" /></TableCell>
                   <TableCell className="font-medium">{tx.to_location_name || tx.toLocationName}</TableCell>
                   <TableCell>
                     <Badge variant={tx.status === "approved" ? "outline" : tx.status === "cancelled" ? "destructive" : "secondary"} className={tx.status === "approved" ? "border-green-500 text-green-700 bg-green-50" : ""}>
@@ -438,9 +473,9 @@ function TransfersTab() {
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>{t("transfers.title")} #{selectedTransfer?.id}</DialogTitle>
-            <DialogDescription className="flex items-center gap-2 text-base">
+            <DialogDescription className="flex items-center gap-2 text-base" dir="ltr">
               <span className="font-semibold">{transferDetail?.from_location_name || selectedTransfer?.from_location_name}</span>
-              <ArrowRightLeft className="inline w-4 h-4 text-muted-foreground" />
+              <ArrowLeft className="w-4 h-4 text-muted-foreground rotate-180" />
               <span className="font-semibold">{transferDetail?.to_location_name || selectedTransfer?.to_location_name}</span>
             </DialogDescription>
           </DialogHeader>
@@ -491,6 +526,8 @@ function TransfersTab() {
 function LedgerTab() {
   const { t, lang } = useI18n();
   const [branchId, setBranchId] = useState<string>("all");
+  const [ledgerSearch, setLedgerSearch] = useState("");
+  const [ledgerType, setLedgerType] = useState<string>("all");
 
   const { data: branches = [] } = useQuery<any[]>({
     queryKey: ["/api/branches"],
@@ -500,6 +537,18 @@ function LedgerTab() {
   const ledgerUrl = branchId === "all" ? "/api/inventory-ledger" : `/api/inventory-ledger?branchId=${branchId}`;
   const { data: ledger = [] } = useQuery<any[]>({
     queryKey: [ledgerUrl],
+  });
+
+  const filteredLedger = ledger.filter((entry: any) => {
+    if (ledgerType !== "all" && entry.reason !== ledgerType) return false;
+    if (!ledgerSearch.trim()) return true;
+    const q = ledgerSearch.toLowerCase();
+    return (
+      (entry.product_name || entry.productName || "").toLowerCase().includes(q) ||
+      (entry.barcode || "").toLowerCase().includes(q) ||
+      (entry.location_name || entry.locationName || "").toLowerCase().includes(q) ||
+      (entry.creator_name || entry.userName || "").toLowerCase().includes(q)
+    );
   });
 
   const getReasonColor = (reason: string) => {
@@ -516,20 +565,49 @@ function LedgerTab() {
 
   return (
     <div className="space-y-4">
-      <div className="w-full md:w-64">
-        <Select value={branchId} onValueChange={setBranchId}>
-          <SelectTrigger data-testid="select-ledger-location">
-            <SelectValue placeholder={t("inv_balances.all_locations")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("inv_balances.all_locations")}</SelectItem>
-            {(branches as any[]).map(b => (
-              <SelectItem key={b.id} value={String(b.id)}>
-                {b.name}{b.address ? ` - ${b.address}` : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex flex-wrap gap-3">
+        <div className="w-full md:w-52">
+          <Select value={branchId} onValueChange={setBranchId}>
+            <SelectTrigger data-testid="select-ledger-location">
+              <SelectValue placeholder={t("inv_balances.all_locations")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("inv_balances.all_locations")}</SelectItem>
+              {(branches as any[]).map(b => (
+                <SelectItem key={b.id} value={String(b.id)}>
+                  {b.name}{b.address ? ` - ${b.address}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-full md:w-44">
+          <Select value={ledgerType} onValueChange={setLedgerType}>
+            <SelectTrigger data-testid="select-ledger-type">
+              <SelectValue placeholder="كل الأنواع" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الأنواع</SelectItem>
+              <SelectItem value="sale">{t("inv_ledger.sale")}</SelectItem>
+              <SelectItem value="purchase_posted">{t("inv_ledger.purchase_posted")}</SelectItem>
+              <SelectItem value="transfer_in">{t("inv_ledger.transfer_in")}</SelectItem>
+              <SelectItem value="transfer_out">{t("inv_ledger.transfer_out")}</SelectItem>
+              <SelectItem value="adjustment">{t("inv_ledger.adjustment")}</SelectItem>
+              <SelectItem value="sale_return">{t("inv_ledger.sale_return")}</SelectItem>
+              <SelectItem value="return">{t("inv_ledger.return")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex-1 relative min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder={t("products.search_placeholder")}
+            className="pl-9"
+            value={ledgerSearch}
+            onChange={e => setLedgerSearch(e.target.value)}
+            data-testid="input-search-ledger"
+          />
+        </div>
       </div>
 
       <div className="border rounded-md">
@@ -549,13 +627,13 @@ function LedgerTab() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {ledger.length === 0 ? (
+            {filteredLedger.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                   {t("inv_ledger.no_entries")}
                 </TableCell>
               </TableRow>
-            ) : ledger.map((entry: any, i: number) => (
+            ) : filteredLedger.map((entry: any, i: number) => (
               <TableRow key={i}>
                 <TableCell className="text-xs">{entry.created_at ? new Date(entry.created_at).toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }) : (entry.createdAt ? new Date(entry.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }) : "-")}</TableCell>
                 <TableCell>
@@ -630,7 +708,7 @@ function InventoryKPIs() {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold text-red-600">{lowStockCount}</div>
-          <p className="text-xs text-muted-foreground mt-1">منتج يحتاج تعبئة</p>
+          <p className="text-xs text-muted-foreground mt-1">منتج تحت الحد الأدنى</p>
         </CardContent>
       </Card>
     </div>
