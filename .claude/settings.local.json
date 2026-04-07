@@ -1,4 +1,30 @@
 {
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "echo '{\"systemMessage\": \"📌 تذكير: حدّث CONTEXT.md وارفعه على GitHub\"}'",
+            "statusMessage": "تذكير نهاية الجلسة..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "$c = Get-Content 'C:/Users/HP/lamsat-anoutha/CONTEXT.md' -Raw -Encoding UTF8; @{ hookSpecificOutput = @{ hookEventName = 'SessionStart'; additionalContext = \"=== CONTEXT.md (لمسة أنوثة) ===`n$c\" } } | ConvertTo-Json -Depth 3",
+            "statusMessage": "جاري تحميل سياق المشروع..."
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Bash(psql:*)",
@@ -29,7 +55,18 @@
       "Bash(PRODUCT_ID=94 echo \"\" echo \"╔══════════════════════════════════════════════════╗\" echo \"║   TEST 2: GET /api/products?q=تجريبي             ║\" echo \"╚══════════════════════════════════════════════════╝\" curl -s -b /tmp/test_cookies.txt \"http://localhost:5000/api/products?q=%D8%AA%D8%AC%D8%B1%D9%8A%D8%A8%D9%8A\")",
       "Bash(PRODUCT_ID=94 echo \"\" echo \"╔══════════════════════════════════════════════════╗\" echo \"║   TEST 3: GET /api/products/94                   ║\" echo \"╚══════════════════════════════════════════════════╝\" curl -s -b /tmp/test_cookies.txt \"http://localhost:5000/api/products/$PRODUCT_ID\")",
       "Bash(PRODUCT_ID=94 echo \"\" echo \"╔══════════════════════════════════════════════════╗\" echo \"║   TEST 7: GET /api/inventory/transactions        ║\" echo \"╚══════════════════════════════════════════════════╝\" echo \"\" echo \"  -- filter by productId=94 --\" curl -s -b /tmp/test_cookies.txt \"http://localhost:5000/api/inventory/transactions?productId=$PRODUCT_ID\")",
-      "Bash(grep -rn requireOwnerOrAdmin /home/runner/workspace/server/ --include=*.ts)"
+      "Bash(grep -rn requireOwnerOrAdmin /home/runner/workspace/server/ --include=*.ts)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(ls C:/Users/HP/lamsat-anoutha/*.env)",
+      "Bash(ls C:/Users/HP/lamsat-anoutha/env*)",
+      "Read(//c/Users/HP/**)",
+      "Bash(echo \"PID=$!\")",
+      "Bash(curl:*)",
+      "Bash(grep -n \"CREATE TABLE settings\\\\|settings\" migrations/*.sql)",
+      "Bash(export DATABASE_URL=\"postgresql://postgres:ReTTTWEhzbNCkAeFPzsboPkiXMGbgMfY@interchange.proxy.rlwy.net:47450/railway\")",
+      "Bash(python -m json.tool)",
+      "Bash(python -c ':*)",
+      "Bash(find client/src -name \"sidebar*\" -exec grep -n \"finance\\\\|reports\\\\|expenses\\\\|hr\\\\|payroll\" {} \\\\;)"
     ]
   }
 }
