@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearch } from "wouter";
 import { Plus, Search, Package, Edit2, Trash2, Eye, MapPin, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,9 +25,20 @@ export default function Products() {
   const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
 
   // ── filters ──────────────────────────────────────────────────────────
+  const searchStr = useSearch();
   const [search, setSearch] = useState("");
-  const [filterCat, setFilterCat] = useState("all");
+  const [filterCat, setFilterCat] = useState(() => {
+    const params = new URLSearchParams(searchStr);
+    return params.get("categoryId") || "all";
+  });
   const [filterType, setFilterType] = useState("all");
+
+  // تحديث الفلتر عند تغيير الرابط
+  useEffect(() => {
+    const params = new URLSearchParams(searchStr);
+    const cat = params.get("categoryId");
+    if (cat) setFilterCat(cat);
+  }, [searchStr]);
 
   // ── product form (add / edit) ─────────────────────────────────────────
   const [formOpen, setFormOpen] = useState(false);
