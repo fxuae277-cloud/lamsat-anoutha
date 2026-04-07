@@ -1,194 +1,238 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { ShoppingCart, AlertCircle, Receipt } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ShoppingCart, AlertTriangle, Receipt, Store, Package } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
-import { Badge } from "@/components/ui/badge";
-import { useI18n } from "@/lib/i18n";
 
-const STATUS_MAP: Record<string, {labelKey: string, color: string}> = {
-  new: { labelKey: "status_labels.new", color: "bg-blue-100 text-blue-700" },
-  preparing: { labelKey: "status_labels.preparing", color: "bg-orange-100 text-orange-700" },
-  ready: { labelKey: "status_labels.ready", color: "bg-emerald-100 text-emerald-700" },
-  delivering: { labelKey: "status_labels.delivering", color: "bg-purple-100 text-purple-700" },
-  completed: { labelKey: "status_labels.completed", color: "bg-green-100 text-green-700" },
-  cancelled: { labelKey: "status_labels.cancelled", color: "bg-red-100 text-red-700" },
+// ─── helpers ────────────────────────────────────────────────────────────────
+function fmt(v: string | number | undefined) {
+  return parseFloat(String(v || "0")).toFixed(3);
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+const PAYMENT_AR: Record<string, string> = {
+  cash: "نقداً",
+  bank: "بطاقة/تحويل",
+  credit: "آجل",
 };
 
+// ─── types ───────────────────────────────────────────────────────────────────
+interface DashboardStats {
+  todaySales: string;
+  todayVat: string;
+  todayOrderCount: number;
+  lowStockCount: number;
+  lowStockItems: { inventoryId: number; productName: string; warehouseName: string; quantity: number; minQuantity: number }[];
+}
+
+interface Sale {
+  id: number;
+  invoiceNumber: string;
+  branchName: string;
+  cashierName: string;
+  total: string;
+  paymentMethod: string;
+  createdAt: string;
+}
+
+interface Shift {
+  shift: { branchId: number; status: string } | null;
+}
+
+interface Branch {
+  id: number;
+  name: string;
+}
+
+// ─── component ───────────────────────────────────────────────────────────────
 export default function Dashboard() {
-  const { t, lang } = useI18n();
-  const { data: stats, isLoading } = useQuery<any>({
+  const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const DAY_NAMES = [
-    t("day_names.sun"),
-    t("day_names.mon"),
-    t("day_names.tue"),
-    t("day_names.wed"),
-    t("day_names.thu"),
-    t("day_names.fri"),
-    t("day_names.sat")
-  ];
-
-  const chartData = (stats?.weeklySales || []).map((d: any) => {
-    const date = new Date(d.date);
-    const dayIndex = date.getDay();
-    const formattedDate = date.toLocaleDateString("en-US", { month: 'short', day: 'numeric' });
-    return { 
-      name: DAY_NAMES[dayIndex], 
-      date: formattedDate,
-      sales: parseFloat(d.total) 
-    };
+  const { data: salesData, isLoading: salesLoading } = useQuery<Sale[]>({
+    queryKey: ["/api/sales", today()],
+    queryFn: getQueryFn({ on401: "throw" }),
+    select: (rows) => rows.slice(0, 10),
   });
 
-  if (isLoading) {
+  const { data: shiftData } = useQuery<Shift>({
+    queryKey: ["/api/shifts/current"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const { data: branches } = useQuery<Branch[]>({
+    queryKey: ["/api/branches"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const activeBranch = shiftData?.shift
+    ? branches?.find((b) => b.id === shiftData.shift!.branchId)?.name ?? "—"
+    : "لا يوجد شيفت مفتوح";
+
+  if (statsLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" dir="rtl">
+      {/* ── عنوان ── */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground" data-testid="text-dashboard-title">{t("dashboard.title")}</h1>
-        <p className="text-muted-foreground mt-1">{t("dashboard.subtitle")}</p>
+        <h1 className="text-2xl font-bold">لوحة التحكم</h1>
+        <p className="text-muted-foreground mt-1">نظرة عامة على أداء المتجر اليوم</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="border-none shadow-sm" data-testid="card-today-sales">
+      {/* ── البطاقات الأربع ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* مبيعات اليوم */}
+        <Card className="border-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.month_sales")}</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">مبيعات اليوم</CardTitle>
             <div className="p-2 bg-primary/10 rounded-full text-primary">
-              <span className="text-xs font-bold">{t("common.omr")}</span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-today-sales-total">
-              {parseFloat(stats?.todaySales || "0").toFixed(3)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">{t("common.omr_currency")}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-sm" data-testid="card-today-vat">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.total_vat")}</CardTitle>
-            <div className="p-2 bg-blue-50 rounded-full text-blue-500">
               <Receipt className="w-4 h-4" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-today-vat-total">
-              {parseFloat(stats?.todayVat || "0").toFixed(3)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">{t("common.omr_currency")}</p>
+            <div className="text-2xl font-bold">{fmt(stats?.todaySales)}</div>
+            <p className="text-xs text-muted-foreground mt-1">ريال عماني</p>
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm" data-testid="card-today-orders">
+        {/* عدد الفواتير */}
+        <Card className="border-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.order_count")}</CardTitle>
-            <div className="p-2 bg-orange-50 rounded-full text-orange-500">
+            <CardTitle className="text-sm font-medium text-muted-foreground">عدد الفواتير</CardTitle>
+            <div className="p-2 bg-blue-50 rounded-full text-blue-500">
               <ShoppingCart className="w-4 h-4" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-today-order-count">
-              {stats?.todayOrderCount || 0}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">{t("dashboard.invoices_today")}</p>
+            <div className="text-2xl font-bold">{stats?.todayOrderCount ?? 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">فاتورة اليوم</p>
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm" data-testid="card-low-stock">
+        {/* المخزون المنخفض */}
+        <Card className="border-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.stock_alerts")}</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">المخزون المنخفض</CardTitle>
             <div className="p-2 bg-red-50 rounded-full text-red-500">
-              <AlertCircle className="w-4 h-4" />
+              <AlertTriangle className="w-4 h-4" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600" data-testid="text-low-stock-count">
-              {stats?.lowStockCount || 0}
+            <div className="text-2xl font-bold text-red-600">{stats?.lowStockCount ?? 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">منتج قارب على النفاذ</p>
+          </CardContent>
+        </Card>
+
+        {/* الفرع النشط */}
+        <Card className="border-none shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">الفرع النشط</CardTitle>
+            <div className="p-2 bg-emerald-50 rounded-full text-emerald-600">
+              <Store className="w-4 h-4" />
             </div>
-            <p className="text-xs text-muted-foreground mt-1">{t("dashboard.products_running_low")}</p>
+          </CardHeader>
+          <CardContent>
+            <div className="text-lg font-bold truncate">{activeBranch}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {shiftData?.shift ? "شيفت مفتوح" : "لا شيفت"}
+            </p>
           </CardContent>
         </Card>
       </div>
 
+      {/* ── الجزء السفلي: جدول المبيعات + تنبيهات المخزون ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        {/* جدول آخر 10 مبيعات */}
         <Card className="col-span-1 lg:col-span-2 border-none shadow-sm">
           <CardHeader>
-            <CardTitle>{t("dashboard.sales_last_30_days")}</CardTitle>
+            <CardTitle className="text-base">آخر 10 مبيعات</CardTitle>
           </CardHeader>
-          <CardContent className="h-[300px]">
-            {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                  <XAxis 
-                    dataKey="name" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} 
-                  />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
-                  <Tooltip 
-                    labelFormatter={(value, payload) => {
-                      if (payload && payload.length > 0) {
-                        return `${payload[0].payload.name} (${payload[0].payload.date})`;
-                      }
-                      return value;
-                    }}
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', direction: lang === 'ar' ? 'rtl' : 'ltr' }} 
-                  />
-                  <Area type="monotone" dataKey="sales" stroke="hsl(var(--primary))" strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" />
-                </AreaChart>
-              </ResponsiveContainer>
+          <CardContent className="p-0">
+            {salesLoading ? (
+              <div className="flex justify-center py-10">
+                <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
+              </div>
+            ) : !salesData?.length ? (
+              <p className="text-center text-muted-foreground py-10">لا توجد مبيعات بعد</p>
             ) : (
-              <div className="h-full flex items-center justify-center text-muted-foreground">
-                {t("dashboard.no_sales_data")}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/40">
+                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">رقم الفاتورة</th>
+                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">الفرع</th>
+                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">الكاشير</th>
+                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">طريقة الدفع</th>
+                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">الإجمالي</th>
+                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">الوقت</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {salesData.map((sale) => (
+                      <tr key={sale.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                        <td className="py-3 px-4 font-mono text-xs">{sale.invoiceNumber}</td>
+                        <td className="py-3 px-4">{sale.branchName ?? "—"}</td>
+                        <td className="py-3 px-4">{sale.cashierName ?? "—"}</td>
+                        <td className="py-3 px-4">
+                          <Badge variant="outline" className="text-xs">
+                            {PAYMENT_AR[sale.paymentMethod] ?? sale.paymentMethod}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4 font-bold text-primary">{fmt(sale.total)} ر.ع</td>
+                        <td className="py-3 px-4 text-muted-foreground text-xs">
+                          {new Date(sale.createdAt).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </CardContent>
         </Card>
 
+        {/* تنبيهات المخزون المنخفض */}
         <Card className="border-none shadow-sm">
-          <CardHeader>
-            <CardTitle>{t("dashboard.recent_orders")}</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">تنبيهات المخزون</CardTitle>
+            <Package className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {(stats?.recentOrders || []).length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">{t("dashboard.no_orders_yet")}</p>
-              ) : (
-                stats.recentOrders.map((order: any) => {
-                  const s = STATUS_MAP[order.status] || STATUS_MAP["new"];
-                  return (
-                    <div key={order.id} className="flex items-center justify-between border-b last:border-0 pb-3 last:pb-0">
-                      <div>
-                        <p className="font-medium text-sm">{t("dashboard.order_number").replace("{0}", order.orderNumber)}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{order.customerName} • {order.city}</p>
-                      </div>
-                      <div className="text-left">
-                        <p className="font-bold text-sm text-primary">{parseFloat(order.total || "0").toFixed(3)} {t("common.omr")}</p>
-                        <Badge className={`${s.color} border-none shadow-none mt-1`}>{t(s.labelKey)}</Badge>
-                      </div>
+            {!stats?.lowStockItems?.length ? (
+              <p className="text-center text-muted-foreground py-8 text-sm">كل المخزون بمستوى جيد ✓</p>
+            ) : (
+              <div className="space-y-3">
+                {stats.lowStockItems.map((item) => (
+                  <div key={item.inventoryId} className="flex flex-col gap-1 border-b last:border-0 pb-3 last:pb-0">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm">{item.productName}</span>
+                      <Badge className="bg-red-100 text-red-700 border-none text-xs">
+                        {item.quantity} / {item.minQuantity}
+                      </Badge>
                     </div>
-                  );
-                })
-              )}
-            </div>
+                    <span className="text-xs text-muted-foreground">{item.warehouseName}</span>
+                    <div className="w-full bg-muted rounded-full h-1.5 mt-1">
+                      <div
+                        className="bg-red-500 h-1.5 rounded-full transition-all"
+                        style={{ width: `${Math.min(100, (item.quantity / item.minQuantity) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

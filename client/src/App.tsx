@@ -12,6 +12,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { MobileLayout } from "@/components/layout/MobileLayout";
 import { EMPLOYEE_ALLOWED_PATHS } from "@/config/sidebar";
 
+import Dashboard from "@/pages/Dashboard";
 import Executive from "@/pages/Executive";
 import ExecutivePlus from "@/pages/ExecutivePlus";
 import POS from "@/pages/POS";
@@ -154,6 +155,9 @@ function DesktopRouter() {
         <Route path="/invoices" component={Invoices}/>
         <Route path="/customers" component={Customers}/>
 
+        <Route path="/dashboard">
+          <RequireOwner><Dashboard /></RequireOwner>
+        </Route>
         <Route path="/">
           <RequireOwner><Executive /></RequireOwner>
         </Route>
