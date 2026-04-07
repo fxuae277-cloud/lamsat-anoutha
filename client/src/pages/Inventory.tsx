@@ -23,14 +23,15 @@ function locLabel(loc: Location) {
 
 function BalancesTab() {
   const { t, lang } = useI18n();
-  const [locationId, setLocationId] = useState<string>("all");
+  const [branchId, setBranchId] = useState<string>("all");
   const [search, setSearch] = useState("");
 
-  const { data: locations = [] } = useQuery<Location[]>({
-    queryKey: ["/api/locations"],
+  const { data: branches = [] } = useQuery<any[]>({
+    queryKey: ["/api/branches"],
+    queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const balancesUrl = locationId === "all" ? "/api/inventory-balances" : `/api/inventory-balances?locationId=${locationId}`;
+  const balancesUrl = branchId === "all" ? "/api/inventory-balances" : `/api/inventory-balances?branchId=${branchId}`;
   const { data: balances = [] } = useQuery<any[]>({
     queryKey: [balancesUrl],
   });
@@ -44,14 +45,16 @@ function BalancesTab() {
     <div className="space-y-4">
       <div className="flex flex-wrap gap-4">
         <div className="w-full md:w-64">
-          <Select value={locationId} onValueChange={setLocationId}>
+          <Select value={branchId} onValueChange={setBranchId}>
             <SelectTrigger data-testid="select-location-filter">
               <SelectValue placeholder={t("inv_balances.all_locations")} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("inv_balances.all_locations")}</SelectItem>
-              {locations.map(loc => (
-                <SelectItem key={loc.id} value={String(loc.id)}>{locLabel(loc)}</SelectItem>
+              {(branches as any[]).map(b => (
+                <SelectItem key={b.id} value={String(b.id)}>
+                  {b.name}{b.address ? ` - ${b.address}` : ""}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -487,13 +490,14 @@ function TransfersTab() {
 
 function LedgerTab() {
   const { t, lang } = useI18n();
-  const [locationId, setLocationId] = useState<string>("all");
+  const [branchId, setBranchId] = useState<string>("all");
 
-  const { data: locations = [] } = useQuery<Location[]>({
-    queryKey: ["/api/locations"],
+  const { data: branches = [] } = useQuery<any[]>({
+    queryKey: ["/api/branches"],
+    queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const ledgerUrl = locationId === "all" ? "/api/inventory-ledger" : `/api/inventory-ledger?locationId=${locationId}`;
+  const ledgerUrl = branchId === "all" ? "/api/inventory-ledger" : `/api/inventory-ledger?branchId=${branchId}`;
   const { data: ledger = [] } = useQuery<any[]>({
     queryKey: [ledgerUrl],
   });
@@ -513,14 +517,16 @@ function LedgerTab() {
   return (
     <div className="space-y-4">
       <div className="w-full md:w-64">
-        <Select value={locationId} onValueChange={setLocationId}>
+        <Select value={branchId} onValueChange={setBranchId}>
           <SelectTrigger data-testid="select-ledger-location">
             <SelectValue placeholder={t("inv_balances.all_locations")} />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("inv_balances.all_locations")}</SelectItem>
-            {locations.map(loc => (
-              <SelectItem key={loc.id} value={String(loc.id)}>{locLabel(loc)}</SelectItem>
+            {(branches as any[]).map(b => (
+              <SelectItem key={b.id} value={String(b.id)}>
+                {b.name}{b.address ? ` - ${b.address}` : ""}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
