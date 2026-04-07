@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Package, Search, ArrowRightLeft, History, Plus, CheckCircle, Barcode, MapPin } from "lucide-react";
+import { Package, Search, ArrowRightLeft, History, Plus, CheckCircle, Barcode, MapPin, AlertTriangle, TrendingUp, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -576,6 +576,61 @@ function LedgerTab() {
   );
 }
 
+function InventoryKPIs() {
+  const { data: products = [] } = useQuery<any[]>({
+    queryKey: ["/api/products"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+  const { data: lowStock = [] } = useQuery<any[]>({
+    queryKey: ["/api/inventory/low-stock"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const totalProducts = products.length;
+  const inventoryValue = products.reduce((sum: number, p: any) => {
+    const cost = parseFloat(p.avgCost || "0") || parseFloat(p.price || "0");
+    return sum + cost * (p.totalStock ?? 0);
+  }, 0);
+  const lowStockCount = lowStock.length;
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" dir="rtl">
+      <Card className="border-none shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">إجمالي المنتجات</CardTitle>
+          <div className="p-2 bg-primary/10 rounded-full text-primary"><Layers className="w-4 h-4" /></div>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{totalProducts}</div>
+          <p className="text-xs text-muted-foreground mt-1">منتج مسجل</p>
+        </CardContent>
+      </Card>
+
+      <Card className="border-none shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">قيمة المخزون</CardTitle>
+          <div className="p-2 bg-emerald-50 rounded-full text-emerald-600"><TrendingUp className="w-4 h-4" /></div>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{inventoryValue.toFixed(3)}</div>
+          <p className="text-xs text-muted-foreground mt-1">ريال عماني</p>
+        </CardContent>
+      </Card>
+
+      <Card className="border-none shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">منخفض المخزون</CardTitle>
+          <div className="p-2 bg-red-50 rounded-full text-red-500"><AlertTriangle className="w-4 h-4" /></div>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-red-600">{lowStockCount}</div>
+          <p className="text-xs text-muted-foreground mt-1">منتج يحتاج تعبئة</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function Inventory() {
   const { t } = useI18n();
 
@@ -585,6 +640,8 @@ export default function Inventory() {
         <Package className="w-8 h-8 text-primary" />
         <h1 className="text-3xl font-bold">{t("nav.inventory")}</h1>
       </div>
+
+      <InventoryKPIs />
 
       <Tabs defaultValue="balances" className="w-full">
         <TabsList className="grid w-full grid-cols-3 mb-8">

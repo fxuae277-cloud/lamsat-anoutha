@@ -265,17 +265,21 @@ export default function Products() {
             <TableRow>
               <TableHead className="w-10">{t("products.image")}</TableHead>
               <TableHead>{t("products.table_name")}</TableHead>
+              <TableHead>الفئة</TableHead>
               <TableHead>{t("products.code")}</TableHead>
               <TableHead>{t("products.default_price")}</TableHead>
-              <TableHead>{t("products.total_stock")}</TableHead>
+              <TableHead>الكمية</TableHead>
               <TableHead>{t("products.table_status")}</TableHead>
               <TableHead className="text-right">{t("products.table_actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {products.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center py-10 text-muted-foreground">{t("products.no_products")}</TableCell></TableRow>
-            ) : products.map(p => (
+              <TableRow><TableCell colSpan={8} className="text-center py-10 text-muted-foreground">{t("products.no_products")}</TableCell></TableRow>
+            ) : products.map(p => {
+              const catName = categories.find((c: any) => c.id === p.categoryId)?.name ?? "—";
+              const stock = p.totalStock ?? 0;
+              return (
               <TableRow key={p.id}>
                 <TableCell>
                   <div className="w-8 h-8 rounded bg-muted flex items-center justify-center">
@@ -283,9 +287,14 @@ export default function Products() {
                   </div>
                 </TableCell>
                 <TableCell className="font-medium">{p.name}</TableCell>
+                <TableCell><Badge variant="outline" className="text-xs">{catName}</Badge></TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">{p.barcode || "—"}</TableCell>
                 <TableCell>{parseFloat(p.price).toFixed(3)}</TableCell>
-                <TableCell><Badge variant="secondary">{p.totalStock ?? 0}</Badge></TableCell>
+                <TableCell>
+                  <Badge variant={stock === 0 ? "destructive" : stock < 5 ? "secondary" : "outline"} className={stock > 0 && stock < 5 ? "border-orange-400 text-orange-600 bg-orange-50" : ""}>
+                    {stock}
+                  </Badge>
+                </TableCell>
                 <TableCell>
                   <Badge
                     variant={p.active ? "default" : "secondary"}
@@ -309,7 +318,8 @@ export default function Products() {
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+            );
+            })}
           </TableBody>
         </Table>
       </div>

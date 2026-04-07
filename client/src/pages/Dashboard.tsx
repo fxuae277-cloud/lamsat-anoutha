@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ShoppingCart, AlertTriangle, Receipt, Store, Package } from "lucide-react";
+import { ShoppingCart, AlertTriangle, Receipt, Store, Package, TrendingUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 
@@ -70,6 +70,16 @@ export default function Dashboard() {
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
+  const { data: allProducts = [] } = useQuery<any[]>({
+    queryKey: ["/api/products"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const inventoryValue = allProducts.reduce((sum: number, p: any) => {
+    const cost = parseFloat(p.avgCost || "0") || parseFloat(p.price || "0");
+    return sum + cost * (p.totalStock ?? 0);
+  }, 0);
+
   const activeBranch = shiftData?.shift
     ? branches?.find((b) => b.id === shiftData.shift!.branchId)?.name ?? "—"
     : "لا يوجد شيفت مفتوح";
@@ -90,8 +100,8 @@ export default function Dashboard() {
         <p className="text-muted-foreground mt-1">نظرة عامة على أداء المتجر اليوم</p>
       </div>
 
-      {/* ── البطاقات الأربع ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* ── البطاقات الخمس ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* مبيعات اليوم */}
         <Card className="border-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -131,6 +141,20 @@ export default function Dashboard() {
           <CardContent>
             <div className="text-2xl font-bold text-red-600">{stats?.lowStockCount ?? 0}</div>
             <p className="text-xs text-muted-foreground mt-1">منتج قارب على النفاذ</p>
+          </CardContent>
+        </Card>
+
+        {/* قيمة المخزون */}
+        <Card className="border-none shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">قيمة المخزون</CardTitle>
+            <div className="p-2 bg-emerald-50 rounded-full text-emerald-600">
+              <TrendingUp className="w-4 h-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{inventoryValue.toFixed(3)}</div>
+            <p className="text-xs text-muted-foreground mt-1">ريال عماني</p>
           </CardContent>
         </Card>
 
