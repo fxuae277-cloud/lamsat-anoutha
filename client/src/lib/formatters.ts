@@ -23,13 +23,13 @@ export function fmtNumGrouped(v: string | number | null | undefined): string {
 export function fmtCurrency(v: string | number | null | undefined): string {
   const num = parseFloat(normalizeDigitsToEn(v) || "0");
   return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
     useGrouping: true,
   }).format(num);
 }
 
-/** عرض المبلغ مع رمز الريال العماني — مثال: 12.500 ر.ع */
+/** عرض المبلغ مع رمز الريال العماني — مثال: 9,800 ر.ع */
 export function fmtOMR(v: string | number | null | undefined): string {
   return `${fmtCurrency(v)} ر.ع`;
 }
