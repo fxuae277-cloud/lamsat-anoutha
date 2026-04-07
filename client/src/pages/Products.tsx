@@ -271,7 +271,7 @@ export default function Products() {
     if (sortBy === field) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortBy(field); setSortDir("asc"); }
   }
-  function SortIcon({ field }: { field: "name" | "price" | "stock" }) {
+  function sortIcon(field: "name" | "price" | "stock") {
     if (sortBy !== field) return <ArrowUpDown className="w-3 h-3 opacity-40 inline ms-1" />;
     return sortDir === "asc"
       ? <ArrowUp className="w-3 h-3 inline ms-1 text-primary" />
@@ -411,15 +411,15 @@ export default function Products() {
               <TableHead className="w-8 text-center">#</TableHead>
               <TableHead className="w-10">{t("products.image")}</TableHead>
               <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("name")}>
-                {t("products.table_name")}<SortIcon field="name" />
+                {t("products.table_name")}{sortIcon("name")}
               </TableHead>
               <TableHead>الفئة</TableHead>
               <TableHead>{t("products.code")}</TableHead>
               <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("price")}>
-                {t("products.default_price")}<SortIcon field="price" />
+                {t("products.default_price")}{sortIcon("price")}
               </TableHead>
               <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("stock")}>
-                الكمية<SortIcon field="stock" />
+                الكمية{sortIcon("stock")}
               </TableHead>
               <TableHead>{t("products.table_status")}</TableHead>
               <TableHead className="text-right">{t("products.table_actions")}</TableHead>
