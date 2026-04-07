@@ -457,7 +457,7 @@ export default function Products() {
                     ? <span className="flex items-center gap-1">{p.barcode} <Copy className="w-3 h-3 opacity-0 group-hover:opacity-50" /></span>
                     : "—"}
                 </TableCell>
-                <TableCell className="font-medium">{parseFloat(p.price).toLocaleString("ar-SA", { minimumFractionDigits: 0 })} <span className="text-xs text-muted-foreground">ر.س</span></TableCell>
+                <TableCell className="font-medium">{parseFloat(p.price).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} <span className="text-xs text-muted-foreground">ر.ع</span></TableCell>
                 <TableCell>
                   <Badge variant={stock === 0 ? "destructive" : stock < 5 ? "secondary" : "outline"} className={stock > 0 && stock < 5 ? "border-orange-400 text-orange-600 bg-orange-50" : ""}>
                     {stock}
