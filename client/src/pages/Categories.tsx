@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Edit2, Trash2, FolderOpen, Package, Search, ChevronDown, ChevronRight, Image as ImageIcon } from "lucide-react";
+import { Plus, Edit2, Trash2, FolderOpen, Package, Search, ChevronDown, ChevronRight, Image as ImageIcon, ChevronsUpDown } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -140,6 +140,20 @@ export default function Categories() {
     setAddOpen(true);
   }
 
+  function openAddSub(parent: Category) {
+    setForm({ ...EMPTY_FORM, parentId: parent.id.toString() });
+    setAddOpen(true);
+  }
+
+  function collapseAll() {
+    const rootIds = (categories as Category[]).filter(c => !c.parentId).map(c => c.id);
+    setCollapsed(new Set(rootIds));
+  }
+
+  function expandAll() {
+    setCollapsed(new Set());
+  }
+
   function openEdit(c: Category) {
     setForm({
       name:        c.name,
@@ -197,11 +211,19 @@ export default function Categories() {
             {categories.length} فئة — {(categories as Category[]).filter(c => !(c as any).isActive).length} غير نشطة
           </p>
         </div>
-        {isOwnerOrAdmin && (
-          <Button onClick={openAdd} className="gap-2">
-            <Plus className="w-4 h-4" /> إضافة فئة
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={expandAll} className="gap-1 text-xs">
+            <ChevronsUpDown className="w-3.5 h-3.5" /> توسيع الكل
           </Button>
-        )}
+          <Button variant="outline" size="sm" onClick={collapseAll} className="gap-1 text-xs">
+            <ChevronRight className="w-3.5 h-3.5" /> طي الكل
+          </Button>
+          {isOwnerOrAdmin && (
+            <Button onClick={openAdd} className="gap-2">
+              <Plus className="w-4 h-4" /> إضافة فئة
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* فلاتر */}
@@ -305,7 +327,9 @@ export default function Categories() {
 
                   {/* الفئة الأب */}
                   <TableCell className="text-sm text-muted-foreground">
-                    {c.parentId ? <Badge variant="outline" className="text-xs">{getCatName(c.parentId)}</Badge> : "—"}
+                    {c.parentId
+                      ? <Badge variant="outline" className="text-xs">{getCatName(c.parentId)}</Badge>
+                      : <Badge variant="secondary" className="text-xs">رئيسية</Badge>}
                   </TableCell>
 
                   {/* عدد المنتجات */}
@@ -313,9 +337,10 @@ export default function Categories() {
                     <Badge
                       variant={count === 0 ? "secondary" : "outline"}
                       className={count > 0 ? "cursor-pointer hover:bg-primary/10 gap-1" : "gap-1"}
+                      title={count > 0 ? "اضغط لعرض المنتجات" : "لا توجد منتجات"}
                       onClick={() => count > 0 && setLocation(`/products?categoryId=${c.id}`)}
                     >
-                      <Package className="w-3 h-3" /> {count}
+                      <Package className="w-3 h-3" /> {count} منتج
                     </Badge>
                   </TableCell>
 
@@ -338,10 +363,15 @@ export default function Categories() {
                   {isOwnerOrAdmin && (
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(c)}>
+                        {c.depth === 0 && (
+                          <Button variant="ghost" size="icon" title="إضافة فئة فرعية" onClick={() => openAddSub(c)}>
+                            <Plus className="w-4 h-4 text-primary" />
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="icon" title="تعديل" onClick={() => openEdit(c)}>
                           <Edit2 className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => setDeleteCategory(c)}>
+                        <Button variant="ghost" size="icon" title="حذف" onClick={() => setDeleteCategory(c)}>
                           <Trash2 className="w-4 h-4 text-destructive" />
                         </Button>
                       </div>
