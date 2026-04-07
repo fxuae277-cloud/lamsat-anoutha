@@ -130,8 +130,9 @@ export async function registerRoutes(
       req.session.destroy(() => {});
       return res.status(401).json({ message: "غير مصرح" });
     }
+    const branch = user.branchId ? await storage.getBranch(user.branchId) : null;
     const { password: _, ...safeUser } = user;
-    res.json({ user: safeUser });
+    res.json({ user: { ...safeUser, branchName: branch?.name || "" } });
   });
 
   app.patch("/api/me/settings", requireAuth, async (req, res) => {

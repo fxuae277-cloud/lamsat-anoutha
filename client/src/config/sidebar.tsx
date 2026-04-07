@@ -77,7 +77,6 @@ export const OWNER_SIDEBAR: SidebarSection[] = [
       { labelKey: "nav.purchases",       icon: FileSpreadsheet, path: "/purchases" },
       { labelKey: "nav.purchaseReturns", icon: PackageX,        path: "/purchase-returns" },
       { labelKey: "nav.transfers",       icon: ArrowLeftRight,  path: "/transfers" },
-      { labelKey: "nav.stockControl",    icon: ClipboardCheck,  path: "/stocktake" },
     ],
   },
 
@@ -87,8 +86,8 @@ export const OWNER_SIDEBAR: SidebarSection[] = [
     items: [
       { labelKey: "nav.inventoryOverview", icon: PackageSearch, path: "/inventory-overview" },
       { labelKey: "nav.branchStock",       icon: Warehouse,     path: "/branch-stock" },
-      { labelKey: "nav.inventory",         icon: Boxes,         path: "/inventory" },
       { labelKey: "nav.inventoryAlerts",   icon: AlertTriangle, path: "/inventory-alerts" },
+      { labelKey: "nav.stockControl",      icon: ClipboardCheck, path: "/stocktake" },
     ],
   },
 

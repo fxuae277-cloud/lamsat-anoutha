@@ -147,28 +147,34 @@ export function Sidebar() {
       </nav>
 
       {/* User footer */}
-      <div className="p-4 border-t border-sidebar-border shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold shrink-0">
+      <div className="p-3 border-t border-sidebar-border shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold shrink-0 text-sm">
             {initial}
           </div>
-          <div className="flex-1 min-w-0">
-            <p
-              className="text-sm font-medium truncate"
-              data-testid="text-sidebar-user"
-            >
-              {user?.name} ({roleLabel})
+          <div className="flex-1 min-w-0 space-y-0.5">
+            <p className="text-sm font-semibold truncate leading-tight" data-testid="text-sidebar-user">
+              {user?.name}
             </p>
-            <p
-              className="text-xs text-muted-foreground truncate"
-              data-testid="text-sidebar-branch"
-            >
-              {user?.terminalName}
-            </p>
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded font-medium leading-none">
+                {roleLabel}
+              </span>
+              {(user as any)?.branchName && (
+                <span className="text-[10px] text-muted-foreground truncate leading-none">
+                  {(user as any).branchName}
+                </span>
+              )}
+              {user?.terminalName && (
+                <span className="text-[10px] text-muted-foreground leading-none" data-testid="text-sidebar-branch">
+                  · {user.terminalName}
+                </span>
+              )}
+            </div>
           </div>
           <button
             onClick={() => logoutMutation.mutate()}
-            className="p-1.5 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+            className="p-1.5 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors shrink-0"
             title={t("sidebar.logout")}
             data-testid="button-sidebar-logout"
           >
