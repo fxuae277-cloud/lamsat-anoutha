@@ -275,7 +275,7 @@ export default function Dashboard() {
                         </td>
                         <td className="py-3 px-4 font-bold text-primary">{fmt(sale.total)} ر.ع</td>
                         <td className="py-3 px-4 text-muted-foreground text-xs">
-                          {new Date(sale.createdAt).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" })}
+                          {new Date(sale.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
                         </td>
                       </tr>
                     ))}

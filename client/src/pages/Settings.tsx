@@ -893,7 +893,7 @@ export default function Settings() {
                           <div className="flex-1 min-w-0">
                             <p className="font-mono text-sm font-medium truncate" data-testid={`text-backup-name-${backup.filename}`}>{backup.filename}</p>
                             <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                              <span>{new Date(backup.createdAt).toLocaleString("en-US")}</span>
+                              <span>{(() => { const d = new Date(backup.createdAt); const day = String(d.getDate()).padStart(2,"0"); const month = String(d.getMonth()+1).padStart(2,"0"); const h = String(d.getHours()).padStart(2,"0"); const m = String(d.getMinutes()).padStart(2,"0"); return `${day}/${month}/${d.getFullYear()} ${h}:${m}`; })()}</span>
                               <span className="font-semibold">{(backup.size / 1024 / 1024).toFixed(2)} MB</span>
                             </div>
                           </div>

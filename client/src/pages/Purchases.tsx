@@ -1,6 +1,7 @@
 ﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
+import { fmtDate } from "@/lib/formatters";
 import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle, Search, Edit, Building, UserPlus, FileSpreadsheet, X, Loader2, CheckCircle2, Upload, Printer } from "lucide-react";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 import { Button } from "@/components/ui/button";
@@ -470,7 +471,7 @@ function SupplierStatementDialog({ open, onOpenChange, supplierId }: { open: boo
                   ) : (
                     statement.items.map((item: any, idx: number) => (
                       <TableRow key={idx}>
-                        <TableCell>{new Date(item.created_at).toLocaleDateString("en-US")}</TableCell>
+                        <TableCell>{fmtDate(item.created_at)}</TableCell>
                         <TableCell>
                           {item.type === 'purchase' ? t("customers.statement_purchase") : t("customers.statement_payment")}
                         </TableCell>

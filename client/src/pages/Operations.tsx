@@ -41,7 +41,9 @@ export default function Operations() {
   function formatDateTime(dt: string | null) {
     if (!dt) return "—";
     const d = new Date(dt);
-    const date = d.toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" });
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const date = `${day}/${month}/${d.getFullYear()}`;
     const time = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
     return { date, time };
   }

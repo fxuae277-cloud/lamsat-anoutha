@@ -13,6 +13,7 @@ import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Supplier } from "@shared/schema";
 import { useI18n } from "@/lib/i18n";
+import { fmtDate } from "@/lib/formatters";
 
 const EMPTY_FORM = {
   name: "", phone: "", whatsapp: "", email: "",
@@ -177,7 +178,7 @@ export default function Suppliers() {
                   {parseFloat(s.totalPurchases || "0").toFixed(3)}
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {s.lastPurchaseDate ? new Date(s.lastPurchaseDate).toLocaleDateString("en-US") : "—"}
+                  {fmtDate(s.lastPurchaseDate)}
                 </TableCell>
                 <TableCell>
                   <Badge variant={s.active ? "default" : "secondary"}>
@@ -398,7 +399,7 @@ export default function Suppliers() {
                         {detailStatement.items.map((item: any) => (
                           <TableRow key={item.id}>
                             <TableCell className="font-mono text-xs">{item.invoice_number}</TableCell>
-                            <TableCell className="text-sm">{item.created_at ? new Date(item.created_at).toLocaleDateString("en-US") : "—"}</TableCell>
+                            <TableCell className="text-sm">{fmtDate(item.created_at)}</TableCell>
                             <TableCell className="text-sm">{item.branch_name || "—"}</TableCell>
                             <TableCell className="font-medium">{item.total?.toFixed(3)}</TableCell>
                             <TableCell className="font-mono text-sm">{item.balance?.toFixed(3)}</TableCell>

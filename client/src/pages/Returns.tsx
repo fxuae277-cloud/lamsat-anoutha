@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import type { Branch } from "@shared/schema";
+import { fmtDate } from "@/lib/formatters";
 
 function fmt(v: string | number | null | undefined) {
   return parseFloat(String(v || "0")).toFixed(3);
@@ -233,7 +234,7 @@ export default function Returns() {
                 <TableCell className="text-sm text-muted-foreground max-w-[150px] truncate">{ret.reason || "—"}</TableCell>
                 <TableCell className="text-sm">{ret.created_by_name || "—"}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {ret.created_at ? new Date(ret.created_at).toLocaleDateString("en-US") : "—"}
+                  {fmtDate(ret.created_at)}
                 </TableCell>
                 <TableCell>
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
@@ -289,7 +290,7 @@ export default function Returns() {
                 <div className="border rounded-lg p-3 bg-muted/30 space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="font-medium">{t("returns.invoice_label")} {foundSale.invoice_number || foundSale.invoiceNumber}</span>
-                    <span className="text-muted-foreground">{foundSale.created_at ? new Date(foundSale.created_at).toLocaleDateString("en-US") : ""}</span>
+                    <span className="text-muted-foreground">{fmtDate(foundSale.created_at)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>{t("returns.invoice_total")} <span className="font-bold text-primary">{fmt(foundSale.total)} {t("common.omr")}</span></span>

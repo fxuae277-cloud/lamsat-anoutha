@@ -13,6 +13,7 @@ import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
+import { fmtDate } from "@/lib/formatters";
 
 type Location = { id: number; name: string; type: string; code: string; branchId: number | null; isMain: boolean; isCentral: boolean; isBranchDefault: boolean; active: boolean; kind: string | null; branchName: string | null };
 
@@ -112,7 +113,7 @@ function BalancesTab() {
                   <TableCell className="text-right font-mono">{Number(b.price || 0).toFixed(3)}</TableCell>
                   <TableCell className="text-right font-mono">{Number(lpp).toFixed(3)}</TableCell>
                   <TableCell className="text-xs">
-                    {lrd ? new Date(lrd).toLocaleDateString("en-US") : "-"}
+                    {lrd ? fmtDate(lrd) : "-"}
                   </TableCell>
                   <TableCell>{loc}</TableCell>
                 </TableRow>
@@ -452,7 +453,7 @@ function TransfersTab() {
               {filteredTransfers.map((tx: any) => (
                 <TableRow key={tx.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedTransfer(tx)} data-testid={`row-transfer-${tx.id}`}>
                   <TableCell className="font-mono text-xs">{tx.id}</TableCell>
-                  <TableCell>{new Date(tx.created_at || tx.createdAt).toLocaleDateString("en-US")}</TableCell>
+                  <TableCell>{fmtDate(tx.created_at || tx.createdAt)}</TableCell>
                   <TableCell className="font-medium">{tx.from_location_name || tx.fromLocationName}</TableCell>
                   <TableCell className="text-center text-muted-foreground"><ArrowLeft className="w-4 h-4 inline rotate-180" /></TableCell>
                   <TableCell className="font-medium">{tx.to_location_name || tx.toLocationName}</TableCell>
@@ -635,7 +636,7 @@ function LedgerTab() {
               </TableRow>
             ) : filteredLedger.map((entry: any, i: number) => (
               <TableRow key={i}>
-                <TableCell className="text-xs">{entry.created_at ? new Date(entry.created_at).toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }) : (entry.createdAt ? new Date(entry.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }) : "-")}</TableCell>
+                <TableCell className="text-xs">{fmtDate(entry.created_at || entry.createdAt)}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className={getReasonColor(entry.reason)}>
                     {t(`inv_ledger.${entry.reason}`)}

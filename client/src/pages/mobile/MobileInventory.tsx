@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 import { useI18n } from "@/lib/i18n";
+import { fmtDate } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -44,7 +45,7 @@ export default function MobileInventory() {
     : balances;
 
   const f3 = (n: any) => parseFloat(String(n || "0")).toFixed(3);
-  const fD = (d: any) => d ? new Date(d).toLocaleDateString("en-US") : "---";
+  const fD = (d: any) => d ? fmtDate(d) : "---";
 
   const locLabel = (loc: Location) => loc.isCentral ? loc.name : `${loc.branchName} - ${loc.name}`;
 

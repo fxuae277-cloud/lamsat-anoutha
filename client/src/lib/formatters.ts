@@ -43,7 +43,7 @@ export function fmtDate(dateStr: string | null | undefined): string {
     const day = String(d.getDate()).padStart(2, "0");
     const month = String(d.getMonth() + 1).padStart(2, "0");
     const year = String(d.getFullYear());
-    return `${year}-${month}-${day}`;
+    return `${day}/${month}/${year}`;
   } catch {
     return "\u2014";
   }
@@ -60,7 +60,7 @@ export function fmtDateTime(dateStr: string | null | undefined): string {
     const year = String(d.getFullYear());
     const hours = String(d.getHours()).padStart(2, "0");
     const mins = String(d.getMinutes()).padStart(2, "0");
-    return `${year}-${month}-${day} ${hours}:${mins}`;
+    return `${day}/${month}/${year} ${hours}:${mins}`;
   } catch {
     return "\u2014";
   }

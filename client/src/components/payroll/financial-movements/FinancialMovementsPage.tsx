@@ -51,18 +51,23 @@ const MOVEMENT_META: Record<MovementType, { label: string; color: string; bg: st
 };
 
 function formatDate(iso: string) {
+  if (!iso) return iso;
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("ar-OM", { year: "numeric", month: "short", day: "numeric" });
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month}/${d.getFullYear()}`;
 }
 
 function formatDateTime(iso: string) {
+  if (!iso) return iso;
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
-  return d.toLocaleString("ar-OM", {
-    year: "numeric", month: "short", day: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const hours = String(d.getHours()).padStart(2, "0");
+  const mins = String(d.getMinutes()).padStart(2, "0");
+  return `${day}/${month}/${d.getFullYear()} ${hours}:${mins}`;
 }
 
 // ─── Add Movement Dialog ──────────────────────────────────────────────────────

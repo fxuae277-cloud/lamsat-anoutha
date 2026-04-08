@@ -45,11 +45,14 @@ function omr(v: number | string | null) {
   return parseFloat(String(v)).toFixed(3);
 }
 
-function fmtDateTime(ts: string | null, lang: string) {
+function fmtDateTime(ts: string | null, _lang: string) {
   if (!ts) return "-";
-  return new Date(ts).toLocaleString("en-US", {
-    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-  });
+  const d = new Date(ts);
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const hours = String(d.getHours()).padStart(2, "0");
+  const mins = String(d.getMinutes()).padStart(2, "0");
+  return `${day}/${month}/${d.getFullYear()} ${hours}:${mins}`;
 }
 
 function pct(a: number, b: number) {
@@ -390,7 +393,7 @@ export default function Executive() {
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip
                     formatter={(value: number) => `${omr(value)} OMR`}
-                    labelFormatter={(d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-US")}
+                    labelFormatter={(d: string) => { const dt = new Date(d + "T00:00:00"); return `${String(dt.getDate()).padStart(2,"0")}/${String(dt.getMonth()+1).padStart(2,"0")}/${dt.getFullYear()}`; }}
                   />
                   <Legend />
                   <Area type="monotone" dataKey="sales" name={t("executive.sales_label")} stroke="#f43f5e" fill="#f43f5e" fillOpacity={0.15} strokeWidth={2} />

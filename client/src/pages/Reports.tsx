@@ -28,11 +28,14 @@ function omr(val: string | number | null) {
   return parseFloat(String(val)).toFixed(3);
 }
 
-function fmtDateTime(ts: string | null, lang: string) {
+function fmtDateTime(ts: string | null, _lang: string) {
   if (!ts) return "-";
-  return new Date(ts).toLocaleString("en-US", {
-    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-  });
+  const d = new Date(ts);
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const hours = String(d.getHours()).padStart(2, "0");
+  const mins = String(d.getMinutes()).padStart(2, "0");
+  return `${day}/${month}/${d.getFullYear()} ${hours}:${mins}`;
 }
 
 function fmtTime(ts: string | null, lang: string) {

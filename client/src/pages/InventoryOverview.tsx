@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getQueryFn } from "@/lib/queryClient";
 import { useI18n } from "@/lib/i18n";
-import { fmtOMR } from "@/lib/formatters";
+import { fmtOMR, fmtDate } from "@/lib/formatters";
 import type { Branch } from "@shared/schema";
 
 // ── أيقونة الفئة الافتراضية ──────────────────────────────────────────────
@@ -532,7 +532,7 @@ export default function InventoryOverview() {
                         <TableRow key={m.id}>
                           <TableCell className="text-center text-xs text-muted-foreground font-mono">{idx + 1}</TableCell>
                           <TableCell className="text-sm whitespace-nowrap">
-                            {m.date || new Date(m.createdAt).toLocaleDateString("en-GB")}
+                            {m.date ? fmtDate(m.date) : fmtDate(m.createdAt)}
                           </TableCell>
                           <TableCell className="font-medium text-sm">{m.productName}</TableCell>
                           <TableCell>

@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import type { Branch, CashLedger, BankLedger } from "@shared/schema";
+import { fmtDate } from "@/lib/formatters";
 
 export default function Expenses() {
   const { t, lang } = useI18n();
@@ -334,7 +335,7 @@ export default function Expenses() {
                   <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">{t("expenses_page.no_expenses")}</TableCell></TableRow>
                 ) : filteredExpenses.map((exp: any) => (
                   <TableRow key={exp.id} data-testid={`row-expense-${exp.id}`}>
-                    <TableCell className="text-xs">{exp.date ? new Date(exp.date + "T00:00:00").toLocaleDateString("en-US") : "—"}</TableCell>
+                    <TableCell className="text-xs">{exp.date ? fmtDate(exp.date) : "—"}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="bg-primary/5 text-xs">
                         {exp.branchName || branchMap[exp.branchId] || "-"}
@@ -402,7 +403,7 @@ export default function Expenses() {
                   <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{t("expenses_page.no_cash_entries")}</TableCell></TableRow>
                 ) : cashLedgerList.map((entry) => (
                   <TableRow key={entry.id} data-testid={`row-cash-ledger-${entry.id}`}>
-                    <TableCell className="text-xs">{entry.date ? new Date(entry.date + "T00:00:00").toLocaleDateString("en-US") : "—"}</TableCell>
+                    <TableCell className="text-xs">{entry.date ? fmtDate(entry.date) : "—"}</TableCell>
                     <TableCell>{branchMap[entry.branchId] || "-"}</TableCell>
                     <TableCell>
                       {entry.shiftId ? (
@@ -462,7 +463,7 @@ export default function Expenses() {
                   <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">{t("expenses_page.no_bank_entries")}</TableCell></TableRow>
                 ) : bankLedgerList.map((entry) => (
                   <TableRow key={entry.id} data-testid={`row-bank-ledger-${entry.id}`}>
-                    <TableCell className="text-xs">{entry.date ? new Date(entry.date + "T00:00:00").toLocaleDateString("en-US") : "—"}</TableCell>
+                    <TableCell className="text-xs">{entry.date ? fmtDate(entry.date) : "—"}</TableCell>
                     <TableCell>{branchMap[entry.branchId] || "-"}</TableCell>
                     <TableCell>
                       {entry.shiftId ? (

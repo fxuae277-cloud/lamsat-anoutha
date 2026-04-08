@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useI18n } from "@/lib/i18n";
+import { fmtDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -180,7 +181,7 @@ export default function MobileTransfers() {
                   <span className="text-sm font-medium">#{tr.id}</span>
                   <Badge className={statusColor(tr.status)}>{tr.status === "approved" ? t("mobile.completed") : tr.status === "draft" ? t("mobile.draft") : tr.status}</Badge>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">{new Date(tr.createdAt).toLocaleDateString("en-US")}</p>
+                <p className="text-xs text-muted-foreground mt-1">{fmtDate(tr.createdAt)}</p>
               </CardContent>
             </Card>
           ))}

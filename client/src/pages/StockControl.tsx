@@ -1,6 +1,7 @@
 ﻿import { useState } from "react";
 import { Plus, ClipboardCheck, Search, Package, ArrowUpDown, CheckCircle2, Eye, AlertTriangle, TrendingUp, TrendingDown, Minus, BarChart3, Building2, RefreshCw } from "lucide-react";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
+import { fmtDate } from "@/lib/formatters";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -236,7 +237,7 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
                 <TableCell className="text-blue-600">{st.surplus_items}</TableCell>
                 <TableCell className="text-red-600">{st.shortage_items}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{st.creator_name || "—"}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">{st.created_at ? new Date(st.created_at).toLocaleDateString("en-US") : "—"}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{fmtDate(st.created_at)}</TableCell>
                 <TableCell>
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setSelectedSt(st); setDetailsOpen(true); }} data-testid={`button-st-details-${st.id}`}>
                     <Eye className="w-3.5 h-3.5" />
@@ -535,7 +536,7 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
             ) : adjustments.map((adj: any) => (
               <TableRow key={adj.id} data-testid={`row-adj-${adj.id}`}>
                 <TableCell className="font-mono text-sm">#{adj.id}</TableCell>
-                <TableCell className="text-sm">{adj.createdAt ? new Date(adj.createdAt).toLocaleDateString("en-US") : "—"}</TableCell>
+                <TableCell className="text-sm">{fmtDate(adj.createdAt)}</TableCell>
                 <TableCell className="text-sm">{adj.branchName}</TableCell>
                 <TableCell className="text-sm">{adj.locationName}</TableCell>
                 <TableCell className="text-sm font-medium">{adj.productName}</TableCell>
@@ -624,7 +625,7 @@ function ReportTab({ branchesList }: { branchesList: any[] }) {
               <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{t("stock_control.no_adjustments")}</TableCell></TableRow>
             ) : report.map((item: any, idx: number) => (
               <TableRow key={idx}>
-                <TableCell className="text-sm">{item.date ? new Date(item.date).toLocaleDateString("en-US") : "—"}</TableCell>
+                <TableCell className="text-sm">{fmtDate(item.date)}</TableCell>
                 <TableCell className="text-sm">{item.branch_name}</TableCell>
                 <TableCell className="text-sm font-medium">{item.product_name}</TableCell>
                 <TableCell>
