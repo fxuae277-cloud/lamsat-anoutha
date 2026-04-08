@@ -43,7 +43,7 @@ export function registerMobileRoutes(app: Express) {
 
       res.json({
         user: { id: user.id, name: user.name, role: user.role, branchId: user.branchId, terminalName: user.terminalName },
-        branch: branch ? { id: branch.id, name: branch.name } : null,
+        branch: branch ? { id: branch.id, name: branch.address ? `${branch.name} - ${branch.address}` : branch.name } : null,
         shift: shift ? { id: shift.id, status: shift.status, startedAt: shift.startedAt, openingCash: shift.openingCash } : null,
         todaySales,
         todayCount,
@@ -111,9 +111,9 @@ export function registerMobileRoutes(app: Express) {
       `);
 
       const branchPerfQ = await pool.query(`
-        SELECT b.name as branch_name, COALESCE(SUM(s.total::numeric), 0) as total
+        SELECT (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name, COALESCE(SUM(s.total::numeric), 0) as total
         FROM branches b LEFT JOIN sales s ON s.branch_id = b.id AND s.created_at::date = CURRENT_DATE
-        GROUP BY b.id, b.name ORDER BY total DESC
+        GROUP BY b.id, b.name, b.address ORDER BY total DESC
       `);
 
       const recentOpsQ = await pool.query(`
@@ -163,7 +163,7 @@ export function registerMobileRoutes(app: Express) {
     try {
       const userId = req.session.userId!;
       const result = await pool.query(
-        `SELECT s.*, b.name as branch_name FROM sales s
+        `SELECT s.*, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name FROM sales s
          LEFT JOIN branches b ON s.branch_id = b.id
          WHERE s.cashier_id = $1 AND s.created_at::date = CURRENT_DATE
          ORDER BY s.created_at DESC`,

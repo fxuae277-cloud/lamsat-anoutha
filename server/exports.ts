@@ -67,7 +67,8 @@ export function registerExportRoutes(app: Express) {
       const report = await storage.getDailyReport(dateStr, branchId);
 
       const branches = await storage.getBranches();
-      const branchName = branchId ? branches.find(b => b.id === branchId)?.name || "" : "جميع الفروع";
+      const foundBranch = branchId ? branches.find(b => b.id === branchId) : null;
+      const branchName = foundBranch ? (foundBranch.address ? `${foundBranch.name} - ${foundBranch.address}` : foundBranch.name) : "جميع الفروع";
 
       const wb = XLSX.utils.book_new();
 
@@ -298,7 +299,8 @@ export function registerExportRoutes(app: Express) {
       const report = await storage.getDailyReport(dateStr, branchId);
 
       const branches = await storage.getBranches();
-      const branchName = branchId ? branches.find(b => b.id === branchId)?.name || "" : "جميع الفروع";
+      const foundBranch2 = branchId ? branches.find(b => b.id === branchId) : null;
+      const branchName = foundBranch2 ? (foundBranch2.address ? `${foundBranch2.name} - ${foundBranch2.address}` : foundBranch2.name) : "جميع الفروع";
 
       const doc = new PDFDocument({ size: "A4", margin: 40, layout: "portrait" });
 
@@ -664,7 +666,7 @@ export function registerExportRoutes(app: Express) {
 
       const { pool: pgPool } = await import("./db");
       let query = `
-        SELECT p.*, s.name as supplier_name, u.name as creator_name, b.name as branch_name
+        SELECT p.*, s.name as supplier_name, u.name as creator_name, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name
         FROM purchases p
         LEFT JOIN suppliers s ON s.id = p.supplier_id
         LEFT JOIN users u ON u.id = p.created_by

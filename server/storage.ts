@@ -537,7 +537,7 @@ export class DatabaseStorage implements IStorage {
     const customer = await this.getCustomer(id);
     if (!customer) return null;
     const invoices = await pool.query(
-      `SELECT s.id, s.invoice_number, s.total, s.subtotal, s.discount, s.vat, s.payment_method, s.created_at, b.name as branch_name, s.branch_id
+      `SELECT s.id, s.invoice_number, s.total, s.subtotal, s.discount, s.vat, s.payment_method, s.created_at, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name, s.branch_id
        FROM sales s
        LEFT JOIN branches b ON b.id = s.branch_id
        WHERE s.customer_id = $1
@@ -545,7 +545,7 @@ export class DatabaseStorage implements IStorage {
       [id]
     );
     const returns = await pool.query(
-      `SELECT sr.id, sr.refund_amount, sr.reason, sr.created_at, s.invoice_number, b.name as branch_name
+      `SELECT sr.id, sr.refund_amount, sr.reason, sr.created_at, s.invoice_number, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name
        FROM sale_returns sr
        LEFT JOIN sales s ON s.id = sr.sale_id
        LEFT JOIN branches b ON b.id = sr.branch_id
@@ -593,7 +593,7 @@ export class DatabaseStorage implements IStorage {
   async getCustomerStatement(id: number, from?: string, to?: string) {
     const customer = await this.getCustomer(id);
     if (!customer) return null;
-    let salesQuery = `SELECT s.id, s.invoice_number, s.total, s.payment_method, s.created_at, b.name as branch_name, 'sale' as type
+    let salesQuery = `SELECT s.id, s.invoice_number, s.total, s.payment_method, s.created_at, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name, 'sale' as type
        FROM sales s LEFT JOIN branches b ON b.id = s.branch_id
        WHERE s.customer_id = $1`;
     const params: any[] = [id];
@@ -602,7 +602,7 @@ export class DatabaseStorage implements IStorage {
     salesQuery += ` ORDER BY s.created_at DESC`;
     const salesRes = await pool.query(salesQuery, params);
 
-    let returnsQuery = `SELECT sr.id, s.invoice_number, sr.refund_amount as total, sr.reason as notes, sr.created_at, b.name as branch_name, 'return' as type
+    let returnsQuery = `SELECT sr.id, s.invoice_number, sr.refund_amount as total, sr.reason as notes, sr.created_at, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name, 'return' as type
        FROM sale_returns sr LEFT JOIN sales s ON s.id = sr.sale_id LEFT JOIN branches b ON b.id = sr.branch_id
        WHERE s.customer_id = $1`;
     const rParams: any[] = [id];
@@ -636,7 +636,7 @@ export class DatabaseStorage implements IStorage {
     if (!supplier) return null;
 
     let purchasesQuery = `
-      SELECT pi.id, pi.invoice_number, pi.grand_total as total, pi.invoice_date as created_at, b.name as branch_name, 'purchase' as type
+      SELECT pi.id, pi.invoice_number, pi.grand_total as total, pi.invoice_date as created_at, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name, 'purchase' as type
       FROM purchase_invoices pi
       LEFT JOIN branches b ON b.id = pi.branch_id
       WHERE pi.supplier_id = $1 AND pi.status = 'approved'
@@ -722,7 +722,7 @@ export class DatabaseStorage implements IStorage {
         id: sales.id,
         invoiceNumber: sales.invoiceNumber,
         branchId: sales.branchId,
-        branchName: branches.name,
+        branchName: sql<string>`(${branches.name} || CASE WHEN ${branches.address} IS NOT NULL AND ${branches.address} <> '' THEN ' - ' || ${branches.address} ELSE '' END)`,
         shiftId: sales.shiftId,
         cashierId: sales.cashierId,
         cashierName: users.name,
@@ -757,7 +757,7 @@ export class DatabaseStorage implements IStorage {
         id: sales.id,
         invoiceNumber: sales.invoiceNumber,
         branchId: sales.branchId,
-        branchName: branches.name,
+        branchName: sql<string>`(${branches.name} || CASE WHEN ${branches.address} IS NOT NULL AND ${branches.address} <> '' THEN ' - ' || ${branches.address} ELSE '' END)`,
         shiftId: sales.shiftId,
         cashierId: sales.cashierId,
         cashierName: users.name,
@@ -1306,7 +1306,7 @@ export class DatabaseStorage implements IStorage {
     const rows = await db.select({
       id: expenses.id,
       branchId: expenses.branchId,
-      branchName: branches.name,
+      branchName: sql<string>`(${branches.name} || CASE WHEN ${branches.address} IS NOT NULL AND ${branches.address} <> '' THEN ' - ' || ${branches.address} ELSE '' END)`,
       shiftId: expenses.shiftId,
       category: expenses.category,
       amount: expenses.amount,
@@ -2200,7 +2200,7 @@ export class DatabaseStorage implements IStorage {
 
   async getLocations(branchId?: number) {
     let query = `
-      SELECT l.*, b.name as branch_name
+      SELECT l.*, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name
       FROM locations l
       LEFT JOIN branches b ON b.id = l.branch_id
     `;
@@ -2346,7 +2346,7 @@ export class DatabaseStorage implements IStorage {
       locationName: locations.name,
       locationCode: locations.code,
       branchId: locations.branchId,
-      branchName: branches.name,
+      branchName: sql<string>`(${branches.name} || CASE WHEN ${branches.address} IS NOT NULL AND ${branches.address} <> '' THEN ' - ' || ${branches.address} ELSE '' END)`,
       productId: locationInventory.productId,
       productName: products.name,
       barcode: products.barcode,
@@ -2370,7 +2370,7 @@ export class DatabaseStorage implements IStorage {
 
     return db.select({
       branchId: locations.branchId,
-      branchName: branches.name,
+      branchName: sql<string>`(${branches.name} || CASE WHEN ${branches.address} IS NOT NULL AND ${branches.address} <> '' THEN ' - ' || ${branches.address} ELSE '' END)`,
       productId: locationInventory.productId,
       productName: products.name,
       barcode: products.barcode,
@@ -2382,7 +2382,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(products, eq(locationInventory.productId, products.id))
       .innerJoin(branches, eq(locations.branchId, branches.id))
       .where(cond)
-      .groupBy(locations.branchId, branches.name, locationInventory.productId, products.name, products.barcode, products.avgCost, products.price)
+      .groupBy(locations.branchId, branches.name, branches.address, locationInventory.productId, products.name, products.barcode, products.avgCost, products.price)
       .orderBy(products.name);
   }
 
@@ -2399,7 +2399,7 @@ export class DatabaseStorage implements IStorage {
       id: inventoryTransactions.id,
       date: inventoryTransactions.date,
       branchId: inventoryTransactions.branchId,
-      branchName: branches.name,
+      branchName: sql<string>`(${branches.name} || CASE WHEN ${branches.address} IS NOT NULL AND ${branches.address} <> '' THEN ' - ' || ${branches.address} ELSE '' END)`,
       fromLocationId: inventoryTransactions.fromLocationId,
       toLocationId: inventoryTransactions.toLocationId,
       productId: inventoryTransactions.productId,
@@ -2432,7 +2432,7 @@ export class DatabaseStorage implements IStorage {
       locationName: locations.name,
       locationCode: locations.code,
       branchId: locations.branchId,
-      branchName: branches.name,
+      branchName: sql<string>`(${branches.name} || CASE WHEN ${branches.address} IS NOT NULL AND ${branches.address} <> '' THEN ' - ' || ${branches.address} ELSE '' END)`,
       productId: locationInventory.productId,
       productName: products.name,
       qtyOnHand: locationInventory.qtyOnHand,
@@ -2482,7 +2482,7 @@ export class DatabaseStorage implements IStorage {
 
       results.push({
         branchId: branch.id,
-        branchName: branch.name,
+        branchName: branch.address ? `${branch.name} - ${branch.address}` : branch.name,
         salesTotal: salesTotal.toFixed(3),
         cogsTotal: cogsTotal.toFixed(3),
         grossProfit: grossProfit.toFixed(3),
@@ -2723,7 +2723,7 @@ export class DatabaseStorage implements IStorage {
 
       results.push({
         branchId: branch.id,
-        branchName: branch.name,
+        branchName: branch.address ? `${branch.name} - ${branch.address}` : branch.name,
         totalSales: totalSales.toFixed(3),
         cogsTotal: totalCogs.toFixed(3),
         grossProfit: grossProfit.toFixed(3),
@@ -2852,7 +2852,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(sales.createdAt));
 
     const allBranches = await db.select().from(branches);
-    const branchMap = Object.fromEntries(allBranches.map(b => [b.id, b.name]));
+    const branchMap = Object.fromEntries(allBranches.map(b => [b.id, b.address ? `${b.name} - ${b.address}` : b.name]));
 
     const rows = saleRows.map(s => ({
       type: "sale" as const,
@@ -2990,7 +2990,7 @@ export class DatabaseStorage implements IStorage {
     }));
 
     const allBranches = await db.select().from(branches);
-    const branchMap = Object.fromEntries(allBranches.map(b => [b.id, b.name]));
+    const branchMap = Object.fromEntries(allBranches.map(b => [b.id, b.address ? `${b.name} - ${b.address}` : b.name]));
 
     const transactions = await db.select({
       id: sales.id,
@@ -3050,7 +3050,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(shifts.startedAt));
 
     const allBranches = await db.select().from(branches);
-    const branchMap = Object.fromEntries(allBranches.map(b => [b.id, b.name]));
+    const branchMap = Object.fromEntries(allBranches.map(b => [b.id, b.address ? `${b.name} - ${b.address}` : b.name]));
 
     return rows.map(s => ({
       ...s,
@@ -3121,7 +3121,7 @@ export class DatabaseStorage implements IStorage {
 
       results.push({
         branchId: branch.id,
-        branchName: branch.name,
+        branchName: branch.address ? `${branch.name} - ${branch.address}` : branch.name,
         totalSales: totalSales.toFixed(3),
         cogsTotal: totalCogs.toFixed(3),
         grossProfit: grossProfit.toFixed(3),
@@ -3251,7 +3251,7 @@ export class DatabaseStorage implements IStorage {
 
   async getLocationTransfersList(branchId?: number) {
     let query = `
-      SELECT lt.id, lt.branch_id as "branchId", b.name as "branchName",
+      SELECT lt.id, lt.branch_id as "branchId", (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as "branchName",
              lt.from_location_id as "fromLocationId", fl.name as "fromLocationName",
              lt.to_location_id as "toLocationId", tl.name as "toLocationName",
              lt.note, lt.created_by as "createdBy", lt.created_at as "createdAt",
@@ -3429,7 +3429,7 @@ export class DatabaseStorage implements IStorage {
 
   async getSaleReturns(branchId?: number) {
     let query = `
-      SELECT sr.*, s.invoice_number, u.name as created_by_name, b.name as branch_name,
+      SELECT sr.*, s.invoice_number, u.name as created_by_name, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
              (SELECT json_agg(json_build_object(
                 'id', sri.id, 'productId', sri.product_id, 'productName', p.name,
                 'quantity', sri.quantity, 'unitPrice', sri.unit_price, 'lineTotal', sri.line_total
@@ -3528,7 +3528,7 @@ export class DatabaseStorage implements IStorage {
 
   async getAuditLogs(filters?: { entityType?: string; branchId?: number; from?: string; to?: string }) {
     let query = `
-      SELECT al.*, u.name as actor_name, b.name as branch_name
+      SELECT al.*, u.name as actor_name, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name
       FROM audit_log al
       LEFT JOIN users u ON u.id = al.user_id
       LEFT JOIN branches b ON b.id = al.branch_id
@@ -3599,7 +3599,7 @@ export class DatabaseStorage implements IStorage {
   async getPayrollDetails(payrollId: number) {
     const result = await pool.query(`
       SELECT pd.*, u.name as employee_name, u.salary_type, u.branch_id,
-             b.name as branch_name
+             (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name
       FROM payroll_details pd
       JOIN users u ON u.id = pd.employee_id
       LEFT JOIN branches b ON b.id = u.branch_id
@@ -4026,7 +4026,7 @@ export class DatabaseStorage implements IStorage {
 
   async getSalaryPayments(payrollId?: number) {
     let query = `
-      SELECT sp.*, u.name as employee_name, b.name as branch_name, u2.name as paid_by_name
+      SELECT sp.*, u.name as employee_name, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name, u2.name as paid_by_name
       FROM salary_payments sp
       JOIN users u ON u.id = sp.employee_id
       LEFT JOIN branches b ON b.id = sp.branch_id
@@ -4056,7 +4056,7 @@ export class DatabaseStorage implements IStorage {
   async getPayrollDetailsWithPayments(payrollId: number) {
     const result = await pool.query(`
       SELECT pd.*, u.name as employee_name, u.salary_type, u.branch_id,
-             b.name as branch_name,
+             (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
              COALESCE((SELECT SUM(sp.amount::numeric) FROM salary_payments sp WHERE sp.payroll_detail_id = pd.id), 0) as total_paid
       FROM payroll_details pd
       JOIN users u ON u.id = pd.employee_id
@@ -4099,8 +4099,9 @@ export class DatabaseStorage implements IStorage {
     if (!empResult.rows[0]) return null;
     const emp = empResult.rows[0];
 
-    const branchResult = await pool.query(`SELECT name FROM branches WHERE id = $1`, [emp.branch_id]);
-    const branchName = branchResult.rows[0]?.name || null;
+    const branchResult = await pool.query(`SELECT name, address FROM branches WHERE id = $1`, [emp.branch_id]);
+    const branchRow = branchResult.rows[0];
+    const branchName = branchRow ? (branchRow.address ? `${branchRow.name} - ${branchRow.address}` : branchRow.name) : null;
 
     const advResult = await pool.query(`
       SELECT COALESCE(SUM(amount::numeric), 0) as total_advances,
@@ -4182,7 +4183,7 @@ export class DatabaseStorage implements IStorage {
 
   async getPayrollOutstandingReport() {
     const result = await pool.query(`
-      SELECT pd.employee_id, u.name as employee_name, b.name as branch_name,
+      SELECT pd.employee_id, u.name as employee_name, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
              pr.month, pr.year, pd.net_salary,
              COALESCE((SELECT SUM(sp.amount::numeric) FROM salary_payments sp WHERE sp.payroll_detail_id = pd.id), 0) as total_paid
       FROM payroll_details pd
@@ -4207,7 +4208,7 @@ export class DatabaseStorage implements IStorage {
 
   async getAdvancesOutstandingReport() {
     const result = await pool.query(`
-      SELECT ea.id, ea.employee_id, u.name as employee_name, b.name as branch_name,
+      SELECT ea.id, ea.employee_id, u.name as employee_name, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
              ea.amount, ea.total_repaid, (ea.amount::numeric - ea.total_repaid::numeric) as remaining_amount,
              ea.date, ea.note
       FROM employee_advances ea
@@ -4247,7 +4248,7 @@ export class DatabaseStorage implements IStorage {
     if (!empResult.rows[0]) return null;
     const emp = empResult.rows[0];
 
-    const branchResult = await pool.query(`SELECT name FROM branches WHERE id = $1`, [emp.branch_id]);
+    const branchResult = await pool.query(`SELECT name, address FROM branches WHERE id = $1`, [emp.branch_id]);
 
     const ledger = await this.getEmployeeLedger(employeeId, { from, to });
 
@@ -4268,7 +4269,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     return {
-      employee: { ...emp, branch_name: branchResult.rows[0]?.name },
+      employee: { ...emp, branch_name: branchResult.rows[0] ? (branchResult.rows[0].address ? `${branchResult.rows[0].name} - ${branchResult.rows[0].address}` : branchResult.rows[0].name) : null },
       period: { from, to },
       ledger,
       totals,
@@ -4277,7 +4278,7 @@ export class DatabaseStorage implements IStorage {
 
   async getPayrollPaymentsReport(filters?: { month?: string; year?: number; branchId?: number }) {
     let query = `
-      SELECT sp.*, u.name as employee_name, b.name as branch_name, u2.name as paid_by_name,
+      SELECT sp.*, u.name as employee_name, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name, u2.name as paid_by_name,
              pr.month, pr.year
       FROM salary_payments sp
       JOIN users u ON u.id = sp.employee_id
@@ -4298,7 +4299,7 @@ export class DatabaseStorage implements IStorage {
 
   async getRecurringDeductionsReport() {
     const result = await pool.query(`
-      SELECT ed.*, u.name as employee_name, b.name as branch_name
+      SELECT ed.*, u.name as employee_name, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name
       FROM employee_deductions ed
       JOIN users u ON u.id = ed.employee_id
       LEFT JOIN branches b ON b.id = u.branch_id
@@ -4310,7 +4311,7 @@ export class DatabaseStorage implements IStorage {
 
   async getPayrollByBranch(month: string, year: number) {
     const result = await pool.query(`
-      SELECT b.id as branch_id, b.name as branch_name,
+      SELECT b.id as branch_id, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
              COUNT(pd.id) as employee_count,
              COALESCE(SUM(pd.basic_salary::numeric), 0) as total_basic,
              COALESCE(SUM(pd.commission::numeric), 0) as total_commission,
@@ -4400,7 +4401,7 @@ export class DatabaseStorage implements IStorage {
 
   async getStocktakes(branchId?: number) {
     let query = `
-      SELECT st.*, b.name as branch_name, l.name as location_name,
+      SELECT st.*, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name, l.name as location_name,
              u1.name as creator_name, u2.name as approver_name
       FROM stocktakes st
       LEFT JOIN branches b ON b.id = st.branch_id
@@ -4574,7 +4575,7 @@ export class DatabaseStorage implements IStorage {
   async getInventoryAdjustments(branchId?: number, locationId?: number) {
     let query = `
       SELECT ia.*, p.name as product_name, p.barcode,
-             b.name as branch_name, l.name as location_name,
+             (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name, l.name as location_name,
              u.name as creator_name
       FROM inventory_adjustments ia
       JOIN products p ON p.id = ia.product_id
@@ -4653,7 +4654,7 @@ export class DatabaseStorage implements IStorage {
              pv.last_purchase_price, pv.last_receipt_date,
              p.name as product_name, p.product_type, p.category_id, c.name as category_name,
              l.name as location_name, l.type as location_type,
-             b.id as branch_id, b.name as branch_name,
+             b.id as branch_id, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
              CASE WHEN l.is_central THEN l.name ELSE COALESCE(b.name || ' - ', '') || l.name END as full_location_name,
              COALESCE(li.reorder_level, 5) as reorder_level
       FROM inventory_balances ib
@@ -5121,7 +5122,7 @@ export class DatabaseStorage implements IStorage {
         locationName: locations.name,
         locationCode: locations.code,
         branchId:     locations.branchId,
-        branchName:   branches.name,
+        branchName:   sql<string>`(${branches.name} || CASE WHEN ${branches.address} IS NOT NULL AND ${branches.address} <> '' THEN ' - ' || ${branches.address} ELSE '' END)`,
         qtyOnHand:    locationInventory.qtyOnHand,
         reorderLevel: locationInventory.reorderLevel,
         updatedAt:    locationInventory.updatedAt,
@@ -5185,7 +5186,7 @@ export class DatabaseStorage implements IStorage {
 
   async getPayrollEmployees(branchId?: number): Promise<any[]> {
     let query = `
-      SELECT u.id, u.name, u.role, u.branch_id, b.name as branch_name,
+      SELECT u.id, u.name, u.role, u.branch_id, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
              u.salary, u.salary_type, u.employment_status, u.commission_rate
       FROM users u
       LEFT JOIN branches b ON b.id = u.branch_id
@@ -5271,7 +5272,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     const result = await pool.query(`
-      SELECT sp.*, u.name AS employee_name, b.name AS branch_name,
+      SELECT sp.*, u.name AS employee_name, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) AS branch_name,
              ub.name AS paid_by_name, pr.month, pr.year
       FROM salary_payments sp
       JOIN  payroll_runs pr ON pr.id  = sp.payroll_id

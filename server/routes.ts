@@ -132,7 +132,7 @@ export async function registerRoutes(
     }
     const branch = user.branchId ? await storage.getBranch(user.branchId) : null;
     const { password: _, ...safeUser } = user;
-    res.json({ user: { ...safeUser, branchName: branch?.name || "" } });
+    res.json({ user: { ...safeUser, branchName: branch ? (branch.address ? `${branch.name} - ${branch.address}` : branch.name) : "" } });
   });
 
   app.patch("/api/me/settings", requireAuth, async (req, res) => {
@@ -449,7 +449,7 @@ export async function registerRoutes(
       `, p3);
 
       const branchPerfQ = await pool.query(`
-        SELECT s.branch_id, b.name AS branch_name,
+        SELECT s.branch_id, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) AS branch_name,
           COALESCE(SUM(s.total),0) AS revenue,
           COALESCE(SUM(s.cogs_total),0) AS cogs,
           COALESCE(SUM(s.total - s.cogs_total),0) AS gross_profit,
@@ -459,7 +459,7 @@ export async function registerRoutes(
         JOIN branches b ON b.id=s.branch_id
         WHERE DATE(s.created_at) >= $1::date AND DATE(s.created_at) <= $2::date
           AND ($3::int IS NULL OR s.branch_id = $3::int)
-        GROUP BY s.branch_id, b.name ORDER BY revenue DESC
+        GROUP BY s.branch_id, b.name, b.address ORDER BY revenue DESC
       `, p3);
 
       const branchExpQ = await pool.query(`
@@ -473,7 +473,7 @@ export async function registerRoutes(
       branchExpQ.rows.forEach((r: any) => { branchExpMap[r.branch_id] = parseFloat(r.expenses); });
 
       const recentExpQ = await pool.query(`
-        SELECT e.id, e.branch_id, b.name AS branch_name, e.category, e.amount, e.source, e.notes, e.date,
+        SELECT e.id, e.branch_id, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) AS branch_name, e.category, e.amount, e.source, e.notes, e.date,
           e.created_at, u.name AS created_by_name
         FROM expenses e
         LEFT JOIN branches b ON b.id=e.branch_id
@@ -2610,7 +2610,7 @@ export async function registerRoutes(
           SELECT
             s.created_at as op_time,
             s.branch_id,
-            b.name as branch_name,
+            (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
             s.cashier_id as user_id,
             u.name as user_name,
             'sale' as op_type,
@@ -2626,7 +2626,7 @@ export async function registerRoutes(
           SELECT
             sh.started_at as op_time,
             sh.branch_id,
-            b.name as branch_name,
+            (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
             sh.cashier_id as user_id,
             u.name as user_name,
             'shift_open' as op_type,
@@ -2643,7 +2643,7 @@ export async function registerRoutes(
           SELECT
             sh.ended_at as op_time,
             sh.branch_id,
-            b.name as branch_name,
+            (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
             sh.cashier_id as user_id,
             u.name as user_name,
             'shift_close' as op_type,
@@ -2660,7 +2660,7 @@ export async function registerRoutes(
           SELECT
             e.created_at as op_time,
             e.branch_id,
-            b.name as branch_name,
+            (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
             e.created_by as user_id,
             u.name as user_name,
             'expense' as op_type,
@@ -2676,7 +2676,7 @@ export async function registerRoutes(
           SELECT
             lt.created_at as op_time,
             lt.branch_id,
-            b.name as branch_name,
+            (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
             lt.created_by as user_id,
             u.name as user_name,
             'transfer' as op_type,
@@ -2694,7 +2694,7 @@ export async function registerRoutes(
           SELECT
             o.created_at as op_time,
             o.branch_id,
-            b.name as branch_name,
+            (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
             o.employee_id as user_id,
             u.name as user_name,
             'order' as op_type,
@@ -2710,7 +2710,7 @@ export async function registerRoutes(
           SELECT
             sr.created_at as op_time,
             sr.branch_id,
-            b.name as branch_name,
+            (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
             sr.created_by as user_id,
             u.name as user_name,
             'return' as op_type,
@@ -2726,7 +2726,7 @@ export async function registerRoutes(
           SELECT
             pi.created_at as op_time,
             pi.branch_id,
-            b.name as branch_name,
+            (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
             pi.created_by as user_id,
             u.name as user_name,
             'purchase' as op_type,

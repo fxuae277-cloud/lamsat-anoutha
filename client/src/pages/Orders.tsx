@@ -69,7 +69,7 @@ export default function Orders() {
     return matchSearch && matchStatus;
   });
 
-  const branchMap = Object.fromEntries(branchesList.map(b => [b.id, b.name]));
+  const branchMap = Object.fromEntries(branchesList.map(b => [b.id, b.address ? `${b.name} - ${b.address}` : b.name]));
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const todayOrders = ordersList.filter(o => o.createdAt && new Date(o.createdAt).toISOString().slice(0, 10) === todayStr);

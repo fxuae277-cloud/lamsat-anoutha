@@ -90,7 +90,7 @@ export default function Expenses() {
   const { data: cashLedgerList = [] } = useQuery<CashLedger[]>({ queryKey: ["/api/ledger/cash"], queryFn: getQueryFn({ on401: "throw" }) });
   const { data: bankLedgerList = [] } = useQuery<BankLedger[]>({ queryKey: ["/api/ledger/bank"], queryFn: getQueryFn({ on401: "throw" }) });
 
-  const branchMap = Object.fromEntries(branchesList.map(b => [b.id, b.name]));
+  const branchMap = Object.fromEntries(branchesList.map(b => [b.id, b.address ? `${b.name} - ${b.address}` : b.name]));
   const userBranchName = user?.branchId ? branchMap[user.branchId] : "—";
 
   function invalidateExpenses() {

@@ -458,7 +458,7 @@ export default function Settings() {
                 </div>
                 <div className="p-4 bg-muted/30 rounded-lg border">
                   <p className="text-xs text-muted-foreground mb-1">{t("settings.branch")}</p>
-                  <p className="font-bold text-sm">{userBranch?.name || "-"}</p>
+                  <p className="font-bold text-sm">{userBranch ? (userBranch.address ? `${userBranch.name} - ${userBranch.address}` : userBranch.name) : "-"}</p>
                 </div>
                 <div className="p-4 bg-muted/30 rounded-lg border">
                   <p className="text-xs text-muted-foreground mb-1">{t("settings.terminal")}</p>
@@ -614,7 +614,7 @@ export default function Settings() {
                                 {t(ROLE_LABELS_KEYS[u.role] || "sidebar.role_employee")}
                               </span>
                             </td>
-                            <td className="p-3 text-sm">{branch?.name || "-"}</td>
+                            <td className="p-3 text-sm">{branch ? (branch.address ? `${branch.name} - ${branch.address}` : branch.name) : "-"}</td>
                             <td className="p-3 text-sm" dir="ltr">{u.terminalName}</td>
                             <td className="p-3 text-center">
                               <span className={`inline-block w-2.5 h-2.5 rounded-full ${u.isActive ? "bg-green-500" : "bg-red-400"}`} title={u.isActive ? t("settings.active") : t("settings.disabled")} />
@@ -1085,7 +1085,7 @@ export default function Settings() {
                   return (
                     <div key={city.id} className="flex items-center justify-between p-3 bg-muted/30 border rounded-lg text-sm">
                       <span className="font-medium">{city.name}</span>
-                      <span className="text-muted-foreground text-xs">{branch?.name || "-"}</span>
+                      <span className="text-muted-foreground text-xs">{branch ? (branch.address ? `${branch.name} - ${branch.address}` : branch.name) : "-"}</span>
                     </div>
                   );
                 })}
