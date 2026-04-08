@@ -12,6 +12,7 @@ import { getQueryFn } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import type { Branch, User } from "@shared/schema";
 import { useI18n } from "@/lib/i18n";
+import { fmtDate, fmtDateTime } from "@/lib/formatters";
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -49,9 +50,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
   function handleThermalPrint() {
     if (!detail) return;
     const pmText = PM_LABELS[detail.paymentMethod] || detail.paymentMethod;
-    const dateStr = detail.createdAt
-      ? new Date(detail.createdAt).toLocaleDateString(locale) + " " + new Date(detail.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
-      : "";
+    const dateStr = detail.createdAt ? fmtDateTime(detail.createdAt) : "";
     const itemsHtml = (detail.items || []).map((item: any) => `
       <tr>
         <td style="text-align:left;font-size:11px;padding:1px 0">${omr(item.total)}</td>
@@ -106,9 +105,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
   function handlePrint() {
     if (!detail) return;
     const pmText = PM_LABELS[detail.paymentMethod] || detail.paymentMethod;
-    const dateStr = detail.createdAt
-      ? new Date(detail.createdAt).toLocaleDateString(locale) + " " + new Date(detail.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
-      : "";
+    const dateStr = detail.createdAt ? fmtDateTime(detail.createdAt) : "";
 
     const itemsHtml = (detail.items || []).map((item: any, i: number) =>
       `<tr>
@@ -228,9 +225,9 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
               <div className="p-3 bg-muted/30 rounded-lg border">
                 <p className="text-xs text-muted-foreground">{t("common.date")}</p>
                 <p className="font-bold mt-1">
-                  {detail.createdAt ? new Date(detail.createdAt).toLocaleDateString(locale) : "—"}
+                  {detail.createdAt ? fmtDate(detail.createdAt) : "—"}
                   <span className="text-xs font-normal text-muted-foreground mr-1">
-                    {detail.createdAt ? new Date(detail.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}
+                    {detail.createdAt ? new Date(detail.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : ""}
                   </span>
                 </p>
               </div>
@@ -502,7 +499,7 @@ export default function Invoices() {
                       </TableCell>
                       <TableCell className="text-center font-mono font-bold">{omr(s.total)}</TableCell>
                       <TableCell className="text-center text-xs text-muted-foreground">
-                        {s.createdAt ? new Date(s.createdAt).toLocaleDateString("en-US") : ""}
+                        {fmtDate(s.createdAt)}
                         <br />
                         {s.createdAt ? new Date(s.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : ""}
                       </TableCell>

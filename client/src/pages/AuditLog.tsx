@@ -10,6 +10,7 @@ import { getQueryFn } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import type { Branch } from "@shared/schema";
 import { useI18n } from "@/lib/i18n";
+import { fmtDateTime } from "@/lib/formatters";
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -232,10 +233,7 @@ export default function AuditLog() {
                     <span className="truncate block">{log.details || "—"}</span>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                    {log.created_at ? new Date(log.created_at).toLocaleString("en-US", {
-                      year: "numeric", month: "2-digit", day: "2-digit",
-                      hour: "2-digit", minute: "2-digit"
-                    }) : "—"}
+                    {fmtDateTime(log.created_at)}
                   </TableCell>
                 </TableRow>
               );

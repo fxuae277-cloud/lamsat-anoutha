@@ -11,6 +11,7 @@ import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Order, Branch, City } from "@shared/schema";
 import { useI18n } from "@/lib/i18n";
+import { fmtDateTime } from "@/lib/formatters";
 import { useAuth } from "@/lib/auth";
 
 function fmt(v: string | number | null | undefined) {
@@ -295,7 +296,7 @@ export default function Orders() {
           ) : filtered.map((order) => {
             const s = STATUS_MAP[order.status || "new"] || STATUS_MAP["new"];
             const StatusIcon = s.icon;
-            const orderTime = order.createdAt ? new Date(order.createdAt).toLocaleString(locale, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+            const orderTime = fmtDateTime(order.createdAt);
             return (
               <div key={order.id} className="p-4 hover:bg-muted/30 transition-colors" data-testid={`card-order-${order.id}`}>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -417,7 +418,7 @@ export default function Orders() {
                 <div className="bg-muted/50 rounded-lg p-3">
                   <p className="text-xs text-muted-foreground">{t("orders.order_time")}</p>
                   <p className="font-bold mt-0.5">
-                    {detailOrder.createdAt ? new Date(detailOrder.createdAt).toLocaleString(locale, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-"}
+                    {fmtDateTime(detailOrder.createdAt)}
                   </p>
                 </div>
                 <div className="bg-muted/50 rounded-lg p-3">

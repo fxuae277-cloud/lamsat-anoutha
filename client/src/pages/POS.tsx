@@ -14,6 +14,7 @@ import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useLogout } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
+import { fmtDateTime } from "@/lib/formatters";
 import type { Product, Branch, Shift } from "@shared/schema";
 
 function fmt(v: string | number | null | undefined) {
@@ -354,8 +355,7 @@ export default function POS() {
       card: t("payment_methods.card"), 
       bank_transfer: t("payment_methods.bank_transfer") 
     };
-    const locale = "en-US";
-    const dateStr = new Date().toLocaleDateString(locale) + " " + new Date().toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+    const dateStr = fmtDateTime(new Date().toISOString());
     const itemsHtml = receiptData.items.map(it => `
       <tr>
         <td style="text-align:${lang === "ar" ? "left" : "right"};font-size:11px;padding:1px 0">${it.lineTotal}</td>
