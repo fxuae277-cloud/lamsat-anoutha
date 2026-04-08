@@ -11,6 +11,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -495,8 +496,8 @@ table{width:100%;border-collapse:collapse;margin:15px 0;font-size:12px}th,td{bor
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><FileText className="w-5 h-5" />{t("customers.statement")}</DialogTitle></DialogHeader>
           <div className="flex flex-wrap gap-2 items-end border-b pb-4">
-            <div><Label className="text-xs">{t("customers.from_date")}</Label><Input type="date" value={stmtFrom} onChange={e => setStmtFrom(e.target.value)} className="w-40" /></div>
-            <div><Label className="text-xs">{t("customers.to_date")}</Label><Input type="date" value={stmtTo} onChange={e => setStmtTo(e.target.value)} className="w-40" /></div>
+            <div><Label className="text-xs">{t("customers.from_date")}</Label><DateInput value={stmtFrom} onChange={e => setStmtFrom(e.target.value)} className="w-40" /></div>
+            <div><Label className="text-xs">{t("customers.to_date")}</Label><DateInput value={stmtTo} onChange={e => setStmtTo(e.target.value)} className="w-40" /></div>
             <div className="flex gap-1">
               <Button size="sm" variant={!stmtFrom && !stmtTo ? "default" : "outline"} onClick={() => setStmtQuickRange("all")}>{t("customers.all_periods")}</Button>
               <Button size="sm" variant="outline" onClick={() => setStmtQuickRange("month")}>{t("customers.this_month")}</Button>

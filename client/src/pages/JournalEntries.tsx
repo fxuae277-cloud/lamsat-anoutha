@@ -10,6 +10,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -214,11 +215,11 @@ export default function JournalEntries() {
         <CardContent className="p-4 flex flex-wrap gap-4 items-end">
           <div className="space-y-1.5">
             <Label className="text-xs">{t("common.from")}</Label>
-            <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="w-40" data-testid="filter-from" />
+            <DateInput value={from} onChange={e => setFrom(e.target.value)} className="w-40" data-testid="filter-from" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">{t("common.to")}</Label>
-            <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="w-40" data-testid="filter-to" />
+            <DateInput value={to} onChange={e => setTo(e.target.value)} className="w-40" data-testid="filter-to" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">{t("journal.status")}</Label>
@@ -317,7 +318,7 @@ export default function JournalEntries() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div className="space-y-2">
               <Label>{t("journal.date")}</Label>
-              <Input type="date" value={entryForm.date} onChange={e => setEntryForm(f => ({ ...f, date: e.target.value }))} data-testid="input-entry-date" />
+              <DateInput value={entryForm.date} onChange={e => setEntryForm(f => ({ ...f, date: e.target.value }))} data-testid="input-entry-date" />
             </div>
             <div className="space-y-2">
               <Label>{t("common.branch")}</Label>

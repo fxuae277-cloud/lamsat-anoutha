@@ -1,6 +1,7 @@
 ﻿import { useState } from "react";
 import { Shield, Search, Calendar, AlertTriangle, RotateCcw, ShoppingCart, User, FileText, Filter, Clock } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -150,11 +151,11 @@ export default function AuditLog() {
         <div className="p-4 border-b flex flex-wrap items-center gap-3 bg-muted/20">
           <div className="space-y-1">
             <label className="text-xs font-medium">{t("audit_log.from_label")}</label>
-            <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="w-40 bg-background" />
+            <DateInput value={from} onChange={e => setFrom(e.target.value)} className="w-40 bg-background" />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium">{t("audit_log.to_label")}</label>
-            <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="w-40 bg-background" />
+            <DateInput value={to} onChange={e => setTo(e.target.value)} className="w-40 bg-background" />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium">{t("audit_log.type_label")}</label>

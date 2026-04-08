@@ -6,6 +6,7 @@ import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle,
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -402,11 +403,11 @@ function SupplierStatementDialog({ open, onOpenChange, supplierId }: { open: boo
           <div className="flex items-end gap-4 print:hidden">
             <div className="space-y-1 flex-1">
               <label className="text-sm font-medium">{t("customers.statement_from")}</label>
-              <Input type="date" value={from} onChange={e => setFrom(e.target.value)} />
+              <DateInput value={from} onChange={e => setFrom(e.target.value)} />
             </div>
             <div className="space-y-1 flex-1">
               <label className="text-sm font-medium">{t("customers.statement_to")}</label>
-              <Input type="date" value={to} onChange={e => setTo(e.target.value)} />
+              <DateInput value={to} onChange={e => setTo(e.target.value)} />
             </div>
             <Button variant="outline" className="gap-2" onClick={handlePrint}>
               <Printer className="w-4 h-4" /> {t("common.print")}
@@ -1834,7 +1835,7 @@ function PurchasesTab() {
               </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium">{t("purchases.date")} *</label>
-                <Input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} data-testid="input-new-date" />
+                <DateInput value={newDate} onChange={e => setNewDate(e.target.value)} data-testid="input-new-date" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">

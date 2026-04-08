@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus, Search, Filter, ArrowRightLeft, TrendingUp, MinusCircle, Wallet, CreditCard, User, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -334,7 +335,7 @@ export default function MonthlyMovementsTab({ usersList, branchesList }: Monthly
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("common.date")} *</label>
-                <Input type="date" value={advForm.date} onChange={e => setAdvForm({...advForm, date: e.target.value})} />
+                <DateInput value={advForm.date} onChange={e => setAdvForm({...advForm, date: e.target.value})} />
               </div>
             </div>
             <div className="space-y-2">
@@ -381,7 +382,7 @@ export default function MonthlyMovementsTab({ usersList, branchesList }: Monthly
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("common.date")} *</label>
-                <Input type="date" value={dedForm.date} onChange={e => setDedForm({...dedForm, date: e.target.value})} />
+                <DateInput value={dedForm.date} onChange={e => setDedForm({...dedForm, date: e.target.value})} />
               </div>
             </div>
             <div className="space-y-2">
@@ -419,7 +420,7 @@ export default function MonthlyMovementsTab({ usersList, branchesList }: Monthly
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("common.date")} *</label>
-                <Input type="date" value={comForm.date} onChange={e => setComForm({...comForm, date: e.target.value})} />
+                <DateInput value={comForm.date} onChange={e => setComForm({...comForm, date: e.target.value})} />
               </div>
             </div>
             <div className="space-y-2">
@@ -468,7 +469,7 @@ export default function MonthlyMovementsTab({ usersList, branchesList }: Monthly
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("common.date")} *</label>
-                <Input type="date" value={entForm.date} onChange={e => setEntForm({...entForm, date: e.target.value})} />
+                <DateInput value={entForm.date} onChange={e => setEntForm({...entForm, date: e.target.value})} />
               </div>
             </div>
             <div className="space-y-2">

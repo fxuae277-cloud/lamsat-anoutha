@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -473,11 +474,11 @@ export default function InventoryOverview() {
             </Select>
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted-foreground shrink-0">{t("inv_overview.filter_from")}</label>
-              <Input type="date" value={movFrom} onChange={e => setMovFrom(e.target.value)} className="w-36 h-9" />
+              <DateInput value={movFrom} onChange={e => setMovFrom(e.target.value)} className="w-36 h-9" />
             </div>
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted-foreground shrink-0">{t("inv_overview.filter_to")}</label>
-              <Input type="date" value={movTo} onChange={e => setMovTo(e.target.value)} className="w-36 h-9" />
+              <DateInput value={movTo} onChange={e => setMovTo(e.target.value)} className="w-36 h-9" />
             </div>
             <Select value={movBranch} onValueChange={setMovBranch}>
               <SelectTrigger className="w-44 h-9"><SelectValue /></SelectTrigger>

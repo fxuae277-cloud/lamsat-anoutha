@@ -2,6 +2,7 @@
 import { FileSpreadsheet, Search, Eye, Printer, Download, X, Banknote, CreditCard, Building2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -392,11 +393,11 @@ export default function Invoices() {
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-1">
               <label className="text-sm font-medium">{t("common.from")}</label>
-              <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-40" data-testid="input-invoices-from" />
+              <DateInput value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-40" data-testid="input-invoices-from" />
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">{t("common.to")}</label>
-              <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-40" data-testid="input-invoices-to" />
+              <DateInput value={toDate} onChange={e => setToDate(e.target.value)} className="w-40" data-testid="input-invoices-to" />
             </div>
             <div className="space-y-1 min-w-[160px]">
               <label className="text-sm font-medium">{t("invoices.table_payment")}</label>

@@ -2,6 +2,7 @@
 import { Plus, Users, UserCheck, Wallet, TrendingUp, ShoppingBag, KeyRound, Shield, BarChart3, AlertCircle, ArrowRightLeft, FileText, CreditCard, FileSpreadsheet, Banknote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -459,11 +460,11 @@ export default function HR() {
             <div className="flex gap-3 items-end">
               <div className="space-y-1 flex-1">
                 <label className="text-xs font-medium">{t("common.from")}</label>
-                <Input type="date" value={perfFrom} onChange={e => setPerfFrom(e.target.value)} />
+                <DateInput value={perfFrom} onChange={e => setPerfFrom(e.target.value)} />
               </div>
               <div className="space-y-1 flex-1">
                 <label className="text-xs font-medium">{t("common.to")}</label>
-                <Input type="date" value={perfTo} onChange={e => setPerfTo(e.target.value)} />
+                <DateInput value={perfTo} onChange={e => setPerfTo(e.target.value)} />
               </div>
             </div>
             {perfData?.performance && (

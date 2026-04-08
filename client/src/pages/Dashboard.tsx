@@ -7,6 +7,7 @@ import { ShoppingCart, AlertTriangle, Receipt, Store, Package, TrendingUp, Filte
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 import { fmtTime } from "@/lib/formatters";
+import { DateInput } from "@/components/ui/date-input";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 function fmt(v: string | number | undefined) {
@@ -203,15 +204,13 @@ export default function Dashboard() {
               <CardTitle className="text-base">المبيعات</CardTitle>
               <div className="flex items-center gap-2 flex-wrap">
                 <Filter className="w-4 h-4 text-muted-foreground" />
-                <Input
-                  type="date"
+                <DateInput
                   value={filterFrom}
                   onChange={e => setFilterFrom(e.target.value)}
                   className="h-8 w-36 text-xs"
                 />
                 <span className="text-xs text-muted-foreground">إلى</span>
-                <Input
-                  type="date"
+                <DateInput
                   value={filterTo}
                   onChange={e => setFilterTo(e.target.value)}
                   className="h-8 w-36 text-xs"

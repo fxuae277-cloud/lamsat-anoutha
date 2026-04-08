@@ -2,6 +2,7 @@
 import { Calendar, Download, Banknote, CreditCard, Building2, TrendingUp, TrendingDown, DollarSign, BarChart3, Package, ShoppingBag, Eye, Layers, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -929,11 +930,11 @@ export default function Reports() {
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-1">
               <label className="text-sm font-medium">{t("reports.from_label")}</label>
-              <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-44" data-testid="input-from-date" />
+              <DateInput value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-44" data-testid="input-from-date" />
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">{t("reports.to_label")}</label>
-              <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="w-44" data-testid="input-to-date" />
+              <DateInput value={toDate} onChange={e => setToDate(e.target.value)} className="w-44" data-testid="input-to-date" />
             </div>
             {activeTab !== "branches" && (
               <div className="space-y-1 min-w-[200px]">

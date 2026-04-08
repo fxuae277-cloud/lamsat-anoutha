@@ -8,6 +8,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -173,27 +174,19 @@ export default function GeneralLedger() {
                   </Select>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input 
-                      type="date" 
-                      value={glFrom} 
-                      onChange={e => setGlFrom(e.target.value)} 
-                      className="pr-10 w-40"
-                      data-testid="input-gl-from"
-                    />
-                  </div>
+                  <DateInput
+                    value={glFrom}
+                    onChange={e => setGlFrom(e.target.value)}
+                    className="w-40"
+                    data-testid="input-gl-from"
+                  />
                   <span className="text-muted-foreground">{t("ledger.to")}</span>
-                  <div className="relative">
-                    <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input 
-                      type="date" 
-                      value={glTo} 
-                      onChange={e => setGlTo(e.target.value)} 
-                      className="pr-10 w-40"
-                      data-testid="input-gl-to"
-                    />
-                  </div>
+                  <DateInput
+                    value={glTo}
+                    onChange={e => setGlTo(e.target.value)}
+                    className="w-40"
+                    data-testid="input-gl-to"
+                  />
                 </div>
               </div>
             </CardContent>
@@ -253,29 +246,21 @@ export default function GeneralLedger() {
               <div className="flex flex-wrap gap-4 items-center">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{t("ledger.from")}:</span>
-                  <div className="relative">
-                    <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input 
-                      type="date" 
-                      value={tbFrom} 
-                      onChange={e => setTbFrom(e.target.value)} 
-                      className="pr-10 w-40"
-                      data-testid="input-tb-from"
-                    />
-                  </div>
+                  <DateInput
+                    value={tbFrom}
+                    onChange={e => setTbFrom(e.target.value)}
+                    className="w-40"
+                    data-testid="input-tb-from"
+                  />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{t("ledger.to")}:</span>
-                  <div className="relative">
-                    <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input 
-                      type="date" 
-                      value={tbTo} 
-                      onChange={e => setTbTo(e.target.value)} 
-                      className="pr-10 w-40"
-                      data-testid="input-tb-to"
-                    />
-                  </div>
+                  <DateInput
+                    value={tbTo}
+                    onChange={e => setTbTo(e.target.value)}
+                    className="w-40"
+                    data-testid="input-tb-to"
+                  />
                 </div>
               </div>
             </CardContent>

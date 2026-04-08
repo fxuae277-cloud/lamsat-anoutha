@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus, Receipt, Search, Wallet, CreditCard, Building2, Calendar, UserCheck, Hash, TrendingDown, Banknote, PieChart, Edit2, Trash2, Printer, Copy, X, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -256,7 +257,7 @@ export default function Expenses() {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <label className="text-sm font-medium">التاريخ</label>
-          <Input type="date" value={values.date}
+          <DateInput value={values.date}
             onChange={e => setValues({ ...values, date: e.target.value })} />
         </div>
         <div className="space-y-2">
@@ -415,10 +416,10 @@ export default function Expenses() {
               {/* Date range */}
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-muted-foreground" />
-                <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+                <DateInput value={fromDate} onChange={e => setFromDate(e.target.value)}
                   className="w-36 bg-background" data-testid="input-filter-from" />
                 <span className="text-muted-foreground text-sm">—</span>
-                <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
+                <DateInput value={toDate} onChange={e => setToDate(e.target.value)}
                   className="w-36 bg-background" data-testid="input-filter-to" />
               </div>
               {/* Branch filter */}

@@ -2,6 +2,7 @@
 import { Search, Filter, Calendar, Building2, Clock, ShoppingBag, Package, Receipt, DoorOpen, DoorClosed, RotateCcw, Truck, ShoppingCart, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -112,11 +113,11 @@ export default function Operations() {
           <label className="text-xs font-medium flex items-center gap-1">
             <Calendar className="w-3 h-3" /> {t("operations.from_label")}
           </label>
-          <Input type="date" className="w-40" value={from} onChange={e => setFrom(e.target.value)} data-testid="input-ops-from" />
+          <DateInput className="w-40" value={from} onChange={e => setFrom(e.target.value)} data-testid="input-ops-from" />
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium">{t("operations.to_label")}</label>
-          <Input type="date" className="w-40" value={to} onChange={e => setTo(e.target.value)} data-testid="input-ops-to" />
+          <DateInput className="w-40" value={to} onChange={e => setTo(e.target.value)} data-testid="input-ops-to" />
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium flex items-center gap-1">

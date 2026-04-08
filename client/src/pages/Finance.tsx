@@ -15,6 +15,7 @@ import { useAuth } from "@/lib/auth";
 import type { Branch, CashLedger, BankLedger } from "@shared/schema";
 import { useI18n } from "@/lib/i18n";
 import { fmtTime } from "@/lib/formatters";
+import { DateInput } from "@/components/ui/date-input";
 
 const TYPE_BADGE: Record<string, string> = {
   sale: "bg-green-100 text-green-800",
@@ -127,8 +128,7 @@ export default function Finance() {
       <div className="flex flex-wrap gap-3 items-center justify-center">
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-muted-foreground" />
-          <Input
-            type="date"
+          <DateInput
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
             className="w-44"

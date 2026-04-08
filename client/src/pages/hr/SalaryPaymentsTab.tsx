@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n";
 import { fmtDate } from "@/lib/formatters";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -235,7 +236,7 @@ export default function SalaryPaymentsTab({ usersList }: { usersList: any[] }) {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("hr.payment_date")} *</label>
-                <Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} data-testid="input-salary-pay-date" />
+                <DateInput value={payDate} onChange={e => setPayDate(e.target.value)} data-testid="input-salary-pay-date" />
               </div>
             </div>
             <div className="space-y-2">
