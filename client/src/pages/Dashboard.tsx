@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ShoppingCart, AlertTriangle, Receipt, Store, Package, TrendingUp, Filter } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
+import { fmtTime } from "@/lib/formatters";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 function fmt(v: string | number | undefined) {
@@ -275,7 +276,7 @@ export default function Dashboard() {
                         </td>
                         <td className="py-3 px-4 font-bold text-primary">{fmt(sale.total)} ر.ع</td>
                         <td className="py-3 px-4 text-muted-foreground text-xs">
-                          {new Date(sale.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                          {fmtTime(sale.createdAt)}
                         </td>
                       </tr>
                     ))}

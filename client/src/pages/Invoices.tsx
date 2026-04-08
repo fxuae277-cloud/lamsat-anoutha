@@ -12,7 +12,7 @@ import { getQueryFn } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import type { Branch, User } from "@shared/schema";
 import { useI18n } from "@/lib/i18n";
-import { fmtDate, fmtDateTime } from "@/lib/formatters";
+import { fmtDate, fmtDateTime, fmtTime } from "@/lib/formatters";
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -227,7 +227,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
                 <p className="font-bold mt-1">
                   {detail.createdAt ? fmtDate(detail.createdAt) : "—"}
                   <span className="text-xs font-normal text-muted-foreground mr-1">
-                    {detail.createdAt ? new Date(detail.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : ""}
+                    {detail.createdAt ? fmtTime(detail.createdAt) : ""}
                   </span>
                 </p>
               </div>
@@ -504,7 +504,7 @@ export default function Invoices() {
                       <TableCell className="text-center text-xs text-muted-foreground">
                         {fmtDate(s.createdAt)}
                         <br />
-                        {s.createdAt ? new Date(s.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : ""}
+                        {s.createdAt ? fmtTime(s.createdAt) : ""}
                       </TableCell>
                       <TableCell className="text-center">
                         <Button

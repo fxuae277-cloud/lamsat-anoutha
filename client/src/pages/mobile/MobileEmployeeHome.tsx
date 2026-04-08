@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 import { useI18n } from "@/lib/i18n";
+import { fmtTime } from "@/lib/formatters";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -58,7 +59,7 @@ export default function MobileEmployeeHome() {
           </div>
           {shiftOpen && data?.shift?.startedAt && (
             <span className="text-xs text-muted-foreground">
-              {new Date(data.shift.startedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+              {fmtTime(data.shift.startedAt)}
             </span>
           )}
         </CardContent>

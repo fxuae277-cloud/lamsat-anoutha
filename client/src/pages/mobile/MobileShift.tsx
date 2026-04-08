@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useI18n } from "@/lib/i18n";
+import { fmtTime } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -123,7 +124,7 @@ export default function MobileShift() {
             <div className="bg-muted/50 p-3 rounded-lg text-center">
               <p className="text-xs text-muted-foreground">{t("mobile.started_at")}</p>
               <p className="font-bold" data-testid="text-shift-start">
-                {currentShift.startedAt ? new Date(currentShift.startedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "--"}
+                {currentShift.startedAt ? fmtTime(currentShift.startedAt) : "--"}
               </p>
             </div>
             <div className="bg-muted/50 p-3 rounded-lg text-center">

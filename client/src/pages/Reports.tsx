@@ -38,9 +38,11 @@ function fmtDateTime(ts: string | null, _lang: string) {
   return `${day}/${month}/${d.getFullYear()} ${hours}:${mins}`;
 }
 
-function fmtTime(ts: string | null, lang: string) {
+function fmtTime(ts: string | null, _lang?: string) {
   if (!ts) return "-";
-  return new Date(ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return "-";
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 function downloadCSV(filename: string, rows: any[][]) {

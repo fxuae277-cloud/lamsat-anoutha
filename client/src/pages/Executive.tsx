@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
+import { fmtTime } from "@/lib/formatters";
 import { useLocation } from "wouter";
 import {
   TrendingUp, TrendingDown, DollarSign, BarChart3, Receipt,
@@ -206,7 +207,7 @@ export default function Executive() {
             <h1 className="text-2xl font-bold" data-testid="text-executive-title">{t("executive.title")}</h1>
             {lastUpdated && (
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {t("executive.last_updated")}: {lastUpdated.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                {t("executive.last_updated")}: {`${fmtTime(lastUpdated.toISOString())}:${String(lastUpdated.getSeconds()).padStart(2, "0")}`}
               </p>
             )}
           </div>

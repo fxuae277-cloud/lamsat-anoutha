@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import type { Branch, CashLedger, BankLedger } from "@shared/schema";
 import { useI18n } from "@/lib/i18n";
+import { fmtTime } from "@/lib/formatters";
 
 const TYPE_BADGE: Record<string, string> = {
   sale: "bg-green-100 text-green-800",
@@ -239,7 +240,7 @@ export default function Finance() {
                   <TableRow key={entry.id}>
                     <TableCell>{i + 1}</TableCell>
                     <TableCell className="text-sm">
-                      {entry.createdAt ? new Date(entry.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                      {entry.createdAt ? fmtTime(entry.createdAt) : "-"}
                     </TableCell>
                     {isAdmin && <TableCell className="text-sm">{branchName(entry.branchId)}</TableCell>}
                     <TableCell>
@@ -288,7 +289,7 @@ export default function Finance() {
                   <TableRow key={entry.id}>
                     <TableCell>{i + 1}</TableCell>
                     <TableCell className="text-sm">
-                      {entry.createdAt ? new Date(entry.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                      {entry.createdAt ? fmtTime(entry.createdAt) : "-"}
                     </TableCell>
                     {isAdmin && <TableCell className="text-sm">{branchName(entry.branchId)}</TableCell>}
                     <TableCell>
@@ -383,7 +384,7 @@ export default function Finance() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm">
-                        {s.endedAt ? new Date(s.endedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                        {s.endedAt ? fmtTime(s.endedAt) : "-"}
                       </TableCell>
                     </TableRow>
                   );

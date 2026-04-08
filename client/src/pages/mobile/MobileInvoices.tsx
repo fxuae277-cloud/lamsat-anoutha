@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 import { useI18n } from "@/lib/i18n";
+import { fmtTime } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ReceiptText, Loader2, FileText } from "lucide-react";
@@ -70,7 +71,7 @@ export default function MobileInvoices() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">
-                  {new Date(inv.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                  {fmtTime(inv.createdAt)}
                 </span>
                 <span className="text-lg font-bold text-primary" data-testid={`text-invoice-total-${inv.id}`}>
                   {parseFloat(inv.total).toFixed(3)}

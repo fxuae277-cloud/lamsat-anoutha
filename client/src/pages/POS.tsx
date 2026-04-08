@@ -14,7 +14,7 @@ import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useLogout } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
-import { fmtDateTime } from "@/lib/formatters";
+import { fmtDateTime, fmtTime } from "@/lib/formatters";
 import type { Product, Branch, Shift } from "@shared/schema";
 
 function fmt(v: string | number | null | undefined) {
@@ -168,11 +168,11 @@ function ShiftReceipt({ report, onNewShift }: { report: any; onNewShift: () => v
             </div>
             <div className="bg-muted/50 rounded-lg p-3 text-center">
               <p className="text-xs text-muted-foreground">{t("pos.open_time")}</p>
-              <p className="font-bold mt-1">{report.shift?.startedAt ? new Date(report.shift.startedAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : "-"}</p>
+              <p className="font-bold mt-1">{report.shift?.startedAt ? fmtTime(report.shift.startedAt) : "-"}</p>
             </div>
             <div className="bg-muted/50 rounded-lg p-3 text-center">
               <p className="text-xs text-muted-foreground">{t("pos.close_time")}</p>
-              <p className="font-bold mt-1">{report.shift?.endedAt ? new Date(report.shift.endedAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : "-"}</p>
+              <p className="font-bold mt-1">{report.shift?.endedAt ? fmtTime(report.shift.endedAt) : "-"}</p>
             </div>
           </div>
 
@@ -766,7 +766,7 @@ export default function POS() {
               </div>
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted rounded-lg text-xs">
                 <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                {currentShift!.startedAt ? new Date(currentShift!.startedAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}
+                {currentShift!.startedAt ? fmtTime(currentShift!.startedAt) : ""}
               </div>
             </>
           )}
@@ -1269,7 +1269,7 @@ export default function POS() {
                         {held.note || `${t("pos.held_invoice")} #${held.id}`}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {held.heldAt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                        {fmtTime(held.heldAt)}
                       </p>
                     </div>
                     <span className="font-bold text-primary">{heldTotal.toFixed(3)} {t("common.omr")}</span>

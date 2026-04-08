@@ -66,6 +66,19 @@ export function fmtDateTime(dateStr: string | null | undefined): string {
   }
 }
 
+export function fmtTime(dateStr: string | Date | null | undefined): string {
+  if (!dateStr) return "—";
+  try {
+    const d = typeof dateStr === "string" ? new Date(dateStr) : dateStr;
+    if (isNaN(d.getTime())) return "—";
+    const hours = String(d.getHours()).padStart(2, "0");
+    const mins = String(d.getMinutes()).padStart(2, "0");
+    return `${hours}:${mins}`;
+  } catch {
+    return "—";
+  }
+}
+
 export function fmtDateLocale(
   dateStr: string | null | undefined,
   opts?: Intl.DateTimeFormatOptions
