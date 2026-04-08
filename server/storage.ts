@@ -121,6 +121,8 @@ export interface IStorage {
   payOrder(id: number, paymentMethod: PaymentMethod, bankTxnId?: string): Promise<Order | undefined>;
   getExpenses(): Promise<Expense[]>;
   createExpense(data: InsertExpense): Promise<Expense>;
+  updateExpense(id: number, data: Partial<InsertExpense>): Promise<Expense>;
+  deleteExpense(id: number): Promise<void>;
   getEmployees(): Promise<Employee[]>;
   createEmployee(data: InsertEmployee): Promise<Employee>;
   getShifts(): Promise<Shift[]>;
@@ -1374,6 +1376,15 @@ export class DatabaseStorage implements IStorage {
   async createExpense(data: InsertExpense) {
     const [row] = await db.insert(expenses).values(data).returning();
     return row;
+  }
+
+  async updateExpense(id: number, data: Partial<InsertExpense>) {
+    const [row] = await db.update(expenses).set(data).where(eq(expenses.id, id)).returning();
+    return row;
+  }
+
+  async deleteExpense(id: number) {
+    await db.delete(expenses).where(eq(expenses.id, id));
   }
 
   async getEmployees() { return db.select().from(employees); }

@@ -1889,7 +1889,7 @@ export async function registerRoutes(
   });
   app.post("/api/expenses", requireAuth, requireManager, enforceBranchScope, async (req, res) => {
     try {
-      const { amount, notes, source, category } = req.body;
+      const { amount, notes, source, category, date: expenseDate } = req.body;
       if (!amount) {
         return res.status(400).json({ message: "المبلغ مطلوب" });
       }
@@ -1910,7 +1910,7 @@ export async function registerRoutes(
         if (shift) shiftId = shift.id;
       }
 
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = expenseDate && /^\d{4}-\d{2}-\d{2}$/.test(expenseDate) ? expenseDate : new Date().toISOString().slice(0, 10);
       const catLabel = category || "عام";
       const expense = await storage.createExpense({
         branchId,
@@ -1963,6 +1963,34 @@ export async function registerRoutes(
       res.status(201).json(expense);
     } catch (err: any) {
       console.error(err);
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.patch("/api/expenses/:id", requireAuth, requireManager, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { amount, category, source, notes, date } = req.body;
+      const updateData: any = {};
+      if (amount !== undefined) updateData.amount = String(amount);
+      if (category !== undefined) updateData.category = category;
+      if (source !== undefined) updateData.source = source;
+      if (notes !== undefined) updateData.notes = notes;
+      if (date !== undefined) updateData.date = date;
+      const updated = await storage.updateExpense(id, updateData);
+      if (!updated) return res.status(404).json({ message: "المصروف غير موجود" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.delete("/api/expenses/:id", requireAuth, requireManager, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      await storage.deleteExpense(id);
+      res.json({ success: true });
+    } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
     }
   });
