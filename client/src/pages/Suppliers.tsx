@@ -138,7 +138,7 @@ export default function Suppliers() {
       {/* Table */}
       <div className="border rounded-lg bg-card">
         <Table>
-          <TableHeader>
+          <TableHeader className="bg-muted/50">
             <TableRow>
               <TableHead>{t("suppliers_page.col_name")}</TableHead>
               <TableHead>{t("suppliers_page.col_phone")}</TableHead>
@@ -153,12 +153,15 @@ export default function Suppliers() {
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
-                  {t("common.no_data")}
+                <TableCell colSpan={8}>
+                  <div className="py-12 text-center text-muted-foreground space-y-3">
+                    <Truck className="w-10 h-10 mx-auto opacity-30" />
+                    <p>{t("common.no_data")}</p>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : filtered.map(s => (
-              <TableRow key={s.id}>
+              <TableRow key={s.id} className="hover:bg-muted/30 transition-colors">
                 <TableCell className="font-medium">{s.name}</TableCell>
                 <TableCell className="text-sm">{s.phone || "—"}</TableCell>
                 <TableCell className="text-sm">
@@ -187,10 +190,10 @@ export default function Suppliers() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="icon" onClick={() => openDetail(s.id)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDetail(s.id)}>
                       <Eye className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(s)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}>
                       <Edit2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -386,7 +389,7 @@ export default function Suppliers() {
                       </div>
                     </div>
                     <Table>
-                      <TableHeader>
+                      <TableHeader className="bg-muted/50">
                         <TableRow>
                           <TableHead>{t("suppliers_page.invoice_no")}</TableHead>
                           <TableHead>{t("suppliers_page.invoice_date")}</TableHead>

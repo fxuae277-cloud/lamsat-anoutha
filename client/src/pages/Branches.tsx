@@ -73,7 +73,7 @@ export default function Branches() {
 
       <div className="border rounded-lg bg-card">
         <Table>
-          <TableHeader>
+          <TableHeader className="bg-muted/50">
             <TableRow>
               <TableHead>#</TableHead>
               <TableHead>{t("settings.branch_name") || "اسم الفرع"}</TableHead>
@@ -86,14 +86,14 @@ export default function Branches() {
             {branches.length === 0 ? (
               <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">{t("common.no_data")}</TableCell></TableRow>
             ) : branches.map((b, i) => (
-              <TableRow key={b.id}>
+              <TableRow key={b.id} className="hover:bg-muted/30 transition-colors">
                 <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                 <TableCell className="font-medium">{b.name}</TableCell>
                 <TableCell>{(b as any).address || "—"}</TableCell>
                 <TableCell>{(b as any).phone || "—"}</TableCell>
                 {isOwnerOrAdmin && (
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(b)}><Edit2 className="w-4 h-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(b)}><Edit2 className="w-4 h-4" /></Button>
                   </TableCell>
                 )}
               </TableRow>

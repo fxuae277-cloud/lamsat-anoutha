@@ -302,7 +302,7 @@ export default function InventoryOverview() {
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader className="bg-muted/40 sticky top-0 z-10">
+                  <TableHeader className="bg-muted/50 sticky top-0 z-10">
                     <TableRow>
                       <TableHead className="w-10 text-center">#</TableHead>
                       <TableHead className="w-14">صورة</TableHead>
@@ -500,7 +500,7 @@ export default function InventoryOverview() {
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader className="bg-muted/40">
+                  <TableHeader className="bg-muted/50">
                     <TableRow>
                       <TableHead className="w-10 text-center">#</TableHead>
                       <TableHead>{t("inv_overview.col_date")}</TableHead>

@@ -416,7 +416,7 @@ export default function Products() {
       {/* Table */}
       <div className="border rounded-lg bg-card">
         <Table>
-          <TableHeader>
+          <TableHeader className="bg-muted/50">
             <TableRow>
               <TableHead className="w-8 text-center">#</TableHead>
               <TableHead className="w-10">{t("products.image")}</TableHead>
@@ -437,12 +437,12 @@ export default function Products() {
           </TableHeader>
           <TableBody>
             {filteredProducts.length === 0 ? (
-              <TableRow><TableCell colSpan={9} className="text-center py-10 text-muted-foreground">{t("products.no_products")}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9}><div className="py-12 text-center text-muted-foreground space-y-3"><Package className="w-10 h-10 mx-auto opacity-30" /><p>{t("products.no_products")}</p></div></TableCell></TableRow>
             ) : filteredProducts.map((p, idx) => {
               const catName = categories.find((c: any) => c.id === p.categoryId)?.name ?? "—";
               const stock = p.totalStock ?? 0;
               return (
-              <TableRow key={p.id} className={!p.active ? "opacity-60" : ""}>
+              <TableRow key={p.id} className={`hover:bg-muted/30 transition-colors${!p.active ? " opacity-60" : ""}`}>
                 <TableCell className="text-center text-xs text-muted-foreground">{idx + 1}</TableCell>
                 <TableCell>
                   <div
@@ -487,13 +487,13 @@ export default function Products() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="icon" title="التفاصيل" onClick={() => setDetailProductId(p.id)} data-testid={`button-detail-product-${p.id}`}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="التفاصيل" onClick={() => setDetailProductId(p.id)} data-testid={`button-detail-product-${p.id}`}>
                       <Eye className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" title="تعديل" onClick={() => openEdit(p)} data-testid={`button-edit-product-${p.id}`}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="تعديل" onClick={() => openEdit(p)} data-testid={`button-edit-product-${p.id}`}>
                       <Edit2 className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" title="حذف" onClick={() => setDeleteConfirmId(p.id)} data-testid={`button-delete-product-${p.id}`}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="حذف" onClick={() => setDeleteConfirmId(p.id)} data-testid={`button-delete-product-${p.id}`}>
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>
@@ -709,7 +709,7 @@ export default function Products() {
                   </Button>
                 </div>
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="bg-muted/50">
                     <TableRow>
                       <TableHead>{t("products.variant_barcode")}</TableHead>
                       <TableHead>{t("products.variant_color")}</TableHead>
@@ -747,7 +747,7 @@ export default function Products() {
                   <p className="text-center py-8 text-muted-foreground">{t("products.no_inventory_data")}</p>
                 ) : (
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="bg-muted/50">
                       <TableRow>
                         <TableHead>{t("products.location_name")}</TableHead>
                         <TableHead>{t("products.branch")}</TableHead>

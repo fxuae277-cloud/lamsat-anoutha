@@ -471,7 +471,10 @@ export default function Invoices() {
           {isLoading ? (
             <div className="py-12 text-center text-muted-foreground">{t("app.loading")}</div>
           ) : salesData.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground">{t("invoices.no_invoices")}</div>
+            <div className="py-12 text-center text-muted-foreground space-y-3">
+              <FileSpreadsheet className="w-10 h-10 mx-auto opacity-30" />
+              <p>{t("invoices.no_invoices")}</p>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -488,7 +491,7 @@ export default function Invoices() {
                 </TableHeader>
                 <TableBody>
                   {salesData.map((s: any) => (
-                    <TableRow key={s.id} data-testid={`row-invoice-${s.id}`}>
+                    <TableRow key={s.id} className="hover:bg-muted/30 transition-colors" data-testid={`row-invoice-${s.id}`}>
                       <TableCell className="font-mono font-bold">{s.invoiceNumber || `#${s.id}`}</TableCell>
                       {isOwnerOrAdmin && <TableCell>{s.branchName || "—"}</TableCell>}
                       <TableCell>{s.cashierName || "—"}</TableCell>
@@ -507,6 +510,7 @@ export default function Invoices() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="h-8 w-8"
                           onClick={() => { setDetailSaleId(s.id); setDetailOpen(true); }}
                           data-testid={`button-view-invoice-${s.id}`}
                         >

@@ -260,7 +260,7 @@ export default function Categories() {
       {/* الجدول */}
       <div className="border rounded-lg bg-card">
         <Table>
-          <TableHeader>
+          <TableHeader className="bg-muted/50">
             <TableRow>
               <TableHead className="w-10">#</TableHead>
               <TableHead className="w-12">الصورة</TableHead>
@@ -286,7 +286,7 @@ export default function Categories() {
               const hasChildren = subCount(c.id) > 0;
               const isCollapsed = collapsed.has(c.id);
               return (
-                <TableRow key={c.id} className={c.depth === 1 ? "bg-muted/30" : ""}>
+                <TableRow key={c.id} className={`hover:bg-muted/30 transition-colors${c.depth === 1 ? " bg-muted/20" : ""}`}>
                   <TableCell className="text-muted-foreground text-xs">{i + 1}</TableCell>
 
                   {/* صورة */}

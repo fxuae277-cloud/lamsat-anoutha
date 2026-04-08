@@ -194,7 +194,7 @@ function SuppliersTab() {
                 </TableRow>
               )}
               {filtered.map(s => (
-                <TableRow key={s.id} data-testid={`row-supplier-${s.id}`}>
+                <TableRow key={s.id} className="hover:bg-muted/30 transition-colors" data-testid={`row-supplier-${s.id}`}>
                   <TableCell className="font-medium">{s.name}</TableCell>
                   <TableCell className="font-mono text-sm">{s.phone || "—"}</TableCell>
                   <TableCell>{s.city || "—"}</TableCell>
@@ -212,13 +212,13 @@ function SuppliersTab() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(s)} data-testid={`button-edit-supplier-${s.id}`} title={t("common.edit")}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)} data-testid={`button-edit-supplier-${s.id}`} title={t("common.edit")}>
                         <Edit className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => openPayment(s)} data-testid={`button-pay-supplier-${s.id}`} title={t("purchases.record_payment")}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openPayment(s)} data-testid={`button-pay-supplier-${s.id}`} title={t("purchases.record_payment")}>
                         <CheckCircle2 className="w-4 h-4 text-green-600" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => { setStatementSupplierId(s.id); setShowStatement(true); }} data-testid={`button-statement-supplier-${s.id}`} title={t("customers.statement")}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setStatementSupplierId(s.id); setShowStatement(true); }} data-testid={`button-statement-supplier-${s.id}`} title={t("customers.statement")}>
                         <FileText className="w-4 h-4" />
                       </Button>
                     </div>
@@ -451,7 +451,7 @@ function SupplierStatementDialog({ open, onOpenChange, supplierId }: { open: boo
               </div>
 
               <Table>
-                <TableHeader>
+                <TableHeader className="bg-muted/50">
                   <TableRow>
                     <TableHead>{t("common.date")}</TableHead>
                     <TableHead>{t("common.type")}</TableHead>

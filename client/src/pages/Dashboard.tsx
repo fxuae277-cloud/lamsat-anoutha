@@ -253,7 +253,7 @@ export default function Dashboard() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b bg-muted/40">
+                    <tr className="border-b bg-muted/50">
                       <th className="text-right py-3 px-4 font-medium text-muted-foreground">رقم الفاتورة</th>
                       <th className="text-right py-3 px-4 font-medium text-muted-foreground">الفرع</th>
                       <th className="text-right py-3 px-4 font-medium text-muted-foreground">الكاشير</th>
@@ -264,7 +264,7 @@ export default function Dashboard() {
                   </thead>
                   <tbody>
                     {salesData.map((sale) => (
-                      <tr key={sale.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                      <tr key={sale.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                         <td className="py-3 px-4 font-mono text-xs">{sale.invoiceNumber}</td>
                         <td className="py-3 px-4">{sale.branchName ?? "—"}</td>
                         <td className="py-3 px-4">{sale.cashierName ?? "—"}</td>

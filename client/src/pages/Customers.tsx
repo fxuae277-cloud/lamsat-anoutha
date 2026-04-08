@@ -323,7 +323,7 @@ table{width:100%;border-collapse:collapse;margin:15px 0;font-size:12px}th,td{bor
       <div className="border rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead className="cursor-pointer" onClick={() => toggleSort("name")}><span className="flex items-center gap-1">{t("customers.name")} <ArrowUpDown className="w-3 h-3" /></span></TableHead>
                 <TableHead>{t("customers.phone")}</TableHead>

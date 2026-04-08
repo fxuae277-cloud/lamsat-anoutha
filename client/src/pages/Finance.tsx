@@ -217,7 +217,7 @@ export default function Finance() {
 
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-muted/50">
                 <TableRow>
                   <TableHead className="text-right">#</TableHead>
                   <TableHead className="text-right">{t("finance_page.table_time")}</TableHead>
@@ -266,7 +266,7 @@ export default function Finance() {
 
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-muted/50">
                 <TableRow>
                   <TableHead className="text-right">#</TableHead>
                   <TableHead className="text-right">{t("finance_page.table_time")}</TableHead>
@@ -344,7 +344,7 @@ export default function Finance() {
               <h3 className="font-semibold text-sm">{t("finance_page.closed_shifts")} — {selectedDate}</h3>
             </div>
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-muted/50">
                 <TableRow>
                   <TableHead className="text-right">#</TableHead>
                   {isAdmin && <TableHead className="text-right">{t("finance_page.table_branch")}</TableHead>}

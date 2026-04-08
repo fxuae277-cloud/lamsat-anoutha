@@ -74,7 +74,7 @@ function BalancesTab() {
 
       <div className="border rounded-md">
         <Table>
-          <TableHeader>
+          <TableHeader className="bg-muted/50">
             <TableRow>
               <TableHead>{t("inv_balances.product")}</TableHead>
               <TableHead>{t("products.barcode")}</TableHead>
@@ -310,7 +310,7 @@ function TransfersTab() {
             </div>
             <div className="max-h-[400px] overflow-auto">
               <Table>
-                <TableHeader>
+                <TableHeader className="bg-muted/50">
                   <TableRow>
                     <TableHead>{t("inv_balances.product")}</TableHead>
                     <TableHead>{t("products.variant_color")}</TableHead>

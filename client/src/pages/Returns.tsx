@@ -183,7 +183,7 @@ export default function Returns() {
       </div>
 
       <div className="bg-card border shadow-sm rounded-xl overflow-hidden">
-        <div className="p-4 border-b flex items-center gap-4 bg-muted/20">
+        <div className="p-4 border-b flex flex-wrap items-end gap-3 bg-muted/30">
           {(user?.role === "owner" || user?.role === "admin") && (
             <Select value={branchFilter} onValueChange={setBranchFilter}>
               <SelectTrigger className="w-48 bg-background" data-testid="select-returns-branch">
@@ -216,7 +216,7 @@ export default function Returns() {
             {filteredReturns.length === 0 ? (
               <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">{t("returns.no_returns")}</TableCell></TableRow>
             ) : filteredReturns.map((ret: any) => (
-              <TableRow key={ret.id} data-testid={`row-return-${ret.id}`}>
+              <TableRow key={ret.id} className="hover:bg-muted/30 transition-colors" data-testid={`row-return-${ret.id}`}>
                 <TableCell>
                   <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs">
                     {ret.return_number}
@@ -237,10 +237,10 @@ export default function Returns() {
                   {fmtDate(ret.created_at)}
                 </TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
+                  <Button variant="ghost" size="icon" className="h-8 w-8"
                     onClick={() => { setSelectedReturn(ret); setDetailOpen(true); }}
                     data-testid={`button-view-return-${ret.id}`}>
-                    <Eye className="w-3.5 h-3.5" />
+                    <Eye className="w-4 h-4" />
                   </Button>
                 </TableCell>
               </TableRow>
@@ -304,7 +304,7 @@ export default function Returns() {
                     {t("returns.invoice_items")}
                   </div>
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="bg-muted/50">
                       <TableRow>
                         <TableHead>{t("returns.table_product")}</TableHead>
                         <TableHead>{t("returns.table_sold_qty")}</TableHead>
@@ -444,7 +444,7 @@ export default function Returns() {
                 <div className="border rounded-lg overflow-hidden text-sm">
                   <div className="bg-muted/30 px-4 py-2 font-bold border-b">{t("returns.returned_items")}</div>
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="bg-muted/50">
                       <TableRow>
                         <TableHead>{t("returns.table_product")}</TableHead>
                         <TableHead>{t("returns.table_qty")}</TableHead>
