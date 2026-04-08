@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-07 (جلسة 6)_
+_آخر تحديث: 2026-04-08 (جلسة 7)_
 
 ---
 
@@ -65,7 +65,7 @@ _آخر تحديث: 2026-04-07 (جلسة 6)_
 - [x] فلاتر: تاريخ من/إلى، الفرع، طريقة الدفع
 - [x] إجمالي حي يتحدث بالفلاتر
 
-### واجهة المستخدم — محدّث جلسة 6
+### واجهة المستخدم — محدّث جلسة 7
 - [x] Sidebar: تكبير خطوط القائمة
 - [x] ترجمات عربية مكتملة (branch_address, branch_phone, branches_desc)
 - [x] SessionStart hook لقراءة CONTEXT.md تلقائياً
@@ -77,6 +77,11 @@ _آخر تحديث: 2026-04-07 (جلسة 6)_
 - [x] auth/me: يُرجع branchName
 - [x] الفئات الهرمية: عرض أم+فرعية في كل القوائم + فلترة تشمل الفرعية (BranchStock/Products/Purchases/POS/MobileProducts)
 - [x] Finance.tsx: إصلاح عرض اسم الفرع في الجداول الثلاثة (دفتر النقد / دفتر البنك / فرق الصندوق) → اسم + موقع
+- [x] `fmtDate()` / `fmtDateTime()` / `fmtTime()` موحدة في كل الصفحات — لا `toLocaleDateString`
+- [x] مكوّن `DateInput` — يحل مشكلة أرقام عربية في Chrome؛ حقل نص DD/MM/YYYY + picker مخفي
+- [x] توحيد تنسيق الجداول: `bg-muted/50` للرؤوس، `hover:bg-muted/30` للصفوف، `h-8 w-8` لأزرار الإجراءات
+- [x] أيقونة التقويم في DateInput: `bg-primary/10 text-primary border-primary/30` — مميزة بلون رئيسي في كل مكان
+- [x] عرض اسم الفرع مع العنوان في كل مكان "اسم - عنوان" (جلسة 7): server (storage/routes/exports/mobile-routes) + frontend (Settings/Orders/Expenses)
 
 ### نظرة عامة على المخزون (InventoryOverview) — جديد جلسة 5
 - [x] إعادة تصميم كاملة: 4 KPI cards بتدرجات لونية
