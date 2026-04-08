@@ -100,7 +100,7 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
           onChange={handleTextChange}
           disabled={disabled}
           className={cn(
-            "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 pr-8 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+            "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 pl-10 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
             className
           )}
           {...props}
@@ -112,7 +112,7 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
           tabIndex={-1}
           disabled={disabled}
           onClick={openPicker}
-          className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+          className="absolute left-0 top-0 h-full px-2 flex items-center border-r border-input text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors disabled:opacity-50 rounded-l-md"
           aria-label="اختر تاريخ"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
