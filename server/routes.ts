@@ -3836,6 +3836,126 @@ export async function registerRoutes(
     }
   });
 
+  // ══════════════════════════════════════════════════════════════════════
+  // النظام المالي الكامل — Financial System APIs
+  // ══════════════════════════════════════════════════════════════════════
+
+  /** قائمة الدخل */
+  app.get("/api/reports/income-statement", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const from = req.query.from as string;
+      const to   = req.query.to   as string;
+      if (!from || !to) return res.status(400).json({ message: "from & to مطلوبان (YYYY-MM-DD)" });
+      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      res.json(await storage.getIncomeStatement(from, to, branchId));
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  /** الميزانية العمومية */
+  app.get("/api/reports/balance-sheet", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const asOf = (req.query.asOf as string) || new Date().toISOString().slice(0, 10);
+      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      res.json(await storage.getBalanceSheet(asOf, branchId));
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  /** كشف الصندوق اليومي مع الرصيد الجاري */
+  app.get("/api/finance/daily-statement", requireAuth, async (req, res) => {
+    try {
+      const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+      const scope = (req as any).branchScope;
+      const branchId = req.query.branchId
+        ? Number(req.query.branchId)
+        : scope?.mode === "branch" ? scope.branchId : undefined;
+      res.json(await storage.getDailyCashStatement(date, branchId));
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  /** التحقق من رصيد الصندوق */
+  app.get("/api/finance/check-balance", requireAuth, async (req, res) => {
+    try {
+      const branchId = req.query.branchId
+        ? Number(req.query.branchId)
+        : (req.session as any).branchId;
+      if (!branchId) return res.status(400).json({ message: "branchId مطلوب" });
+      res.json(await storage.checkCashBalance(branchId));
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  /** المصروفات حسب التصنيف */
+  app.get("/api/reports/expenses-by-category", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const from = req.query.from as string;
+      const to   = req.query.to   as string;
+      if (!from || !to) return res.status(400).json({ message: "from & to مطلوبان" });
+      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      res.json(await storage.getExpensesByCategory(from, to, branchId));
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  /** التدفقات النقدية */
+  app.get("/api/reports/cash-flow", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const from = req.query.from as string;
+      const to   = req.query.to   as string;
+      if (!from || !to) return res.status(400).json({ message: "from & to مطلوبان" });
+      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      res.json(await storage.getCashFlowStatement(from, to, branchId));
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  /** تصنيفات المصروفات */
+  app.get("/api/expense-categories", requireAuth, async (_req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT * FROM expense_categories WHERE is_active = TRUE ORDER BY sort_order`
+      );
+      res.json(result.rows);
+    } catch {
+      // جدول غير موجود بعد → إرجاع القائمة الثابتة
+      res.json([
+        { code: "supplies",    name: "مستلزمات" },
+        { code: "rent",        name: "إيجار" },
+        { code: "salary",      name: "رواتب" },
+        { code: "transport",   name: "مواصلات" },
+        { code: "maintenance", name: "صيانة" },
+        { code: "electricity", name: "كهرباء ومياه" },
+        { code: "phone",       name: "اتصالات" },
+        { code: "marketing",   name: "تسويق" },
+        { code: "shipping",    name: "شحن" },
+        { code: "taxes",       name: "ضرائب ورسوم" },
+        { code: "other",       name: "أخرى" },
+      ]);
+    }
+  });
+
+  /** تشغيل migration المالي (seed chart of accounts) */
+  app.post("/api/finance/run-migration", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const migPath = path.join(process.cwd(), "migrations", "0010_financial_system.sql");
+      const sql = fs.readFileSync(migPath, "utf8");
+      await pool.query(sql);
+      res.json({ success: true, message: "تم تشغيل المايجريشن بنجاح" });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+    }
+  });
+
   registerExportRoutes(app);
   registerBackupRoutes(app);
   registerMobileRoutes(app);

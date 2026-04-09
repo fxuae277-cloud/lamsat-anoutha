@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-08 (جلسة 7)_
+_آخر تحديث: 2026-04-09 (جلسة 8)_
 
 ---
 
@@ -65,6 +65,18 @@ _آخر تحديث: 2026-04-08 (جلسة 7)_
 - [x] فلاتر: تاريخ من/إلى، الفرع، طريقة الدفع
 - [x] إجمالي حي يتحدث بالفلاتر
 
+### النظام المالي الكامل — جديد جلسة 8
+- [x] Migration 0010: دليل حسابات موسع (7 مجموعات، 60+ حساب) + account_balances + expense_categories
+- [x] storage.ts: `getIncomeStatement` / `getBalanceSheet` / `getDailyCashStatement` / `checkCashBalance` / `getExpensesByCategory` / `getCashFlowStatement`
+- [x] API جديدة: `/api/reports/income-statement` / `/api/reports/balance-sheet` / `/api/reports/cash-flow` / `/api/reports/expenses-by-category` / `/api/finance/check-balance` / `/api/finance/daily-statement` / `/api/expense-categories` / `/api/finance/run-migration`
+- [x] Reports.tsx: كتابة كاملة — 9 تبويبات (نظرة عامة / قائمة الدخل / مبيعات / مدفوعات / منتجات / فئات / ورديات / مقارنة الفروع / التدفقات النقدية) + Recharts charts
+- [x] Finance.tsx: عمود الرصيد الجاري + زر طباعة HTML + 6 KPI cards + تحسين التصميم
+- [x] Expenses.tsx: تحقق من رصيد الصندوق قبل الصرف (قاعدة "لا صرف بدون رصيد") + تحذير ذكي + منع الحفظ
+- [x] قائمة الدخل: إجمالي المبيعات − COGS = إجمالي الربح − مصروفات = صافي الربح + هامش%
+- [x] مقارنة الفروع: شناص / لوى مع BarChart + كروت تفصيلية + تصدير CSV
+- [x] التدفقات النقدية: تشغيلية + تمويلية + بنكية + صافي التغير
+- [x] نظام القيود المزدوجة: autoJournal.ts موجود + حسابات صحيحة (مدين = دائن)
+
 ### واجهة المستخدم — محدّث جلسة 7
 - [x] Sidebar: تكبير خطوط القائمة
 - [x] ترجمات عربية مكتملة (branch_address, branch_phone, branches_desc)
@@ -113,17 +125,20 @@ _آخر تحديث: 2026-04-08 (جلسة 7)_
 - أسماء منتجات غير منظمة في DB
 - Inventory anomalies في بعض الفروع
 - سجل الحركات: لا يعرض "الكمية قبل/بعد" (يحتاج عمود في DB + API)
+- Migration 0010 يحتاج تشغيل على Railway قبل ظهور البيانات المالية الجديدة
 
 ---
 
 ## ⏳ القادم
-- [ ] تشغيل migration على Railway (0007 + 0008)
+- [ ] تشغيل migration على Railway (0007 + 0008 + 0009 + **0010**)
+  - استخدام: `POST /api/finance/run-migration` (يتطلب تسجيل دخول owner)
 - [ ] ربط WhatsApp automation
 - [ ] تنظيف بيانات المنتجات (أسماء مكررة وغير منظمة)
 - [ ] فلاتر Dashboard إضافية
-- [ ] صفحة تقارير مفصلة
 - [ ] إضافة عمود `qty_before` / `qty_after` في جدول inventory_ledger + API
 - [ ] مراجعة صفحة التحويلات (Transfers) بشكل مستقل عن صفحة المخزون
+- [ ] الميزانية العمومية في Reports.tsx (تبويب جديد)
+- [ ] صفحة دليل الحسابات (Accounts.tsx) ربطها بالنظام الجديد
 
 ---
 

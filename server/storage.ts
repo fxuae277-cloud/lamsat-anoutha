@@ -5355,6 +5355,304 @@ export class DatabaseStorage implements IStorage {
       note: data.note ?? null,
     });
   }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // النظام المالي الكامل — Financial System
+  // ══════════════════════════════════════════════════════════════════════
+
+  /** قائمة الدخل: إجمالي المبيعات − COGS = إجمالي الربح − المصروفات = صافي الربح */
+  async getIncomeStatement(from: string, to: string, branchId?: number): Promise<any> {
+    const branchFilter = branchId ? `AND b.id = ${branchId}` : "";
+    const branchExpFilter = branchId ? `AND e.branch_id = ${branchId}` : "";
+
+    // إجمالي المبيعات + COGS من جدول sales
+    const salesRes = await pool.query(`
+      SELECT
+        COALESCE(SUM(s.total::numeric), 0)         AS total_revenue,
+        COALESCE(SUM(s.vat::numeric), 0)           AS total_vat,
+        COALESCE(SUM(s.cogs_total::numeric), 0)    AS total_cogs,
+        COALESCE(SUM(s.gross_profit::numeric), 0)  AS gross_profit,
+        COUNT(*)                                    AS invoice_count,
+        COALESCE(SUM(CASE WHEN s.payment_method='cash' THEN s.total::numeric ELSE 0 END), 0) AS cash_sales,
+        COALESCE(SUM(CASE WHEN s.payment_method='card' THEN s.total::numeric ELSE 0 END), 0) AS card_sales,
+        COALESCE(SUM(CASE WHEN s.payment_method='bank_transfer' THEN s.total::numeric ELSE 0 END), 0) AS bank_sales
+      FROM sales s
+      JOIN branches b ON b.id = s.branch_id
+      WHERE DATE(s.created_at) >= $1 AND DATE(s.created_at) <= $2 ${branchFilter}
+    `, [from, to]);
+
+    // مبيعات الطلبات
+    const ordRes = await pool.query(`
+      SELECT
+        COALESCE(SUM(o.total::numeric), 0)        AS total_revenue,
+        COALESCE(SUM(o.cogs_total::numeric), 0)   AS total_cogs,
+        COALESCE(SUM(o.gross_profit::numeric), 0) AS gross_profit
+      FROM orders o
+      JOIN branches b ON b.id = o.branch_id
+      WHERE o.status = 'paid' AND DATE(o.created_at) >= $1 AND DATE(o.created_at) <= $2 ${branchFilter}
+    `, [from, to]);
+
+    // المرتجعات
+    const retRes = await pool.query(`
+      SELECT COALESCE(SUM(sr.refund_amount::numeric), 0) AS total_returns
+      FROM sale_returns sr
+      JOIN branches b ON b.id = sr.branch_id
+      WHERE DATE(sr.created_at) >= $1 AND DATE(sr.created_at) <= $2 ${branchFilter}
+    `, [from, to]);
+
+    // المصروفات حسب التصنيف
+    const expRes = await pool.query(`
+      SELECT
+        e.category,
+        COALESCE(SUM(e.amount::numeric), 0) AS total
+      FROM expenses e
+      WHERE e.date >= $1 AND e.date <= $2 ${branchExpFilter}
+      GROUP BY e.category
+      ORDER BY total DESC
+    `, [from, to]);
+
+    // إجمالي المصروفات
+    const totalExpRes = await pool.query(`
+      SELECT COALESCE(SUM(e.amount::numeric), 0) AS total_expenses
+      FROM expenses e
+      WHERE e.date >= $1 AND e.date <= $2 ${branchExpFilter}
+    `, [from, to]);
+
+    const s = salesRes.rows[0];
+    const o = ordRes.rows[0];
+    const totalRevenue = parseFloat(s.total_revenue) + parseFloat(o.total_revenue);
+    const totalCogs    = parseFloat(s.total_cogs)    + parseFloat(o.total_cogs);
+    const grossProfit  = totalRevenue - totalCogs;
+    const totalReturns = parseFloat(retRes.rows[0].total_returns);
+    const netRevenue   = totalRevenue - totalReturns;
+    const totalExpenses = parseFloat(totalExpRes.rows[0].total_expenses);
+    const netProfit    = grossProfit - totalExpenses;
+    const margin       = netRevenue > 0 ? (netProfit / netRevenue) * 100 : 0;
+
+    return {
+      from, to, branchId: branchId ?? null,
+      revenue: {
+        total: totalRevenue.toFixed(3),
+        netRevenue: netRevenue.toFixed(3),
+        cashSales: parseFloat(s.cash_sales).toFixed(3),
+        cardSales: parseFloat(s.card_sales).toFixed(3),
+        bankSales: parseFloat(s.bank_sales).toFixed(3),
+        returns: totalReturns.toFixed(3),
+        invoiceCount: parseInt(s.invoice_count),
+        vat: parseFloat(s.total_vat).toFixed(3),
+      },
+      cogs: { total: totalCogs.toFixed(3) },
+      grossProfit: grossProfit.toFixed(3),
+      grossMargin: netRevenue > 0 ? ((grossProfit / netRevenue) * 100).toFixed(1) : "0.0",
+      expenses: {
+        total: totalExpenses.toFixed(3),
+        byCategory: expRes.rows.map(r => ({ category: r.category, total: parseFloat(r.total).toFixed(3) })),
+      },
+      netProfit: netProfit.toFixed(3),
+      netMargin: margin.toFixed(1),
+    };
+  }
+
+  /** الميزانية العمومية: الأصول والخصوم وحقوق الملكية */
+  async getBalanceSheet(asOf: string, branchId?: number): Promise<any> {
+    const branchCond = branchId ? `AND je.branch_id = ${branchId}` : "";
+
+    const result = await pool.query(`
+      SELECT
+        a.code, a.name, a.type, a.level, a.parent_id,
+        COALESCE(SUM(jel.debit::numeric), 0)  AS total_debit,
+        COALESCE(SUM(jel.credit::numeric), 0) AS total_credit
+      FROM accounts a
+      LEFT JOIN journal_entry_lines jel ON jel.account_id = a.id
+      LEFT JOIN journal_entries je ON je.id = jel.entry_id
+        AND je.status = 'posted'
+        AND je.date <= $1
+        ${branchCond}
+      WHERE a.active = TRUE
+      GROUP BY a.code, a.name, a.type, a.level, a.parent_id
+      ORDER BY a.code
+    `, [asOf]);
+
+    const rows = result.rows;
+    const calcBalance = (r: any) => {
+      const d = parseFloat(r.total_debit);
+      const c = parseFloat(r.total_credit);
+      if (r.type === 'asset' || r.type === 'expense') return d - c;
+      return c - d;
+    };
+
+    const assets     = rows.filter(r => r.type === 'asset'     && r.level >= 2);
+    const liabilities = rows.filter(r => r.type === 'liability' && r.level >= 2);
+    const equity      = rows.filter(r => r.type === 'equity'    && r.level >= 2);
+
+    const sumLevel2 = (arr: any[]) => arr.filter(r => r.level === 2).reduce((s, r) => s + calcBalance(r), 0);
+
+    const totalAssets      = sumLevel2(assets);
+    const totalLiabilities = sumLevel2(liabilities);
+    const totalEquity      = sumLevel2(equity);
+
+    // حساب الأرباح غير الموزعة التلقائية
+    const incomeRes = await pool.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN a.type IN ('revenue') THEN jel.credit::numeric - jel.debit::numeric ELSE 0 END), 0) AS revenues,
+        COALESCE(SUM(CASE WHEN a.type IN ('expense') THEN jel.debit::numeric - jel.credit::numeric ELSE 0 END), 0) AS expenses
+      FROM journal_entry_lines jel
+      JOIN accounts a ON a.id = jel.account_id
+      JOIN journal_entries je ON je.id = jel.entry_id AND je.status = 'posted' AND je.date <= $1
+      ${branchId ? `AND je.branch_id = ${branchId}` : ""}
+    `, [asOf]);
+    const currentPeriodProfit = parseFloat(incomeRes.rows[0].revenues) - parseFloat(incomeRes.rows[0].expenses);
+
+    return {
+      asOf, branchId: branchId ?? null,
+      assets:      assets.map(r => ({ code: r.code, name: r.name, level: r.level, balance: calcBalance(r).toFixed(3) })),
+      liabilities: liabilities.map(r => ({ code: r.code, name: r.name, level: r.level, balance: calcBalance(r).toFixed(3) })),
+      equity:      equity.map(r => ({ code: r.code, name: r.name, level: r.level, balance: calcBalance(r).toFixed(3) })),
+      totals: {
+        assets:           totalAssets.toFixed(3),
+        liabilities:      totalLiabilities.toFixed(3),
+        equity:           totalEquity.toFixed(3),
+        currentPeriodProfit: currentPeriodProfit.toFixed(3),
+        totalLiabilitiesAndEquity: (totalLiabilities + totalEquity + currentPeriodProfit).toFixed(3),
+      },
+    };
+  }
+
+  /** كشف الصندوق اليومي مع الرصيد الجاري */
+  async getDailyCashStatement(date: string, branchId?: number): Promise<any> {
+    const branchFilter = branchId ? `AND cl.branch_id = ${branchId}` : "";
+
+    const entriesRes = await pool.query(`
+      SELECT cl.*, u.name AS user_name, b.name AS branch_name, b.address AS branch_address
+      FROM cash_ledger cl
+      LEFT JOIN users u ON u.id = cl.created_by
+      LEFT JOIN branches b ON b.id = cl.branch_id
+      WHERE cl.date = $1 ${branchFilter}
+      ORDER BY cl.created_at ASC
+    `, [date]);
+
+    const entries = entriesRes.rows;
+    let running = 0;
+    const withBalance = entries.map(e => {
+      running += parseFloat(e.amount_in || "0") - parseFloat(e.amount_out || "0");
+      return { ...e, runningBalance: running.toFixed(3) };
+    });
+
+    // ملخص
+    const totals = entries.reduce((acc, e) => {
+      const amtIn  = parseFloat(e.amount_in || "0");
+      const amtOut = parseFloat(e.amount_out || "0");
+      acc.totalIn  += amtIn;
+      acc.totalOut += amtOut;
+      if (e.type === 'sale')       acc.cashSales     += amtIn;
+      if (e.type === 'expense')    acc.cashExpenses  += amtOut;
+      if (e.type === 'deposit')    acc.deposits      += amtIn;
+      if (e.type === 'withdrawal') acc.withdrawals   += amtOut;
+      return acc;
+    }, { totalIn: 0, totalOut: 0, cashSales: 0, cashExpenses: 0, deposits: 0, withdrawals: 0 });
+
+    // رصيد الافتتاح (آخر يوم سابق)
+    const prevRes = await pool.query(`
+      SELECT COALESCE(SUM(cl.amount_in::numeric) - SUM(cl.amount_out::numeric), 0) AS balance
+      FROM cash_ledger cl
+      WHERE cl.date < $1 ${branchFilter}
+    `, [date]);
+    const openingBalance = parseFloat(prevRes.rows[0].balance || "0");
+    const netCash = openingBalance + totals.totalIn - totals.totalOut;
+
+    return {
+      date, branchId: branchId ?? null,
+      entries: withBalance,
+      openingBalance: openingBalance.toFixed(3),
+      totalIn:      totals.totalIn.toFixed(3),
+      totalOut:     totals.totalOut.toFixed(3),
+      cashSales:    totals.cashSales.toFixed(3),
+      cashExpenses: totals.cashExpenses.toFixed(3),
+      deposits:     totals.deposits.toFixed(3),
+      withdrawals:  totals.withdrawals.toFixed(3),
+      netCash:      netCash.toFixed(3),
+      expectedClosing: netCash.toFixed(3),
+    };
+  }
+
+  /** التحقق من رصيد الصندوق قبل الصرف */
+  async checkCashBalance(branchId: number): Promise<{ balance: number; sufficient: boolean }> {
+    const res = await pool.query(`
+      SELECT COALESCE(SUM(cl.amount_in::numeric) - SUM(cl.amount_out::numeric), 0) AS balance
+      FROM cash_ledger cl
+      WHERE cl.branch_id = $1
+    `, [branchId]);
+    const balance = parseFloat(res.rows[0].balance || "0");
+    return { balance, sufficient: balance > 0 };
+  }
+
+  /** إحصائيات المصروفات حسب التصنيف */
+  async getExpensesByCategory(from: string, to: string, branchId?: number): Promise<any[]> {
+    const branchFilter = branchId ? `AND e.branch_id = ${branchId}` : "";
+    const res = await pool.query(`
+      SELECT
+        e.category,
+        COUNT(*)                              AS count,
+        COALESCE(SUM(e.amount::numeric), 0)  AS total,
+        COALESCE(SUM(CASE WHEN e.source = 'cash' THEN e.amount::numeric ELSE 0 END), 0)          AS cash_total,
+        COALESCE(SUM(CASE WHEN e.source = 'bank_transfer' THEN e.amount::numeric ELSE 0 END), 0) AS bank_total
+      FROM expenses e
+      WHERE e.date >= $1 AND e.date <= $2 ${branchFilter}
+      GROUP BY e.category
+      ORDER BY total DESC
+    `, [from, to]);
+    return res.rows;
+  }
+
+  /** تقرير التدفقات النقدية (مبسط) */
+  async getCashFlowStatement(from: string, to: string, branchId?: number): Promise<any> {
+    const bf = branchId ? `AND cl.branch_id = ${branchId}` : "";
+    const be = branchId ? `AND e.branch_id = ${branchId}` : "";
+
+    const cashRes = await pool.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN cl.type = 'sale'       THEN cl.amount_in::numeric  ELSE 0 END), 0) AS from_sales,
+        COALESCE(SUM(CASE WHEN cl.type = 'expense'    THEN cl.amount_out::numeric ELSE 0 END), 0) AS to_expenses,
+        COALESCE(SUM(CASE WHEN cl.type = 'deposit'    THEN cl.amount_in::numeric  ELSE 0 END), 0) AS deposits_in,
+        COALESCE(SUM(CASE WHEN cl.type = 'withdrawal' THEN cl.amount_out::numeric ELSE 0 END), 0) AS withdrawals_out,
+        COALESCE(SUM(cl.amount_in::numeric) - SUM(cl.amount_out::numeric), 0)                     AS net_change
+      FROM cash_ledger cl
+      WHERE cl.date >= $1 AND cl.date <= $2 ${bf}
+    `, [from, to]);
+
+    const bankRes = await pool.query(`
+      SELECT
+        COALESCE(SUM(bl.amount_in::numeric), 0)  AS total_in,
+        COALESCE(SUM(bl.amount_out::numeric), 0) AS total_out,
+        COALESCE(SUM(bl.amount_in::numeric) - SUM(bl.amount_out::numeric), 0) AS net_change
+      FROM bank_ledger bl
+      WHERE bl.date >= $1 AND bl.date <= $2 ${branchId ? `AND bl.branch_id = ${branchId}` : ""}
+    `, [from, to]);
+
+    const c = cashRes.rows[0];
+    const b = bankRes.rows[0];
+
+    return {
+      from, to, branchId: branchId ?? null,
+      operating: {
+        fromSales:    parseFloat(c.from_sales).toFixed(3),
+        toExpenses:   parseFloat(c.to_expenses).toFixed(3),
+        netOperating: (parseFloat(c.from_sales) - parseFloat(c.to_expenses)).toFixed(3),
+      },
+      financing: {
+        depositsIn:      parseFloat(c.deposits_in).toFixed(3),
+        withdrawalsOut:  parseFloat(c.withdrawals_out).toFixed(3),
+        netFinancing:    (parseFloat(c.deposits_in) - parseFloat(c.withdrawals_out)).toFixed(3),
+      },
+      bank: {
+        totalIn:    parseFloat(b.total_in).toFixed(3),
+        totalOut:   parseFloat(b.total_out).toFixed(3),
+        netChange:  parseFloat(b.net_change).toFixed(3),
+      },
+      cashNetChange: parseFloat(c.net_change).toFixed(3),
+      totalNetChange: (parseFloat(c.net_change) + parseFloat(b.net_change)).toFixed(3),
+    };
+  }
 }
 
 export const storage = new DatabaseStorage();

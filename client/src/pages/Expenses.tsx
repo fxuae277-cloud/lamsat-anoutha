@@ -90,6 +90,14 @@ export default function Expenses() {
   const { data: cashLedgerList = [] } = useQuery<CashLedger[]>({ queryKey: ["/api/ledger/cash"], queryFn: getQueryFn({ on401: "throw" }) });
   const { data: bankLedgerList = [] } = useQuery<BankLedger[]>({ queryKey: ["/api/ledger/bank"], queryFn: getQueryFn({ on401: "throw" }) });
 
+  // التحقق من رصيد الصندوق الحالي
+  const cashBalanceQuery = `/api/finance/check-balance${user?.branchId ? `?branchId=${user.branchId}` : ""}`;
+  const { data: cashBalance } = useQuery<{ balance: number; sufficient: boolean }>({
+    queryKey: [cashBalanceQuery],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    enabled: !!user?.branchId,
+  });
+
   const branchMap = Object.fromEntries(branchesList.map(b => [b.id, b.address ? `${b.name} - ${b.address}` : b.name]));
   const userBranchName = user?.branchId ? branchMap[user.branchId] : "—";
 
@@ -103,6 +111,15 @@ export default function Expenses() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      // التحقق من رصيد الصندوق قبل الصرف النقدي
+      if (newExpense.source === "cash" && cashBalance) {
+        const amount = parseFloat(newExpense.amount || "0");
+        if (amount > cashBalance.balance) {
+          throw new Error(
+            `رصيد الصندوق غير كافٍ — الرصيد الحالي: ${cashBalance.balance.toFixed(3)} ر.ع، المبلغ المطلوب: ${amount.toFixed(3)} ر.ع. يُقترح السحب من البنك أو تغيير طريقة الدفع.`
+          );
+        }
+      }
       await apiRequest("POST", "/api/expenses", {
         amount: newExpense.amount,
         source: newExpense.source,
@@ -114,6 +131,7 @@ export default function Expenses() {
     onSuccess: () => {
       toast({ title: "تم إضافة المصروف", description: "تم تسجيل المصروف وربطه بالفرع والشفت." });
       invalidateExpenses();
+      queryClient.invalidateQueries({ queryKey: [cashBalanceQuery] });
       setAddOpen(false);
       setNewExpense(emptyForm);
     },
@@ -279,6 +297,21 @@ export default function Expenses() {
           onChange={e => setValues({ ...values, notes: e.target.value })} />
       </div>
 
+      {/* تحذير رصيد الصندوق */}
+      {values.source === "cash" && cashBalance && (
+        parseFloat(values.amount || "0") > cashBalance.balance ? (
+          <div className="bg-red-50 border border-red-300 rounded-lg p-3 text-xs text-red-800">
+            ⚠️ <strong>رصيد غير كافٍ!</strong> رصيد الصندوق الحالي: <strong>{cashBalance.balance.toFixed(3)} ر.ع</strong>
+            <br />المبلغ المطلوب: <strong>{parseFloat(values.amount || "0").toFixed(3)} ر.ع</strong>
+            <br />اقتراح: قم بسحب من البنك أو غيّر طريقة الدفع إلى "تحويل بنكي".
+          </div>
+        ) : (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800">
+            ✅ رصيد الصندوق الحالي: <strong>{cashBalance.balance.toFixed(3)} ر.ع</strong> — كافٍ للصرف
+          </div>
+        )
+      )}
+
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
         💡 المصروف النقدي يُخصم تلقائياً من الصندوق | المصروف بالتحويل يُخصم من الحساب البنكي
       </div>
@@ -308,7 +341,10 @@ export default function Expenses() {
             {expenseFormContent(newExpense, setNewExpense)}
             <DialogFooter>
               <Button onClick={() => createMutation.mutate()}
-                disabled={createMutation.isPending || !newExpense.category || !newExpense.amount}
+                disabled={
+                  createMutation.isPending || !newExpense.category || !newExpense.amount ||
+                  (newExpense.source === "cash" && cashBalance != null && parseFloat(newExpense.amount || "0") > cashBalance.balance)
+                }
                 className="gap-2 bg-rose-600 hover:bg-rose-700 text-white"
                 data-testid="button-save-expense">
                 {createMutation.isPending ? "جارٍ الحفظ..." : <><Receipt className="w-4 h-4" />حفظ المصروف</>}
