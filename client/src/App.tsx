@@ -11,6 +11,7 @@ import Login from "@/pages/Login";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { MobileLayout } from "@/components/layout/MobileLayout";
 import { EMPLOYEE_ALLOWED_PATHS } from "@/config/sidebar";
+import { Component, ErrorInfo, ReactNode } from "react";
 
 import Dashboard from "@/pages/Dashboard";
 import Executive from "@/pages/Executive";
@@ -61,34 +62,56 @@ import MobileCustomers from "@/pages/mobile/MobileCustomers";
 import MobileProducts from "@/pages/mobile/MobileProducts";
 import MobileInventory from "@/pages/mobile/MobileInventory";
 
-import { ReactNode } from "react";
 import { useEnglishDigits } from "@/lib/useEnglishDigits";
 
-function PageLoading() {
-  return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-muted-foreground">جارٍ التحميل...</p>
-      </div>
-    </div>
-  );
+// ─── Error Boundary ──────────────────────────────────────────────────────────
+interface EBState { hasError: boolean; error?: Error }
+class PageErrorBoundary extends Component<{ children: ReactNode }, EBState> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError(error: Error): EBState {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[PageErrorBoundary]", error.message, info.componentStack);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 p-8 text-center" dir="rtl">
+          <div className="text-5xl">⚠️</div>
+          <h2 className="text-xl font-bold text-red-700">خطأ في تحميل الصفحة</h2>
+          <p className="text-sm text-muted-foreground max-w-md">{this.state.error?.message}</p>
+          <button
+            className="mt-2 px-4 py-2 bg-primary text-white rounded-lg text-sm"
+            onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
+// ─── Auth Guards ──────────────────────────────────────────────────────────────
+// Note: AuthenticatedRouter already handles isLoading + !user cases.
+// RequireOwner only needs to check role (data is guaranteed to be loaded here).
 function RequireOwner({ children }: { children: ReactNode }) {
-  const { data, isLoading } = useAuth();
+  const { data } = useAuth();
   const user = data?.user;
-  if (isLoading) return <PageLoading />;
   if (user?.role !== "owner" && user?.role !== "admin") {
     return <Redirect to="/pos" />;
   }
-  return <>{children}</>;
+  return <PageErrorBoundary>{children}</PageErrorBoundary>;
 }
 
 function MobileHome() {
-  const { data, isLoading } = useAuth();
+  const { data } = useAuth();
   const user = data?.user;
-  if (isLoading) return <PageLoading />;
   if (user?.role === "owner" || user?.role === "admin") {
     return <MobileOwnerHome />;
   }
@@ -96,13 +119,12 @@ function MobileHome() {
 }
 
 function RequireMobileOwner({ children }: { children: ReactNode }) {
-  const { data, isLoading } = useAuth();
+  const { data } = useAuth();
   const user = data?.user;
-  if (isLoading) return <PageLoading />;
   if (user?.role !== "owner" && user?.role !== "admin") {
     return <Redirect to="/" />;
   }
-  return <>{children}</>;
+  return <PageErrorBoundary>{children}</PageErrorBoundary>;
 }
 
 function MobileRouter() {
