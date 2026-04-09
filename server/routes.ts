@@ -3956,6 +3956,183 @@ export async function registerRoutes(
     }
   });
 
+  // ── Migration 0011 ─────────────────────────────────────────────────────────
+  app.post("/api/run-migration-0011", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const migPath = path.join(process.cwd(), "migrations", "0011_roles_permissions.sql");
+      const sql = fs.readFileSync(migPath, "utf8");
+      await pool.query(sql);
+      res.json({ success: true, message: "تم تشغيل migration 0011 — الأدوار والصلاحيات بنجاح" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // API: الأدوار والصلاحيات
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // قائمة الأدوار مع عدد الصلاحيات
+  app.get("/api/roles", requireAuth, async (_req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT r.id, r.name, r.description, r.is_active, r.created_at,
+               COUNT(rp.permission_id)::int AS permission_count
+        FROM roles r
+        LEFT JOIN role_permissions rp ON rp.role_id = r.id
+        GROUP BY r.id
+        ORDER BY r.id
+      `);
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message });
+    }
+  });
+
+  // قائمة كل الصلاحيات مجمّعة حسب الفئة
+  app.get("/api/permissions", requireAuth, async (_req, res) => {
+    try {
+      const result = await pool.query(
+        "SELECT id, code, name, category FROM permissions ORDER BY category, id"
+      );
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message });
+    }
+  });
+
+  // صلاحيات دور محدد
+  app.get("/api/roles/:id/permissions", requireAuth, async (req, res) => {
+    const roleId = Number(req.params.id);
+    try {
+      const result = await pool.query(
+        `SELECT p.id, p.code, p.name, p.category
+         FROM permissions p
+         JOIN role_permissions rp ON rp.permission_id = p.id
+         WHERE rp.role_id = $1
+         ORDER BY p.category, p.id`,
+        [roleId]
+      );
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message });
+    }
+  });
+
+  // تحديث صلاحيات دور (المالك فقط)
+  app.put("/api/roles/:id/permissions", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    const roleId = Number(req.params.id);
+    const { permissionIds } = req.body as { permissionIds: number[] };
+    if (!Array.isArray(permissionIds)) {
+      return res.status(400).json({ message: "permissionIds يجب أن يكون مصفوفة" });
+    }
+    try {
+      // المالك لا يمكن تعديل صلاحياته (دائماً كاملة)
+      const role = await pool.query("SELECT name FROM roles WHERE id = $1", [roleId]);
+      if (role.rows[0]?.name === "owner") {
+        return res.status(403).json({ message: "لا يمكن تعديل صلاحيات المالك" });
+      }
+      await pool.query("DELETE FROM role_permissions WHERE role_id = $1", [roleId]);
+      if (permissionIds.length > 0) {
+        const vals = permissionIds.map((pid, i) => `($1, $${i + 2})`).join(",");
+        await pool.query(
+          `INSERT INTO role_permissions (role_id, permission_id) VALUES ${vals} ON CONFLICT DO NOTHING`,
+          [roleId, ...permissionIds]
+        );
+      }
+      res.json({ success: true, message: "تم تحديث الصلاحيات" });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message });
+    }
+  });
+
+  // إضافة مستخدم مع التحقق من كلمة المرور وسجل التاريخ
+  app.patch("/api/users/:id/toggle", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    try {
+      const user = await storage.getUser(id);
+      if (!user) return res.status(404).json({ message: "المستخدم غير موجود" });
+      const updated = await storage.updateUser(id, { isActive: !user.isActive });
+      if (!updated) return res.status(404).json({ message: "فشل التحديث" });
+      const { password: _, ...safe } = updated;
+      res.json(safe);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message });
+    }
+  });
+
+  // حذف مستخدم (إلغاء تفعيل فقط — لا حذف فعلي)
+  app.delete("/api/users/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    try {
+      const actor = await storage.getUser(req.session.userId!);
+      if (actor?.id === id) {
+        return res.status(400).json({ message: "لا يمكنك حذف حسابك الخاص" });
+      }
+      // إلغاء تفعيل بدلاً من الحذف الفعلي
+      const updated = await storage.updateUser(id, { isActive: false });
+      if (!updated) return res.status(404).json({ message: "المستخدم غير موجود" });
+      await storage.addAuditLog({
+        action: "user_update",
+        entityType: "user",
+        entityId: id,
+        branchId: updated.branchId,
+        userId: actor?.id ?? null,
+        userName: actor?.name ?? null,
+        details: `تم إلغاء تفعيل المستخدم "${updated.name}"`,
+        oldValue: JSON.stringify({ isActive: true }),
+        newValue: JSON.stringify({ isActive: false }),
+      });
+      res.json({ success: true, message: "تم إلغاء تفعيل المستخدم" });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message });
+    }
+  });
+
+  // تحديث role_id عند تعيين دور جديد للمستخدم
+  app.patch("/api/users/:id/role", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const { roleId } = req.body as { roleId: number };
+    if (!roleId) return res.status(400).json({ message: "roleId مطلوب" });
+    try {
+      const roleRow = await pool.query("SELECT name FROM roles WHERE id = $1", [roleId]);
+      if (!roleRow.rows.length) return res.status(404).json({ message: "الدور غير موجود" });
+      const roleName = roleRow.rows[0].name; // 'owner' or 'sales'
+      await pool.query(
+        "UPDATE users SET role_id = $1, role = $2 WHERE id = $3",
+        [roleId, roleName, id]
+      );
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message });
+    }
+  });
+
+  // فحص صلاحية المستخدم الحالي
+  app.get("/api/my-permissions", requireAuth, async (req, res) => {
+    try {
+      const userRow = await pool.query(
+        "SELECT role, role_id FROM users WHERE id = $1", [req.session.userId]
+      );
+      const { role, role_id } = userRow.rows[0] || {};
+      if (role === "owner" || role === "admin") {
+        const all = await pool.query("SELECT code FROM permissions");
+        return res.json({ role, permissions: all.rows.map((r: any) => r.code) });
+      }
+      if (!role_id) return res.json({ role, permissions: [] });
+      const perms = await pool.query(
+        `SELECT p.code FROM permissions p
+         JOIN role_permissions rp ON rp.permission_id = p.id
+         WHERE rp.role_id = $1`, [role_id]
+      );
+      res.json({ role, permissions: perms.rows.map((r: any) => r.code) });
+    } catch {
+      res.json({ role: "unknown", permissions: [] });
+    }
+  });
+
   registerExportRoutes(app);
   registerBackupRoutes(app);
   registerMobileRoutes(app);

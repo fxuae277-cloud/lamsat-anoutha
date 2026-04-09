@@ -110,8 +110,10 @@ export const OWNER_SIDEBAR: SidebarSection[] = [
   {
     sectionKey: "sidebar.section_settings",
     items: [
-      { labelKey: "nav.settings", icon: Settings, path: "/settings" },
-      { labelKey: "nav.hr",       icon: UserCog,  path: "/hr" },
+      { labelKey: "nav.settings",        icon: Settings,    path: "/settings" },
+      { labelKey: "nav.hr",              icon: UserCog,     path: "/hr" },
+      { labelKey: "nav.usersManagement", icon: Users,       path: "/users-management" },
+      { labelKey: "nav.rolesManagement", icon: ShieldCheck, path: "/roles-management" },
     ],
   },
   {

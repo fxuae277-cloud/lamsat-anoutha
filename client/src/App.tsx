@@ -40,6 +40,8 @@ import Categories from "@/pages/Categories";
 import InventoryAlerts from "@/pages/InventoryAlerts";
 import Branches from "@/pages/Branches";
 import PurchaseReturns from "@/pages/PurchaseReturns";
+import UsersManagement from "@/pages/UsersManagement";
+import RolesManagement from "@/pages/RolesManagement";
 import InventoryOverview from "@/pages/InventoryOverview";
 import SuppliersPage from "@/pages/Suppliers";
 import { PayrollProvider } from "@/providers/PayrollProvider";
@@ -239,6 +241,12 @@ function DesktopRouter() {
         </Route>
         <Route path="/audit-log">
           <RequireOwner><AuditLog /></RequireOwner>
+        </Route>
+        <Route path="/users-management">
+          <RequireOwner><UsersManagement /></RequireOwner>
+        </Route>
+        <Route path="/roles-management">
+          <RequireOwner><RolesManagement /></RequireOwner>
         </Route>
         <Route path="/journal-entries">
           <RequireOwner><JournalEntries /></RequireOwner>
