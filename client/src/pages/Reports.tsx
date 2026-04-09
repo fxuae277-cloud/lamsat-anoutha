@@ -111,16 +111,24 @@ export default function Reports() {
   const branchId = branch !== "all" ? Number(branch) : undefined;
   const branchQs = branchId ? `&branchId=${branchId}` : "";
 
-  const { data: branches = [] }     = useQuery<Branch[]>({ queryKey: ["/api/branches"], queryFn: getQueryFn({ on401: "returnNull" }) });
-  const { data: income }            = useQuery<any>({ queryKey: [`/api/reports/income-statement?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
-  const { data: branchComp }        = useQuery<any>({ queryKey: [`/api/reports/branch-comparison-range?from=${from}&to=${to}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
-  const { data: salesList = [] }    = useQuery<any[]>({ queryKey: [`/api/reports/sales-list?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
-  const { data: payments }          = useQuery<any>({ queryKey: [`/api/reports/payments-report?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
-  const { data: shiftsRpt = [] }    = useQuery<any[]>({ queryKey: [`/api/reports/shifts-report?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
-  const { data: productsRpt = [] }  = useQuery<any[]>({ queryKey: [`/api/reports/products-report?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
-  const { data: categoriesRpt = [] }= useQuery<any[]>({ queryKey: [`/api/reports/categories-report?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
-  const { data: cashFlow }          = useQuery<any>({ queryKey: [`/api/reports/cash-flow?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
-  const { data: expCats = [] }      = useQuery<any[]>({ queryKey: [`/api/reports/expenses-by-category?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
+  const { data: _branches }     = useQuery<Branch[]>({ queryKey: ["/api/branches"], queryFn: getQueryFn({ on401: "returnNull" }) });
+  const { data: income }        = useQuery<any>({ queryKey: [`/api/reports/income-statement?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
+  const { data: branchComp }    = useQuery<any>({ queryKey: [`/api/reports/branch-comparison-range?from=${from}&to=${to}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
+  const { data: _salesList }    = useQuery<any[]>({ queryKey: [`/api/reports/sales-list?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
+  const { data: payments }      = useQuery<any>({ queryKey: [`/api/reports/payments-report?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
+  const { data: _shiftsRpt }    = useQuery<any[]>({ queryKey: [`/api/reports/shifts-report?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
+  const { data: _productsRpt }  = useQuery<any[]>({ queryKey: [`/api/reports/products-report?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
+  const { data: _categoriesRpt }= useQuery<any[]>({ queryKey: [`/api/reports/categories-report?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
+  const { data: cashFlow }      = useQuery<any>({ queryKey: [`/api/reports/cash-flow?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
+  const { data: _expCats }      = useQuery<any[]>({ queryKey: [`/api/reports/expenses-by-category?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
+
+  // ── null-safe array coercion (= [] لا يحمي من null، فقط من undefined) ───
+  const branches     : Branch[] = Array.isArray(_branches)     ? _branches     : [];
+  const salesList    : any[]    = Array.isArray(_salesList)    ? _salesList    : [];
+  const shiftsRpt    : any[]    = Array.isArray(_shiftsRpt)    ? _shiftsRpt    : [];
+  const productsRpt  : any[]    = Array.isArray(_productsRpt)  ? _productsRpt  : [];
+  const categoriesRpt: any[]    = Array.isArray(_categoriesRpt)? _categoriesRpt: [];
+  const expCats      : any[]    = Array.isArray(_expCats)      ? _expCats      : [];
 
   // ── branch display ────────────────────────────────────────────────────────
   const branchLabel = (id: number) => {
