@@ -65,8 +65,9 @@ import { ReactNode } from "react";
 import { useEnglishDigits } from "@/lib/useEnglishDigits";
 
 function RequireOwner({ children }: { children: ReactNode }) {
-  const { data } = useAuth();
+  const { data, isLoading } = useAuth();
   const user = data?.user;
+  if (isLoading) return null;
   if (user?.role !== "owner" && user?.role !== "admin") {
     return <Redirect to="/pos" />;
   }
@@ -74,8 +75,9 @@ function RequireOwner({ children }: { children: ReactNode }) {
 }
 
 function MobileHome() {
-  const { data } = useAuth();
+  const { data, isLoading } = useAuth();
   const user = data?.user;
+  if (isLoading) return null;
   if (user?.role === "owner" || user?.role === "admin") {
     return <MobileOwnerHome />;
   }
@@ -83,8 +85,9 @@ function MobileHome() {
 }
 
 function RequireMobileOwner({ children }: { children: ReactNode }) {
-  const { data } = useAuth();
+  const { data, isLoading } = useAuth();
   const user = data?.user;
+  if (isLoading) return null;
   if (user?.role !== "owner" && user?.role !== "admin") {
     return <Redirect to="/" />;
   }
