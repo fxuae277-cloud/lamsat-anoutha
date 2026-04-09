@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-09 (جلسة 8)_
+_آخر تحديث: 2026-04-09 (جلسة 9)_
 
 ---
 
@@ -65,6 +65,22 @@ _آخر تحديث: 2026-04-09 (جلسة 8)_
 - [x] فلاتر: تاريخ من/إلى، الفرع، طريقة الدفع
 - [x] إجمالي حي يتحدث بالفلاتر
 
+### نظام الأدوار والصلاحيات — جديد جلسة 9
+- [x] Migration 0011: جداول roles + permissions + role_permissions + password_history
+- [x] دوران فقط: المالك (39 صلاحية كاملة) والبيع (10 صلاحيات محدودة)
+- [x] أعمدة جديدة في users: role_id + failed_login_count + locked_until + last_login
+- [x] `requirePermission(code)` middleware مع backward compat للدور النصي القديم
+- [x] API: GET /api/roles, GET /api/permissions, GET/PUT /api/roles/:id/permissions
+- [x] API: PATCH /api/users/:id/toggle, DELETE /api/users/:id (إلغاء تفعيل فقط)
+- [x] API: GET /api/my-permissions, POST /api/run-migration-0011
+- [x] UsersManagement.tsx: صفحة مستقلة — بحث + فلاتر + إضافة/تعديل/حذف + reset password
+- [x] RolesManagement.tsx: عرض كل الصلاحيات (39) مقسمة بفئات مع toggle للبيع
+- [x] التحقق من قوة كلمة المرور: 8 أحرف + كبير + صغير + رقم + رمز خاص
+- [x] Sidebar: رابطان جديدان "إدارة المستخدمين" و"الأدوار والصلاحيات"
+- [x] إصلاح l.map is not a function في Reports.tsx (Array.isArray بدلاً من = [])
+- [x] إصلاح اختفاء الصفحات: Error Boundary شامل في App.tsx يعرض رسالة الخطأ
+- [x] إصلاح RequireOwner: لا redirect أثناء isLoading (AuthenticatedRouter يتولى التحميل)
+
 ### النظام المالي الكامل — جديد جلسة 8
 - [x] Migration 0010: دليل حسابات موسع (7 مجموعات، 60+ حساب) + account_balances + expense_categories
 - [x] storage.ts: `getIncomeStatement` / `getBalanceSheet` / `getDailyCashStatement` / `checkCashBalance` / `getExpensesByCategory` / `getCashFlowStatement`
@@ -125,18 +141,18 @@ _آخر تحديث: 2026-04-09 (جلسة 8)_
 - أسماء منتجات غير منظمة في DB
 - Inventory anomalies في بعض الفروع
 - سجل الحركات: لا يعرض "الكمية قبل/بعد" (يحتاج عمود في DB + API)
-- Migration 0010 يحتاج تشغيل على Railway قبل ظهور البيانات المالية الجديدة
+- Migration 0011 يحتاج تشغيل على Railway: `fetch('/api/run-migration-0011',{method:'POST'}).then(r=>r.json()).then(console.log)`
 
 ---
 
 ## ⏳ القادم
-- [ ] تشغيل migration على Railway (0007 + 0008 + 0009 + **0010**)
-  - استخدام: `POST /api/finance/run-migration` (يتطلب تسجيل دخول owner)
+- [ ] تشغيل migration 0011 على Railway (الأدوار والصلاحيات)
+- [ ] تطبيق requirePermission على API endpoints الموجودة (المبيعات، المنتجات، المخزون...)
+- [ ] نظام الإشعارات: طلب إرجاع فاتورة → إشعار للمالك
+- [ ] قفل الحساب بعد 5 محاولات فاشلة (failed_login_count + locked_until موجودان في DB)
 - [ ] ربط WhatsApp automation
 - [ ] تنظيف بيانات المنتجات (أسماء مكررة وغير منظمة)
-- [ ] فلاتر Dashboard إضافية
 - [ ] إضافة عمود `qty_before` / `qty_after` في جدول inventory_ledger + API
-- [ ] مراجعة صفحة التحويلات (Transfers) بشكل مستقل عن صفحة المخزون
 - [ ] الميزانية العمومية في Reports.tsx (تبويب جديد)
 - [ ] صفحة دليل الحسابات (Accounts.tsx) ربطها بالنظام الجديد
 
