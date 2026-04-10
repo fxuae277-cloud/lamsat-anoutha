@@ -504,6 +504,10 @@ function PurchasesTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<number | null>(null);
   const [showPostConfirm, setShowPostConfirm] = useState(false);
+  // ── فلاتر قائمة الفواتير (يجب أن تكون هنا في الأعلى — قبل أي return شرطي) ──
+  const [invSearch,   setInvSearch]   = useState("");
+  const [invSupplier, setInvSupplier] = useState("all");
+  const [invStatus,   setInvStatus]   = useState("all");
   const [showQuickSupplier, setShowQuickSupplier] = useState(false);
   const [showQuickProduct, setShowQuickProduct] = useState(false);
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
@@ -1683,10 +1687,6 @@ function PurchasesTab() {
   }
 
   // ── إحصائيات + فلاتر ──────────────────────────────────────────────────
-  const [invSearch,     setInvSearch]     = useState("");
-  const [invSupplier,   setInvSupplier]   = useState("all");
-  const [invStatus,     setInvStatus]     = useState("all");
-
   const invoiceStats = {
     total:    invoices.length,
     amount:   invoices.reduce((s, i) => s + parseFloat(String(i.grandTotal || 0)), 0),
