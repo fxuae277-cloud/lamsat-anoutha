@@ -4042,6 +4042,20 @@ export async function registerRoutes(
     }
   });
 
+  // ── Migration 0012 ─────────────────────────────────────────────────────────
+  app.post("/api/run-migration-0012", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const migPath = path.join(process.cwd(), "migrations", "0012_pos_orders_system.sql");
+      const sql = fs.readFileSync(migPath, "utf8");
+      await pool.query(sql);
+      res.json({ success: true, message: "تم تشغيل migration 0012 — POS & Orders بنجاح" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+    }
+  });
+
   // ── Migration 0011 ─────────────────────────────────────────────────────────
   app.post("/api/run-migration-0011", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
     try {
