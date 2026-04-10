@@ -1687,14 +1687,16 @@ function PurchasesTab() {
   }
 
   // ── إحصائيات + فلاتر ──────────────────────────────────────────────────
+  // ضمان أن invoices مصفوفة دائماً لتجنب أي crash
+  const safeInvoices = Array.isArray(invoices) ? invoices : [];
   const invoiceStats = {
-    total:    invoices.length,
-    amount:   invoices.reduce((s, i) => s + parseFloat(String(i.grandTotal || 0)), 0),
-    pending:  invoices.filter(i => i.status === "pending").length,
-    done:     invoices.filter(i => i.status === "approved" || i.status === "received").length,
+    total:    safeInvoices.length,
+    amount:   safeInvoices.reduce((s, i) => s + parseFloat(String((i as any).grandTotal || 0)), 0),
+    pending:  safeInvoices.filter(i => i.status === "pending").length,
+    done:     safeInvoices.filter(i => i.status === "approved" || i.status === "received").length,
   };
 
-  const filteredInvoices = (invoices as PurchaseInvoice[]).filter(inv => {
+  const filteredInvoices = (safeInvoices as PurchaseInvoice[]).filter(inv => {
     if (invSearch) {
       const q = invSearch.toLowerCase();
       const name = supplierMap[inv.supplierId]?.toLowerCase() || "";
