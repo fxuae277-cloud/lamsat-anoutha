@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-10 (جلسة 10 — إصلاح Purchases + Orders)_
+_آخر تحديث: 2026-04-10 (جلسة 11 — RBAC + Notifications + Account Lock + Ledger Snapshot + Balance Sheet)_
 
 ---
 
@@ -78,6 +78,17 @@ _آخر تحديث: 2026-04-10 (جلسة 10 — إصلاح Purchases + Orders)_
 - [x] إصلاح Purchases.tsx — React Error #300: 3 hooks (`invSearch`, `invSupplier`, `invStatus`) كانت مُعرَّفة بعد `if (selectedInvoice && invoiceDetail) { return }` — انتهاك Rules of Hooks — نُقلت إلى أعلى الكومبوننت
 - [x] إضافة Array.isArray guard في Purchases.tsx: `const safeInvoices = Array.isArray(invoices) ? invoices : []`
 
+### الأمان والإشعارات والتدقيق — جديد جلسة 11
+- [x] تطبيق `requirePermission(code)` على جميع الـ 94 API endpoint في routes.ts
+- [x] نظام الإشعارات: Migration 0013 — جدول `notifications` + API (count/list/read/read-all)
+- [x] إشعار تلقائي للمالك عند كل إرجاع فاتورة (INSERT في notifications عند POST /api/sales/:id/return)
+- [x] إصلاح bug: `req.session?.user` كان undefined → `await storage.getUser(req.session.userId!)`
+- [x] `NotificationBell` component: badge عدد غير مقروء، polling كل 30 ثانية، dropdown يعرض آخر 20 إشعار
+- [x] قفل الحساب بعد 5 محاولات فاشلة: failed_login_count + locked_until (قفل 15 دقيقة)
+- [x] Migration 0014: عمودا qty_before/qty_after في inventory_ledger + BEFORE INSERT trigger تلقائي
+- [x] تبويب الميزانية العمومية في Reports.tsx: 4 KPI cards + مقارنة Assets/Liabilities/Equity + تصدير CSV
+- [x] مكوّن BsRow لعرض صفوف الحسابات مع مستويات المسافة البادئة
+
 ### نظام الأدوار والصلاحيات — جديد جلسة 9
 - [x] Migration 0011: جداول roles + permissions + role_permissions + password_history
 - [x] دوران فقط: المالك (39 صلاحية كاملة) والبيع (10 صلاحيات محدودة)
@@ -151,29 +162,19 @@ _آخر تحديث: 2026-04-10 (جلسة 10 — إصلاح Purchases + Orders)_
 ---
 
 ## ⚠️ خطوات مطلوبة بعد الرفع على Railway
-- تشغيل migration 0012: `fetch('/api/run-migration-0012',{method:'POST'})` أو SQL مباشر في Railway DB
-- تشغيل migration 0011 إذا لم يُنفَّذ بعد
+- ~~Migration 0011, 0012, 0013, 0014 — تم تشغيلها جميعاً✅~~
 
 ## ⚠️ مشاكل مفتوحة
 - أسماء منتجات غير منظمة في DB
 - Inventory anomalies في بعض الفروع
-- سجل الحركات: لا يعرض "الكمية قبل/بعد" (يحتاج عمود في DB + API)
-- Migration 0011 يحتاج تشغيل على Railway: `fetch('/api/run-migration-0011',{method:'POST'}).then(r=>r.json()).then(console.log)`
-- Migration 0012 يحتاج تشغيل على Railway: `fetch('/api/run-migration-0012',{method:'POST'}).then(r=>r.json()).then(console.log)`
 
 ---
 
 ## ⏳ القادم
-- [ ] تشغيل migration 0012 على Railway (POS + Orders)
-- [ ] تشغيل migration 0011 على Railway (الأدوار والصلاحيات)
-- [ ] تطبيق requirePermission على API endpoints الموجودة (المبيعات، المنتجات، المخزون...)
-- [ ] نظام الإشعارات: طلب إرجاع فاتورة → إشعار للمالك
-- [ ] قفل الحساب بعد 5 محاولات فاشلة (failed_login_count + locked_until موجودان في DB)
 - [ ] ربط WhatsApp automation
 - [ ] تنظيف بيانات المنتجات (أسماء مكررة وغير منظمة)
-- [ ] إضافة عمود `qty_before` / `qty_after` في جدول inventory_ledger + API
-- [ ] الميزانية العمومية في Reports.tsx (تبويب جديد)
 - [ ] صفحة دليل الحسابات (Accounts.tsx) ربطها بالنظام الجديد
+- [ ] عرض qty_before/qty_after في واجهة سجل حركات المخزون (LedgerTab)
 
 ---
 
