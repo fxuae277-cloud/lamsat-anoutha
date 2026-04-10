@@ -1,5 +1,5 @@
 ﻿import { useState } from "react";
-import { FileSpreadsheet, Search, Eye, Printer, Download, X, Banknote, CreditCard, Building2, FileText } from "lucide-react";
+import { FileSpreadsheet, Search, Eye, Printer, Download, X, Banknote, CreditCard, Building2, FileText, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
@@ -103,6 +103,29 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
     if (w) { w.document.write(html); w.document.close(); }
   }
 
+  function handleWhatsApp() {
+    if (!detail) return;
+    const items = (detail.items || []).map((i: any) =>
+      `  • ${i.productName} × ${i.quantity} = ${omr(i.total)} ر.ع`
+    ).join("\n");
+    const customerLine = detail.customerName ? `العميلة: ${detail.customerName}\n` : "";
+    const msg = encodeURIComponent(
+      `🌸 *لمسة أنوثة* 🌸\n` +
+      `────────────────\n` +
+      `رقم الفاتورة: ${detail.invoiceNumber || `#${detail.id}`}\n` +
+      `التاريخ: ${fmtDate(detail.createdAt)}\n` +
+      customerLine +
+      `\nالمنتجات:\n${items}\n\n` +
+      `الإجمالي: *${omr(detail.total)} ر.ع*\n\n` +
+      `شكراً لتسوقكم معنا 💝`
+    );
+    const rawPhone = (detail.customerPhone || "").replace(/\D/g, "");
+    const phone = rawPhone
+      ? (rawPhone.startsWith("968") ? rawPhone : `968${rawPhone}`)
+      : "";
+    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+  }
+
   function handlePrint() {
     if (!detail) return;
     const pmText = PM_LABELS[detail.paymentMethod] || detail.paymentMethod;
@@ -196,6 +219,9 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
             <div className="flex gap-2">
               {detail && (
                 <>
+                  <Button size="sm" variant="outline" className="gap-1 border-emerald-500 text-emerald-700 hover:bg-emerald-50" onClick={handleWhatsApp} data-testid="button-whatsapp-invoice">
+                    <MessageSquare className="w-4 h-4" /> واتساب
+                  </Button>
                   <Button size="sm" variant="outline" className="gap-1" onClick={() => window.open(`/api/exports/invoice.pdf?id=${detail.id}`, "_blank")} data-testid="button-pdf-invoice">
                     <FileText className="w-4 h-4" />
                     PDF
@@ -240,6 +266,15 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
                 <p className="text-xs text-muted-foreground">{t("invoices.table_cashier")}</p>
                 <p className="font-bold mt-1">{detail.cashierName || "—"}</p>
               </div>
+              {detail.customerName && (
+                <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 col-span-2 md:col-span-1">
+                  <p className="text-xs text-emerald-700">العميلة</p>
+                  <p className="font-bold mt-1 text-emerald-900">{detail.customerName}</p>
+                  {detail.customerPhone && (
+                    <p className="text-xs text-emerald-600 mt-0.5" dir="ltr">{detail.customerPhone}</p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2">

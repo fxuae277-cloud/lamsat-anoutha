@@ -191,18 +191,25 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId }: {
     const items = (sale.items || []).map((i: any) =>
       `  • ${i.productName || i.product_name} × ${i.quantity} = ${omr(n(i.unitPrice || i.unit_price) * i.quantity)} ر.ع`
     ).join("\n");
+    const customerLine = sale.customerName ? `العميلة: ${sale.customerName}\n` : "";
     const msg = encodeURIComponent(
       `🌸 *لمسة أنوثة* 🌸\n` +
       `────────────────\n` +
       `رقم الفاتورة: ${sale.invoiceNumber || sale.invoice_number}\n` +
-      `التاريخ: ${fmtDate(sale.createdAt || sale.created_at)}\n\n` +
-      `المنتجات:\n${items}\n\n` +
+      `التاريخ: ${fmtDate(sale.createdAt || sale.created_at)}\n` +
+      customerLine +
+      `\nالمنتجات:\n${items}\n\n` +
       `الإجمالي: *${omr(total)} ر.ع*\n` +
       `المدفوع: ${omr(paid)} ر.ع\n` +
-      `الباقي: ${omr(change)} ر.ع\n\n` +
-      `شكراً لتسوقكم معنا 💝`
+      (n(change) > 0 ? `الباقي: ${omr(change)} ر.ع\n` : "") +
+      `\nشكراً لتسوقكم معنا 💝`
     );
-    window.open(`https://wa.me/?text=${msg}`, "_blank");
+    // إذا توفّر رقم العميل → فتح محادثة مباشرة، وإلا → شاشة اختيار جهة الاتصال
+    const rawPhone = (sale.customerPhone || "").replace(/\D/g, "");
+    const phone = rawPhone
+      ? (rawPhone.startsWith("968") ? rawPhone : `968${rawPhone}`)
+      : "";
+    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
   };
 
   return (
@@ -225,6 +232,14 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId }: {
             <span>{fmtDateTime(sale.createdAt || sale.created_at)}</span>
             <span className="text-muted-foreground">الكاشير:</span>
             <span>{cashierName}</span>
+            {sale.customerName && (<>
+              <span className="text-muted-foreground">العميلة:</span>
+              <span>{sale.customerName}</span>
+            </>)}
+            {sale.customerPhone && (<>
+              <span className="text-muted-foreground">الهاتف:</span>
+              <span dir="ltr">{sale.customerPhone}</span>
+            </>)}
           </div>
           <hr className="border-dashed my-1" />
           <table className="w-full text-xs">
@@ -668,7 +683,12 @@ export default function POS() {
         throw new Error(err.message || "فشل إنشاء الفاتورة");
       }
       const sale = await res.json();
-      return { ...sale, items: cart.map(i => ({ productName: i.productName, quantity: i.quantity, unitPrice: i.unitPrice, color: i.color })) };
+      return {
+        ...sale,
+        items: cart.map(i => ({ productName: i.productName, quantity: i.quantity, unitPrice: i.unitPrice, color: i.color })),
+        customerName: customer?.name ?? null,
+        customerPhone: customer?.phone ?? null,
+      };
     },
     onSuccess: (sale) => {
       setCompletedSale(sale);

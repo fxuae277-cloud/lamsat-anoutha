@@ -762,6 +762,8 @@ export class DatabaseStorage implements IStorage {
         cashierId: sales.cashierId,
         cashierName: users.name,
         customerId: sales.customerId,
+        customerName: customers.name,
+        customerPhone: customers.phone,
         subtotal: sales.subtotal,
         discount: sales.discount,
         discountType: sales.discountType,
@@ -775,6 +777,7 @@ export class DatabaseStorage implements IStorage {
       .from(sales)
       .leftJoin(branches, eq(sales.branchId, branches.id))
       .leftJoin(users, eq(sales.cashierId, users.id))
+      .leftJoin(customers, eq(sales.customerId, customers.id))
       .where(eq(sales.id, id));
 
     if (!row) return null;
