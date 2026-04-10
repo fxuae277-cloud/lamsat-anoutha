@@ -3,7 +3,7 @@ import {
   BarChart3, TrendingUp, TrendingDown, DollarSign, CreditCard, Building2,
   Download, FileText, Package, Users, Layers, PieChart as PieIcon,
   ArrowUpRight, ArrowDownRight, Minus, RefreshCw, Calendar, GitBranch,
-  Banknote, Receipt, Activity, ChevronDown, ChevronUp,
+  Banknote, Receipt, Activity, ChevronDown, ChevronUp, Scale,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -121,6 +121,7 @@ export default function Reports() {
   const { data: _categoriesRpt }= useQuery<any[]>({ queryKey: [`/api/reports/categories-report?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
   const { data: cashFlow }      = useQuery<any>({ queryKey: [`/api/reports/cash-flow?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
   const { data: _expCats }      = useQuery<any[]>({ queryKey: [`/api/reports/expenses-by-category?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
+  const { data: balanceSheet }  = useQuery<any>({ queryKey: [`/api/reports/balance-sheet?asOf=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
 
   // ── null-safe array coercion (= [] لا يحمي من null، فقط من undefined) ───
   const branches     : Branch[] = Array.isArray(_branches)     ? _branches     : [];
@@ -244,8 +245,9 @@ export default function Reports() {
             <TabsTrigger value="products" className="gap-1 whitespace-nowrap"><Package className="h-4 w-4" />المنتجات</TabsTrigger>
             <TabsTrigger value="categories" className="gap-1 whitespace-nowrap"><Layers className="h-4 w-4" />الفئات</TabsTrigger>
             <TabsTrigger value="shifts"   className="gap-1 whitespace-nowrap"><Activity className="h-4 w-4" />الورديات</TabsTrigger>
-            {isAdmin && <TabsTrigger value="branches" className="gap-1 whitespace-nowrap"><GitBranch className="h-4 w-4" />مقارنة الفروع</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="cashflow" className="gap-1 whitespace-nowrap"><Banknote className="h-4 w-4" />التدفقات النقدية</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="branches"      className="gap-1 whitespace-nowrap"><GitBranch className="h-4 w-4" />مقارنة الفروع</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="cashflow"      className="gap-1 whitespace-nowrap"><Banknote className="h-4 w-4" />التدفقات النقدية</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="balance-sheet" className="gap-1 whitespace-nowrap"><Scale className="h-4 w-4" />الميزانية العمومية</TabsTrigger>}
           </TabsList>
         </div>
 
@@ -754,6 +756,138 @@ export default function Reports() {
             ) : <EmptyState icon={Banknote} label="اختر نطاق تاريخ لعرض التدفقات النقدية" />}
           </TabsContent>
         )}
+
+        {/* ── الميزانية العمومية ───────────────────────────────────────────── */}
+        {isAdmin && (
+          <TabsContent value="balance-sheet" className="space-y-4">
+            <div className="text-center text-sm text-muted-foreground mb-2">
+              الميزانية العمومية بتاريخ: <span className="font-semibold text-foreground">{to}</span>
+            </div>
+            {balanceSheet ? (
+              <>
+                {/* KPI row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <KpiCard title="إجمالي الأصول"          value={fmtOMR(balanceSheet.totals?.assets)}                    icon={Package}    color="text-blue-600" />
+                  <KpiCard title="إجمالي الخصوم"          value={fmtOMR(balanceSheet.totals?.liabilities)}               icon={TrendingDown} color="text-red-600" />
+                  <KpiCard title="حقوق الملكية"           value={fmtOMR(balanceSheet.totals?.equity)}                    icon={Users}      color="text-purple-600" />
+                  <KpiCard title="أرباح/خسائر الفترة"     value={fmtOMR(balanceSheet.totals?.currentPeriodProfit)}       icon={TrendingUp} color={parseFloat(balanceSheet.totals?.currentPeriodProfit) >= 0 ? "text-green-600" : "text-red-600"} />
+                </div>
+
+                {/* توازن الميزانية */}
+                {(() => {
+                  const diff = Math.abs(parseFloat(balanceSheet.totals?.assets || "0") - parseFloat(balanceSheet.totals?.totalLiabilitiesAndEquity || "0"));
+                  return (
+                    <div className={`flex items-center justify-center gap-3 py-2 px-4 rounded-xl text-sm font-medium ${diff < 0.01 ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+                      <Scale className="h-4 w-4" />
+                      {diff < 0.01
+                        ? "✅ الميزانية متوازنة — الأصول = الخصوم + حقوق الملكية"
+                        : `⚠️ فارق في الميزانية: ${diff.toFixed(3)} ر.ع`}
+                    </div>
+                  );
+                })()}
+
+                {/* جدولان جنباً إلى جنب */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* الأصول */}
+                  <Card className="rounded-2xl border-blue-100">
+                    <CardHeader className="pb-2 bg-blue-50 rounded-t-2xl">
+                      <CardTitle className="text-sm text-blue-800 flex justify-between">
+                        <span>أولاً: الأصول</span>
+                        <span className="font-mono">{fmtOMR(balanceSheet.totals?.assets)}</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-2 p-0">
+                      {(balanceSheet.assets || []).length === 0
+                        ? <p className="text-sm text-muted-foreground text-center py-4">لا توجد بيانات</p>
+                        : (balanceSheet.assets || []).map((a: any) => (
+                          <BsRow key={a.code} code={a.code} name={a.name} balance={a.balance} level={a.level} />
+                        ))}
+                      <div className="flex justify-between items-center px-4 py-3 bg-blue-50/60 border-t font-bold text-sm">
+                        <span>إجمالي الأصول</span>
+                        <span className="font-mono text-blue-700">{fmtOMR(balanceSheet.totals?.assets)}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* الخصوم + حقوق الملكية */}
+                  <div className="space-y-4">
+                    <Card className="rounded-2xl border-red-100">
+                      <CardHeader className="pb-2 bg-red-50 rounded-t-2xl">
+                        <CardTitle className="text-sm text-red-800 flex justify-between">
+                          <span>ثانياً: الخصوم</span>
+                          <span className="font-mono">{fmtOMR(balanceSheet.totals?.liabilities)}</span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-2 p-0">
+                        {(balanceSheet.liabilities || []).length === 0
+                          ? <p className="text-sm text-muted-foreground text-center py-4">لا توجد بيانات</p>
+                          : (balanceSheet.liabilities || []).map((a: any) => (
+                            <BsRow key={a.code} code={a.code} name={a.name} balance={a.balance} level={a.level} />
+                          ))}
+                        <div className="flex justify-between items-center px-4 py-3 bg-red-50/60 border-t font-bold text-sm">
+                          <span>إجمالي الخصوم</span>
+                          <span className="font-mono text-red-700">{fmtOMR(balanceSheet.totals?.liabilities)}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="rounded-2xl border-purple-100">
+                      <CardHeader className="pb-2 bg-purple-50 rounded-t-2xl">
+                        <CardTitle className="text-sm text-purple-800 flex justify-between">
+                          <span>ثالثاً: حقوق الملكية</span>
+                          <span className="font-mono">{fmtOMR((parseFloat(balanceSheet.totals?.equity || "0") + parseFloat(balanceSheet.totals?.currentPeriodProfit || "0")).toFixed(3))}</span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-2 p-0">
+                        {(balanceSheet.equity || []).map((a: any) => (
+                          <BsRow key={a.code} code={a.code} name={a.name} balance={a.balance} level={a.level} />
+                        ))}
+                        <BsRow code="" name="أرباح/خسائر الفترة الحالية" balance={balanceSheet.totals?.currentPeriodProfit} level={2}
+                          valueClass={parseFloat(balanceSheet.totals?.currentPeriodProfit) >= 0 ? "text-green-700" : "text-red-700"} />
+                        <div className="flex justify-between items-center px-4 py-3 bg-purple-50/60 border-t font-bold text-sm">
+                          <span>إجمالي حقوق الملكية</span>
+                          <span className="font-mono text-purple-700">
+                            {fmtOMR((parseFloat(balanceSheet.totals?.equity || "0") + parseFloat(balanceSheet.totals?.currentPeriodProfit || "0")).toFixed(3))}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* مجموع الجانب الأيسر */}
+                    <Card className="rounded-2xl border-2 border-gray-300 bg-gray-50">
+                      <CardContent className="px-4 py-3 flex justify-between items-center">
+                        <span className="font-extrabold text-sm">إجمالي الخصوم + حقوق الملكية</span>
+                        <span className="font-mono font-extrabold text-base">
+                          {fmtOMR(balanceSheet.totals?.totalLiabilitiesAndEquity)}
+                        </span>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+
+                {/* تصدير CSV */}
+                <div className="flex justify-end">
+                  <Button variant="outline" size="sm" className="gap-2" onClick={() => {
+                    const rows: any[][] = [
+                      ["نوع", "كود الحساب", "اسم الحساب", "الرصيد (ر.ع)"],
+                      ...((balanceSheet.assets || []).map((a: any) => ["أصول", a.code, a.name, omr(a.balance)])),
+                      ["إجمالي الأصول", "", "", omr(balanceSheet.totals?.assets)],
+                      ...((balanceSheet.liabilities || []).map((a: any) => ["خصوم", a.code, a.name, omr(a.balance)])),
+                      ["إجمالي الخصوم", "", "", omr(balanceSheet.totals?.liabilities)],
+                      ...((balanceSheet.equity || []).map((a: any) => ["حقوق الملكية", a.code, a.name, omr(a.balance)])),
+                      ["أرباح/خسائر الفترة", "", "", omr(balanceSheet.totals?.currentPeriodProfit)],
+                      ["إجمالي الخصوم + ح.الملكية", "", "", omr(balanceSheet.totals?.totalLiabilitiesAndEquity)],
+                    ];
+                    downloadCSV(`الميزانية_العمومية_${to}.csv`, rows);
+                  }}>
+                    <Download className="h-4 w-4" />
+                    تصدير CSV
+                  </Button>
+                </div>
+              </>
+            ) : <EmptyState icon={Scale} label="اختر تاريخ لعرض الميزانية العمومية" />}
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
@@ -788,6 +922,25 @@ function CashFlowRow({ label, value, color }: { label: string; value: any; color
       <span className="text-muted-foreground">{label}</span>
       <span className={`font-medium ${color}`}>
         {typeof value === "string" && value.startsWith("(") ? value : `${parseFloat(String(value || 0)).toFixed(3)}`} ر.ع
+      </span>
+    </div>
+  );
+}
+
+function BsRow({ code, name, balance, level = 1, valueClass = "" }:
+  { code: string; name: string; balance: any; level?: number; valueClass?: string }) {
+  const isHeader = level <= 1;
+  const amount = parseFloat(String(balance || "0"));
+  return (
+    <div
+      className={`flex justify-between items-center px-4 py-2 border-b border-border/40 last:border-0 ${isHeader ? "bg-muted/20 font-semibold" : ""}`}
+      style={{ paddingRight: `${16 + (level - 1) * 16}px` }}
+    >
+      <span className={`text-sm ${isHeader ? "" : "text-muted-foreground"}`}>
+        {code ? `${code} - ${name}` : name}
+      </span>
+      <span className={`text-sm font-mono ${valueClass || (isHeader ? "font-bold" : "")}`}>
+        {amount.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} ر.ع
       </span>
     </div>
   );
