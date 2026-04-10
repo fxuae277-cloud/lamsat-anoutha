@@ -496,7 +496,8 @@ function ReturnModal({ onClose }: { onClose: () => void }) {
 
 // ─── Main POS Component ───────────────────────────────────────────────────────
 export default function POS() {
-  const { data: user } = useAuth();
+  const { data: authData } = useAuth();
+  const user = authData?.user;
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -637,7 +638,6 @@ export default function POS() {
       if (cart.length === 0) throw new Error("السلة فارغة");
       if (payMethod === "cash" && paid < total) throw new Error("المبلغ المدفوع أقل من الإجمالي");
 
-      const invNumRes = await fetch("/api/sales", { method: "HEAD", credentials: "include" });
       const body = {
         invoiceNumber: "", // يُولَّد في الـ storage
         subtotal: subtotal.toFixed(3),

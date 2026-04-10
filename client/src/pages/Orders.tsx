@@ -122,7 +122,8 @@ function OrderFormModal({ order, onClose, onSaved }: {
 }) {
   const { toast } = useToast();
   const isEdit = !!order;
-  const { data: user } = useAuth();
+  const { data: authData } = useAuth();
+  const user = authData?.user;
 
   const [customerName, setCustomerName]     = useState(order?.customerName || "");
   const [customerPhone, setCustomerPhone]   = useState(order?.customerPhone || "");
@@ -505,7 +506,8 @@ function OrderDetailModal({ order, onClose }: { order: Order; onClose: () => voi
 export default function Orders() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const { data: user } = useAuth();
+  const { data: authData } = useAuth();
+  const user = authData?.user;
   const isManager = ["owner", "admin", "manager"].includes(user?.role || "");
 
   const [search, setSearch]           = useState("");
