@@ -1655,6 +1655,83 @@ export async function registerRoutes(
     }
     res.json(filtered);
   });
+  /** GET /api/orders/stats — إحصائيات الطلبات (يجب أن يكون قبل /:id) */
+  app.get("/api/orders/stats", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      const isManager = ["owner", "admin", "manager"].includes(user.role);
+      const branchClause = isManager ? "" : `AND branch_id = ${user.branchId}`;
+      const result = await pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE status='new') as new_count,
+          COUNT(*) FILTER (WHERE status='preparing') as preparing_count,
+          COUNT(*) FILTER (WHERE status='ready') as ready_count,
+          COUNT(*) FILTER (WHERE status='delivered') as delivered_count,
+          COUNT(*) FILTER (WHERE status='cancelled') as cancelled_count,
+          COUNT(*) as total_count
+        FROM orders WHERE 1=1 ${branchClause}
+      `);
+      res.json(result.rows[0]);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  /** GET /api/orders/full — قائمة الطلبات مع الفلاتر الكاملة (يجب أن يكون قبل /:id) */
+  app.get("/api/orders/full", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      const isManager = ["owner", "admin", "manager"].includes(user.role);
+      const { search, status, source, from, to, branchId: bId } = req.query;
+
+      let where = "WHERE 1=1";
+      const params: any[] = [];
+      if (!isManager) {
+        params.push(user.branchId);
+        where += ` AND o.branch_id = $${params.length}`;
+      } else if (bId) {
+        params.push(Number(bId));
+        where += ` AND o.branch_id = $${params.length}`;
+      }
+      if (search) {
+        params.push(`%${search}%`);
+        where += ` AND (o.order_number ILIKE $${params.length} OR o.customer_name ILIKE $${params.length})`;
+      }
+      if (status && status !== "all") {
+        params.push(status);
+        where += ` AND o.status = $${params.length}`;
+      }
+      if (source && source !== "all") {
+        params.push(source);
+        where += ` AND o.source = $${params.length}`;
+      }
+      if (from) { params.push(from); where += ` AND o.created_at >= $${params.length}`; }
+      if (to)   { params.push(to);   where += ` AND o.created_at <  $${params.length}::date + 1`; }
+
+      const result = await pool.query(`
+        SELECT o.*,
+               b.name as branch_name,
+               u.name as employee_name,
+               (SELECT json_agg(json_build_object(
+                  'id', oi.id, 'productId', oi.product_id, 'productName', p.name,
+                  'quantity', oi.quantity, 'unitPrice', oi.unit_price, 'total', oi.total,
+                  'color', oi.color, 'size', oi.size
+               )) FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = o.id) as items
+        FROM orders o
+        LEFT JOIN branches b ON b.id = o.branch_id
+        LEFT JOIN users u ON u.id = o.employee_id
+        ${where}
+        ORDER BY o.created_at DESC
+        LIMIT 500
+      `, params);
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/orders/:id", requireAuth, enforceBranchScope, async (req, res) => {
     const order = await storage.getOrder(Number(req.params.id));
     if (!order) return res.status(404).json({ message: "الطلب غير موجود" });
@@ -4264,87 +4341,6 @@ export async function registerRoutes(
     try {
       await pool.query(`DELETE FROM held_invoices WHERE id=$1`, [Number(req.params.id)]);
       res.json({ success: true });
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
-
-  // ═══════════════════════════════════════════════════════════════════
-  // ORDERS EXTENDED ROUTES — نظام الطلبات الموسع
-  // ═══════════════════════════════════════════════════════════════════
-
-  /** GET /api/orders/stats — إحصائيات الطلبات */
-  app.get("/api/orders/stats", requireAuth, async (req, res) => {
-    try {
-      const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
-      const isManager = ["owner", "admin", "manager"].includes(user.role);
-      const branchClause = isManager ? "" : `AND branch_id = ${user.branchId}`;
-      const result = await pool.query(`
-        SELECT
-          COUNT(*) FILTER (WHERE status='new') as new_count,
-          COUNT(*) FILTER (WHERE status='preparing') as preparing_count,
-          COUNT(*) FILTER (WHERE status='ready') as ready_count,
-          COUNT(*) FILTER (WHERE status='delivered') as delivered_count,
-          COUNT(*) FILTER (WHERE status='cancelled') as cancelled_count,
-          COUNT(*) as total_count
-        FROM orders WHERE 1=1 ${branchClause}
-      `);
-      res.json(result.rows[0]);
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
-
-  /** GET /api/orders/full — قائمة الطلبات مع الفلاتر الكاملة */
-  app.get("/api/orders/full", requireAuth, async (req, res) => {
-    try {
-      const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
-      const isManager = ["owner", "admin", "manager"].includes(user.role);
-      const { search, status, source, from, to, branchId: bId } = req.query;
-
-      let where = "WHERE 1=1";
-      const params: any[] = [];
-      if (!isManager) {
-        params.push(user.branchId);
-        where += ` AND o.branch_id = $${params.length}`;
-      } else if (bId) {
-        params.push(Number(bId));
-        where += ` AND o.branch_id = $${params.length}`;
-      }
-      if (search) {
-        params.push(`%${search}%`);
-        where += ` AND (o.order_number ILIKE $${params.length} OR o.customer_name ILIKE $${params.length})`;
-      }
-      if (status && status !== "all") {
-        params.push(status);
-        where += ` AND o.status = $${params.length}`;
-      }
-      if (source && source !== "all") {
-        params.push(source);
-        where += ` AND o.source = $${params.length}`;
-      }
-      if (from) { params.push(from); where += ` AND o.created_at >= $${params.length}`; }
-      if (to)   { params.push(to);   where += ` AND o.created_at <  $${params.length}::date + 1`; }
-
-      const result = await pool.query(`
-        SELECT o.*,
-               b.name as branch_name,
-               u.name as employee_name,
-               (SELECT json_agg(json_build_object(
-                  'id', oi.id, 'productId', oi.product_id, 'productName', p.name,
-                  'quantity', oi.quantity, 'unitPrice', oi.unit_price, 'total', oi.total,
-                  'color', oi.color, 'size', oi.size
-               )) FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = o.id) as items
-        FROM orders o
-        LEFT JOIN branches b ON b.id = o.branch_id
-        LEFT JOIN users u ON u.id = o.employee_id
-        ${where}
-        ORDER BY o.created_at DESC
-        LIMIT 500
-      `, params);
-      res.json(result.rows);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

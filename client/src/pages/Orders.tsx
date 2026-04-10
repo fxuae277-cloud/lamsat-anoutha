@@ -552,11 +552,12 @@ export default function Orders() {
   const clearFilters = () => { setSearch(""); setStatusFilter("all"); setSourceFilter("all"); setFromDate(""); setToDate(""); setPage(1); };
   const hasFilters = !!(search || statusFilter !== "all" || sourceFilter !== "all" || fromDate || toDate);
 
+  const safeOrders = Array.isArray(orders) ? orders : [];
   const paginated = useMemo(() => {
     const start = (page - 1) * PER_PAGE;
-    return orders.slice(start, start + PER_PAGE);
-  }, [orders, page]);
-  const totalPages = Math.ceil(orders.length / PER_PAGE);
+    return safeOrders.slice(start, start + PER_PAGE);
+  }, [safeOrders, page]);
+  const totalPages = Math.ceil(safeOrders.length / PER_PAGE);
 
   return (
     <div className="p-4 md:p-6 space-y-4" dir="rtl">
