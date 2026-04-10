@@ -622,7 +622,9 @@ function LedgerTab() {
               <TableHead>{t("products.variant_color")}</TableHead>
               <TableHead>{t("products.variant_size")}</TableHead>
               <TableHead>{t("inv_balances.location")}</TableHead>
+              <TableHead className="text-right">قبل</TableHead>
               <TableHead className="text-right">{t("inv_ledger.qty_change")}</TableHead>
+              <TableHead className="text-right">بعد</TableHead>
               <TableHead>{t("common.employee")}</TableHead>
               <TableHead>{t("inv_ledger.reference")}</TableHead>
             </TableRow>
@@ -630,7 +632,7 @@ function LedgerTab() {
           <TableBody>
             {filteredLedger.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={12} className="text-center text-muted-foreground py-8">
                   {t("inv_ledger.no_entries")}
                 </TableCell>
               </TableRow>
@@ -647,8 +649,14 @@ function LedgerTab() {
                 <TableCell>{entry.color || "-"}</TableCell>
                 <TableCell>{entry.size || "-"}</TableCell>
                 <TableCell>{entry.location_name || entry.locationName}</TableCell>
+                <TableCell className="text-right font-mono text-muted-foreground text-xs">
+                  {entry.qty_before ?? "-"}
+                </TableCell>
                 <TableCell className={`text-right font-bold ${(entry.qty_change ?? entry.qtyChange) > 0 ? "text-green-600" : "text-red-600"}`}>
                   {(entry.qty_change ?? entry.qtyChange) > 0 ? `+${entry.qty_change ?? entry.qtyChange}` : (entry.qty_change ?? entry.qtyChange)}
+                </TableCell>
+                <TableCell className="text-right font-mono text-muted-foreground text-xs">
+                  {entry.qty_after ?? "-"}
                 </TableCell>
                 <TableCell>{entry.creator_name || entry.userName || "-"}</TableCell>
                 <TableCell className="text-xs font-mono">{entry.ref_id ? `${entry.ref_table || ""}#${entry.ref_id}` : (entry.reference || "-")}</TableCell>
