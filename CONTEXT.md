@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-10 (جلسة 10 — إصلاح ترتيب المسارات)_
+_آخر تحديث: 2026-04-10 (جلسة 10 — إصلاح Purchases + Orders)_
 
 ---
 
@@ -75,6 +75,8 @@ _آخر تحديث: 2026-04-10 (جلسة 10 — إصلاح ترتيب المسا
 - [x] إصلاح useAuth في POS.tsx و Orders.tsx: `const { data: authData } = useAuth(); const user = authData?.user;` (بدلاً من `const { data: user }` الخاطئ)
 - [x] إصلاح ترتيب مسارات Express في routes.ts: نقل `GET /api/orders/stats` و `GET /api/orders/full` ليكونا **قبل** `GET /api/orders/:id` — سبب اختفاء صفحة الطلبات
 - [x] إصلاح Array.isArray guard في Orders.tsx: `const safeOrders = Array.isArray(orders) ? orders : []` لمنع crash عند خطأ API
+- [x] إصلاح Purchases.tsx — React Error #300: 3 hooks (`invSearch`, `invSupplier`, `invStatus`) كانت مُعرَّفة بعد `if (selectedInvoice && invoiceDetail) { return }` — انتهاك Rules of Hooks — نُقلت إلى أعلى الكومبوننت
+- [x] إضافة Array.isArray guard في Purchases.tsx: `const safeInvoices = Array.isArray(invoices) ? invoices : []`
 
 ### نظام الأدوار والصلاحيات — جديد جلسة 9
 - [x] Migration 0011: جداول roles + permissions + role_permissions + password_history
@@ -179,6 +181,7 @@ _آخر تحديث: 2026-04-10 (جلسة 10 — إصلاح ترتيب المسا
 - **useAuth()** يُرجع `{ data: { user: {...} } }` — الصحيح: `const { data: authData } = useAuth(); const user = authData?.user;`
 - **Express route ordering**: المسارات الثابتة (`/stats`, `/full`) يجب تسجيلها قبل المسارات الديناميكية (`/:id`) وإلا سيلتهمها Express
 - **React Query default**: `= []` لا يحمي من خطأ API يُرجع كائن — استخدم `Array.isArray()` guard دائماً
+- **React Hooks بعد conditional return**: أي `useState`/`useQuery`/`useMutation` بعد `if (...) { return }` → Error #300/#310 — كل الـ hooks يجب في أعلى الكومبوننت قبل أي return شرطي
 
 ---
 
