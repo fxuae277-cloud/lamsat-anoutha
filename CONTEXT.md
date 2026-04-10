@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-10 (جلسة 10)_
+_آخر تحديث: 2026-04-10 (جلسة 10 — إصلاح ترتيب المسارات)_
 
 ---
 
@@ -72,6 +72,9 @@ _آخر تحديث: 2026-04-10 (جلسة 10)_
 - [x] API جديدة: GET /api/orders/stats, GET /api/orders/full, PUT /api/orders/:id, DELETE /api/orders/:id, POST /api/orders/:id/convert-to-invoice, GET /api/customers/search
 - [x] POS.tsx: إعادة كتابة كاملة — تخطيط split (سلة يمين + منتجات يسار)، بطاقات منتجات مع شارات المخزون (متوفر/منخفض/نافد)، فلاتر الفئات، شريط Top 5، عميل اختياري، خصم للمالك فقط، 3 طرق دفع (نقدي/بطاقة/تحويل)، تعليق/استئناف (HoldListModal)، إيصال طباعة + واتساب، إرجاع للمالك
 - [x] Orders.tsx: إعادة كتابة كاملة — 5 بطاقات إحصائية، فلاتر (بحث/حالة/مصدر/تاريخ)، جدول الطلبات مع شارات، نموذج إنشاء/تعديل، تغيير الحالة، تحويل طلب لفاتورة مع قيد محاسبي تلقائي
+- [x] إصلاح useAuth في POS.tsx و Orders.tsx: `const { data: authData } = useAuth(); const user = authData?.user;` (بدلاً من `const { data: user }` الخاطئ)
+- [x] إصلاح ترتيب مسارات Express في routes.ts: نقل `GET /api/orders/stats` و `GET /api/orders/full` ليكونا **قبل** `GET /api/orders/:id` — سبب اختفاء صفحة الطلبات
+- [x] إصلاح Array.isArray guard في Orders.tsx: `const safeOrders = Array.isArray(orders) ? orders : []` لمنع crash عند خطأ API
 
 ### نظام الأدوار والصلاحيات — جديد جلسة 9
 - [x] Migration 0011: جداول roles + permissions + role_permissions + password_history
@@ -154,6 +157,7 @@ _آخر تحديث: 2026-04-10 (جلسة 10)_
 - Inventory anomalies في بعض الفروع
 - سجل الحركات: لا يعرض "الكمية قبل/بعد" (يحتاج عمود في DB + API)
 - Migration 0011 يحتاج تشغيل على Railway: `fetch('/api/run-migration-0011',{method:'POST'}).then(r=>r.json()).then(console.log)`
+- Migration 0012 يحتاج تشغيل على Railway: `fetch('/api/run-migration-0012',{method:'POST'}).then(r=>r.json()).then(console.log)`
 
 ---
 
@@ -168,6 +172,13 @@ _آخر تحديث: 2026-04-10 (جلسة 10)_
 - [ ] إضافة عمود `qty_before` / `qty_after` في جدول inventory_ledger + API
 - [ ] الميزانية العمومية في Reports.tsx (تبويب جديد)
 - [ ] صفحة دليل الحسابات (Accounts.tsx) ربطها بالنظام الجديد
+
+---
+
+## 🔑 قواعد تقنية ثابتة (لا تتغير)
+- **useAuth()** يُرجع `{ data: { user: {...} } }` — الصحيح: `const { data: authData } = useAuth(); const user = authData?.user;`
+- **Express route ordering**: المسارات الثابتة (`/stats`, `/full`) يجب تسجيلها قبل المسارات الديناميكية (`/:id`) وإلا سيلتهمها Express
+- **React Query default**: `= []` لا يحمي من خطأ API يُرجع كائن — استخدم `Array.isArray()` guard دائماً
 
 ---
 
