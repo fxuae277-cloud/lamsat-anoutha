@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-09 (جلسة 9)_
+_آخر تحديث: 2026-04-10 (جلسة 10)_
 
 ---
 
@@ -64,6 +64,14 @@ _آخر تحديث: 2026-04-09 (جلسة 9)_
 ### لوحة التحكم (Dashboard)
 - [x] فلاتر: تاريخ من/إلى، الفرع، طريقة الدفع
 - [x] إجمالي حي يتحدث بالفلاتر
+
+### شاشة نقطة البيع POS ونظام الطلبات — جديد جلسة 10
+- [x] Migration 0012: أعمدة جديدة في sales (amount_paid, change_amount, payment_reference, status, order_id) + sale_items (color, size, line_discount) + orders (source, delivery_method, delivery_fee, subtotal, discount, payment_status, invoice_id...) + جدول held_invoices
+- [x] schema.ts: تحديث sales / saleItems / orders / orderItems + إضافة heldInvoices
+- [x] API جديدة: GET /api/pos/products, GET /api/pos/top, GET/POST/DELETE /api/pos/held, POST /api/pos/held/:id/resume
+- [x] API جديدة: GET /api/orders/stats, GET /api/orders/full, PUT /api/orders/:id, DELETE /api/orders/:id, POST /api/orders/:id/convert-to-invoice, GET /api/customers/search
+- [x] POS.tsx: إعادة كتابة كاملة — تخطيط split (سلة يمين + منتجات يسار)، بطاقات منتجات مع شارات المخزون (متوفر/منخفض/نافد)، فلاتر الفئات، شريط Top 5، عميل اختياري، خصم للمالك فقط، 3 طرق دفع (نقدي/بطاقة/تحويل)، تعليق/استئناف (HoldListModal)، إيصال طباعة + واتساب، إرجاع للمالك
+- [x] Orders.tsx: إعادة كتابة كاملة — 5 بطاقات إحصائية، فلاتر (بحث/حالة/مصدر/تاريخ)، جدول الطلبات مع شارات، نموذج إنشاء/تعديل، تغيير الحالة، تحويل طلب لفاتورة مع قيد محاسبي تلقائي
 
 ### نظام الأدوار والصلاحيات — جديد جلسة 9
 - [x] Migration 0011: جداول roles + permissions + role_permissions + password_history
@@ -137,6 +145,10 @@ _آخر تحديث: 2026-04-09 (جلسة 9)_
 
 ---
 
+## ⚠️ خطوات مطلوبة بعد الرفع على Railway
+- تشغيل migration 0012: `fetch('/api/run-migration-0012',{method:'POST'})` أو SQL مباشر في Railway DB
+- تشغيل migration 0011 إذا لم يُنفَّذ بعد
+
 ## ⚠️ مشاكل مفتوحة
 - أسماء منتجات غير منظمة في DB
 - Inventory anomalies في بعض الفروع
@@ -146,6 +158,7 @@ _آخر تحديث: 2026-04-09 (جلسة 9)_
 ---
 
 ## ⏳ القادم
+- [ ] تشغيل migration 0012 على Railway (POS + Orders)
 - [ ] تشغيل migration 0011 على Railway (الأدوار والصلاحيات)
 - [ ] تطبيق requirePermission على API endpoints الموجودة (المبيعات، المنتجات، المخزون...)
 - [ ] نظام الإشعارات: طلب إرجاع فاتورة → إشعار للمالك

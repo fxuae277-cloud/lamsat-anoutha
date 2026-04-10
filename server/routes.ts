@@ -4133,6 +4133,401 @@ export async function registerRoutes(
     }
   });
 
+  // ═══════════════════════════════════════════════════════════════════
+  // POS ROUTES — نقطة البيع
+  // ═══════════════════════════════════════════════════════════════════
+
+  /** GET /api/pos/products — قائمة المنتجات للـ POS مع المخزون */
+  app.get("/api/pos/products", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      const { search, categoryId } = req.query;
+      const branchId = user.branchId;
+
+      let query = `
+        SELECT
+          p.id, p.name, p.barcode, p.price, p.avg_cost as "avgCost",
+          p.image, p.active, p.category_id as "categoryId",
+          c.name as "categoryName",
+          COALESCE((
+            SELECT SUM(li.qty_on_hand)
+            FROM location_inventory li
+            JOIN locations l ON l.id = li.location_id
+            WHERE li.product_id = p.id AND l.branch_id = $1
+          ), 0)::int as "stockQty"
+        FROM products p
+        LEFT JOIN categories c ON c.id = p.category_id
+        WHERE p.active = true
+      `;
+      const params: any[] = [branchId];
+      if (search) {
+        params.push(`%${search}%`);
+        query += ` AND (p.name ILIKE $${params.length} OR p.barcode ILIKE $${params.length})`;
+      }
+      if (categoryId) {
+        params.push(Number(categoryId));
+        query += ` AND (p.category_id = $${params.length} OR (SELECT parent_id FROM categories WHERE id = p.category_id) = $${params.length})`;
+      }
+      query += ` ORDER BY p.name ASC LIMIT 200`;
+      const result = await pool.query(query, params);
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  /** GET /api/pos/top — أكثر 5 منتجات مبيعاً */
+  app.get("/api/pos/top", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      const result = await pool.query(`
+        SELECT p.id, p.name, p.price, p.image, p.avg_cost as "avgCost", p.category_id as "categoryId",
+               COUNT(si.id) as sold_count,
+               COALESCE((
+                 SELECT SUM(li.qty_on_hand)
+                 FROM location_inventory li
+                 JOIN locations l ON l.id = li.location_id
+                 WHERE li.product_id = p.id AND l.branch_id = $1
+               ), 0)::int as "stockQty"
+        FROM products p
+        JOIN sale_items si ON si.product_id = p.id
+        JOIN sales s ON s.id = si.sale_id AND s.branch_id = $1
+        WHERE p.active = true
+          AND s.created_at >= NOW() - INTERVAL '30 days'
+        GROUP BY p.id, p.name, p.price, p.image, p.avg_cost, p.category_id
+        ORDER BY sold_count DESC
+        LIMIT 5
+      `, [user.branchId]);
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  /** GET /api/pos/held — الفواتير المعلقة */
+  app.get("/api/pos/held", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      const result = await pool.query(
+        `SELECT * FROM held_invoices WHERE branch_id = $1 AND created_by = $2 ORDER BY created_at DESC`,
+        [user.branchId, user.id]
+      );
+      res.json(result.rows.map((r: any) => ({ ...r, items: JSON.parse(r.items || "[]") })));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  /** POST /api/pos/held — تعليق فاتورة */
+  app.post("/api/pos/held", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      const { items, customerId, customerName, customerPhone } = req.body;
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: "السلة فارغة" });
+      }
+      const cntRes = await pool.query(`SELECT COALESCE(MAX(id),0)+1 as next FROM held_invoices`);
+      const holdNumber = `HOLD-${String(cntRes.rows[0].next).padStart(4, "0")}`;
+      const result = await pool.query(
+        `INSERT INTO held_invoices (hold_number, items, customer_id, customer_name, customer_phone, branch_id, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [holdNumber, JSON.stringify(items), customerId || null, customerName || null, customerPhone || null, user.branchId, user.id]
+      );
+      const row = result.rows[0];
+      res.status(201).json({ ...row, items: JSON.parse(row.items || "[]") });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  /** POST /api/pos/held/:id/resume — استئناف فاتورة معلقة (تُرجع البيانات وتحذف السجل) */
+  app.post("/api/pos/held/:id/resume", requireAuth, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `DELETE FROM held_invoices WHERE id=$1 RETURNING *`,
+        [Number(req.params.id)]
+      );
+      if (result.rowCount === 0) return res.status(404).json({ message: "الفاتورة المعلقة غير موجودة" });
+      const row = result.rows[0];
+      res.json({ ...row, items: JSON.parse(row.items || "[]") });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  /** DELETE /api/pos/held/:id — حذف فاتورة معلقة */
+  app.delete("/api/pos/held/:id", requireAuth, async (req, res) => {
+    try {
+      await pool.query(`DELETE FROM held_invoices WHERE id=$1`, [Number(req.params.id)]);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // ORDERS EXTENDED ROUTES — نظام الطلبات الموسع
+  // ═══════════════════════════════════════════════════════════════════
+
+  /** GET /api/orders/stats — إحصائيات الطلبات */
+  app.get("/api/orders/stats", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      const isManager = ["owner", "admin", "manager"].includes(user.role);
+      const branchClause = isManager ? "" : `AND branch_id = ${user.branchId}`;
+      const result = await pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE status='new') as new_count,
+          COUNT(*) FILTER (WHERE status='preparing') as preparing_count,
+          COUNT(*) FILTER (WHERE status='ready') as ready_count,
+          COUNT(*) FILTER (WHERE status='delivered') as delivered_count,
+          COUNT(*) FILTER (WHERE status='cancelled') as cancelled_count,
+          COUNT(*) as total_count
+        FROM orders WHERE 1=1 ${branchClause}
+      `);
+      res.json(result.rows[0]);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  /** GET /api/orders/full — قائمة الطلبات مع الفلاتر الكاملة */
+  app.get("/api/orders/full", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      const isManager = ["owner", "admin", "manager"].includes(user.role);
+      const { search, status, source, from, to, branchId: bId } = req.query;
+
+      let where = "WHERE 1=1";
+      const params: any[] = [];
+      if (!isManager) {
+        params.push(user.branchId);
+        where += ` AND o.branch_id = $${params.length}`;
+      } else if (bId) {
+        params.push(Number(bId));
+        where += ` AND o.branch_id = $${params.length}`;
+      }
+      if (search) {
+        params.push(`%${search}%`);
+        where += ` AND (o.order_number ILIKE $${params.length} OR o.customer_name ILIKE $${params.length})`;
+      }
+      if (status && status !== "all") {
+        params.push(status);
+        where += ` AND o.status = $${params.length}`;
+      }
+      if (source && source !== "all") {
+        params.push(source);
+        where += ` AND o.source = $${params.length}`;
+      }
+      if (from) { params.push(from); where += ` AND o.created_at >= $${params.length}`; }
+      if (to)   { params.push(to);   where += ` AND o.created_at <  $${params.length}::date + 1`; }
+
+      const result = await pool.query(`
+        SELECT o.*,
+               b.name as branch_name,
+               u.name as employee_name,
+               (SELECT json_agg(json_build_object(
+                  'id', oi.id, 'productId', oi.product_id, 'productName', p.name,
+                  'quantity', oi.quantity, 'unitPrice', oi.unit_price, 'total', oi.total,
+                  'color', oi.color, 'size', oi.size
+               )) FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = o.id) as items
+        FROM orders o
+        LEFT JOIN branches b ON b.id = o.branch_id
+        LEFT JOIN users u ON u.id = o.employee_id
+        ${where}
+        ORDER BY o.created_at DESC
+        LIMIT 500
+      `, params);
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  /** PUT /api/orders/:id — تعديل طلب */
+  app.put("/api/orders/:id", requireAuth, async (req, res) => {
+    try {
+      const orderId = Number(req.params.id);
+      const { items, ...data } = req.body;
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
+
+      // تحديث بيانات الطلب
+      const fields: string[] = [];
+      const vals: any[] = [];
+      const allowed = ["customer_name","customer_phone","source","delivery_method","delivery_address",
+        "delivery_fee","subtotal","discount","discount_type","total","status","payment_method",
+        "payment_status","payment_reference","notes","customer_id"];
+      for (const [k, v] of Object.entries(data)) {
+        const col = k.replace(/([A-Z])/g, "_$1").toLowerCase();
+        if (allowed.includes(col)) { vals.push(v); fields.push(`${col}=$${vals.length}`); }
+      }
+      if (fields.length > 0) {
+        vals.push(orderId);
+        await pool.query(`UPDATE orders SET ${fields.join(",")} WHERE id=$${vals.length}`, vals);
+      }
+
+      // تحديث بنود الطلب إذا أُرسلت
+      if (items && Array.isArray(items)) {
+        await pool.query(`DELETE FROM order_items WHERE order_id=$1`, [orderId]);
+        for (const item of items) {
+          await pool.query(
+            `INSERT INTO order_items (order_id,product_id,quantity,unit_price,total,unit_cost_at_sale,line_cogs,color,size)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            [orderId, item.productId, item.quantity, item.unitPrice,
+             (parseFloat(item.unitPrice)*item.quantity).toFixed(3),
+             item.costPrice||"0", "0", item.color||null, item.size||null]
+          );
+        }
+      }
+
+      const updated = await pool.query(`SELECT * FROM orders WHERE id=$1`, [orderId]);
+      res.json(updated.rows[0]);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  /** DELETE /api/orders/:id — حذف طلب */
+  app.delete("/api/orders/:id", requireAuth, requireManager, async (req, res) => {
+    try {
+      const orderId = Number(req.params.id);
+      await pool.query(`DELETE FROM order_items WHERE order_id=$1`, [orderId]);
+      await pool.query(`DELETE FROM orders WHERE id=$1`, [orderId]);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  /** POST /api/orders/:id/convert-to-invoice — تحويل طلب لفاتورة بيع */
+  app.post("/api/orders/:id/convert-to-invoice", requireAuth, async (req, res) => {
+    try {
+      const orderId = Number(req.params.id);
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
+
+      const orderRes = await pool.query(`SELECT * FROM orders WHERE id=$1`, [orderId]);
+      if (orderRes.rowCount === 0) return res.status(404).json({ message: "الطلب غير موجود" });
+      const order = orderRes.rows[0];
+      if (order.status !== "delivered") return res.status(400).json({ message: "الطلب يجب أن يكون في حالة 'تم التسليم' أولاً" });
+      if (order.invoice_id) return res.status(400).json({ message: "الطلب محول لفاتورة مسبقاً" });
+
+      const itemsRes = await pool.query(
+        `SELECT oi.*, p.avg_cost FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id=$1`,
+        [orderId]
+      );
+      const items = itemsRes.rows;
+      if (items.length === 0) return res.status(400).json({ message: "الطلب لا يحتوي على منتجات" });
+
+      // تحقق من المخزون
+      for (const item of items) {
+        const stockRes = await pool.query(`
+          SELECT COALESCE(SUM(li.qty_on_hand),0) as qty
+          FROM location_inventory li JOIN locations l ON l.id=li.location_id
+          WHERE li.product_id=$1 AND l.branch_id=$2
+        `, [item.product_id, order.branch_id]);
+        if (parseInt(stockRes.rows[0].qty) < item.quantity) {
+          return res.status(400).json({ message: `مخزون المنتج ${item.product_id} غير كافٍ` });
+        }
+      }
+
+      const { paymentMethod, paymentReference, amountPaid } = req.body;
+      const subtotal = parseFloat(order.total || "0");
+      const cogsTotal = items.reduce((s: number, i: any) => s + parseFloat(i.avg_cost||"0")*i.quantity, 0);
+
+      let shiftId: number | null = null;
+      const shift = await storage.getCurrentShift(order.branch_id, user.terminalName);
+      if (shift) shiftId = shift.id;
+
+      const invNumRes = await pool.query(`SELECT COALESCE(MAX(id),0)+1 as next FROM sales`);
+      const invoiceNumber = `INV-${String(invNumRes.rows[0].next).padStart(5, "0")}`;
+
+      const saleRes = await pool.query(`
+        INSERT INTO sales (invoice_number, branch_id, shift_id, cashier_id, customer_id,
+          subtotal, discount, discount_type, vat, total, amount_paid, change_amount,
+          payment_method, payment_reference, cogs_total, gross_profit, status, order_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,'value','0',$8,$9,$10,$11,$12,$13,$14,'completed',$15)
+        RETURNING *
+      `, [invoiceNumber, order.branch_id, shiftId, user.id, order.customer_id||null,
+          subtotal.toFixed(3), "0", subtotal.toFixed(3),
+          amountPaid||subtotal.toFixed(3),
+          Math.max(0, parseFloat(amountPaid||"0")-subtotal).toFixed(3),
+          paymentMethod||order.payment_method||"cash",
+          paymentReference||null,
+          cogsTotal.toFixed(3),
+          (subtotal-cogsTotal).toFixed(3),
+          orderId]);
+      const sale = saleRes.rows[0];
+
+      // بنود الفاتورة + خصم المخزون
+      for (const item of items) {
+        await pool.query(
+          `INSERT INTO sale_items (sale_id,product_id,quantity,unit_price,total,unit_cost_at_sale,line_cogs,color,size)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [sale.id, item.product_id, item.quantity, item.unit_price,
+           (parseFloat(item.unit_price)*item.quantity).toFixed(3),
+           item.avg_cost||"0",
+           (parseFloat(item.avg_cost||"0")*item.quantity).toFixed(3),
+           item.color||null, item.size||null]
+        );
+        // خصم المخزون
+        await pool.query(`
+          UPDATE location_inventory SET qty_on_hand = qty_on_hand - $1
+          WHERE product_id = $2
+            AND location_id = (SELECT id FROM locations WHERE branch_id=$3 AND is_branch_default=true LIMIT 1)
+        `, [item.quantity, item.product_id, order.branch_id]);
+      }
+
+      // ربط الطلب بالفاتورة
+      await pool.query(`UPDATE orders SET invoice_id=$1, status='delivered' WHERE id=$2`, [sale.id, orderId]);
+
+      // قيد محاسبي
+      journalForSale({
+        id: sale.id,
+        invoiceNumber: sale.invoice_number,
+        total: sale.total,
+        vat: "0",
+        paymentMethod: sale.payment_method,
+        branchId: sale.branch_id,
+        cashierId: sale.cashier_id,
+        cogsTotal: sale.cogs_total,
+        createdAt: sale.created_at,
+      }).catch(() => {});
+
+      res.status(201).json({ sale, orderId });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // CUSTOMERS — العملاء (إضافة حقول بحث)
+  // ═══════════════════════════════════════════════════════════════════
+
+  /** GET /api/customers/search — بحث سريع عن عميل */
+  app.get("/api/customers/search", requireAuth, async (req, res) => {
+    try {
+      const { q } = req.query;
+      if (!q) return res.json([]);
+      const result = await pool.query(
+        `SELECT id, name, phone, city FROM customers
+         WHERE active = true AND (name ILIKE $1 OR phone ILIKE $1)
+         ORDER BY name LIMIT 10`,
+        [`%${q}%`]
+      );
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   registerExportRoutes(app);
   registerBackupRoutes(app);
   registerMobileRoutes(app);

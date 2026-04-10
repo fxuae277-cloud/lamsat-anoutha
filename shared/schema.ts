@@ -188,6 +188,11 @@ export const sales = pgTable("sales", {
   discountType: text("discount_type").default("value"),
   vat: decimal("vat", { precision: 10, scale: 3 }).notNull(),
   total: decimal("total", { precision: 10, scale: 3 }).notNull(),
+  amountPaid: decimal("amount_paid", { precision: 10, scale: 3 }).default("0"),
+  changeAmount: decimal("change_amount", { precision: 10, scale: 3 }).default("0"),
+  paymentReference: text("payment_reference"),
+  status: text("status").default("completed"),
+  orderId: integer("order_id"),
   paymentMethod: text("payment_method").notNull().default("cash"),
   bankTxnId: text("bank_txn_id"),
   bankReceiptImage: text("bank_receipt_image"),
@@ -208,6 +213,9 @@ export const saleItems = pgTable("sale_items", {
   total: decimal("total", { precision: 10, scale: 3 }).notNull(),
   unitCostAtSale: decimal("unit_cost_at_sale", { precision: 10, scale: 3 }).default("0"),
   lineCogs: decimal("line_cogs", { precision: 10, scale: 3 }).default("0"),
+  color: text("color"),
+  size: text("size"),
+  lineDiscount: decimal("line_discount", { precision: 10, scale: 3 }).default("0"),
 });
 export const insertSaleItemSchema = createInsertSchema(saleItems).omit({ id: true });
 export type InsertSaleItem = z.infer<typeof insertSaleItemSchema>;
@@ -236,6 +244,7 @@ export type Shift = typeof shifts.$inferSelect;
 export const orders = pgTable("orders", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   orderNumber: text("order_number").notNull(),
+  customerId: integer("customer_id").references(() => customers.id),
   customerName: text("customer_name").notNull(),
   customerPhone: text("customer_phone"),
   city: text("city"),
@@ -243,10 +252,21 @@ export const orders = pgTable("orders", {
   branchId: integer("branch_id").references(() => branches.id),
   shiftId: integer("shift_id").references(() => shifts.id),
   employeeId: integer("employee_id").references(() => users.id),
+  createdBy: integer("created_by").references(() => users.id),
+  source: text("source").default("walk-in"),
   deliveryType: text("delivery_type").default("pickup"),
+  deliveryMethod: text("delivery_method").default("pickup"),
+  deliveryAddress: text("delivery_address"),
+  deliveryFee: decimal("delivery_fee", { precision: 10, scale: 3 }).default("0"),
+  subtotal: decimal("subtotal", { precision: 10, scale: 3 }).default("0"),
+  discount: decimal("discount", { precision: 10, scale: 3 }).default("0"),
+  discountType: text("discount_type").default("value"),
   status: text("status").default("new"),
   paymentMethod: text("payment_method").default("cash"),
+  paymentStatus: text("payment_status").default("unpaid"),
+  paymentReference: text("payment_reference"),
   bankTxnId: text("bank_txn_id"),
+  invoiceId: integer("invoice_id"),
   total: decimal("total", { precision: 10, scale: 3 }),
   cogsTotal: decimal("cogs_total", { precision: 10, scale: 3 }).default("0"),
   grossProfit: decimal("gross_profit", { precision: 10, scale: 3 }).default("0"),
@@ -496,6 +516,21 @@ export const auditLog = pgTable("audit_log", {
 export const insertAuditLogSchema = createInsertSchema(auditLog).omit({ id: true, createdAt: true });
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLog.$inferSelect;
+
+export const heldInvoices = pgTable("held_invoices", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  holdNumber: text("hold_number").notNull(),
+  items: text("items").notNull().default("[]"),
+  customerId: integer("customer_id").references(() => customers.id),
+  customerName: text("customer_name"),
+  customerPhone: text("customer_phone"),
+  branchId: integer("branch_id").references(() => branches.id),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertHeldInvoiceSchema = createInsertSchema(heldInvoices).omit({ id: true, createdAt: true });
+export type InsertHeldInvoice = z.infer<typeof insertHeldInvoiceSchema>;
+export type HeldInvoice = typeof heldInvoices.$inferSelect;
 
 export const payrollRuns = pgTable("payroll_runs", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
