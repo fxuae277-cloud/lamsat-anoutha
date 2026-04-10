@@ -72,15 +72,17 @@ export async function registerRoutes(
     // code and the frontend expect (same shape Drizzle would return).
     const rawResult = await pool.query(
       `SELECT id, username, password, name, role, pin, phone, salary,
-              salary_type            AS "salaryType",
-              commission_rate        AS "commissionRate",
-              branch_id              AS "branchId",
-              terminal_name          AS "terminalName",
-              is_active              AS "isActive",
-              ui_language            AS "uiLanguage",
-              employment_status      AS "employmentStatus",
+              salary_type             AS "salaryType",
+              commission_rate         AS "commissionRate",
+              branch_id               AS "branchId",
+              terminal_name           AS "terminalName",
+              is_active               AS "isActive",
+              ui_language             AS "uiLanguage",
+              employment_status       AS "employmentStatus",
               opening_advance_balance AS "openingAdvanceBalance",
-              opening_payable_balance AS "openingPayableBalance"
+              opening_payable_balance AS "openingPayableBalance",
+              failed_login_count      AS "failedLoginCount",
+              locked_until            AS "lockedUntil"
        FROM users WHERE username = $1`,
       [username.trim()]
     );
@@ -90,16 +92,56 @@ export async function registerRoutes(
       logger.warn("failed_login", { username, reason: "user_not_found", ip: req.ip });
       return res.status(401).json({ message: "اسم المستخدم أو كلمة المرور غير صحيحة" });
     }
+
+    // ── فحص قفل الحساب ──────────────────────────────────────────────────────
+    if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
+      const remaining = Math.ceil((new Date(user.lockedUntil).getTime() - Date.now()) / 60000);
+      logger.warn("failed_login", { username, reason: "account_locked", ip: req.ip });
+      return res.status(403).json({
+        message: `الحساب مقفل مؤقتاً. حاول مجدداً بعد ${remaining} دقيقة`,
+      });
+    }
+
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
-      logger.warn("failed_login", { username, reason: "wrong_password", ip: req.ip });
-      return res.status(401).json({ message: "اسم المستخدم أو كلمة المرور غير صحيحة" });
+      // ── زيادة عداد المحاولات الفاشلة ──────────────────────────────────────
+      const newCount = (user.failedLoginCount || 0) + 1;
+      const MAX_ATTEMPTS = 5;
+      const LOCK_MINUTES = 15;
+      if (newCount >= MAX_ATTEMPTS) {
+        const lockUntil = new Date(Date.now() + LOCK_MINUTES * 60 * 1000);
+        await pool.query(
+          `UPDATE users SET failed_login_count = $1, locked_until = $2 WHERE id = $3`,
+          [newCount, lockUntil, user.id]
+        );
+        logger.warn("account_locked", { username, attempts: newCount, ip: req.ip });
+        return res.status(403).json({
+          message: `تم قفل الحساب بعد ${MAX_ATTEMPTS} محاولات فاشلة. حاول مجدداً بعد ${LOCK_MINUTES} دقيقة`,
+        });
+      } else {
+        await pool.query(
+          `UPDATE users SET failed_login_count = $1 WHERE id = $2`,
+          [newCount, user.id]
+        );
+        logger.warn("failed_login", { username, reason: "wrong_password", attempts: newCount, ip: req.ip });
+        return res.status(401).json({
+          message: `اسم المستخدم أو كلمة المرور غير صحيحة (${newCount}/${MAX_ATTEMPTS} محاولات)`,
+        });
+      }
     }
+
     if (!user.isActive) {
       return res.status(403).json({ message: "الحساب معطّل" });
     }
+
+    // ── تسجيل دخول ناجح: إعادة تعيين العداد ─────────────────────────────────
+    await pool.query(
+      `UPDATE users SET failed_login_count = 0, locked_until = NULL, last_login = NOW() WHERE id = $1`,
+      [user.id]
+    );
+
     req.session.userId = user.id;
-    const { password: _, ...safeUser } = user;
+    const { password: _, failedLoginCount: __, lockedUntil: ___, ...safeUser } = user;
     req.session.save((err) => {
       if (err) {
         console.error("[login] session.save() FAILED:", err?.message, err?.stack);
@@ -4039,6 +4081,20 @@ export async function registerRoutes(
       res.json({ success: true, message: "تم تشغيل المايجريشن بنجاح" });
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+    }
+  });
+
+  // ── Migration 0014 ─────────────────────────────────────────────────────────
+  app.post("/api/run-migration-0014", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const migPath = path.join(process.cwd(), "migrations", "0014_ledger_qty_snapshot_and_lock.sql");
+      const sql = fs.readFileSync(migPath, "utf8");
+      await pool.query(sql);
+      res.json({ success: true, message: "تم تشغيل migration 0014 — qty_before/qty_after بنجاح" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
     }
   });
 
