@@ -36,7 +36,7 @@ import { registerBackupRoutes } from "./backup";
 import { registerMobileRoutes } from "./mobile-routes";
 import { saveUploadedFile, parseInvoiceFile } from "./ocr";
 import { authLimiter, passwordLimiter, uploadLimiter } from "./middleware/rateLimiter";
-import { requireAuth, requireOwnerOrAdmin, requireRole, requireManager, enforceBranchScope } from "./middleware/auth";
+import { requireAuth, requireOwnerOrAdmin, requireRole, requireManager, enforceBranchScope, requirePermission } from "./middleware/auth";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -802,7 +802,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/categories", requireAuth, async (req, res) => {
+  app.get("/api/categories", requireAuth, requirePermission("products.view"), async (req, res) => {
     const { search, parentId, isActive } = req.query;
     const filters: { search?: string; parentId?: number | null; isActive?: boolean } = {};
     if (search) filters.search = String(search);
@@ -810,30 +810,30 @@ export async function registerRoutes(
     if (isActive !== undefined) filters.isActive = isActive === "true";
     res.json(await storage.getCategories(filters));
   });
-  app.post("/api/categories", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+  app.post("/api/categories", requireAuth, requirePermission("categories.manage"), async (req, res) => {
     const parsed = createCategorySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
     res.status(201).json(await storage.createCategory(parsed.data as any));
   });
   // toggle قبل patch العام — مهم للترتيب في Express
-  app.patch("/api/categories/:id/toggle", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+  app.patch("/api/categories/:id/toggle", requireAuth, requirePermission("categories.manage"), async (req, res) => {
     const row = await storage.toggleCategoryActive(Number(req.params.id));
     if (!row) return res.status(404).json({ message: "الفئة غير موجودة" });
     res.json(row);
   });
-  app.patch("/api/categories/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+  app.patch("/api/categories/:id", requireAuth, requirePermission("categories.manage"), async (req, res) => {
     const parsed = updateCategorySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
     const row = await storage.updateCategory(Number(req.params.id), parsed.data as any);
     if (!row) return res.status(404).json({ message: "الفئة غير موجودة" });
     res.json(row);
   });
-  app.delete("/api/categories/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+  app.delete("/api/categories/:id", requireAuth, requirePermission("categories.manage"), async (req, res) => {
     await storage.deleteCategory(Number(req.params.id));
     res.json({ ok: true });
   });
 
-  app.get("/api/products", requireAuth, async (req, res) => {
+  app.get("/api/products", requireAuth, requirePermission("products.view"), async (req, res) => {
     const { q, barcode, categoryId, productType } = req.query;
     res.json(await storage.getProducts({
       q:           q           ? String(q)           : undefined,
@@ -842,7 +842,7 @@ export async function registerRoutes(
       productType: productType ? String(productType) : undefined,
     }));
   });
-  app.get("/api/products/:id", requireAuth, async (req, res) => {
+  app.get("/api/products/:id", requireAuth, requirePermission("products.view"), async (req, res) => {
     const product = await storage.getProduct(Number(req.params.id));
     if (!product) return res.status(404).json({ message: "المنتج غير موجود" });
     const [variants, locationInventory, lastPurchaseResult] = await Promise.all([
@@ -867,12 +867,12 @@ export async function registerRoutes(
       lastSupplier: lp?.last_supplier ?? null,
     });
   });
-  app.get("/api/products/barcode/:barcode", requireAuth, async (req, res) => {
+  app.get("/api/products/barcode/:barcode", requireAuth, requirePermission("products.view"), async (req, res) => {
     const row = await storage.getProductByBarcode(req.params.barcode as string);
     if (!row) return res.status(404).json({ message: "المنتج غير موجود" });
     res.json(row);
   });
-  app.post("/api/products", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+  app.post("/api/products", requireAuth, requirePermission("products.create"), async (req, res) => {
     try {
       const parsed = createProductSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
@@ -883,7 +883,7 @@ export async function registerRoutes(
       res.status(500).json({ message: err?.message ?? "خطأ في إنشاء المنتج" });
     }
   });
-  app.patch("/api/products/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+  app.patch("/api/products/:id", requireAuth, requirePermission("products.edit"), async (req, res) => {
     const parsed = updateProductSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
     const productId = Number(req.params.id);
@@ -905,7 +905,7 @@ export async function registerRoutes(
     }
     res.json(row);
   });
-  app.delete("/api/products/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+  app.delete("/api/products/:id", requireAuth, requirePermission("products.delete"), async (req, res) => {
     try {
       await storage.deleteProduct(Number(req.params.id));
       res.json({ message: "تم حذف المنتج" });
@@ -915,10 +915,10 @@ export async function registerRoutes(
   });
 
   // ── Product Variants ──
-  app.get("/api/products/:id/variants", requireAuth, async (req, res) => {
+  app.get("/api/products/:id/variants", requireAuth, requirePermission("products.view"), async (req, res) => {
     res.json(await storage.getVariantsByProduct(Number(req.params.id)));
   });
-  app.post("/api/products/:id/variants", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+  app.post("/api/products/:id/variants", requireAuth, requirePermission("products.create"), async (req, res) => {
     try {
       const productId = Number(req.params.id);
       const parsed = createProductVariantSchema.safeParse(req.body);
@@ -939,15 +939,15 @@ export async function registerRoutes(
       res.status(500).json({ message: err?.message ?? "خطأ" });
     }
   });
-  app.get("/api/variants", requireAuth, async (_req, res) => {
+  app.get("/api/variants", requireAuth, requirePermission("products.view"), async (_req, res) => {
     res.json(await storage.getAllVariants());
   });
-  app.get("/api/variants/barcode/:barcode", requireAuth, async (req, res) => {
+  app.get("/api/variants/barcode/:barcode", requireAuth, requirePermission("products.view"), async (req, res) => {
     const variant = await storage.getVariantByBarcode(req.params.barcode as string);
     if (!variant) return res.status(404).json({ message: "الباركود غير موجود" });
     res.json(variant);
   });
-  app.patch("/api/variants/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+  app.patch("/api/variants/:id", requireAuth, requirePermission("products.edit"), async (req, res) => {
     try {
       const id = Number(req.params.id);
       const parsed = updateProductVariantSchema.safeParse(req.body);
@@ -967,11 +967,11 @@ export async function registerRoutes(
       res.status(500).json({ message: err?.message ?? "خطأ" });
     }
   });
-  app.delete("/api/variants/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+  app.delete("/api/variants/:id", requireAuth, requirePermission("products.delete"), async (req, res) => {
     await storage.deleteVariant(Number(req.params.id));
     res.json({ message: "تم حذف المتغير" });
   });
-  app.post("/api/variants/quick-create", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/variants/quick-create", requireAuth, requirePermission("products.create"), async (req, res) => {
     try {
       const parsed = quickCreateVariantSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
@@ -1006,14 +1006,14 @@ export async function registerRoutes(
   });
 
   // ── Inventory Balances ──
-  app.get("/api/inventory-balances", requireAuth, async (req, res) => {
+  app.get("/api/inventory-balances", requireAuth, requirePermission("inventory.view"), async (req, res) => {
     const locationId = req.query.locationId ? Number(req.query.locationId) : undefined;
     const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
     res.json(await storage.getInventoryBalances(locationId, branchId));
   });
 
   // ── Branch Stock (only items transferred from central warehouse) ──
-  app.get("/api/branch-stock/:branchId", requireAuth, async (req, res) => {
+  app.get("/api/branch-stock/:branchId", requireAuth, requirePermission("inventory.view"), async (req, res) => {
     const branchId = Number(req.params.branchId);
     const result = await pool.query(`
       SELECT ib.variant_id,
@@ -1038,7 +1038,7 @@ export async function registerRoutes(
   });
 
   // ── Stock Transfers ──
-  app.get("/api/transfer-locations", requireAuth, async (_req, res) => {
+  app.get("/api/transfer-locations", requireAuth, requirePermission("inventory.view"), async (_req, res) => {
     const result = await pool.query(`
       SELECT 'central' as type, l.id as location_id, l.name as label, NULL::int as branch_id
       FROM locations l WHERE l.is_central = true AND l.active = true
@@ -1051,7 +1051,7 @@ export async function registerRoutes(
     res.json(result.rows);
   });
 
-  app.get("/api/transfer-source-stock/:locationId", requireAuth, async (req, res) => {
+  app.get("/api/transfer-source-stock/:locationId", requireAuth, requirePermission("inventory.view"), async (req, res) => {
     const locationId = Number(req.params.locationId);
     const locRes = await pool.query(`SELECT id, is_central, branch_id FROM locations WHERE id = $1`, [locationId]);
     const loc = locRes.rows[0];
@@ -1082,10 +1082,10 @@ export async function registerRoutes(
     res.json(result.rows);
   });
 
-  app.get("/api/stock-transfers", requireAuth, async (_req, res) => {
+  app.get("/api/stock-transfers", requireAuth, requirePermission("inventory.view"), async (_req, res) => {
     res.json(await storage.getStockTransfers());
   });
-  app.get("/api/stock-transfers/:id", requireAuth, async (req, res) => {
+  app.get("/api/stock-transfers/:id", requireAuth, requirePermission("inventory.view"), async (req, res) => {
     const transfer = await storage.getStockTransfer(Number(req.params.id));
     if (!transfer) return res.status(404).json({ message: "التحويل غير موجود" });
     const lines = await storage.getStockTransferLines(transfer.id);
@@ -1122,7 +1122,7 @@ export async function registerRoutes(
       lines,
     });
   });
-  app.post("/api/stock-transfers", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/stock-transfers", requireAuth, requirePermission("inventory.transfer"), async (req, res) => {
     try {
       const transfer = await storage.createStockTransfer({
         fromLocationId: req.body.fromLocationId,
@@ -1136,7 +1136,7 @@ export async function registerRoutes(
       res.status(500).json({ message: err?.message ?? "خطأ" });
     }
   });
-  app.post("/api/stock-transfers/:id/lines", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/stock-transfers/:id/lines", requireAuth, requirePermission("inventory.transfer"), async (req, res) => {
     try {
       const transfer = await storage.getStockTransfer(Number(req.params.id));
       if (!transfer || transfer.status !== "draft") return res.status(400).json({ message: "لا يمكن التعديل" });
@@ -1178,11 +1178,11 @@ export async function registerRoutes(
       res.status(500).json({ message: err?.message ?? "خطأ" });
     }
   });
-  app.delete("/api/stock-transfer-lines/:id", requireAuth, requireManager, async (req, res) => {
+  app.delete("/api/stock-transfer-lines/:id", requireAuth, requirePermission("inventory.transfer"), async (req, res) => {
     await storage.deleteStockTransferLine(Number(req.params.id));
     res.json({ message: "تم الحذف" });
   });
-  app.post("/api/stock-transfers/execute", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/stock-transfers/execute", requireAuth, requirePermission("inventory.transfer"), async (req, res) => {
     const { fromLocationId, toLocationId, lines } = req.body;
     if (!fromLocationId || !toLocationId || !lines?.length) {
       return res.status(400).json({ message: "بيانات ناقصة" });
@@ -1234,7 +1234,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/stock-transfers/:id/approve", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/stock-transfers/:id/approve", requireAuth, requirePermission("inventory.transfer"), async (req, res) => {
     try {
       const result = await storage.approveStockTransfer(Number(req.params.id), req.session.userId!);
       if (!result) return res.status(400).json({ message: "لا يمكن اعتماد التحويل" });
@@ -1245,7 +1245,7 @@ export async function registerRoutes(
   });
 
   // ── Inventory Ledger ──
-  app.get("/api/inventory-ledger", requireAuth, requireManager, async (req, res) => {
+  app.get("/api/inventory-ledger", requireAuth, requirePermission("inventory.view"), async (req, res) => {
     const filters: any = {};
     if (req.query.variantId) filters.variantId = Number(req.query.variantId);
     if (req.query.locationId) filters.locationId = Number(req.query.locationId);
@@ -1262,7 +1262,7 @@ export async function registerRoutes(
     res.status(201).json(await storage.createWarehouse(parsed.data));
   });
 
-  app.get("/api/inventory", requireAuth, requireManager, async (req, res) => {
+  app.get("/api/inventory", requireAuth, requirePermission("inventory.view"), async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
     if (!user) return res.status(401).json({ message: "غير مصرح" });
     const branchId = req.query.branchId
@@ -1273,7 +1273,7 @@ export async function registerRoutes(
   app.get("/api/inventory/low-stock", requireAuth, async (_req, res) => {
     res.json(await storage.getLowStockAlerts());
   });
-  app.get("/api/inventory/transactions", requireAuth, requireManager, async (req, res) => {
+  app.get("/api/inventory/transactions", requireAuth, requirePermission("inventory.view"), async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
     if (!user) return res.status(401).json({ message: "غير مصرح" });
     const branchId = req.query.branchId
@@ -1288,14 +1288,14 @@ export async function registerRoutes(
       limit:     req.query.limit     ? Number(req.query.limit)     : undefined,
     }));
   });
-  app.post("/api/inventory/receive", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/inventory/receive", requireAuth, requirePermission("inventory.edit"), async (req, res) => {
     const { productId, warehouseId, quantity } = req.body;
     if (!productId || !warehouseId || !quantity) {
       return res.status(400).json({ message: "البيانات ناقصة" });
     }
     res.json(await storage.adjustInventory(productId, warehouseId, quantity));
   });
-  app.post("/api/inventory/transfer", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/inventory/transfer", requireAuth, requirePermission("inventory.transfer"), async (req, res) => {
     const parsed = insertInventoryTransferSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     try {
@@ -1353,7 +1353,7 @@ export async function registerRoutes(
     res.json(await storage.getLocationLowStock(branchId, locationCode));
   });
 
-  app.post("/api/location-inventory/transfer", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/location-inventory/transfer", requireAuth, requirePermission("inventory.transfer"), async (req, res) => {
     try {
       const { fromLocationId, toLocationId, productId, quantity, note } = req.body;
       if (!fromLocationId || !toLocationId || !productId || !quantity || quantity <= 0) {
@@ -1366,7 +1366,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/inventory-transfers", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/inventory-transfers", requireAuth, requirePermission("inventory.transfer"), async (req, res) => {
     try {
       const { branchId, items } = req.body;
       if (!branchId || !items || !Array.isArray(items) || items.length === 0) {
@@ -1411,7 +1411,7 @@ export async function registerRoutes(
     res.json(await storage.getLocationTransfersList(branchId));
   });
 
-  app.post("/api/location-inventory/add-stock", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/location-inventory/add-stock", requireAuth, requirePermission("inventory.edit"), async (req, res) => {
     try {
       const { branchId, productId, quantity, note } = req.body;
       if (!branchId || !productId || !quantity || quantity <= 0) {
@@ -1424,20 +1424,20 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/customers/kpis", requireAuth, async (_req, res) => {
+  app.get("/api/customers/kpis", requireAuth, requirePermission("customers.view"), async (_req, res) => {
     try { res.json(await storage.getCustomerKpis()); }
     catch (err: any) { res.status(500).json({ message: err.message }); }
   });
-  app.get("/api/customers", requireAuth, async (_req, res) => {
+  app.get("/api/customers", requireAuth, requirePermission("customers.view"), async (_req, res) => {
     res.json(await storage.getCustomers());
   });
-  app.get("/api/customers/:id", requireAuth, async (req, res) => {
+  app.get("/api/customers/:id", requireAuth, requirePermission("customers.view"), async (req, res) => {
     const id = parseInt(req.params.id as string);
     const result = await storage.getCustomerWithInvoices(id);
     if (!result) return res.status(404).json({ message: "Customer not found" });
     res.json(result);
   });
-  app.get("/api/customers/:id/statement", requireAuth, async (req, res) => {
+  app.get("/api/customers/:id/statement", requireAuth, requirePermission("customers.view"), async (req, res) => {
     try {
       const id = parseInt(req.params.id as string);
       const from = req.query.from as string | undefined;
@@ -1447,7 +1447,7 @@ export async function registerRoutes(
       res.json(result);
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
-  app.post("/api/customers", requireAuth, async (req, res) => {
+  app.post("/api/customers", requireAuth, requirePermission("customers.create"), async (req, res) => {
     try {
       const parsed = insertCustomerSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
@@ -1458,13 +1458,13 @@ export async function registerRoutes(
       res.status(201).json(await storage.createCustomer(parsed.data));
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
-  app.post("/api/customers/find-or-create", requireAuth, async (req, res) => {
+  app.post("/api/customers/find-or-create", requireAuth, requirePermission("customers.create"), async (req, res) => {
     const { phone, name } = req.body;
     if (!phone) return res.status(400).json({ message: "Phone is required" });
     const customer = await storage.findOrCreateCustomerByPhone(phone, name);
     res.json(customer);
   });
-  app.put("/api/customers/:id", requireAuth, async (req, res) => {
+  app.put("/api/customers/:id", requireAuth, requirePermission("customers.edit"), async (req, res) => {
     try {
       const id = parseInt(req.params.id as string);
       const parsed = updateCustomerSchema.safeParse(req.body);
@@ -1479,23 +1479,23 @@ export async function registerRoutes(
       res.json(updated);
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
-  app.delete("/api/customers/:id", requireAuth, requireManager, async (req, res) => {
+  app.delete("/api/customers/:id", requireAuth, requirePermission("customers.delete"), async (req, res) => {
     try {
       await storage.deleteCustomer(parseInt(req.params.id as string));
       res.json({ success: true });
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
 
-  app.get("/api/suppliers", requireAuth, requireManager, async (req, res) => {
+  app.get("/api/suppliers", requireAuth, requirePermission("suppliers.manage"), async (req, res) => {
     const activeOnly = req.query.activeOnly === "true";
     res.json(await storage.getSuppliers(activeOnly));
   });
-  app.get("/api/suppliers/:id", requireAuth, requireManager, async (req, res) => {
+  app.get("/api/suppliers/:id", requireAuth, requirePermission("suppliers.manage"), async (req, res) => {
     const row = await storage.getSupplier(Number(req.params.id));
     if (!row) return res.status(404).json({ message: "المورد غير موجود" });
     res.json(row);
   });
-  app.post("/api/suppliers", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/suppliers", requireAuth, requirePermission("suppliers.manage"), async (req, res) => {
     const parsed = insertSupplierSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
     if (!(parsed.data as any).name || !(parsed.data as any).name.trim()) {
@@ -1507,7 +1507,7 @@ export async function registerRoutes(
     }
     res.status(201).json(await storage.createSupplier(parsed.data));
   });
-  app.patch("/api/suppliers/:id", requireAuth, requireManager, async (req, res) => {
+  app.patch("/api/suppliers/:id", requireAuth, requirePermission("suppliers.manage"), async (req, res) => {
     if (req.body.name) {
       const existing = await storage.getSupplierByName(req.body.name.trim());
       if (existing && existing.id !== Number(req.params.id)) {
@@ -1519,7 +1519,7 @@ export async function registerRoutes(
     res.json(row);
   });
 
-  app.post("/api/suppliers/:id/payment", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/suppliers/:id/payment", requireAuth, requirePermission("suppliers.manage"), async (req, res) => {
     try {
       const supplierId = Number(req.params.id);
       const { amount, method, note, branchId } = req.body;
@@ -1555,7 +1555,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/suppliers/:id/statement", requireAuth, requireManager, async (req, res) => {
+  app.get("/api/suppliers/:id/statement", requireAuth, requirePermission("suppliers.manage"), async (req, res) => {
     try {
       const id = Number(req.params.id);
       const from = req.query.from as string;
@@ -1591,7 +1591,7 @@ export async function registerRoutes(
     }
     res.json(detail);
   });
-  app.post("/api/sales", requireAuth, async (req, res) => {
+  app.post("/api/sales", requireAuth, requirePermission("invoice.create"), async (req, res) => {
     const { items, branchId: _b, cashierId: _c, employeeId: _e, terminalName: _t, shiftId: _s, ...saleData } = req.body;
     const user = await storage.getUser(req.session.userId!);
     if (!user) return res.status(401).json({ message: "المستخدم غير موجود" });
@@ -1840,14 +1840,11 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/sales/:id/return", requireAuth, requireManager, enforceBranchScope, async (req, res) => {
+  app.post("/api/sales/:id/return", requireAuth, requirePermission("invoice.return"), enforceBranchScope, async (req, res) => {
     try {
       const saleId = Number(req.params.id);
-      const user = req.session?.user;
+      const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "غير مسجل دخول" });
-      if (!["owner", "admin", "manager"].includes(user.role)) {
-        return res.status(403).json({ message: "ليس لديك صلاحية إنشاء مرتجعات" });
-      }
 
       const { items, reason, refundMethod, shiftId } = req.body;
       if (!items || !Array.isArray(items) || items.length === 0) {
@@ -1899,6 +1896,18 @@ export async function registerRoutes(
         saleInvoiceNumber: sale.invoiceNumber || "",
         createdAt: result.createdAt ?? undefined,
       }).catch(err => console.error("[AutoJournal] Return error:", err.message));
+
+      // ── إشعار للمالك ────────────────────────────────────────────────
+      pool.query(
+        `INSERT INTO notifications (type, title, body, data, target_role, created_by)
+         VALUES ('invoice_return', $1, $2, $3, 'owner', $4)`,
+        [
+          `مرتجع فاتورة — ${returnNumber}`,
+          `أجرى ${user.name || user.username} إرجاعاً على الفاتورة ${sale.invoiceNumber || saleId} بمبلغ ${refundAmount.toFixed(3)} ر.ع`,
+          JSON.stringify({ returnId: result.id, saleId, returnNumber, refundAmount: refundAmount.toFixed(3) }),
+          user.id,
+        ]
+      ).catch(err => console.error("[Notification] Return notify error:", err.message));
 
       res.status(201).json(result);
     } catch (err: any) {
@@ -1964,7 +1973,7 @@ export async function registerRoutes(
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
     }
   });
-  app.post("/api/expenses", requireAuth, requireManager, enforceBranchScope, async (req, res) => {
+  app.post("/api/expenses", requireAuth, requirePermission("expenses.create"), enforceBranchScope, async (req, res) => {
     try {
       const { amount, notes, source, category, date: expenseDate } = req.body;
       if (!amount) {
@@ -2044,7 +2053,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/expenses/:id", requireAuth, requireManager, async (req, res) => {
+  app.patch("/api/expenses/:id", requireAuth, requirePermission("expenses.edit"), async (req, res) => {
     try {
       const id = Number(req.params.id);
       const { amount, category, source, notes, date } = req.body;
@@ -2062,7 +2071,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/expenses/:id", requireAuth, requireManager, async (req, res) => {
+  app.delete("/api/expenses/:id", requireAuth, requirePermission("expenses.delete"), async (req, res) => {
     try {
       const id = Number(req.params.id);
       await storage.deleteExpense(id);
@@ -2105,7 +2114,7 @@ export async function registerRoutes(
   app.get("/api/shifts", requireAuth, enforceBranchScope, async (_req, res) => {
     res.json(await storage.getShifts());
   });
-  app.post("/api/shifts", requireAuth, async (req, res) => {
+  app.post("/api/shifts", requireAuth, requirePermission("shift.open"), async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
     if (!user || !user.branchId || !user.terminalName) {
       return res.status(400).json({ message: "بيانات المستخدم ناقصة (الفرع أو الجهاز)" });
@@ -2125,7 +2134,7 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     res.status(201).json(await storage.createShift(parsed.data));
   });
-  app.patch("/api/shifts/:id/close", requireAuth, enforceBranchScope, async (req, res) => {
+  app.patch("/api/shifts/:id/close", requireAuth, requirePermission("shift.close"), enforceBranchScope, async (req, res) => {
     const shiftId = Number(req.params.id);
     const pendingOrders = await storage.getPendingOrdersByShift(shiftId);
     if (pendingOrders.length > 0) {
@@ -2143,7 +2152,7 @@ export async function registerRoutes(
     res.json(row);
   });
 
-  app.get("/api/reports/shift", requireAuth, enforceBranchScope, async (req, res) => {
+  app.get("/api/reports/shift", requireAuth, requirePermission("reports.view"), enforceBranchScope, async (req, res) => {
     const shiftId = Number(req.query.shiftId);
     if (!shiftId) return res.status(400).json({ message: "shiftId مطلوب" });
     const report = await storage.getShiftReport(shiftId);
@@ -2151,7 +2160,7 @@ export async function registerRoutes(
     res.json(report);
   });
 
-  app.get("/api/reports/daily", requireAuth, enforceBranchScope, async (req, res) => {
+  app.get("/api/reports/daily", requireAuth, requirePermission("reports.view"), enforceBranchScope, async (req, res) => {
     const dateStr = req.query.date as string;
     if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
@@ -2162,7 +2171,7 @@ export async function registerRoutes(
     res.json(report);
   });
 
-  app.get("/api/reports/shifts-by-date", requireAuth, enforceBranchScope, async (req, res) => {
+  app.get("/api/reports/shifts-by-date", requireAuth, requirePermission("reports.view"), enforceBranchScope, async (req, res) => {
     const dateStr = req.query.date as string;
     if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
@@ -2180,7 +2189,7 @@ export async function registerRoutes(
     res.json(await storage.getBranchComparisonReport(dateStr));
   });
 
-  app.get("/api/reports/overview", requireAuth, enforceBranchScope, async (req, res) => {
+  app.get("/api/reports/overview", requireAuth, requirePermission("reports.view"), enforceBranchScope, async (req, res) => {
     const from = req.query.from as string;
     const to = req.query.to as string;
     if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
@@ -2191,7 +2200,7 @@ export async function registerRoutes(
     res.json(await storage.getOverviewReport(from, to, branchId));
   });
 
-  app.get("/api/reports/sales-list", requireAuth, enforceBranchScope, async (req, res) => {
+  app.get("/api/reports/sales-list", requireAuth, requirePermission("reports.view"), enforceBranchScope, async (req, res) => {
     const from = req.query.from as string;
     const to = req.query.to as string;
     if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
@@ -2203,7 +2212,7 @@ export async function registerRoutes(
     res.json(await storage.getSalesListReport(from, to, branchId, paymentMethod));
   });
 
-  app.get("/api/reports/categories-report", requireAuth, enforceBranchScope, async (req, res) => {
+  app.get("/api/reports/categories-report", requireAuth, requirePermission("reports.view"), enforceBranchScope, async (req, res) => {
     const from = req.query.from as string;
     const to = req.query.to as string;
     if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
@@ -2214,7 +2223,7 @@ export async function registerRoutes(
     res.json(await storage.getCategoriesReport(from, to, branchId));
   });
 
-  app.get("/api/reports/payments-report", requireAuth, enforceBranchScope, async (req, res) => {
+  app.get("/api/reports/payments-report", requireAuth, requirePermission("reports.view"), enforceBranchScope, async (req, res) => {
     const from = req.query.from as string;
     const to = req.query.to as string;
     if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
@@ -2225,7 +2234,7 @@ export async function registerRoutes(
     res.json(await storage.getPaymentsReport(from, to, branchId));
   });
 
-  app.get("/api/reports/shifts-report", requireAuth, enforceBranchScope, async (req, res) => {
+  app.get("/api/reports/shifts-report", requireAuth, requirePermission("reports.view"), enforceBranchScope, async (req, res) => {
     const from = req.query.from as string;
     const to = req.query.to as string;
     if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
@@ -2309,19 +2318,19 @@ export async function registerRoutes(
     res.json(await storage.getProfitByProducts(from, to, branchId));
   });
 
-  app.get("/api/purchases", requireAuth, requireManager, async (_req, res) => {
+  app.get("/api/purchases", requireAuth, requirePermission("purchases.view"), async (_req, res) => {
     const invoices = await storage.getPurchaseInvoices();
     res.json(invoices);
   });
 
-  app.get("/api/purchases/:id", requireAuth, requireManager, async (req, res) => {
+  app.get("/api/purchases/:id", requireAuth, requirePermission("purchases.view"), async (req, res) => {
     const invoice = await storage.getPurchaseInvoice(Number(req.params.id));
     if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
     const items = await storage.getPurchaseItems(invoice.id);
     res.json({ ...invoice, items });
   });
 
-  app.post("/api/purchases", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/purchases", requireAuth, requirePermission("purchases.create"), async (req, res) => {
     try {
       const { supplierId, invoiceDate, shippingCost, customsCost, clearanceCost, otherCost, notes, branchId } = req.body;
       if (!invoiceDate) {
@@ -2349,7 +2358,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/purchases/:id", requireAuth, requireManager, async (req, res) => {
+  app.patch("/api/purchases/:id", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
     const id = Number(req.params.id);
     const invoice = await storage.getPurchaseInvoice(id);
     if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
@@ -2368,7 +2377,7 @@ export async function registerRoutes(
     res.json(row);
   });
 
-  app.post("/api/purchases/:id/items", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/purchases/:id/items", requireAuth, requirePermission("purchases.create"), async (req, res) => {
     try {
       const purchaseId = Number(req.params.id);
       const invoice = await storage.getPurchaseInvoice(purchaseId);
@@ -2397,7 +2406,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/purchases/:purchaseId/items/:itemId", requireAuth, requireManager, async (req, res) => {
+  app.patch("/api/purchases/:purchaseId/items/:itemId", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
     const purchaseId = Number(req.params.purchaseId);
     const invoice = await storage.getPurchaseInvoice(purchaseId);
     if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
@@ -2428,7 +2437,7 @@ export async function registerRoutes(
     res.json(updated);
   });
 
-  app.delete("/api/purchases/:purchaseId/items/:itemId", requireAuth, requireManager, async (req, res) => {
+  app.delete("/api/purchases/:purchaseId/items/:itemId", requireAuth, requirePermission("purchases.delete"), async (req, res) => {
     const purchaseId = Number(req.params.purchaseId);
     const invoice = await storage.getPurchaseInvoice(purchaseId);
     if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
@@ -2439,7 +2448,7 @@ export async function registerRoutes(
     res.json({ message: "تم الحذف" });
   });
 
-  app.patch("/api/purchases/:id/status", requireAuth, requireManager, async (req, res) => {
+  app.patch("/api/purchases/:id/status", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
     try {
       const id = Number(req.params.id);
       const parsed = patchPurchaseStatusSchema.safeParse(req.body);
@@ -2475,7 +2484,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/purchase-invoices/:id/approve", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/purchase-invoices/:id/approve", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
     try {
       const result = await storage.approvePurchaseInvoice(Number(req.params.id));
 
@@ -2508,7 +2517,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/purchases/:purchaseId/parse-invoice", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/purchases/:purchaseId/parse-invoice", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
     try {
       const { fileId } = req.body;
       if (!fileId) {
@@ -2552,7 +2561,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/purchases/:id/receive", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/purchases/:id/receive", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
     try {
       const result = await storage.receivePurchaseInvoice(Number(req.params.id));
       res.json(result);
@@ -2586,7 +2595,7 @@ export async function registerRoutes(
     res.json(summary);
   });
 
-  app.post("/api/cash-ledger/deposit", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/cash-ledger/deposit", requireAuth, requirePermission("cash.deposit"), async (req, res) => {
     try {
       const { amount, note } = req.body;
       if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ message: "المبلغ مطلوب ويجب أن يكون أكبر من صفر" });
@@ -2614,7 +2623,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/cash-ledger/withdrawal", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/cash-ledger/withdrawal", requireAuth, requirePermission("cash.withdraw"), async (req, res) => {
     try {
       const { amount, note } = req.body;
       if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ message: "المبلغ مطلوب ويجب أن يكون أكبر من صفر" });
@@ -2831,7 +2840,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/stocktakes", requireAuth, requireManager, async (req, res) => {
+  app.get("/api/stocktakes", requireAuth, requirePermission("inventory.count"), async (req, res) => {
     try {
       const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
       const list = await storage.getStocktakes(branchId);
@@ -2841,7 +2850,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/stocktakes", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/stocktakes", requireAuth, requirePermission("inventory.count"), async (req, res) => {
     try {
       const { branchId, locationId, note } = req.body;
       if (!branchId || !locationId) return res.status(400).json({ message: "الفرع والموقع مطلوبان" });
@@ -2858,7 +2867,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/stocktakes/:id/items", requireAuth, requireManager, async (req, res) => {
+  app.get("/api/stocktakes/:id/items", requireAuth, requirePermission("inventory.count"), async (req, res) => {
     try {
       const items = await storage.getStocktakeItems(Number(req.params.id));
       res.json(items);
@@ -2867,7 +2876,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/stocktake-items/:id", requireAuth, requireManager, async (req, res) => {
+  app.patch("/api/stocktake-items/:id", requireAuth, requirePermission("inventory.count"), async (req, res) => {
     try {
       const { countedQty, note } = req.body;
       if (countedQty === undefined || countedQty === null) return res.status(400).json({ message: "الكمية المعدودة مطلوبة" });
@@ -2879,7 +2888,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/stocktakes/:id/approve", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+  app.post("/api/stocktakes/:id/approve", requireAuth, requirePermission("inventory.count"), async (req, res) => {
     try {
       const updated = await storage.approveStocktake(Number(req.params.id), req.session.userId!);
       if (!updated) return res.status(400).json({ message: "لا يمكن اعتماد هذا الجرد" });
@@ -2889,7 +2898,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/inventory-adjustments", requireAuth, requireManager, async (req, res) => {
+  app.get("/api/inventory-adjustments", requireAuth, requirePermission("inventory.count"), async (req, res) => {
     try {
       const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
       const locationId = req.query.locationId ? Number(req.query.locationId) : undefined;
@@ -2900,7 +2909,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/inventory-adjustments", requireAuth, requireManager, async (req, res) => {
+  app.post("/api/inventory-adjustments", requireAuth, requirePermission("inventory.count"), async (req, res) => {
     try {
       const { branchId, locationId, productId, qtyChange, reason } = req.body;
       if (!branchId || !locationId || !productId || qtyChange === undefined || !reason) {
@@ -4215,7 +4224,7 @@ export async function registerRoutes(
   // ═══════════════════════════════════════════════════════════════════
 
   /** GET /api/pos/products — قائمة المنتجات للـ POS مع المخزون */
-  app.get("/api/pos/products", requireAuth, async (req, res) => {
+  app.get("/api/pos/products", requireAuth, requirePermission("pos.access"), async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "غير مصرح" });
@@ -4255,7 +4264,7 @@ export async function registerRoutes(
   });
 
   /** GET /api/pos/top — أكثر 5 منتجات مبيعاً */
-  app.get("/api/pos/top", requireAuth, async (req, res) => {
+  app.get("/api/pos/top", requireAuth, requirePermission("pos.access"), async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "غير مصرح" });
@@ -4284,7 +4293,7 @@ export async function registerRoutes(
   });
 
   /** GET /api/pos/held — الفواتير المعلقة */
-  app.get("/api/pos/held", requireAuth, async (req, res) => {
+  app.get("/api/pos/held", requireAuth, requirePermission("pos.access"), async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "غير مصرح" });
@@ -4299,7 +4308,7 @@ export async function registerRoutes(
   });
 
   /** POST /api/pos/held — تعليق فاتورة */
-  app.post("/api/pos/held", requireAuth, async (req, res) => {
+  app.post("/api/pos/held", requireAuth, requirePermission("pos.access"), async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "غير مصرح" });
@@ -4322,7 +4331,7 @@ export async function registerRoutes(
   });
 
   /** POST /api/pos/held/:id/resume — استئناف فاتورة معلقة (تُرجع البيانات وتحذف السجل) */
-  app.post("/api/pos/held/:id/resume", requireAuth, async (req, res) => {
+  app.post("/api/pos/held/:id/resume", requireAuth, requirePermission("pos.access"), async (req, res) => {
     try {
       const result = await pool.query(
         `DELETE FROM held_invoices WHERE id=$1 RETURNING *`,
@@ -4337,7 +4346,7 @@ export async function registerRoutes(
   });
 
   /** DELETE /api/pos/held/:id — حذف فاتورة معلقة */
-  app.delete("/api/pos/held/:id", requireAuth, async (req, res) => {
+  app.delete("/api/pos/held/:id", requireAuth, requirePermission("pos.access"), async (req, res) => {
     try {
       await pool.query(`DELETE FROM held_invoices WHERE id=$1`, [Number(req.params.id)]);
       res.json({ success: true });
@@ -4508,7 +4517,7 @@ export async function registerRoutes(
   // ═══════════════════════════════════════════════════════════════════
 
   /** GET /api/customers/search — بحث سريع عن عميل */
-  app.get("/api/customers/search", requireAuth, async (req, res) => {
+  app.get("/api/customers/search", requireAuth, requirePermission("customers.view"), async (req, res) => {
     try {
       const { q } = req.query;
       if (!q) return res.json([]);
@@ -4519,6 +4528,98 @@ export async function registerRoutes(
         [`%${q}%`]
       );
       res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // NOTIFICATIONS — نظام الإشعارات
+  // ═══════════════════════════════════════════════════════════════════
+
+  /** POST /api/run-migration-0013 — تشغيل migration جدول الإشعارات */
+  app.post("/api/run-migration-0013", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS notifications (
+          id          SERIAL PRIMARY KEY,
+          type        TEXT    NOT NULL,
+          title       TEXT    NOT NULL,
+          body        TEXT,
+          data        JSONB,
+          target_role TEXT    NOT NULL DEFAULT 'owner',
+          created_by  INTEGER REFERENCES users(id),
+          created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+          is_read     BOOLEAN   NOT NULL DEFAULT FALSE,
+          read_at     TIMESTAMP,
+          read_by     INTEGER REFERENCES users(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_notifications_target_role ON notifications(target_role);
+        CREATE INDEX IF NOT EXISTS idx_notifications_is_read     ON notifications(is_read);
+        CREATE INDEX IF NOT EXISTS idx_notifications_created_at  ON notifications(created_at DESC);
+      `);
+      res.json({ success: true, message: "Migration 0013 تم بنجاح" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  /** GET /api/notifications/count — عدد الإشعارات غير المقروءة (للـ badge) */
+  app.get("/api/notifications/count", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user || (user.role !== "owner" && user.role !== "admin")) {
+        return res.json({ count: 0 });
+      }
+      const result = await pool.query(
+        `SELECT COUNT(*) as count FROM notifications WHERE target_role = 'owner' AND is_read = FALSE`
+      );
+      res.json({ count: Number(result.rows[0].count) });
+    } catch {
+      res.json({ count: 0 });
+    }
+  });
+
+  /** GET /api/notifications — قائمة الإشعارات */
+  app.get("/api/notifications", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const limit = Number(req.query.limit) || 20;
+      const result = await pool.query(
+        `SELECT n.*, u.name as creator_name
+         FROM notifications n
+         LEFT JOIN users u ON u.id = n.created_by
+         WHERE n.target_role = 'owner'
+         ORDER BY n.created_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  /** PATCH /api/notifications/:id/read — تحديد إشعار كمقروء */
+  app.patch("/api/notifications/:id/read", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      await pool.query(
+        `UPDATE notifications SET is_read = TRUE, read_at = NOW(), read_by = $1 WHERE id = $2`,
+        [req.session.userId, Number(req.params.id)]
+      );
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  /** PATCH /api/notifications/read-all — تحديد كل الإشعارات كمقروءة */
+  app.patch("/api/notifications/read-all", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      await pool.query(
+        `UPDATE notifications SET is_read = TRUE, read_at = NOW(), read_by = $1 WHERE target_role = 'owner' AND is_read = FALSE`,
+        [req.session.userId]
+      );
+      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

@@ -1,8 +1,9 @@
 import { ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
-import { Bell, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/lib/i18n";
+import { NotificationBell } from "./NotificationBell";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { t, lang } = useI18n();
@@ -29,10 +30,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <button className="relative p-2 text-muted-foreground hover:bg-accent rounded-full transition-colors">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full"></span>
-            </button>
+            <NotificationBell />
             <div className="text-sm font-medium text-muted-foreground">
               {headerDate}
             </div>
