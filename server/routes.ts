@@ -4793,6 +4793,20 @@ export async function registerRoutes(
   registerBackupRoutes(app);
   registerMobileRoutes(app);
 
+  // ── Migration 0016 ─────────────────────────────────────────────────────────
+  app.post("/api/run-migration-0016", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const migPath = path.join(process.cwd(), "migrations", "0016_inventory_constraints.sql");
+      const sqlText = fs.readFileSync(migPath, "utf8");
+      await pool.query(sqlText);
+      res.json({ success: true, message: "تم تشغيل migration 0016 — قيود المخزون والفهارس بنجاح" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+    }
+  });
+
   // ── Reset Demo Data ────────────────────────────────────────────────────────
   app.post("/api/admin/reset-demo-data", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
     try {
