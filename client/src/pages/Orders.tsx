@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { fmtDate, fmtDateTime } from "@/lib/formatters";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
+import { DateInput } from "@/components/ui/date-input";
 import type { Branch } from "@shared/schema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -603,8 +604,8 @@ export default function Orders() {
               {Object.entries(SOURCE_MAP).map(([v, s]) => <SelectItem key={v} value={v}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="h-8 w-36 text-xs" dir="ltr" />
-          <Input type="date" value={toDate}   onChange={e => setToDate(e.target.value)}   className="h-8 w-36 text-xs" dir="ltr" />
+          <DateInput value={fromDate} onChange={setFromDate} className="h-8 w-36 text-xs" placeholder="من تاريخ" />
+          <DateInput value={toDate}   onChange={setToDate}   className="h-8 w-36 text-xs" placeholder="إلى تاريخ" />
           {hasFilters && (
             <Button size="sm" variant="outline" className="h-8 text-xs gap-1 text-red-500 border-red-200 hover:bg-red-50" onClick={clearFilters}>
               <X className="w-3 h-3" /> مسح
