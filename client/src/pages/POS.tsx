@@ -704,7 +704,13 @@ export default function POS() {
   // ── Barcode scan ─────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (document.activeElement === searchRef.current) return;
+      // لا تتدخل إذا كان المستخدم يكتب في أي حقل إدخال أو textarea أو select
+      const active = document.activeElement;
+      if (!active) return;
+      const tag = active.tagName.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      // لا تتدخل إذا كان هناك dialog مفتوح (مودال)
+      if (document.querySelector("[role='dialog']")) return;
       if (e.key.length === 1 && /[a-zA-Z0-9\-]/.test(e.key)) {
         searchRef.current?.focus();
       }
