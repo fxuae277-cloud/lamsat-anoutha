@@ -8,7 +8,7 @@ import {
   ShoppingBag, Clock, Truck, CheckCircle, XCircle,
   Package, User, Phone,
   RefreshCw, FileText, ArrowRight,
-  MapPin, AlertTriangle,
+  MapPin, AlertTriangle, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,6 +92,28 @@ const PAY_STATUS_MAP: Record<string, { label: string; color: string }> = {
 
 const n = (v: any) => parseFloat(String(v || "0")) || 0;
 const omr = (v: number) => v.toFixed(3).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+// ─── Avatar helpers ────────────────────────────────────────────────────────────
+const AVATAR_COLORS = [
+  "bg-pink-100 text-pink-700",
+  "bg-purple-100 text-purple-700",
+  "bg-blue-100 text-blue-700",
+  "bg-emerald-100 text-emerald-700",
+  "bg-amber-100 text-amber-700",
+  "bg-rose-100 text-rose-700",
+  "bg-indigo-100 text-indigo-700",
+];
+function avatarColor(name: string) {
+  let s = 0;
+  for (let i = 0; i < name.length; i++) s += name.charCodeAt(i);
+  return AVATAR_COLORS[s % AVATAR_COLORS.length];
+}
+
+const PAY_METHOD_MAP: Record<string, { label: string; color: string }> = {
+  cash:          { label: "نقدي",    color: "bg-emerald-100 text-emerald-700" },
+  card:          { label: "بطاقة",   color: "bg-blue-100 text-blue-700" },
+  bank_transfer: { label: "تحويل",   color: "bg-purple-100 text-purple-700" },
+};
 
 // ─── Stats Cards ───────────────────────────────────────────────────────────────
 function StatsCards({ stats }: { stats: any }) {
@@ -600,6 +622,29 @@ export default function Orders() {
   const clearFilters = () => { setSearch(""); setStatusFilter("all"); setSourceFilter("all"); setFromDate(""); setToDate(""); setPage(1); };
   const hasFilters = !!(search || statusFilter !== "all" || sourceFilter !== "all" || fromDate || toDate);
 
+  const exportCSV = () => {
+    const rows = [
+      ["رقم الطلب","العميل","الهاتف","الحالة","المصدر","طريقة الدفع","الإجمالي","تاريخ الطلب"],
+      ...safeOrders.map(o => [
+        o.orderNumber,
+        o.customerName,
+        o.customerPhone || "",
+        STATUS_MAP[o.status]?.label || o.status,
+        SOURCE_MAP[o.source]?.label || o.source,
+        PAY_METHOD_MAP[o.paymentMethod || ""]?.label || o.paymentMethod || "",
+        omr(n(o.total)),
+        fmtDate(o.createdAt),
+      ]),
+    ];
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const bom = "\uFEFF";
+    const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `orders-${new Date().toISOString().slice(0,10)}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const safeOrders = Array.isArray(orders) ? orders : [];
   const paginated = useMemo(() => {
     const start = (page - 1) * PER_PAGE;
@@ -617,9 +662,14 @@ export default function Orders() {
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">إدارة طلبات العملاء</p>
         </div>
-        <Button className="bg-pink-600 hover:bg-pink-700 gap-1.5" onClick={() => { setEditOrder(null); setShowForm(true); }}>
-          <Plus className="w-4 h-4" /> طلب جديد
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="gap-1.5 h-9 text-sm border-emerald-300 text-emerald-700 hover:bg-emerald-50" onClick={exportCSV}>
+            <Download className="w-4 h-4" /> تصدير CSV
+          </Button>
+          <Button className="bg-pink-600 hover:bg-pink-700 gap-1.5" onClick={() => { setEditOrder(null); setShowForm(true); }}>
+            <Plus className="w-4 h-4" /> طلب جديد
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -658,6 +708,29 @@ export default function Orders() {
             <RefreshCw className="w-3.5 h-3.5" />
           </Button>
         </div>
+        {/* Quick status pills */}
+        <div className="flex flex-wrap gap-1.5 items-center">
+          {[
+            { value: "all", label: "الكل", color: "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200" },
+            { value: "new", label: "جديد", color: "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200" },
+            { value: "preparing", label: "جاري التجهيز", color: "bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200" },
+            { value: "ready", label: "جاهز", color: "bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200" },
+            { value: "delivered", label: "تم التسليم", color: "bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200" },
+            { value: "cancelled", label: "ملغي", color: "bg-red-100 text-red-700 border-red-200 hover:bg-red-200" },
+          ].map(pill => (
+            <button
+              key={pill.value}
+              onClick={() => { setStatusFilter(pill.value); setPage(1); }}
+              className={`px-3 py-1 rounded-full border text-xs font-medium transition-all ${pill.color} ${statusFilter === pill.value ? "ring-2 ring-offset-1 ring-pink-400 font-bold" : "opacity-80"}`}
+            >
+              {pill.label}
+              {pill.value !== "all" && stats?.[`${pill.value}_count`] !== undefined && (
+                <span className="mr-1 opacity-70">({stats[`${pill.value}_count`] || 0})</span>
+              )}
+              {pill.value === "all" && <span className="mr-1 opacity-70">({safeOrders.length || (Array.isArray(orders) ? orders.length : 0)})</span>}
+            </button>
+          ))}
+        </div>
         <p className="text-xs text-muted-foreground">{orders.length} طلب</p>
       </div>
 
@@ -677,7 +750,7 @@ export default function Orders() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/50 border-b">
-                  {["رقم الطلب","العميل","المنتجات","المبلغ","الحالة","المصدر","تاريخ الطلب","إجراءات"].map(h => (
+                  {["رقم الطلب","العميل","المنتجات","المبلغ","الحالة","الدفع","المصدر","تاريخ الطلب","إجراءات"].map(h => (
                     <th key={h} className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -694,13 +767,21 @@ export default function Orders() {
                         {order.invoiceId && <span className="mr-1 text-[10px] bg-purple-100 text-purple-600 px-1 rounded">فاتورة</span>}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <p className="font-medium text-xs">{order.customerName}</p>
-                          {order.isRegisteredCustomer && (
-                            <span className="text-[9px] bg-green-100 text-green-700 border border-green-200 rounded-full px-1.5 py-0.5 font-medium whitespace-nowrap">عميل سابق</span>
-                          )}
+                        <div className="flex items-center gap-2">
+                          {/* Avatar */}
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${avatarColor(order.customerName || "؟")}`}>
+                            {(order.customerName || "؟").charAt(0)}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1">
+                              <p className="font-medium text-xs">{order.customerName}</p>
+                              {order.isRegisteredCustomer && (
+                                <span className="text-[9px] bg-green-100 text-green-700 border border-green-200 rounded-full px-1.5 py-0.5 font-medium whitespace-nowrap">عميل سابق</span>
+                              )}
+                            </div>
+                            {order.customerPhone && <p className="text-[10px] text-muted-foreground" dir="ltr">{order.customerPhone}</p>}
+                          </div>
                         </div>
-                        {order.customerPhone && <p className="text-[10px] text-muted-foreground" dir="ltr">{order.customerPhone}</p>}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{(order.items?.length || 0)} منتج</td>
                       <td className="px-4 py-3 font-bold text-pink-600 text-xs" dir="ltr">{omr(n(order.total))} ر.ع</td>
@@ -708,6 +789,13 @@ export default function Orders() {
                         <Badge variant="outline" className={`${st.color} text-[10px] gap-1`}>
                           <StIcon className="w-2.5 h-2.5" />{st.label}
                         </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        {order.paymentMethod ? (
+                          <Badge variant="outline" className={`${PAY_METHOD_MAP[order.paymentMethod]?.color || "bg-gray-100 text-gray-700"} text-[10px]`}>
+                            {PAY_METHOD_MAP[order.paymentMethod]?.label || order.paymentMethod}
+                          </Badge>
+                        ) : <span className="text-[10px] text-muted-foreground">—</span>}
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant="outline" className={`${src.color} text-[10px]`}>{src.label}</Badge>
