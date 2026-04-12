@@ -14,10 +14,11 @@ interface DateInputProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> {
   value?: string;
   onChange?: React.ChangeEventHandler<HTMLInputElement>;
+  placeholder?: string;
 }
 
 export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
-  ({ className, value = "", onChange, disabled, ...props }, ref) => {
+  ({ className, value = "", onChange, disabled, placeholder = "DD/MM/YYYY", ...props }, ref) => {
     const hiddenRef = React.useRef<HTMLInputElement>(null);
 
     // يحوّل YYYY-MM-DD → DD/MM/YYYY
@@ -94,7 +95,7 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
           dir="ltr"
           lang="en"
           inputMode="numeric"
-          placeholder="DD/MM/YYYY"
+          placeholder={placeholder}
           maxLength={10}
           value={displayVal}
           onChange={handleTextChange}
