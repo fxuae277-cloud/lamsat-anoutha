@@ -763,53 +763,56 @@ export default function POS() {
   const rootCats = categories.filter(c => !c.parentId && c.isActive !== false);
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-gray-50" dir="rtl">
-      {/* ─ Header ─ */}
-      <header className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center">
-            <Store className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <h1 className="font-bold text-sm leading-tight">لمسة أنوثة</h1>
-            <p className="text-xs text-muted-foreground leading-tight">{branchName} · {user.name}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {isOwner && (
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-orange-600 border-orange-300 hover:bg-orange-50"
-              onClick={() => setShowReturn(true)}>
-              <RotateCcw className="w-3 h-3" /> إرجاع
-            </Button>
-          )}
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 relative"
-            onClick={() => setShowHold(true)}>
-            <Pause className="w-3 h-3" /> معلق
-            {heldCount > 0 && (
-              <span className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-pink-600 text-white text-[9px] flex items-center justify-center">{heldCount}</span>
-            )}
-          </Button>
-        </div>
-      </header>
+    <div className="h-screen flex overflow-hidden bg-gray-50" dir="rtl">
 
-      {/* ─ Main Body ─ */}
-      <div className="flex flex-1 overflow-hidden gap-0">
-        {/* ══ Cart (Right in RTL) ══ */}
-        <div className="w-[380px] shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
-          {/* Cart Header */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-b bg-gray-50 shrink-0">
+      {/* ══ Cart (Right) — يبدأ من أعلى الشاشة مباشرة ══ */}
+      <div className="w-[400px] shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden shadow-md">
+
+        {/* Cart Header — يحتوي على اسم الفرع + أزرار الإجراء */}
+        <div className="px-3 pt-3 pb-2 border-b bg-gradient-to-l from-pink-600 to-rose-500 shrink-0">
+          {/* صف علوي: اسم الفرع + معلق + إرجاع */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+                <Store className="w-3.5 h-3.5 text-white" />
+              </div>
+              <span className="text-white text-xs font-medium">{branchName}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {isOwner && (
+                <Button size="sm" variant="ghost"
+                  className="h-6 text-[11px] gap-1 text-white hover:bg-white/20 px-2"
+                  onClick={() => setShowReturn(true)}>
+                  <RotateCcw className="w-3 h-3" /> إرجاع
+                </Button>
+              )}
+              <Button size="sm" variant="ghost"
+                className="h-6 text-[11px] gap-1 text-white hover:bg-white/20 px-2 relative"
+                onClick={() => setShowHold(true)}>
+                <Pause className="w-3 h-3" /> معلق
+                {heldCount > 0 && (
+                  <span className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-white text-pink-600 text-[9px] font-bold flex items-center justify-center">{heldCount}</span>
+                )}
+              </Button>
+            </div>
+          </div>
+          {/* صف ثانٍ: عنوان السلة + عدد المنتجات */}
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4 text-pink-600" />
-              <span className="font-semibold text-sm">سلة المشتريات</span>
-              {cart.length > 0 && <Badge className="bg-pink-100 text-pink-700 border-pink-200 text-xs h-5 px-1.5">{cart.length}</Badge>}
+              <ShoppingCart className="w-4 h-4 text-white" />
+              <span className="font-bold text-white text-sm">سلة المشتريات</span>
+              {cart.length > 0 && (
+                <span className="bg-white text-pink-600 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">{cart.length}</span>
+              )}
             </div>
             {cart.length > 0 && (
-              <button className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"
+              <button className="text-white/70 hover:text-white text-xs flex items-center gap-1 transition-colors"
                 onClick={() => setConfirmClear(true)}>
                 <XCircle className="w-3.5 h-3.5" /> مسح الكل
               </button>
             )}
           </div>
+        </div>
 
           {/* Customer */}
           <div className="px-3 py-2 border-b shrink-0">
@@ -1056,7 +1059,7 @@ export default function POS() {
           )}
 
           {/* Products Grid */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-3">
             {loadingProducts && (
               <div className="grid grid-cols-3 xl:grid-cols-4 gap-3">
                 {Array.from({ length: 8 }).map((_, i) => (
@@ -1120,7 +1123,6 @@ export default function POS() {
             )}
           </div>
         </div>
-      </div>
 
       {/* ─ Modals ─ */}
       {completedSale && (
