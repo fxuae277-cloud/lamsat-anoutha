@@ -1821,7 +1821,11 @@ export async function registerRoutes(
       }
       if (search) {
         params.push(`%${search}%`);
-        where += ` AND (o.order_number ILIKE $${params.length} OR o.customer_phone ILIKE $${params.length})`;
+        where += ` AND (
+          o.order_number ILIKE $${params.length}
+          OR o.customer_phone ILIKE $${params.length}
+          OR o.customer_id IN (SELECT id FROM customers WHERE phone ILIKE $${params.length})
+        )`;
       }
       if (status && status !== "all") {
         params.push(status);

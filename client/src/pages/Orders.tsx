@@ -129,6 +129,8 @@ function OrderFormModal({ order, onClose, onSaved }: {
 
   const [customerName, setCustomerName]     = useState(order?.customerName || "");
   const [customerPhone, setCustomerPhone]   = useState(order?.customerPhone || "");
+  const [customerId, setCustomerId]         = useState<number | null>(order?.customerId || null);
+  const [customerSuggestions, setCustomerSuggestions] = useState<any[]>([]);
   const [source, setSource]                 = useState(order?.source || "walk-in");
   const [deliveryMethod, setDeliveryMethod] = useState(order?.deliveryMethod || "pickup");
   const [deliveryAddress, setDeliveryAddress] = useState(order?.deliveryAddress || "");
@@ -170,7 +172,7 @@ function OrderFormModal({ order, onClose, onSaved }: {
       if (!customerName.trim()) throw new Error("اسم العميل مطلوب");
       if (items.length === 0) throw new Error("يجب إضافة منتج واحد على الأقل");
       const body = {
-        customerName, customerPhone, source, deliveryMethod, deliveryAddress,
+        customerName, customerPhone, customerId, source, deliveryMethod, deliveryAddress,
         deliveryFee: feeVal.toFixed(3), subtotal: subtotal.toFixed(3),
         discount: discVal.toFixed(3), total: total.toFixed(3),
         paymentMethod, paymentStatus, notes, branchId,
@@ -203,11 +205,50 @@ function OrderFormModal({ order, onClose, onSaved }: {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-600">اسم العميل *</label>
-              <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="اسم العميل" className="h-9" />
+              <Input value={customerName} onChange={e => { setCustomerName(e.target.value); setCustomerId(null); }} placeholder="اسم العميل" className="h-9" />
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">رقم الهاتف</label>
-              <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="9XXXXXXXX" dir="ltr" className="h-9" />
+            <div className="space-y-1 relative">
+              <label className="text-xs font-medium text-gray-600">رقم الهاتف {customerId && <span className="text-green-600 text-[10px]">✓ مسجل</span>}</label>
+              <Input
+                value={customerPhone}
+                onChange={async e => {
+                  const val = e.target.value;
+                  setCustomerPhone(val);
+                  setCustomerId(null);
+                  if (val.length >= 4) {
+                    try {
+                      const res = await fetch(`/api/customers/search?q=${encodeURIComponent(val)}`, { credentials: "include" });
+                      const data = await res.json();
+                      setCustomerSuggestions(Array.isArray(data) ? data : []);
+                    } catch { setCustomerSuggestions([]); }
+                  } else {
+                    setCustomerSuggestions([]);
+                  }
+                }}
+                placeholder="9XXXXXXXX" dir="ltr" className="h-9"
+              />
+              {customerSuggestions.length > 0 && (
+                <div className="absolute top-full right-0 left-0 z-50 bg-white border rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
+                  {customerSuggestions.map(c => (
+                    <button key={c.id} type="button"
+                      className="w-full text-right flex items-center gap-2 px-3 py-2 hover:bg-pink-50 text-sm"
+                      onClick={() => {
+                        setCustomerName(c.name);
+                        setCustomerPhone(c.phone || "");
+                        setCustomerId(c.id);
+                        setCustomerSuggestions([]);
+                      }}>
+                      <div className="w-7 h-7 rounded-full bg-pink-100 flex items-center justify-center text-pink-600 text-xs font-bold shrink-0">
+                        {c.name?.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-medium text-xs">{c.name}</p>
+                        <p className="text-[10px] text-muted-foreground" dir="ltr">{c.phone}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
