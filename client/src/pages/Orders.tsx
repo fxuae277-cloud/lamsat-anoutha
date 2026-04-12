@@ -2,7 +2,7 @@
  * Orders.tsx — نظام إدارة الطلبات لمسة أنوثة
  * جلسة 10 | RTL | عملة OMR
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Plus, Search, X, Eye, Edit, Trash2,
   ShoppingBag, Clock, Truck, CheckCircle, XCircle,
@@ -143,6 +143,8 @@ function StatsCards({ stats }: { stats: any }) {
 }
 
 // ─── Product Table Row ─────────────────────────────────────────────────────────
+interface ProductExt extends Product { barcode?: string; }
+
 function ProductTableRow({ item, idx, onUpdate, onRemove }: {
   item: OrderItem;
   idx: number;
@@ -152,42 +154,68 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
   const [search, setSearch] = useState(item.productName || "");
   const [showDrop, setShowDrop] = useState(false);
 
-  const { data: results = [] } = useQuery<Product[]>({
+  const { data: results = [] } = useQuery<ProductExt[]>({
     queryKey: ["/api/pos/products/row", search],
     queryFn: () => fetch(`/api/pos/products?search=${encodeURIComponent(search)}`, { credentials: "include" }).then(r => r.json()),
-    enabled: search.length >= 2,
+    enabled: search.length >= 1,
   });
+
+  const selectProduct = (p: ProductExt) => {
+    setSearch(p.name);
+    setShowDrop(false);
+    onUpdate(idx, { productId: p.id, productName: p.name, unitPrice: n(p.price), costPrice: n(p.avgCost), stockQty: p.stockQty });
+  };
+
+  const stockColor = (qty?: number) => {
+    if (!qty || qty <= 0) return "bg-red-100 text-red-700";
+    if (qty <= 5)         return "bg-amber-100 text-amber-700";
+    return "bg-emerald-100 text-emerald-700";
+  };
 
   return (
     <tr className="border-b hover:bg-gray-50/50">
       {/* المنتج */}
       <td className="px-2 py-1.5 relative">
-        <div className="relative">
-          <Input
-            value={search}
-            onChange={e => { setSearch(e.target.value); setShowDrop(true); onUpdate(idx, { productName: e.target.value, productId: 0 }); }}
-            onFocus={() => search.length >= 2 && setShowDrop(true)}
-            placeholder="اختر المنتج..."
-            className="h-8 text-xs"
-          />
-          {showDrop && results.length > 0 && (
-            <div className="absolute top-full right-0 left-0 z-50 bg-white border rounded-lg shadow-lg max-h-36 overflow-y-auto mt-0.5">
-              {results.map(p => (
-                <button key={p.id} type="button"
-                  className="w-full text-right flex justify-between items-center px-3 py-1.5 hover:bg-pink-50 text-xs"
-                  onMouseDown={e => e.preventDefault()}
-                  onClick={() => {
-                    setSearch(p.name);
-                    setShowDrop(false);
-                    onUpdate(idx, { productId: p.id, productName: p.name, unitPrice: n(p.price), costPrice: n(p.avgCost), stockQty: p.stockQty });
-                  }}>
-                  <span>{p.name}</span>
-                  <span className="text-pink-600 font-medium">{omr(n(p.price))} ر.ع</span>
-                </button>
-              ))}
-            </div>
-          )}
+        <div className="relative flex gap-1">
+          <div className="relative flex-1">
+            <Input
+              value={search}
+              onChange={e => { setSearch(e.target.value); setShowDrop(true); onUpdate(idx, { productName: e.target.value, productId: 0 }); }}
+              onFocus={() => search.length >= 1 && setShowDrop(true)}
+              onBlur={() => setTimeout(() => setShowDrop(false), 150)}
+              placeholder="اسم المنتج أو باركود..."
+              className="h-8 text-xs"
+            />
+            {showDrop && results.length > 0 && (
+              <div className="absolute top-full right-0 left-0 z-50 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto mt-0.5">
+                {results.map(p => (
+                  <button key={p.id} type="button"
+                    className="w-full text-right flex items-center gap-2 px-3 py-2 hover:bg-pink-50 border-b border-gray-50 last:border-0"
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => selectProduct(p)}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{p.name}</p>
+                      {p.barcode && <p className="text-[10px] text-muted-foreground font-mono" dir="ltr">{p.barcode}</p>}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${stockColor(p.stockQty)}`}>
+                        {p.stockQty ?? 0} قطعة
+                      </span>
+                      <span className="text-pink-600 font-bold text-xs">{omr(n(p.price))}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <BarcodeScanButton onScan={barcode => { setSearch(barcode); setShowDrop(true); }} />
         </div>
+        {/* مخزون المنتج المحدد */}
+        {item.productId > 0 && item.stockQty !== undefined && (
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium mt-0.5 inline-block ${stockColor(item.stockQty)}`}>
+            مخزون: {item.stockQty} قطعة
+          </span>
+        )}
       </td>
       {/* الكمية */}
       <td className="px-2 py-1.5">
@@ -242,6 +270,13 @@ function OrderFormModal({ order, onClose, onSaved }: {
   const [branchId, setBranchId] = useState(order?.branchId || user?.branchId || 0);
 
   const { data: branches = [] } = useQuery<Branch[]>({ queryKey: ["/api/branches"], queryFn: getQueryFn({ on401: "returnNull" }) });
+
+  // اختيار الفرع الأول تلقائياً إذا لم يكن محدداً
+  useEffect(() => {
+    if (!branchId && branches.length > 0) {
+      setBranchId(branches[0].id);
+    }
+  }, [branches, branchId]);
 
   const updateItem = (idx: number, updates: Partial<OrderItem>) =>
     setItems(prev => prev.map((x, xi) => xi === idx ? { ...x, ...updates } : x));
