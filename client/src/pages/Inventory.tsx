@@ -60,15 +60,18 @@ function BalancesTab() {
             </SelectContent>
           </Select>
         </div>
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input 
-            placeholder={t("products.search_placeholder")} 
-            className="pl-9" 
-            value={search} 
-            onChange={e => setSearch(e.target.value)}
-            data-testid="input-search-balances"
-          />
+        <div className="flex gap-2 flex-1">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder={t("products.search_placeholder")}
+              className="pl-9"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              data-testid="input-search-balances"
+            />
+          </div>
+          <BarcodeScanButton onScan={(barcode) => setSearch(barcode)} />
         </div>
       </div>
 
