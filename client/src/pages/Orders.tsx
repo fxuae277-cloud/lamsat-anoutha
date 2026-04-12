@@ -142,6 +142,80 @@ function StatsCards({ stats }: { stats: any }) {
   );
 }
 
+// ─── Product Table Row ─────────────────────────────────────────────────────────
+function ProductTableRow({ item, idx, onUpdate, onRemove }: {
+  item: OrderItem;
+  idx: number;
+  onUpdate: (idx: number, updates: Partial<OrderItem>) => void;
+  onRemove: (idx: number) => void;
+}) {
+  const [search, setSearch] = useState(item.productName || "");
+  const [showDrop, setShowDrop] = useState(false);
+
+  const { data: results = [] } = useQuery<Product[]>({
+    queryKey: ["/api/pos/products/row", search],
+    queryFn: () => fetch(`/api/pos/products?search=${encodeURIComponent(search)}`, { credentials: "include" }).then(r => r.json()),
+    enabled: search.length >= 2,
+  });
+
+  return (
+    <tr className="border-b hover:bg-gray-50/50">
+      {/* المنتج */}
+      <td className="px-2 py-1.5 relative">
+        <div className="relative">
+          <Input
+            value={search}
+            onChange={e => { setSearch(e.target.value); setShowDrop(true); onUpdate(idx, { productName: e.target.value, productId: 0 }); }}
+            onFocus={() => search.length >= 2 && setShowDrop(true)}
+            placeholder="اختر المنتج..."
+            className="h-8 text-xs"
+          />
+          {showDrop && results.length > 0 && (
+            <div className="absolute top-full right-0 left-0 z-50 bg-white border rounded-lg shadow-lg max-h-36 overflow-y-auto mt-0.5">
+              {results.map(p => (
+                <button key={p.id} type="button"
+                  className="w-full text-right flex justify-between items-center px-3 py-1.5 hover:bg-pink-50 text-xs"
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={() => {
+                    setSearch(p.name);
+                    setShowDrop(false);
+                    onUpdate(idx, { productId: p.id, productName: p.name, unitPrice: n(p.price), costPrice: n(p.avgCost), stockQty: p.stockQty });
+                  }}>
+                  <span>{p.name}</span>
+                  <span className="text-pink-600 font-medium">{omr(n(p.price))} ر.ع</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </td>
+      {/* الكمية */}
+      <td className="px-2 py-1.5">
+        <Input type="number" min="1" value={item.quantity}
+          onChange={e => onUpdate(idx, { quantity: parseInt(e.target.value) || 1 })}
+          className="w-16 h-8 text-center text-xs" dir="ltr" />
+      </td>
+      {/* سعر الوحدة */}
+      <td className="px-2 py-1.5">
+        <Input type="number" step="0.001" min="0" value={String(item.unitPrice)}
+          onChange={e => onUpdate(idx, { unitPrice: e.target.value as any })}
+          className="w-24 h-8 text-xs" dir="ltr" />
+      </td>
+      {/* الإجمالي */}
+      <td className="px-3 py-1.5 text-xs font-bold text-pink-600 whitespace-nowrap" dir="ltr">
+        {omr(n(item.unitPrice) * item.quantity)} ر.ع
+      </td>
+      {/* حذف */}
+      <td className="px-2 py-1.5">
+        <button type="button" onClick={() => onRemove(idx)}
+          className="text-red-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-50">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
 // ─── Order Form Modal ──────────────────────────────────────────────────────────
 function OrderFormModal({ order, onClose, onSaved }: {
   order?: Order | null; onClose: () => void; onSaved: () => void;
@@ -163,44 +237,35 @@ function OrderFormModal({ order, onClose, onSaved }: {
   const [paymentMethod, setPaymentMethod]   = useState(order?.paymentMethod || "cash");
   const [paymentStatus, setPaymentStatus]   = useState(order?.paymentStatus || "unpaid");
   const [notes, setNotes]                   = useState(order?.notes || "");
-  const [items, setItems]                   = useState<OrderItem[]>(order?.items || []);
-  const [productSearch, setProductSearch]   = useState("");
-  const [showSearch, setShowSearch]         = useState(false);
-  const [branchId, setBranchId]             = useState(order?.branchId || user?.branchId || 0);
+  const emptyRow: OrderItem = { productId: 0, quantity: 1, unitPrice: 0 };
+  const [items, setItems]   = useState<OrderItem[]>(order?.items?.length ? order.items : [{ ...emptyRow }]);
+  const [branchId, setBranchId] = useState(order?.branchId || user?.branchId || 0);
 
   const { data: branches = [] } = useQuery<Branch[]>({ queryKey: ["/api/branches"], queryFn: getQueryFn({ on401: "returnNull" }) });
 
-  const { data: productResults = [] } = useQuery<Product[]>({
-    queryKey: ["/api/pos/products", productSearch],
-    queryFn: () => fetch(`/api/pos/products?search=${encodeURIComponent(productSearch)}`, { credentials: "include" }).then(r => r.json()),
-    enabled: productSearch.length >= 2,
-  });
+  const updateItem = (idx: number, updates: Partial<OrderItem>) =>
+    setItems(prev => prev.map((x, xi) => xi === idx ? { ...x, ...updates } : x));
+  const removeItem = (idx: number) =>
+    setItems(prev => prev.filter((_, xi) => xi !== idx));
+  const addRow = () =>
+    setItems(prev => [...prev, { ...emptyRow }]);
 
   const subtotal = items.reduce((s, i) => s + n(i.unitPrice) * i.quantity, 0);
   const discVal = n(discount);
   const feeVal  = n(deliveryFee);
   const total   = Math.max(0, subtotal - discVal + feeVal);
 
-  const addProduct = (p: Product) => {
-    setItems(prev => {
-      const ex = prev.find(i => i.productId === p.id);
-      if (ex) return prev.map(i => i.productId === p.id ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { productId: p.id, productName: p.name, quantity: 1, unitPrice: n(p.price), costPrice: n(p.avgCost), stockQty: p.stockQty }];
-    });
-    setProductSearch("");
-    setShowSearch(false);
-  };
-
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!customerName.trim()) throw new Error("اسم العميل مطلوب");
-      if (items.length === 0) throw new Error("يجب إضافة منتج واحد على الأقل");
+      const validItems = items.filter(i => i.productId && i.productId > 0);
+      if (validItems.length === 0) throw new Error("يجب إضافة منتج واحد على الأقل");
       const body = {
         customerName, customerPhone, customerId, source, deliveryMethod, deliveryAddress,
         deliveryFee: feeVal.toFixed(3), subtotal: subtotal.toFixed(3),
         discount: discVal.toFixed(3), total: total.toFixed(3),
         paymentMethod, paymentStatus, notes, branchId,
-        items: items.map(i => ({
+        items: validItems.map(i => ({
           productId: i.productId, quantity: i.quantity,
           unitPrice: n(i.unitPrice).toFixed(3),
           total: (n(i.unitPrice) * i.quantity).toFixed(3),
@@ -324,49 +389,36 @@ function OrderFormModal({ order, onClose, onSaved }: {
             </div>
           )}
 
-          {/* Products */}
+          {/* Products Table */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-gray-600">المنتجات *</label>
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setShowSearch(v => !v)}>
-                <Plus className="w-3 h-3" /> إضافة منتج
-              </Button>
+            <label className="text-xs font-medium text-gray-600">المنتجات *</label>
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-50 border-b">
+                    <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">المنتج</th>
+                    <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground w-20">الكمية</th>
+                    <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground w-28">سعر الوحدة</th>
+                    <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground w-28">الإجمالي</th>
+                    <th className="w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, idx) => (
+                    <ProductTableRow
+                      key={idx}
+                      item={item}
+                      idx={idx}
+                      onUpdate={updateItem}
+                      onRemove={removeItem}
+                    />
+                  ))}
+                </tbody>
+              </table>
             </div>
-            {showSearch && (
-              <div className="relative">
-                <div className="flex gap-2 mb-1">
-                  <Input placeholder="ابحث عن منتج..." value={productSearch}
-                    onChange={e => setProductSearch(e.target.value)} autoFocus className="h-8 text-sm flex-1" />
-                  <BarcodeScanButton onScan={(barcode) => setProductSearch(barcode)} />
-                </div>
-                {productResults.length > 0 && (
-                  <div className="absolute top-full right-0 left-0 bg-white border rounded-lg shadow-lg z-50 max-h-40 overflow-y-auto mt-1">
-                    {productResults.map(p => (
-                      <button key={p.id} className="w-full text-right flex justify-between items-center px-3 py-2 hover:bg-pink-50 text-sm" onClick={() => addProduct(p)}>
-                        <span>{p.name}</span>
-                        <span className="text-pink-600 font-medium text-xs">{omr(n(p.price))} ر.ع</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            {items.length === 0 && <p className="text-center text-xs text-muted-foreground py-4 border border-dashed rounded-lg">لم تُضف منتجات بعد</p>}
-            <div className="space-y-1.5">
-              {items.map((item, idx) => (
-                <div key={idx} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2 border">
-                  <span className="flex-1 truncate text-xs font-medium">{item.productName}</span>
-                  <Input type="number" min="1" value={item.quantity}
-                    onChange={e => setItems(prev => prev.map((i, x) => x === idx ? { ...i, quantity: parseInt(e.target.value) || 1 } : i))}
-                    className="w-14 h-7 text-center text-xs" dir="ltr" />
-                  <span className="text-xs text-gray-500 w-20 text-left" dir="ltr">{omr(n(item.unitPrice))} ر.ع</span>
-                  <span className="text-xs font-bold text-pink-600 w-20 text-left" dir="ltr">{omr(n(item.unitPrice) * item.quantity)} ر.ع</span>
-                  <button className="text-red-400 hover:text-red-600" onClick={() => setItems(prev => prev.filter((_, x) => x !== idx))}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1 w-full border-dashed" onClick={addRow}>
+              <Plus className="w-3 h-3" /> إضافة منتج
+            </Button>
           </div>
 
           {/* Payment */}
@@ -404,18 +456,23 @@ function OrderFormModal({ order, onClose, onSaved }: {
             <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="ملاحظات الطلب..." className="h-9" />
           </div>
 
-          {items.length > 0 && (
-            <div className="bg-pink-50 border border-pink-100 rounded-xl p-3 space-y-1 text-sm">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>المجموع الفرعي</span><span dir="ltr">{omr(subtotal)} ر.ع</span>
-              </div>
-              {discVal > 0 && <div className="flex justify-between text-xs text-emerald-600"><span>خصم</span><span dir="ltr">- {omr(discVal)} ر.ع</span></div>}
-              {feeVal > 0 && <div className="flex justify-between text-xs"><span>رسوم التوصيل</span><span dir="ltr">+ {omr(feeVal)} ر.ع</span></div>}
-              <div className="flex justify-between font-bold border-t border-pink-200 pt-1">
-                <span>الإجمالي</span><span className="text-pink-600" dir="ltr">{omr(total)} ر.ع</span>
-              </div>
+          {/* Summary */}
+          <div className="bg-pink-50 border border-pink-100 rounded-xl p-3 space-y-1.5 text-sm">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>المجموع الفرعي</span><span dir="ltr">{omr(subtotal)} ر.ع</span>
             </div>
-          )}
+            <div className="flex justify-between text-xs text-emerald-600">
+              <span>الخصم</span><span dir="ltr">- {omr(discVal)} ر.ع</span>
+            </div>
+            {feeVal > 0 && (
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>رسوم التوصيل</span><span dir="ltr">+ {omr(feeVal)} ر.ع</span>
+              </div>
+            )}
+            <div className="flex justify-between font-bold border-t border-pink-200 pt-1.5">
+              <span>الإجمالي</span><span className="text-pink-600 text-base" dir="ltr">{omr(total)} ر.ع</span>
+            </div>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={onClose}>إلغاء</Button>
