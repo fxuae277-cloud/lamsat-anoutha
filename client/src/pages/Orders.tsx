@@ -151,8 +151,15 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
   onUpdate: (idx: number, updates: Partial<OrderItem>) => void;
   onRemove: (idx: number) => void;
 }) {
-  const [search, setSearch] = useState(item.productName || "");
-  const [showDrop, setShowDrop] = useState(false);
+  const [search, setSearch]           = useState(item.productName || "");
+  const [showDrop, setShowDrop]       = useState(false);
+  const [linkedPrice, setLinkedPrice] = useState<number | null>(item.productId > 0 ? n(item.unitPrice) : null);
+  const [priceStr, setPriceStr]       = useState(item.productId > 0 ? omr(n(item.unitPrice)) : "");
+
+  // مزامنة السعر عند تغيير item من الخارج (مثلاً عند التعديل)
+  useEffect(() => {
+    if (item.productId > 0) setPriceStr(omr(n(item.unitPrice)));
+  }, [item.productId]);
 
   const { data: results = [] } = useQuery<ProductExt[]>({
     queryKey: ["/api/pos/products/row", search],
@@ -161,10 +168,15 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
   });
 
   const selectProduct = (p: ProductExt) => {
+    const price = n(p.price);
     setSearch(p.name);
     setShowDrop(false);
-    onUpdate(idx, { productId: p.id, productName: p.name, unitPrice: n(p.price), costPrice: n(p.avgCost), stockQty: p.stockQty });
+    setLinkedPrice(price);
+    setPriceStr(omr(price));
+    onUpdate(idx, { productId: p.id, productName: p.name, unitPrice: price, costPrice: n(p.avgCost), stockQty: p.stockQty });
   };
+
+  const isPriceModified = linkedPrice !== null && Math.abs(n(priceStr.replace(/,/g, "")) - linkedPrice) > 0.0001;
 
   const stockColor = (qty?: number) => {
     if (!qty || qty <= 0) return "bg-red-100 text-red-700";
@@ -180,7 +192,13 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
           <div className="relative flex-1">
             <Input
               value={search}
-              onChange={e => { setSearch(e.target.value); setShowDrop(true); onUpdate(idx, { productName: e.target.value, productId: 0 }); }}
+              onChange={e => {
+                setSearch(e.target.value);
+                setShowDrop(true);
+                setLinkedPrice(null);
+                setPriceStr("");
+                onUpdate(idx, { productName: e.target.value, productId: 0, unitPrice: 0 });
+              }}
               onFocus={() => search.length >= 1 && setShowDrop(true)}
               onBlur={() => setTimeout(() => setShowDrop(false), 150)}
               placeholder="اسم المنتج أو باركود..."
@@ -201,7 +219,7 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
                       <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${stockColor(p.stockQty)}`}>
                         {p.stockQty ?? 0} قطعة
                       </span>
-                      <span className="text-pink-600 font-bold text-xs">{omr(n(p.price))}</span>
+                      <span className="text-pink-600 font-bold text-xs">{omr(n(p.price))} ر.ع</span>
                     </div>
                   </button>
                 ))}
@@ -223,11 +241,51 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
           onChange={e => onUpdate(idx, { quantity: parseInt(e.target.value) || 1 })}
           className="w-16 h-8 text-center text-xs" dir="ltr" />
       </td>
-      {/* سعر الوحدة */}
+      {/* سعر الوحدة — مربوط بالمنتج */}
       <td className="px-2 py-1.5">
-        <Input type="number" step="0.001" min="0" value={String(item.unitPrice)}
-          onChange={e => onUpdate(idx, { unitPrice: e.target.value as any })}
-          className="w-24 h-8 text-xs" dir="ltr" />
+        <div className="space-y-0.5">
+          <div className="relative">
+            <Input
+              type="text" inputMode="decimal" dir="ltr"
+              value={priceStr}
+              onChange={e => {
+                const raw = e.target.value.replace(/[^\d.]/g, "");
+                setPriceStr(raw);
+                onUpdate(idx, { unitPrice: parseFloat(raw) || 0 });
+              }}
+              onBlur={() => {
+                const v = parseFloat(priceStr.replace(/,/g, "")) || 0;
+                setPriceStr(omr(v));
+                onUpdate(idx, { unitPrice: v });
+              }}
+              placeholder="0.000"
+              className={`w-28 h-8 text-xs pr-7 ${
+                item.productId > 0
+                  ? isPriceModified
+                    ? "border-amber-400 bg-amber-50 focus-visible:ring-amber-400"
+                    : "border-emerald-400 bg-emerald-50 focus-visible:ring-emerald-400"
+                  : ""
+              }`}
+            />
+            {/* أيقونة الربط */}
+            {item.productId > 0 && (
+              <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] ${isPriceModified ? "text-amber-500" : "text-emerald-500"}`}>
+                {isPriceModified ? "✎" : "🔗"}
+              </span>
+            )}
+          </div>
+          {/* زر إعادة السعر الأصلي عند التعديل */}
+          {isPriceModified && linkedPrice !== null && (
+            <button type="button"
+              className="text-[10px] text-emerald-600 hover:text-emerald-800 underline"
+              onClick={() => {
+                setPriceStr(omr(linkedPrice));
+                onUpdate(idx, { unitPrice: linkedPrice });
+              }}>
+              ↩ {omr(linkedPrice)} ر.ع
+            </button>
+          )}
+        </div>
       </td>
       {/* الإجمالي */}
       <td className="px-3 py-1.5 text-xs font-bold text-pink-600 whitespace-nowrap" dir="ltr">
