@@ -1020,6 +1020,32 @@ export async function registerRoutes(
   app.get("/api/products/:id/variants", requireAuth, requirePermission("products.view"), async (req, res) => {
     res.json(await storage.getVariantsByProduct(Number(req.params.id)));
   });
+
+  /** GET /api/products/:id/variants-with-stock — variants مع المخزون حسب الفرع */
+  app.get("/api/products/:id/variants-with-stock", requireAuth, async (req, res) => {
+    try {
+      const productId = Number(req.params.id);
+      const user = await storage.getUser(req.session.userId!);
+      const branchId = user?.branchId;
+      const result = await pool.query(`
+        SELECT
+          pv.id, pv.color, pv.size, pv.price, pv.sku, pv.barcode,
+          pv.is_default as "isDefault", pv.active,
+          COALESCE((
+            SELECT SUM(ib.qty_on_hand)
+            FROM inventory_balances ib
+            JOIN locations l ON l.id = ib.location_id
+            WHERE ib.variant_id = pv.id AND l.branch_id = $2
+          ), 0)::int AS "stockQty"
+        FROM product_variants pv
+        WHERE pv.product_id = $1 AND pv.active = true
+        ORDER BY pv.color NULLS LAST, pv.size NULLS LAST
+      `, [productId, branchId]);
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
   app.post("/api/products/:id/variants", requireAuth, requirePermission("products.create"), async (req, res) => {
     try {
       const productId = Number(req.params.id);

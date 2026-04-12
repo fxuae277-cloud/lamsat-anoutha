@@ -28,6 +28,7 @@ import type { Branch } from "@shared/schema";
 interface OrderItem {
   id?: number;
   productId: number;
+  variantId?: number;
   productName?: string;
   quantity: number;
   unitPrice: number | string;
@@ -36,6 +37,17 @@ interface OrderItem {
   size?: string;
   costPrice?: number | string;
   stockQty?: number;
+}
+
+interface ProductVariantExt {
+  id: number;
+  color?: string;
+  size?: string;
+  price: string;
+  sku?: string;
+  barcode?: string;
+  isDefault: boolean;
+  stockQty: number;
 }
 
 interface Order {
@@ -145,6 +157,12 @@ function StatsCards({ stats }: { stats: any }) {
 // ─── Product Table Row ─────────────────────────────────────────────────────────
 interface ProductExt extends Product { barcode?: string; }
 
+const stockColor = (qty?: number) => {
+  if (!qty || qty <= 0) return "bg-red-100 text-red-700 border-red-200";
+  if (qty <= 5)         return "bg-amber-100 text-amber-700 border-amber-200";
+  return "bg-emerald-100 text-emerald-700 border-emerald-200";
+};
+
 function ProductTableRow({ item, idx, onUpdate, onRemove }: {
   item: OrderItem;
   idx: number;
@@ -155,8 +173,9 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
   const [showDrop, setShowDrop]       = useState(false);
   const [linkedPrice, setLinkedPrice] = useState<number | null>(item.productId > 0 ? n(item.unitPrice) : null);
   const [priceStr, setPriceStr]       = useState(item.productId > 0 ? omr(n(item.unitPrice)) : "");
+  const [variants, setVariants]       = useState<ProductVariantExt[]>([]);
+  const [loadingV, setLoadingV]       = useState(false);
 
-  // مزامنة السعر عند تغيير item من الخارج (مثلاً عند التعديل)
   useEffect(() => {
     if (item.productId > 0) setPriceStr(omr(n(item.unitPrice)));
   }, [item.productId]);
@@ -167,136 +186,237 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
     enabled: search.length >= 1,
   });
 
-  const selectProduct = (p: ProductExt) => {
+  const fetchVariants = async (productId: number) => {
+    setLoadingV(true);
+    try {
+      const res = await fetch(`/api/products/${productId}/variants-with-stock`, { credentials: "include" });
+      const data: ProductVariantExt[] = await res.json();
+      setVariants(data);
+      // إذا كان المنتج بدون ألوان/مقاسات أو variant واحد فقط → اختره تلقائياً
+      if (data.length === 1) applyVariant(data[0]);
+    } finally {
+      setLoadingV(false);
+    }
+  };
+
+  const applyVariant = (v: ProductVariantExt) => {
+    const price = n(v.price);
+    setLinkedPrice(price);
+    setPriceStr(omr(price));
+    onUpdate(idx, { variantId: v.id, color: v.color || undefined, size: v.size || undefined, unitPrice: price, stockQty: v.stockQty });
+  };
+
+  const selectProduct = async (p: ProductExt) => {
     const price = n(p.price);
     setSearch(p.name);
     setShowDrop(false);
     setLinkedPrice(price);
     setPriceStr(omr(price));
-    onUpdate(idx, { productId: p.id, productName: p.name, unitPrice: price, costPrice: n(p.avgCost), stockQty: p.stockQty });
+    setVariants([]);
+    onUpdate(idx, { productId: p.id, productName: p.name, unitPrice: price, costPrice: n(p.avgCost), stockQty: p.stockQty, variantId: undefined, color: undefined, size: undefined });
+    await fetchVariants(p.id);
   };
 
   const isPriceModified = linkedPrice !== null && Math.abs(n(priceStr.replace(/,/g, "")) - linkedPrice) > 0.0001;
 
-  const stockColor = (qty?: number) => {
-    if (!qty || qty <= 0) return "bg-red-100 text-red-700";
-    if (qty <= 5)         return "bg-amber-100 text-amber-700";
-    return "bg-emerald-100 text-emerald-700";
-  };
+  // استخراج الألوان والمقاسات الفريدة
+  const colors  = [...new Set(variants.map(v => v.color).filter(Boolean))] as string[];
+  const hasColors = colors.length > 0;
+  const sizes   = [...new Set(variants.filter(v => !item.color || v.color === item.color).map(v => v.size).filter(Boolean))] as string[];
+  const hasSizes = sizes.length > 0;
+
+  // إيجاد الـ variant المحدد حالياً
+  const selectedVariant = variants.find(v =>
+    (!item.color || v.color === item.color) &&
+    (!item.size  || v.size  === item.size)
+  );
 
   return (
-    <tr className="border-b hover:bg-gray-50/50">
-      {/* المنتج */}
-      <td className="px-2 py-1.5 relative">
-        <div className="relative flex gap-1">
-          <div className="relative flex-1">
-            <Input
-              value={search}
-              onChange={e => {
-                setSearch(e.target.value);
-                setShowDrop(true);
-                setLinkedPrice(null);
-                setPriceStr("");
-                onUpdate(idx, { productName: e.target.value, productId: 0, unitPrice: 0 });
-              }}
-              onFocus={() => search.length >= 1 && setShowDrop(true)}
-              onBlur={() => setTimeout(() => setShowDrop(false), 150)}
-              placeholder="اسم المنتج أو باركود..."
-              className="h-8 text-xs"
-            />
-            {showDrop && results.length > 0 && (
-              <div className="absolute top-full right-0 left-0 z-50 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto mt-0.5">
-                {results.map(p => (
-                  <button key={p.id} type="button"
-                    className="w-full text-right flex items-center gap-2 px-3 py-2 hover:bg-pink-50 border-b border-gray-50 last:border-0"
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={() => selectProduct(p)}>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium truncate">{p.name}</p>
-                      {p.barcode && <p className="text-[10px] text-muted-foreground font-mono" dir="ltr">{p.barcode}</p>}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${stockColor(p.stockQty)}`}>
-                        {p.stockQty ?? 0} قطعة
-                      </span>
-                      <span className="text-pink-600 font-bold text-xs">{omr(n(p.price))} ر.ع</span>
-                    </div>
-                  </button>
-                ))}
+    <tr className="border-b">
+      <td colSpan={5} className="px-2 py-2">
+        <div className="space-y-2">
+          {/* صف البحث */}
+          <div className="flex gap-1 items-center">
+            <div className="relative flex-1">
+              <Input
+                value={search}
+                onChange={e => {
+                  setSearch(e.target.value);
+                  setShowDrop(true);
+                  setLinkedPrice(null);
+                  setPriceStr("");
+                  setVariants([]);
+                  onUpdate(idx, { productName: e.target.value, productId: 0, unitPrice: 0, variantId: undefined, color: undefined, size: undefined });
+                }}
+                onFocus={() => search.length >= 1 && setShowDrop(true)}
+                onBlur={() => setTimeout(() => setShowDrop(false), 150)}
+                placeholder="اسم المنتج أو باركود..."
+                className="h-8 text-xs"
+              />
+              {showDrop && results.length > 0 && (
+                <div className="absolute top-full right-0 left-0 z-50 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto mt-0.5">
+                  {results.map(p => (
+                    <button key={p.id} type="button"
+                      className="w-full text-right flex items-center gap-2 px-3 py-2 hover:bg-pink-50 border-b border-gray-50 last:border-0"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => selectProduct(p)}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{p.name}</p>
+                        {p.barcode && <p className="text-[10px] text-muted-foreground font-mono" dir="ltr">{p.barcode}</p>}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${stockColor(p.stockQty)}`}>
+                          {p.stockQty ?? 0} قطعة
+                        </span>
+                        <span className="text-pink-600 font-bold text-xs">{omr(n(p.price))} ر.ع</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <BarcodeScanButton onScan={barcode => { setSearch(barcode); setShowDrop(true); }} />
+
+            {/* الكمية */}
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="text-xs text-muted-foreground">الكمية</span>
+              <Input type="number" min="1" value={item.quantity}
+                onChange={e => onUpdate(idx, { quantity: parseInt(e.target.value) || 1 })}
+                className="w-16 h-8 text-center text-xs" dir="ltr" />
+            </div>
+
+            {/* السعر */}
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="text-xs text-muted-foreground">السعر</span>
+              <div className="relative">
+                <Input type="text" inputMode="decimal" dir="ltr"
+                  value={priceStr}
+                  onChange={e => {
+                    const raw = e.target.value.replace(/[^\d.]/g, "");
+                    setPriceStr(raw);
+                    onUpdate(idx, { unitPrice: parseFloat(raw) || 0 });
+                  }}
+                  onBlur={() => {
+                    const v = parseFloat(priceStr.replace(/,/g, "")) || 0;
+                    setPriceStr(omr(v));
+                    onUpdate(idx, { unitPrice: v });
+                  }}
+                  placeholder="0.000"
+                  className={`w-24 h-8 text-xs ${item.productId > 0 ? isPriceModified ? "border-amber-400 bg-amber-50" : "border-emerald-400 bg-emerald-50" : ""}`}
+                />
+                {item.productId > 0 && (
+                  <span className={`absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] ${isPriceModified ? "text-amber-500" : "text-emerald-500"}`}>
+                    {isPriceModified ? "✎" : "🔗"}
+                  </span>
+                )}
               </div>
-            )}
-          </div>
-          <BarcodeScanButton onScan={barcode => { setSearch(barcode); setShowDrop(true); }} />
-        </div>
-        {/* مخزون المنتج المحدد */}
-        {item.productId > 0 && item.stockQty !== undefined && (
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium mt-0.5 inline-block ${stockColor(item.stockQty)}`}>
-            مخزون: {item.stockQty} قطعة
-          </span>
-        )}
-      </td>
-      {/* الكمية */}
-      <td className="px-2 py-1.5">
-        <Input type="number" min="1" value={item.quantity}
-          onChange={e => onUpdate(idx, { quantity: parseInt(e.target.value) || 1 })}
-          className="w-16 h-8 text-center text-xs" dir="ltr" />
-      </td>
-      {/* سعر الوحدة — مربوط بالمنتج */}
-      <td className="px-2 py-1.5">
-        <div className="space-y-0.5">
-          <div className="relative">
-            <Input
-              type="text" inputMode="decimal" dir="ltr"
-              value={priceStr}
-              onChange={e => {
-                const raw = e.target.value.replace(/[^\d.]/g, "");
-                setPriceStr(raw);
-                onUpdate(idx, { unitPrice: parseFloat(raw) || 0 });
-              }}
-              onBlur={() => {
-                const v = parseFloat(priceStr.replace(/,/g, "")) || 0;
-                setPriceStr(omr(v));
-                onUpdate(idx, { unitPrice: v });
-              }}
-              placeholder="0.000"
-              className={`w-28 h-8 text-xs pr-7 ${
-                item.productId > 0
-                  ? isPriceModified
-                    ? "border-amber-400 bg-amber-50 focus-visible:ring-amber-400"
-                    : "border-emerald-400 bg-emerald-50 focus-visible:ring-emerald-400"
-                  : ""
-              }`}
-            />
-            {/* أيقونة الربط */}
-            {item.productId > 0 && (
-              <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] ${isPriceModified ? "text-amber-500" : "text-emerald-500"}`}>
-                {isPriceModified ? "✎" : "🔗"}
-              </span>
-            )}
-          </div>
-          {/* زر إعادة السعر الأصلي عند التعديل */}
-          {isPriceModified && linkedPrice !== null && (
-            <button type="button"
-              className="text-[10px] text-emerald-600 hover:text-emerald-800 underline"
-              onClick={() => {
-                setPriceStr(omr(linkedPrice));
-                onUpdate(idx, { unitPrice: linkedPrice });
-              }}>
-              ↩ {omr(linkedPrice)} ر.ع
+            </div>
+
+            {/* الإجمالي */}
+            <div className="shrink-0 text-xs font-bold text-pink-600 min-w-[70px] text-left" dir="ltr">
+              {omr(n(item.unitPrice) * item.quantity)} ر.ع
+            </div>
+
+            {/* حذف */}
+            <button type="button" onClick={() => onRemove(idx)}
+              className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50 shrink-0">
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
+          </div>
+
+          {/* اختيار اللون والمقاس */}
+          {loadingV && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+              <div className="w-3 h-3 border-2 border-pink-400 border-t-transparent rounded-full animate-spin" />
+              جاري تحميل الخيارات...
+            </div>
+          )}
+
+          {!loadingV && item.productId > 0 && variants.length > 0 && (hasColors || hasSizes) && (
+            <div className="bg-gray-50 border border-gray-100 rounded-lg p-2.5 space-y-2.5">
+              {/* ألوان */}
+              {hasColors && (
+                <div className="space-y-1">
+                  <p className="text-[11px] font-medium text-gray-500">اللون</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {colors.map(color => {
+                      const colorVariants = variants.filter(v => v.color === color);
+                      const totalStock = colorVariants.reduce((s, v) => s + v.stockQty, 0);
+                      const isSelected = item.color === color;
+                      return (
+                        <button key={color} type="button"
+                          onClick={() => {
+                            onUpdate(idx, { color, size: undefined, variantId: undefined });
+                            // إذا لا يوجد مقاسات → اختر الـ variant مباشرة
+                            const cv = colorVariants.find(v => !v.size) || colorVariants[0];
+                            if (cv && colorVariants.length === 1) applyVariant(cv);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-all ${
+                            isSelected
+                              ? "border-pink-500 bg-pink-100 text-pink-700 ring-2 ring-pink-300 ring-offset-1"
+                              : "border-gray-200 bg-white hover:border-pink-300 hover:bg-pink-50"
+                          } ${totalStock === 0 ? "opacity-40" : ""}`}>
+                          {color}
+                          <span className={`mr-1 text-[10px] ${stockColor(totalStock).split(" ")[1]}`}>
+                            ({totalStock})
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* مقاسات */}
+              {hasSizes && (
+                <div className="space-y-1">
+                  <p className="text-[11px] font-medium text-gray-500">المقاس</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {sizes.map(size => {
+                      const sv = variants.find(v => v.size === size && (!item.color || v.color === item.color));
+                      const qty = sv?.stockQty ?? 0;
+                      const isSelected = item.size === size;
+                      return (
+                        <button key={size} type="button"
+                          onClick={() => sv && applyVariant(sv)}
+                          disabled={qty === 0}
+                          className={`min-w-[38px] px-2.5 py-1 rounded-lg border text-xs font-medium transition-all ${
+                            isSelected
+                              ? "border-pink-500 bg-pink-600 text-white ring-2 ring-pink-300 ring-offset-1"
+                              : qty === 0
+                                ? "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed"
+                                : "border-gray-200 bg-white hover:border-pink-300 hover:bg-pink-50"
+                          }`}>
+                          {size}
+                          <span className={`block text-[9px] leading-none mt-0.5 ${isSelected ? "text-pink-200" : qty === 0 ? "text-gray-300" : "text-muted-foreground"}`}>
+                            {qty === 0 ? "نفذ" : qty}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* معلومات الـ variant المحدد */}
+              {selectedVariant && (
+                <div className="flex items-center gap-3 text-xs pt-1 border-t border-gray-200">
+                  {item.color && <span className="text-gray-600">اللون: <b>{item.color}</b></span>}
+                  {item.size  && <span className="text-gray-600">المقاس: <b>{item.size}</b></span>}
+                  <span className={`px-1.5 py-0.5 rounded-full border text-[10px] font-medium ${stockColor(selectedVariant.stockQty)}`}>
+                    مخزون: {selectedVariant.stockQty} قطعة
+                  </span>
+                  {isPriceModified && linkedPrice !== null && (
+                    <button type="button" className="text-emerald-600 underline"
+                      onClick={() => { setPriceStr(omr(linkedPrice)); onUpdate(idx, { unitPrice: linkedPrice }); }}>
+                      ↩ {omr(linkedPrice)} ر.ع
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
-      </td>
-      {/* الإجمالي */}
-      <td className="px-3 py-1.5 text-xs font-bold text-pink-600 whitespace-nowrap" dir="ltr">
-        {omr(n(item.unitPrice) * item.quantity)} ر.ع
-      </td>
-      {/* حذف */}
-      <td className="px-2 py-1.5">
-        <button type="button" onClick={() => onRemove(idx)}
-          className="text-red-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-50">
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
       </td>
     </tr>
   );
@@ -359,7 +479,8 @@ function OrderFormModal({ order, onClose, onSaved }: {
         discount: discVal.toFixed(3), total: total.toFixed(3),
         paymentMethod, paymentStatus, notes, branchId,
         items: validItems.map(i => ({
-          productId: i.productId, quantity: i.quantity,
+          productId: i.productId, variantId: i.variantId || null,
+          quantity: i.quantity,
           unitPrice: n(i.unitPrice).toFixed(3),
           total: (n(i.unitPrice) * i.quantity).toFixed(3),
           costPrice: n(i.costPrice).toFixed(3),
@@ -486,16 +607,14 @@ function OrderFormModal({ order, onClose, onSaved }: {
           <div className="space-y-2">
             <label className="text-xs font-medium text-gray-600">المنتجات *</label>
             <div className="border rounded-lg overflow-hidden">
+              <div className="bg-gray-50 border-b px-3 py-2 flex items-center gap-4 text-xs font-semibold text-muted-foreground">
+                <span className="flex-1">المنتج / اللون / المقاس</span>
+                <span className="w-20 text-center">الكمية</span>
+                <span className="w-24 text-center">السعر</span>
+                <span className="w-20 text-center">الإجمالي</span>
+                <span className="w-6"></span>
+              </div>
               <table className="w-full">
-                <thead>
-                  <tr className="bg-gray-50 border-b">
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">المنتج</th>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground w-20">الكمية</th>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground w-28">سعر الوحدة</th>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground w-28">الإجمالي</th>
-                    <th className="w-8"></th>
-                  </tr>
-                </thead>
                 <tbody>
                   {items.map((item, idx) => (
                     <ProductTableRow
