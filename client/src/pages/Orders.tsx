@@ -708,30 +708,7 @@ export default function Orders() {
             <RefreshCw className="w-3.5 h-3.5" />
           </Button>
         </div>
-        {/* Quick status pills */}
-        <div className="flex flex-wrap gap-1.5 items-center">
-          {[
-            { value: "all", label: "الكل", color: "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200" },
-            { value: "new", label: "جديد", color: "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200" },
-            { value: "preparing", label: "جاري التجهيز", color: "bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200" },
-            { value: "ready", label: "جاهز", color: "bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200" },
-            { value: "delivered", label: "تم التسليم", color: "bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200" },
-            { value: "cancelled", label: "ملغي", color: "bg-red-100 text-red-700 border-red-200 hover:bg-red-200" },
-          ].map(pill => (
-            <button
-              key={pill.value}
-              onClick={() => { setStatusFilter(pill.value); setPage(1); }}
-              className={`px-3 py-1 rounded-full border text-xs font-medium transition-all ${pill.color} ${statusFilter === pill.value ? "ring-2 ring-offset-1 ring-pink-400 font-bold" : "opacity-80"}`}
-            >
-              {pill.label}
-              {pill.value !== "all" && stats?.[`${pill.value}_count`] !== undefined && (
-                <span className="mr-1 opacity-70">({stats[`${pill.value}_count`] || 0})</span>
-              )}
-              {pill.value === "all" && <span className="mr-1 opacity-70">({safeOrders.length || (Array.isArray(orders) ? orders.length : 0)})</span>}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground">{orders.length} طلب</p>
+<p className="text-xs text-muted-foreground">{orders.length} طلب</p>
       </div>
 
       {/* Table */}
