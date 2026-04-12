@@ -1533,6 +1533,28 @@ export async function registerRoutes(
   app.get("/api/customers", requireAuth, requirePermission("customers.view"), async (_req, res) => {
     res.json(await storage.getCustomers());
   });
+  /** GET /api/customers/search — يجب أن يكون قبل /:id */
+  app.get("/api/customers/search", requireAuth, requirePermission("customers.view"), async (req, res) => {
+    try {
+      const { q } = req.query;
+      if (!q) {
+        const all = await pool.query(
+          `SELECT id, name, phone, city FROM customers WHERE active = true ORDER BY name LIMIT 50`
+        );
+        return res.json(all.rows);
+      }
+      const result = await pool.query(
+        `SELECT id, name, phone, city FROM customers
+         WHERE active = true AND (name ILIKE $1 OR phone ILIKE $1)
+         ORDER BY name LIMIT 20`,
+        [`%${q}%`]
+      );
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/customers/:id", requireAuth, requirePermission("customers.view"), async (req, res) => {
     const id = parseInt(req.params.id as string);
     const result = await storage.getCustomerWithInvoices(id);
@@ -4680,28 +4702,7 @@ export async function registerRoutes(
   // CUSTOMERS — العملاء (إضافة حقول بحث)
   // ═══════════════════════════════════════════════════════════════════
 
-  /** GET /api/customers/search — بحث سريع عن عميل */
-  app.get("/api/customers/search", requireAuth, requirePermission("customers.view"), async (req, res) => {
-    try {
-      const { q } = req.query;
-      if (!q) {
-        // إرجاع كل العملاء عند عدم وجود بحث (حتى 50)
-        const all = await pool.query(
-          `SELECT id, name, phone, city FROM customers WHERE active = true ORDER BY name LIMIT 50`
-        );
-        return res.json(all.rows);
-      }
-      const result = await pool.query(
-        `SELECT id, name, phone, city FROM customers
-         WHERE active = true AND (name ILIKE $1 OR phone ILIKE $1)
-         ORDER BY name LIMIT 20`,
-        [`%${q}%`]
-      );
-      res.json(result.rows);
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
+  /** تم نقل GET /api/customers/search — انظر قبل /:id مباشرة */
 
   // ═══════════════════════════════════════════════════════════════════
   // NOTIFICATIONS — نظام الإشعارات
