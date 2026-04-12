@@ -1805,7 +1805,7 @@ export async function registerRoutes(
     }
     res.json(filtered);
   });
-  /** GET /api/orders/stats — إحصائيات الطلبات (يجب أن يكون قبل /:id) */
+  /** GET /api/orders/stats — إحصائيات الطلبات مع مقارنة شهرية */
   app.get("/api/orders/stats", requireAuth, async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
@@ -1814,12 +1814,33 @@ export async function registerRoutes(
       const branchClause = isManager ? "" : `AND branch_id = ${user.branchId}`;
       const result = await pool.query(`
         SELECT
-          COUNT(*) FILTER (WHERE status='new') as new_count,
+          -- إجمالي كل الوقت (للبادجات الجانبية)
+          COUNT(*) FILTER (WHERE status='new')       as new_count,
           COUNT(*) FILTER (WHERE status='preparing') as preparing_count,
-          COUNT(*) FILTER (WHERE status='ready') as ready_count,
+          COUNT(*) FILTER (WHERE status='ready')     as ready_count,
           COUNT(*) FILTER (WHERE status='delivered') as delivered_count,
           COUNT(*) FILTER (WHERE status='cancelled') as cancelled_count,
-          COUNT(*) as total_count
+          COUNT(*)                                   as total_count,
+
+          -- هذا الشهر
+          COUNT(*) FILTER (WHERE created_at >= date_trunc('month', NOW()))                                          as this_month_total,
+          COUNT(*) FILTER (WHERE status='new'       AND created_at >= date_trunc('month', NOW()))                   as this_month_new,
+          COUNT(*) FILTER (WHERE status='preparing' AND created_at >= date_trunc('month', NOW()))                   as this_month_preparing,
+          COUNT(*) FILTER (WHERE status='ready'     AND created_at >= date_trunc('month', NOW()))                   as this_month_ready,
+          COUNT(*) FILTER (WHERE status='delivered' AND created_at >= date_trunc('month', NOW()))                   as this_month_delivered,
+          COUNT(*) FILTER (WHERE status='cancelled' AND created_at >= date_trunc('month', NOW()))                   as this_month_cancelled,
+
+          -- الشهر الماضي
+          COUNT(*) FILTER (WHERE created_at >= date_trunc('month', NOW() - INTERVAL '1 month') AND created_at < date_trunc('month', NOW()))                                          as prev_month_total,
+          COUNT(*) FILTER (WHERE status='new'       AND created_at >= date_trunc('month', NOW() - INTERVAL '1 month') AND created_at < date_trunc('month', NOW()))                   as prev_month_new,
+          COUNT(*) FILTER (WHERE status='preparing' AND created_at >= date_trunc('month', NOW() - INTERVAL '1 month') AND created_at < date_trunc('month', NOW()))                   as prev_month_preparing,
+          COUNT(*) FILTER (WHERE status='ready'     AND created_at >= date_trunc('month', NOW() - INTERVAL '1 month') AND created_at < date_trunc('month', NOW()))                   as prev_month_ready,
+          COUNT(*) FILTER (WHERE status='delivered' AND created_at >= date_trunc('month', NOW() - INTERVAL '1 month') AND created_at < date_trunc('month', NOW()))                   as prev_month_delivered,
+          COUNT(*) FILTER (WHERE status='cancelled' AND created_at >= date_trunc('month', NOW() - INTERVAL '1 month') AND created_at < date_trunc('month', NOW()))                   as prev_month_cancelled,
+
+          -- اليوم
+          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE) as today_count,
+          COUNT(*) FILTER (WHERE status='new' AND created_at >= CURRENT_DATE) as today_new
         FROM orders WHERE 1=1 ${branchClause}
       `);
       res.json(result.rows[0]);

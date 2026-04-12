@@ -128,24 +128,70 @@ const PAY_METHOD_MAP: Record<string, { label: string; color: string }> = {
 };
 
 // ─── Stats Cards ───────────────────────────────────────────────────────────────
+function pctChange(curr: number, prev: number): { pct: number; label: string; color: string } | null {
+  if (prev === 0 && curr === 0) return null;
+  if (prev === 0) return { pct: 100, label: "+100%", color: "text-emerald-600" };
+  const pct = Math.round(((curr - prev) / prev) * 100);
+  if (pct === 0) return { pct: 0, label: "±0%", color: "text-gray-400" };
+  return {
+    pct,
+    label: `${pct > 0 ? "+" : ""}${pct}%`,
+    color: pct > 0 ? "text-emerald-600" : "text-red-500",
+  };
+}
+
 function StatsCards({ stats }: { stats: any }) {
+  const s = stats || {};
   const cards = [
-    { key: "new_count",       label: "جديد",         color: "text-blue-600",    bg: "bg-blue-50 border-blue-100",     icon: Clock },
-    { key: "preparing_count", label: "جاري التجهيز", color: "text-amber-600",   bg: "bg-amber-50 border-amber-100",   icon: Package },
-    { key: "ready_count",     label: "جاهز",         color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100", icon: CheckCircle },
-    { key: "delivered_count", label: "تم التسليم",   color: "text-purple-600",  bg: "bg-purple-50 border-purple-100", icon: Truck },
-    { key: "cancelled_count", label: "ملغي",         color: "text-red-600",     bg: "bg-red-50 border-red-100",       icon: XCircle },
+    {
+      key: "new_count", thisKey: "this_month_new", prevKey: "prev_month_new",
+      label: "جديد", color: "text-blue-600", bg: "bg-blue-50 border-blue-100", icon: Clock,
+    },
+    {
+      key: "preparing_count", thisKey: "this_month_preparing", prevKey: "prev_month_preparing",
+      label: "جاري التجهيز", color: "text-amber-600", bg: "bg-amber-50 border-amber-100", icon: Package,
+    },
+    {
+      key: "ready_count", thisKey: "this_month_ready", prevKey: "prev_month_ready",
+      label: "جاهز", color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100", icon: CheckCircle,
+    },
+    {
+      key: "delivered_count", thisKey: "this_month_delivered", prevKey: "prev_month_delivered",
+      label: "تم التسليم", color: "text-purple-600", bg: "bg-purple-50 border-purple-100", icon: Truck,
+    },
+    {
+      key: "cancelled_count", thisKey: "this_month_cancelled", prevKey: "prev_month_cancelled",
+      label: "ملغي", color: "text-red-600", bg: "bg-red-50 border-red-100", icon: XCircle,
+    },
   ];
   return (
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
       {cards.map(c => {
-        const Icon = c.icon;
+        const Icon   = c.icon;
+        const curr   = Number(s[c.thisKey] || 0);
+        const prev   = Number(s[c.prevKey] || 0);
+        const change = pctChange(curr, prev);
+        const todayNew = c.key === "new_count" ? Number(s.today_new || 0) : null;
         return (
-          <div key={c.key} className={`${c.bg} border rounded-xl p-3 flex items-center gap-3`}>
-            <Icon className={`w-5 h-5 ${c.color} shrink-0`} />
-            <div>
-              <p className={`text-xl font-bold ${c.color}`}>{stats?.[c.key] || 0}</p>
+          <div key={c.key} className={`${c.bg} border rounded-xl p-3`}>
+            <div className="flex items-center gap-2 mb-1">
+              <Icon className={`w-4 h-4 ${c.color} shrink-0`} />
               <p className="text-xs text-muted-foreground">{c.label}</p>
+            </div>
+            <p className={`text-2xl font-bold ${c.color}`}>{s[c.key] || 0}</p>
+            <div className="mt-1.5 space-y-0.5">
+              {change && (
+                <p className={`text-[11px] font-medium flex items-center gap-1 ${change.color}`}>
+                  <span>{change.label}</span>
+                  <span className="text-muted-foreground font-normal">من الشهر الماضي</span>
+                </p>
+              )}
+              {todayNew !== null && todayNew > 0 && (
+                <p className="text-[11px] text-blue-500 font-medium">+{todayNew} اليوم</p>
+              )}
+              {!change && todayNew === null && (
+                <p className="text-[11px] text-muted-foreground">هذا الشهر: {curr}</p>
+              )}
             </div>
           </div>
         );
