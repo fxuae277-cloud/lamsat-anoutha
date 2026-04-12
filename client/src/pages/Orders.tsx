@@ -44,6 +44,8 @@ interface Order {
   customerId?: number;
   customerName: string;
   customerPhone?: string;
+  isRegisteredCustomer?: boolean;
+  registeredCustomerName?: string;
   source: string;
   status: string;
   deliveryMethod: string;
@@ -692,7 +694,12 @@ export default function Orders() {
                         {order.invoiceId && <span className="mr-1 text-[10px] bg-purple-100 text-purple-600 px-1 rounded">فاتورة</span>}
                       </td>
                       <td className="px-4 py-3">
-                        <p className="font-medium text-xs">{order.customerName}</p>
+                        <div className="flex items-center gap-1">
+                          <p className="font-medium text-xs">{order.customerName}</p>
+                          {order.isRegisteredCustomer && (
+                            <span className="text-[9px] bg-green-100 text-green-700 border border-green-200 rounded-full px-1.5 py-0.5 font-medium whitespace-nowrap">عميل سابق</span>
+                          )}
+                        </div>
                         {order.customerPhone && <p className="text-[10px] text-muted-foreground" dir="ltr">{order.customerPhone}</p>}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{(order.items?.length || 0)} منتج</td>

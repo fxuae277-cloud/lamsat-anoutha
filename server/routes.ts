@@ -1842,6 +1842,12 @@ export async function registerRoutes(
         SELECT o.*,
                b.name as branch_name,
                u.name as employee_name,
+               c.id   as registered_customer_id,
+               c.name as registered_customer_name,
+               (o.customer_id IS NOT NULL
+                OR (o.customer_phone IS NOT NULL AND EXISTS (
+                  SELECT 1 FROM customers cx WHERE cx.phone = o.customer_phone AND cx.active = true
+                ))) as is_registered_customer,
                (SELECT json_agg(json_build_object(
                   'id', oi.id, 'productId', oi.product_id, 'productName', p.name,
                   'quantity', oi.quantity, 'unitPrice', oi.unit_price, 'total', oi.total,
@@ -1850,6 +1856,7 @@ export async function registerRoutes(
         FROM orders o
         LEFT JOIN branches b ON b.id = o.branch_id
         LEFT JOIN users u ON u.id = o.employee_id
+        LEFT JOIN customers c ON c.id = o.customer_id OR (o.customer_id IS NULL AND c.phone = o.customer_phone AND c.active = true)
         ${where}
         ORDER BY o.created_at DESC
         LIMIT 500
