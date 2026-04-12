@@ -587,7 +587,7 @@ export default function Orders() {
         <div className="flex flex-wrap gap-2 items-center">
           <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-            <Input placeholder="بحث برقم الطلب أو اسم العميل..." value={search}
+            <Input placeholder="بحث برقم الطلب أو رقم الهاتف..." value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }} className="pr-9 h-8 text-sm" />
           </div>
           <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
