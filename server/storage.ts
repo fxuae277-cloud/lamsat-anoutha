@@ -74,6 +74,7 @@ export interface IStorage {
   deleteCategory(id: number): Promise<void>;
   toggleCategoryActive(id: number): Promise<Category | undefined>;
   getProducts(): Promise<Product[]>;
+  searchProducts(filters: { q?: string; page?: number; limit?: number; branchId?: number }): Promise<{ products: any[]; total: number }>;
   getProduct(id: number): Promise<Product | undefined>;
   getProductByBarcode(barcode: string): Promise<Product | undefined>;
   createProduct(data: InsertProduct): Promise<Product>;
@@ -399,13 +400,76 @@ export class DatabaseStorage implements IStorage {
     for (const r of stockResult.rows as any[]) stockMap.set(Number(r.product_id), Number(r.total_stock));
     return rows.map(r => ({ ...r, totalStock: stockMap.get(r.id) ?? 0 }));
   }
+
+  async searchProducts(filters: { q?: string; page?: number; limit?: number; branchId?: number }) {
+    const page = filters.page || 1;
+    const limit = filters.limit || 20;
+    const offset = (page - 1) * limit;
+
+    const conditions: any[] = [];
+    if (filters.q) {
+      conditions.push(or(
+        ilike(products.name, `%${filters.q}%`),
+        ilike(products.barcode, `%${filters.q}%`),
+        sql`${products.id}::text = ${filters.q}`
+      ));
+    }
+    if (filters.branchId) {
+      conditions.push(eq(products.branchId, filters.branchId));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Count total
+    const [totalRes] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(products)
+      .where(whereClause);
+    const total = totalRes?.count || 0;
+
+    // Get paginated products
+    const rows = await db.select()
+      .from(products)
+      .where(whereClause)
+      .limit(limit)
+      .offset(offset)
+      .orderBy(desc(products.id));
+
+    if (rows.length === 0) return { products: [], total };
+
+    const ids = rows.map(r => r.id);
+    const stockResult = await db.execute(sql`
+      SELECT pv.product_id, COALESCE(SUM(ib.qty_on_hand), 0)::int AS total_stock
+      FROM product_variants pv
+      LEFT JOIN inventory_balances ib ON ib.variant_id = pv.id
+      WHERE pv.product_id = ANY(ARRAY[${sql.join(ids.map(id => sql`${id}::int`), sql`, `)}])
+      GROUP BY pv.product_id
+    `);
+    const stockMap = new Map<number, number>();
+    for (const r of stockResult.rows as any[]) stockMap.set(Number(r.product_id), Number(r.total_stock));
+
+    const enrichedProducts = rows.map(r => ({ ...r, totalStock: stockMap.get(r.id) ?? 0 }));
+    return { products: enrichedProducts, total };
+  }
+
   async getProduct(id: number) {
     const [row] = await db.select().from(products).where(eq(products.id, id));
     return row;
   }
   async getProductByBarcode(barcode: string) {
-    const [row] = await db.select().from(products).where(eq(products.barcode, barcode));
-    return row;
+    let [row] = await db.select().from(products).where(eq(products.barcode, barcode));
+    if (!row && /^\d+$/.test(barcode)) {
+      [row] = await db.select().from(products).where(eq(products.id, parseInt(barcode)));
+    }
+    if (!row) return undefined;
+
+    const stockResult = await db.execute(sql`
+      SELECT COALESCE(SUM(qty_on_hand), 0)::int AS total_stock
+      FROM inventory_balances ib
+      JOIN product_variants pv ON pv.id = ib.variant_id
+      WHERE pv.product_id = ${row.id}
+    `);
+    const totalStock = (stockResult.rows[0] as any)?.total_stock ?? 0;
+    return { ...row, totalStock };
   }
   async createProduct(data: InsertProduct) {
     const [row] = await db.insert(products).values(data).returning();

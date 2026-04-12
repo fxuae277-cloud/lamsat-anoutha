@@ -884,6 +884,33 @@ export async function registerRoutes(
       productType: productType ? String(productType) : undefined,
     }));
   });
+
+  app.get("/api/test-search", async (req, res) => {
+    try {
+      const q = req.query.q as string;
+      const result = await storage.searchProducts({ q, page: 1, limit: 10 });
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/products/search", requireAuth, requirePermission("products.view"), async (req, res) => {
+    try {
+      const q = req.query.q as string;
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const branchId = req.user?.role === "owner" || req.user?.role === "admin" 
+        ? (req.query.branchId ? parseInt(req.query.branchId as string) : undefined)
+        : req.user?.branchId;
+
+      const result = await storage.searchProducts({ q, page, limit, branchId });
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/products/:id", requireAuth, requirePermission("products.view"), async (req, res) => {
     const product = await storage.getProduct(Number(req.params.id));
     if (!product) return res.status(404).json({ message: "المنتج غير موجود" });
@@ -909,10 +936,43 @@ export async function registerRoutes(
       lastSupplier: lp?.last_supplier ?? null,
     });
   });
-  app.get("/api/products/barcode/:barcode", requireAuth, requirePermission("products.view"), async (req, res) => {
-    const row = await storage.getProductByBarcode(req.params.barcode as string);
-    if (!row) return res.status(404).json({ message: "المنتج غير موجود" });
-    res.json(row);
+  app.get("/api/test-barcode/:code", async (req, res) => {
+    try {
+      const code = req.params.code;
+      const product = await storage.getProductByBarcode(code);
+      if (!product) return res.status(404).json({ message: "Product not found" });
+      res.json({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        stock: product.totalStock,
+        image: product.image
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/products/barcode/:code", requireAuth, requirePermission("products.view"), async (req, res) => {
+    try {
+      const code = req.params.code;
+      const product = await storage.getProductByBarcode(code);
+      
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      // Return requested fields: id, name, price, stock, image
+      res.json({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        stock: product.totalStock,
+        image: product.image
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
   });
   app.post("/api/products", requireAuth, requirePermission("products.create"), async (req, res) => {
     try {
@@ -2408,13 +2468,19 @@ export async function registerRoutes(
       return res.status(400).json({ message: "لا يمكن تعديل فاتورة معتمدة أو ملغاة" });
     }
     const updateData: any = {};
-    const { shippingCost, customsCost, clearanceCost, otherCost, notes, supplierId } = req.body;
+    const { shippingCost, customsCost, clearanceCost, otherCost, notes, supplierId, paymentMethod, dueDate, discount, discountType, vatRate, vatAmount } = req.body;
     if (shippingCost !== undefined) updateData.shippingCost = String(shippingCost);
     if (customsCost !== undefined) updateData.customsCost = String(customsCost);
     if (clearanceCost !== undefined) updateData.clearanceCost = String(clearanceCost);
     if (otherCost !== undefined) updateData.otherCost = String(otherCost);
     if (notes !== undefined) updateData.notes = notes;
     if (supplierId !== undefined) updateData.supplierId = supplierId;
+    if (paymentMethod !== undefined) updateData.paymentMethod = paymentMethod;
+    if (dueDate !== undefined) updateData.dueDate = dueDate;
+    if (discount !== undefined) updateData.discount = String(discount);
+    if (discountType !== undefined) updateData.discountType = discountType;
+    if (vatRate !== undefined) updateData.vatRate = String(vatRate);
+    if (vatAmount !== undefined) updateData.vatAmount = String(vatAmount);
     const row = await storage.updatePurchaseInvoice(id, updateData);
     res.json(row);
   });
@@ -2488,6 +2554,20 @@ export async function registerRoutes(
     }
     await storage.deletePurchaseItem(Number(req.params.itemId));
     res.json({ message: "تم الحذف" });
+  });
+
+  app.delete("/api/purchases/:id", requireAuth, requirePermission("purchases.manage"), async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const inv = await pool.query("SELECT status FROM purchase_invoices WHERE id=$1", [id]);
+      if (!inv.rows.length) return res.status(404).json({ message: "الفاتورة غير موجودة" });
+      if (inv.rows[0].status !== "pending") return res.status(400).json({ message: "لا يمكن حذف فاتورة غير معلقة" });
+      await pool.query("DELETE FROM purchase_items WHERE purchase_id=$1", [id]);
+      await pool.query("DELETE FROM purchase_invoices WHERE id=$1", [id]);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الحذف" });
+    }
   });
 
   app.patch("/api/purchases/:id/status", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
@@ -4081,6 +4161,20 @@ export async function registerRoutes(
       res.json({ success: true, message: "تم تشغيل المايجريشن بنجاح" });
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+    }
+  });
+
+  // ── Migration 0015 ─────────────────────────────────────────────────────────
+  app.post("/api/run-migration-0015", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const migPath = path.join(process.cwd(), "migrations", "0015_purchase_payment_and_delete.sql");
+      const sql = fs.readFileSync(migPath, "utf8");
+      await pool.query(sql);
+      res.json({ success: true, message: "تم تشغيل migration 0015 — payment_method/due_date/discount/vat بنجاح" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
     }
   });
 

@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
 import { fmtDate } from "@/lib/formatters";
@@ -532,6 +532,20 @@ function PurchasesTab() {
   const [newClearance, setNewClearance] = useState("0");
   const [newOther, setNewOther] = useState("0");
   const [newNotes, setNewNotes] = useState("");
+  const [newPayMethod, setNewPayMethod] = useState("cash");
+  const [newDueDate, setNewDueDate]     = useState("");
+  const [newDiscount, setNewDiscount]   = useState("0");
+  const [newDiscType, setNewDiscType]   = useState<"value"|"percent">("value");
+  const [newVatRate, setNewVatRate]     = useState("0");
+  const [modalItems, setModalItems]     = useState<Array<{uid:string;variantId:number|null;productId:number|null;name:string;barcode:string;color:string;size:string;qty:number;unitCost:number}>>([]);
+  const [modalBarcode, setModalBarcode] = useState("");
+  const [modalBarcodeLoading, setModalBarcodeLoading] = useState(false);
+  const [selectedIds, setSelectedIds]   = useState<Set<number>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
+  const [showBulkDelete, setShowBulkDelete] = useState(false);
+  const [sortCol, setSortCol] = useState<"invoiceNumber"|"invoiceDate"|"grandTotal">("invoiceDate");
+  const [sortDir, setSortDir] = useState<"asc"|"desc">("desc");
+  const modalBarcodeRef = useRef<HTMLInputElement>(null);
 
   const [addProductId, setAddProductId] = useState("");
   const [addVariantId, setAddVariantId] = useState<number | null>(null);
@@ -611,27 +625,89 @@ function PurchasesTab() {
   const supplierMap = Object.fromEntries(allSuppliers.map(s => [s.id, s.name]));
   const productMap = Object.fromEntries(allProducts.map(p => [p.id, p.name]));
 
+  // ── Modal totals ──────────────────────────────────────────────────────────
+  const modalSubtotal  = modalItems.reduce((s, i) => s + i.qty * i.unitCost, 0);
+  const modalDiscVal   = newDiscType === "value" ? parseFloat(newDiscount || "0") : modalSubtotal * parseFloat(newDiscount || "0") / 100;
+  const modalAfterDisc = Math.max(0, modalSubtotal - modalDiscVal);
+  const modalVat       = modalAfterDisc * parseFloat(newVatRate || "0") / 100;
+  const modalGrandTotal = modalAfterDisc + modalVat + (parseFloat(newShipping||"0")||0) + (parseFloat(newCustoms||"0")||0) + (parseFloat(newClearance||"0")||0) + (parseFloat(newOther||"0")||0);
+
+  async function handleModalBarcode(raw: string) {
+    const barcode = raw.trim();
+    if (!barcode) return;
+    setModalBarcodeLoading(true);
+    try {
+      const res = await fetch(`/api/variants/barcode/${encodeURIComponent(barcode)}`, { credentials: "include" });
+      if (res.ok) {
+        const v = await res.json();
+        setModalItems(prev => {
+          const idx = prev.findIndex(i => i.variantId === v.id);
+          if (idx >= 0) return prev.map((i, n) => n === idx ? { ...i, qty: i.qty + 1 } : i);
+          return [...prev, { uid: crypto.randomUUID(), variantId: v.id, productId: v.productId, name: v.name || barcode, barcode: v.barcode || barcode, color: v.color || "", size: v.size || "", qty: 1, unitCost: parseFloat(v.costDefault || "0") }];
+        });
+      } else {
+        setModalItems(prev => [...prev, { uid: crypto.randomUUID(), variantId: null, productId: null, name: barcode, barcode, color: "", size: "", qty: 1, unitCost: 0 }]);
+      }
+    } finally {
+      setModalBarcodeLoading(false);
+      setModalBarcode("");
+      setTimeout(() => modalBarcodeRef.current?.focus(), 50);
+    }
+  }
+
   const createMutation = useMutation({
     mutationFn: async () => {
+      if (!newSupplierId) throw new Error("اختر المورد");
       const res = await apiRequest("POST", "/api/purchases", {
         supplierId: Number(newSupplierId),
         branchId: newBranchId ? Number(newBranchId) : null,
         invoiceDate: newDate,
+        paymentMethod: newPayMethod,
+        dueDate: newDueDate || null,
+        discount: parseFloat(newDiscount || "0"),
+        discountType: newDiscType,
+        vatRate: parseFloat(newVatRate || "0"),
+        vatAmount: modalVat,
         shippingCost: Number(newShipping) || 0,
         customsCost: Number(newCustoms) || 0,
         clearanceCost: Number(newClearance) || 0,
         otherCost: Number(newOther) || 0,
         notes: newNotes || null,
       });
-      return res.json();
+      const inv = await res.json();
+      // إضافة البنود المسحوبة في النافذة
+      for (const item of modalItems) {
+        try {
+          if (!item.productId && !item.variantId) {
+            const qcRes = await apiRequest("POST", "/api/variants/quick-create", {
+              productName: item.name || "صنف",
+              barcode: item.barcode || null, color: item.color || null, size: item.size || null,
+              price: item.unitCost || 0, costDefault: item.unitCost || 0,
+            });
+            const qcData = await qcRes.json();
+            await apiRequest("POST", `/api/purchases/${inv.id}/items`, {
+              productId: qcData.product.id, variantId: qcData.variant.id,
+              qty: item.qty, unitCostBase: item.unitCost,
+            });
+          } else {
+            await apiRequest("POST", `/api/purchases/${inv.id}/items`, {
+              productId: item.productId, variantId: item.variantId,
+              qty: item.qty, unitCostBase: item.unitCost,
+            });
+          }
+        } catch {}
+      }
+      return inv;
     },
     onSuccess: (inv) => {
       qc.invalidateQueries({ queryKey: ["/api/purchases"] });
       setShowCreate(false);
       setSelectedInvoice(inv.id);
       toast({ title: t("purchases.invoice_created") });
-      setNewSupplierId(""); setNewBranchId(""); setNewNotes("");
+      setNewSupplierId(""); setNewBranchId(""); setNewNotes(""); setNewDueDate("");
       setNewShipping("0"); setNewCustoms("0"); setNewClearance("0"); setNewOther("0");
+      setNewPayMethod("cash"); setNewDiscount("0"); setNewVatRate("0");
+      setModalItems([]); setModalBarcode("");
     },
     onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
@@ -798,6 +874,20 @@ function PurchasesTab() {
       toast({ title: t("purchases.invoice_received"), description: t("purchases.invoice_received_desc") });
     },
     onError: (e: Error) => toast({ title: t("purchases.approve_failed"), description: e.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/purchases/${id}`);
+      if (!res.ok) { const e = await res.json(); throw new Error(e.message); }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/purchases"] });
+      setShowDeleteConfirm(null);
+      setSelectedIds(new Set());
+      toast({ title: "تم حذف الفاتورة" });
+    },
+    onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
 
   async function handleOcrUpload(file: File) {
@@ -1696,6 +1786,9 @@ function PurchasesTab() {
     done:     safeInvoices.filter(i => i.status === "approved" || i.status === "received").length,
   };
 
+  const today = new Date().toISOString().slice(0, 10);
+  const todayCount = safeInvoices.filter(i => String((i as any).invoiceDate || "").startsWith(today)).length;
+
   const filteredInvoices = (safeInvoices as PurchaseInvoice[]).filter(inv => {
     if (invSearch) {
       const q = invSearch.toLowerCase();
@@ -1707,10 +1800,16 @@ function PurchasesTab() {
     return true;
   });
 
+  const sortedInvoices = [...filteredInvoices].sort((a: any, b: any) => {
+    let av = a[sortCol] ?? ""; let bv = b[sortCol] ?? "";
+    if (sortCol === "grandTotal") { av = parseFloat(String(av)); bv = parseFloat(String(bv)); }
+    return sortDir === "asc" ? (av < bv ? -1 : av > bv ? 1 : 0) : (av > bv ? -1 : av < bv ? 1 : 0);
+  });
+
   return (
     <div className="space-y-4">
       {/* إحصائيات سريعة */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div className="bg-card border rounded-lg p-3 text-center">
           <p className="text-2xl font-bold">{invoiceStats.total}</p>
           <p className="text-xs text-muted-foreground mt-0.5">إجمالي الفواتير</p>
@@ -1726,6 +1825,10 @@ function PurchasesTab() {
         <div className="bg-card border rounded-lg p-3 text-center cursor-pointer hover:border-green-400/50" onClick={() => setInvStatus("approved")}>
           <p className="text-2xl font-bold text-green-600">{invoiceStats.done}</p>
           <p className="text-xs text-muted-foreground mt-0.5">مكتملة</p>
+        </div>
+        <div className="bg-card border rounded-lg p-3 text-center">
+          <p className="text-2xl font-bold text-blue-600">{todayCount}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">فواتير اليوم</p>
         </div>
       </div>
 
@@ -1762,27 +1865,56 @@ function PurchasesTab() {
         </Button>
       </div>
 
+      {/* شريط الحذف الجماعي */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-lg px-4 py-2">
+          <span className="text-sm font-medium">{selectedIds.size} فاتورة محددة</span>
+          <Button size="sm" variant="destructive" className="gap-1 h-7 text-xs" onClick={() => setShowBulkDelete(true)}>
+            <Trash2 className="w-3 h-3" /> حذف المحددة
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedIds(new Set())}>إلغاء التحديد</Button>
+        </div>
+      )}
+
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
-                <TableHead>#</TableHead>
+                <TableHead className="w-10">
+                  <input type="checkbox" className="h-4 w-4 cursor-pointer"
+                    checked={sortedInvoices.length > 0 && sortedInvoices.every(i => selectedIds.has(i.id))}
+                    onChange={e => setSelectedIds(e.target.checked ? new Set(sortedInvoices.map(i => i.id)) : new Set())}
+                  />
+                </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => { setSortCol("invoiceNumber"); setSortDir(d => sortCol === "invoiceNumber" && d === "asc" ? "desc" : "asc"); }}>
+                  # {sortCol === "invoiceNumber" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+                </TableHead>
                 <TableHead>{t("purchases.supplier")}</TableHead>
-                <TableHead>{t("purchases.date")}</TableHead>
-                <TableHead>{t("purchases.grand_total")}</TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => { setSortCol("invoiceDate"); setSortDir(d => sortCol === "invoiceDate" && d === "asc" ? "desc" : "asc"); }}>
+                  {t("purchases.date")} {sortCol === "invoiceDate" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+                </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => { setSortCol("grandTotal"); setSortDir(d => sortCol === "grandTotal" && d === "asc" ? "desc" : "asc"); }}>
+                  {t("purchases.grand_total")} {sortCol === "grandTotal" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+                </TableHead>
                 <TableHead>{t("purchases.status")}</TableHead>
                 <TableHead>{t("purchases.table_actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredInvoices.length === 0 && (
+              {sortedInvoices.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">{t("common.no_data")}</TableCell>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">{t("common.no_data")}</TableCell>
                 </TableRow>
               )}
-              {filteredInvoices.map((inv) => (
-                <TableRow key={inv.id} className="cursor-pointer hover:bg-muted/30" onClick={() => setSelectedInvoice(inv.id)} data-testid={`row-purchase-${inv.id}`}>
+              {sortedInvoices.map((inv) => (
+                <TableRow key={inv.id} className={`cursor-pointer hover:bg-muted/30 ${selectedIds.has(inv.id) ? "bg-primary/5" : ""}`} onClick={() => setSelectedInvoice(inv.id)} data-testid={`row-purchase-${inv.id}`}>
+                  <TableCell onClick={e => e.stopPropagation()}>
+                    <input type="checkbox" className="h-4 w-4 cursor-pointer"
+                      checked={selectedIds.has(inv.id)}
+                      onChange={e => { e.stopPropagation(); setSelectedIds(prev => { const s = new Set(prev); e.target.checked ? s.add(inv.id) : s.delete(inv.id); return s; }); }}
+                    />
+                  </TableCell>
                   <TableCell className="font-mono">{inv.invoiceNumber}</TableCell>
                   <TableCell>{supplierMap[inv.supplierId] || "—"}</TableCell>
                   <TableCell>{inv.invoiceDate}</TableCell>
@@ -1792,10 +1924,15 @@ function PurchasesTab() {
                       {inv.status === "pending" ? t("purchases.pending") : inv.status === "approved" ? t("purchases.approved") : inv.status === "received" ? t("purchases.received") : t("purchases.cancelled")}
                     </Badge>
                   </TableCell>
-                  <TableCell onClick={e => e.stopPropagation()}>
-                    <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => setSelectedInvoice(inv.id)}>
+                  <TableCell onClick={e => e.stopPropagation()} className="flex items-center gap-1">
+                    <Button variant="ghost" size="sm" className="gap-1 text-xs h-8" onClick={() => setSelectedInvoice(inv.id)}>
                       <FileText className="w-3.5 h-3.5" /> {t("purchases.open_invoice")}
                     </Button>
+                    {inv.status === "pending" && canManage && (
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700" onClick={() => setShowDeleteConfirm(inv.id)} title="حذف">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -1804,63 +1941,166 @@ function PurchasesTab() {
         </CardContent>
       </Card>
 
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-lg">
+      {/* ── نافذة إنشاء فاتورة جديدة (موسّعة) ── */}
+      <Dialog open={showCreate} onOpenChange={(v) => { if (!v) { setShowCreate(false); setModalItems([]); setModalBarcode(""); } }}>
+        <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto" dir="rtl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> {t("purchases.new_purchase")}</DialogTitle>
-            <DialogDescription>{t("purchases.create_invoice_desc")}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1 col-span-2">
-                <label className="text-sm font-medium">{t("purchases.supplier")} *</label>
-                <div className="flex gap-1">
-                  <Select value={newSupplierId} onValueChange={setNewSupplierId}>
-                    <SelectTrigger data-testid="select-new-supplier" className="flex-1"><SelectValue placeholder={t("purchases.select_supplier")} /></SelectTrigger>
-                    <SelectContent>
-                      {activeSuppliers.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Button variant="outline" size="icon" className="shrink-0" onClick={() => setShowQuickSupplier(true)} title={t("purchases.new_supplier")} data-testid="button-quick-add-supplier">
-                    <UserPlus className="w-4 h-4" />
-                  </Button>
-                </div>
+
+          {/* حقول الرأس */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1 col-span-2">
+              <label className="text-sm font-medium">{t("purchases.supplier")} *</label>
+              <div className="flex gap-1">
+                <Select value={newSupplierId} onValueChange={setNewSupplierId}>
+                  <SelectTrigger className="flex-1"><SelectValue placeholder={t("purchases.select_supplier")} /></SelectTrigger>
+                  <SelectContent>{activeSuppliers.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
+                <Button variant="outline" size="icon" onClick={() => setShowQuickSupplier(true)} title={t("purchases.new_supplier")}>
+                  <UserPlus className="w-4 h-4" />
+                </Button>
               </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium">{t("purchases.branch_label")}</label>
-                <Select value={newBranchId} onValueChange={setNewBranchId}>
-                  <SelectTrigger data-testid="select-new-branch"><SelectValue placeholder={t("purchases.select_branch")} /></SelectTrigger>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{t("purchases.date")} *</label>
+              <DateInput value={newDate} onChange={e => setNewDate(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">طريقة الدفع</label>
+              <Select value={newPayMethod} onValueChange={setNewPayMethod}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">نقداً</SelectItem>
+                  <SelectItem value="bank_transfer">تحويل بنكي</SelectItem>
+                  <SelectItem value="cheque">شيك</SelectItem>
+                  <SelectItem value="credit">آجل</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">تاريخ الاستحقاق</label>
+              <DateInput value={newDueDate} onChange={e => setNewDueDate(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{t("purchases.branch_label")}</label>
+              <Select value={newBranchId} onValueChange={setNewBranchId}>
+                <SelectTrigger><SelectValue placeholder={t("purchases.select_branch")} /></SelectTrigger>
+                <SelectContent>{branches.map((b: any) => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* مسح الباركود + جدول البنود */}
+          <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
+            <div className="flex gap-2 items-center">
+              <div className="relative flex-1">
+                <Package className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  ref={modalBarcodeRef}
+                  className="pr-9 font-mono"
+                  placeholder="امسح الباركود أو اكتبه ثم Enter..."
+                  value={modalBarcode}
+                  onChange={e => setModalBarcode(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleModalBarcode(modalBarcode); } }}
+                  disabled={modalBarcodeLoading}
+                  dir="ltr"
+                />
+              </div>
+              <Button size="sm" variant="outline" onClick={() => handleModalBarcode(modalBarcode)} disabled={modalBarcodeLoading || !modalBarcode.trim()}>
+                {modalBarcodeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "إضافة"}
+              </Button>
+            </div>
+            {modalItems.length > 0 ? (
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead className="text-xs">الصنف</TableHead>
+                      <TableHead className="text-xs">الكمية</TableHead>
+                      <TableHead className="text-xs">سعر الوحدة</TableHead>
+                      <TableHead className="text-xs">الإجمالي</TableHead>
+                      <TableHead className="w-8"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {modalItems.map((item) => (
+                      <TableRow key={item.uid}>
+                        <TableCell className="text-sm py-1.5">
+                          <div className="font-medium">{item.name}</div>
+                          {item.barcode && <div className="text-xs text-muted-foreground font-mono">{item.barcode}</div>}
+                          {(item.color || item.size) && <div className="text-xs text-muted-foreground">{[item.color, item.size].filter(Boolean).join(" / ")}</div>}
+                        </TableCell>
+                        <TableCell className="py-1.5">
+                          <Input type="number" min={1} className="h-7 w-16 text-center text-sm" value={item.qty}
+                            onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? {...i, qty: Math.max(1, parseInt(e.target.value)||1)} : i))} />
+                        </TableCell>
+                        <TableCell className="py-1.5">
+                          <Input type="number" min={0} step="0.001" className="h-7 w-24 text-sm font-mono" value={item.unitCost}
+                            onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? {...i, unitCost: parseFloat(e.target.value)||0} : i))} />
+                        </TableCell>
+                        <TableCell className="font-mono text-sm py-1.5">{omr(item.qty * item.unitCost)} ر.ع</TableCell>
+                        <TableCell className="py-1.5">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" onClick={() => setModalItems(prev => prev.filter(i => i.uid !== item.uid))}>
+                            <X className="w-3.5 h-3.5" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <p className="text-center text-sm text-muted-foreground py-3">امسح باركود المنتجات لإضافتها</p>
+            )}
+          </div>
+
+          {/* تكاليف إضافية + خصم + ضريبة */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{t("purchases.shipping")}</label>
+              <Input type="number" step="0.001" value={newShipping} onChange={e => setNewShipping(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{t("purchases.customs")}</label>
+              <Input type="number" step="0.001" value={newCustoms} onChange={e => setNewCustoms(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">خصم</label>
+              <div className="flex gap-1">
+                <Input type="number" min={0} step="0.001" className="flex-1" value={newDiscount} onChange={e => setNewDiscount(e.target.value)} />
+                <Select value={newDiscType} onValueChange={(v: any) => setNewDiscType(v)}>
+                  <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {branches.map((b: any) => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
+                    <SelectItem value="value">ر.ع</SelectItem>
+                    <SelectItem value="percent">%</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium">{t("purchases.date")} *</label>
-                <DateInput value={newDate} onChange={e => setNewDate(e.target.value)} data-testid="input-new-date" />
-              </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-sm font-medium">{t("purchases.shipping")}</label>
-                <Input type="number" step="0.001" value={newShipping} onChange={e => setNewShipping(e.target.value)} data-testid="input-new-shipping" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium">{t("purchases.customs")}</label>
-                <Input type="number" step="0.001" value={newCustoms} onChange={e => setNewCustoms(e.target.value)} data-testid="input-new-customs" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium">{t("purchases.clearance")}</label>
-                <Input type="number" step="0.001" value={newClearance} onChange={e => setNewClearance(e.target.value)} data-testid="input-new-clearance" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium">{t("purchases.other")}</label>
-                <Input type="number" step="0.001" value={newOther} onChange={e => setNewOther(e.target.value)} data-testid="input-new-other" />
-              </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">ضريبة %</label>
+              <Input type="number" min={0} max={100} step="0.1" value={newVatRate} onChange={e => setNewVatRate(e.target.value)} placeholder="0" />
             </div>
           </div>
+
+          {/* ملخص الإجمالي */}
+          {(modalItems.length > 0 || parseFloat(newDiscount||"0") > 0 || parseFloat(newVatRate||"0") > 0) && (
+            <div className="bg-muted/40 rounded-lg p-3 space-y-1 text-sm border">
+              <div className="flex justify-between"><span className="text-muted-foreground">المجموع الفرعي</span><span className="font-mono">{omr(modalSubtotal)} ر.ع</span></div>
+              {modalDiscVal > 0 && <div className="flex justify-between text-red-600"><span>الخصم</span><span className="font-mono">- {omr(modalDiscVal)} ر.ع</span></div>}
+              {modalVat > 0 && <div className="flex justify-between text-amber-600"><span>الضريبة ({newVatRate}%)</span><span className="font-mono">{omr(modalVat)} ر.ع</span></div>}
+              <div className="flex justify-between font-bold text-base border-t pt-1 mt-1"><span>الإجمالي</span><span className="font-mono text-emerald-700">{omr(modalGrandTotal)} ر.ع</span></div>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <label className="text-sm font-medium">ملاحظات</label>
+            <Input value={newNotes} onChange={e => setNewNotes(e.target.value)} placeholder="ملاحظات اختيارية..." />
+          </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>{t("common.cancel")}</Button>
+            <Button variant="outline" onClick={() => { setShowCreate(false); setModalItems([]); setModalBarcode(""); }}>{t("common.cancel")}</Button>
             <Button className="bg-primary gap-2" onClick={() => createMutation.mutate()} disabled={!newSupplierId || createMutation.isPending} data-testid="button-save-purchase">
               <Plus className="w-4 h-4" /> {createMutation.isPending ? t("common.loading") : t("common.save")}
             </Button>
@@ -1955,6 +2195,45 @@ function PurchasesTab() {
             <Button variant="outline" onClick={() => setShowQuickProduct(false)}>{t("common.cancel")}</Button>
             <Button onClick={() => quickProductMutation.mutate()} disabled={!qpName || quickProductMutation.isPending} data-testid="button-save-qp">
               {quickProductMutation.isPending ? t("common.loading") : t("common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* تأكيد حذف فردي */}
+      <Dialog open={!!showDeleteConfirm} onOpenChange={() => setShowDeleteConfirm(null)}>
+        <DialogContent className="max-w-sm" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600"><Trash2 className="w-5 h-5" /> تأكيد الحذف</DialogTitle>
+            <DialogDescription>سيتم حذف الفاتورة نهائياً. لا يمكن التراجع عن هذا الإجراء.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(null)}>{t("common.cancel")}</Button>
+            <Button variant="destructive" onClick={() => { if (showDeleteConfirm) deleteMutation.mutate(showDeleteConfirm); }} disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending ? t("common.loading") : "حذف"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* تأكيد حذف جماعي */}
+      <Dialog open={showBulkDelete} onOpenChange={setShowBulkDelete}>
+        <DialogContent className="max-w-sm" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600"><Trash2 className="w-5 h-5" /> حذف {selectedIds.size} فاتورة</DialogTitle>
+            <DialogDescription>سيتم حذف الفواتير المعلقة المحددة فقط. هذا الإجراء لا يمكن التراجع عنه.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkDelete(false)}>{t("common.cancel")}</Button>
+            <Button variant="destructive" disabled={deleteMutation.isPending} onClick={async () => {
+              for (const id of Array.from(selectedIds)) {
+                const inv = safeInvoices.find(i => i.id === id);
+                if (inv?.status === "pending") await deleteMutation.mutateAsync(id).catch(() => {});
+              }
+              setShowBulkDelete(false);
+              setSelectedIds(new Set());
+            }}>
+              حذف المحددة
             </Button>
           </DialogFooter>
         </DialogContent>
