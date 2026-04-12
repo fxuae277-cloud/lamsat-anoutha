@@ -358,20 +358,33 @@ function CustomerModal({ onClose, onSelect }: {
   onSelect: (c: Customer | null) => void;
 }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<"search" | "new">("search");
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
 
-  const { data: results = [] } = useQuery<Customer[]>({
-    queryKey: ["/api/customers/search", search],
-    queryFn: () => fetch(`/api/customers/search?q=${encodeURIComponent(search)}`, { credentials: "include" }).then(r => r.json()),
-    enabled: search.length >= 2,
+  // جلب كل العملاء فوراً عند فتح المودال، ثم فلترة بالبحث
+  const { data: allCustomers = [] } = useQuery<Customer[]>({
+    queryKey: ["/api/customers/search", ""],
+    queryFn: () => fetch(`/api/customers/search`, { credentials: "include" }).then(r => r.json()),
   });
+
+  // فلترة محلية بدلاً من API call لكل حرف
+  const results = search.trim()
+    ? allCustomers.filter(c =>
+        (c.name || "").toLowerCase().includes(search.toLowerCase()) ||
+        (c.phone || "").includes(search)
+      )
+    : allCustomers;
 
   const createMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/customers", { name: newName, phone: newPhone }).then(r => r.json()),
-    onSuccess: (c) => { toast({ title: "تم إضافة العميل" }); onSelect(c); },
+    onSuccess: (c) => {
+      toast({ title: "تم إضافة العميل" });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers/search"] });
+      onSelect(c);
+    },
     onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
   });
 
@@ -380,31 +393,45 @@ function CustomerModal({ onClose, onSelect }: {
       <DialogContent className="max-w-sm" dir="rtl">
         <DialogHeader><DialogTitle className="flex items-center gap-2"><UserIcon className="w-4 h-4" /> اختيار العميل</DialogTitle></DialogHeader>
         <div className="flex gap-2 mb-3">
-          <Button size="sm" variant={mode === "search" ? "default" : "outline"} onClick={() => setMode("search")} className="flex-1 h-8 text-xs">بحث عن عميل</Button>
-          <Button size="sm" variant={mode === "new" ? "default" : "outline"} onClick={() => setMode("new")} className="flex-1 h-8 text-xs">عميل جديد</Button>
+          <Button size="sm" variant={mode === "search" ? "default" : "outline"} onClick={() => setMode("search")} className="flex-1 h-8 text-xs">قائمة العملاء</Button>
+          <Button size="sm" variant={mode === "new" ? "default" : "outline"} onClick={() => setMode("new")} className="flex-1 h-8 text-xs bg-pink-50">+ عميل جديد</Button>
         </div>
         {mode === "search" ? (
-          <div className="space-y-3">
-            <Input placeholder="ابحث بالاسم أو الهاتف..." value={search} onChange={e => setSearch(e.target.value)} autoFocus />
-            <div className="space-y-1 max-h-52 overflow-y-auto">
-              {results.map(c => (
-                <button key={c.id} className="w-full text-right flex items-center gap-3 p-2 hover:bg-pink-50 rounded-lg transition-colors"
-                  onClick={() => onSelect(c)}>
-                  <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center text-pink-600 text-sm font-bold shrink-0">
-                    {c.name?.charAt(0) || "؟"}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{c.name}</p>
-                    <p className="text-xs text-muted-foreground">{c.phone}</p>
-                  </div>
-                </button>
-              ))}
-              {search.length >= 2 && results.length === 0 && <p className="text-center text-xs text-muted-foreground py-3">لا يوجد عملاء مطابقون</p>}
+          <div className="space-y-2">
+            <Input
+              placeholder="ابحث بالاسم أو الهاتف..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              autoFocus
+            />
+            <div className="space-y-1 max-h-56 overflow-y-auto rounded-lg border bg-gray-50/50 p-1">
+              {results.length === 0 ? (
+                <div className="text-center py-4 space-y-2">
+                  <p className="text-xs text-muted-foreground">لا يوجد عملاء مطابقون</p>
+                  <Button size="sm" className="bg-pink-600 hover:bg-pink-700 text-xs h-7"
+                    onClick={() => { setNewName(search); setMode("new"); }}>
+                    + إضافة "{search}" كعميل جديد
+                  </Button>
+                </div>
+              ) : (
+                results.map(c => (
+                  <button key={c.id} className="w-full text-right flex items-center gap-3 p-2 hover:bg-pink-50 rounded-lg transition-colors"
+                    onClick={() => onSelect(c)}>
+                    <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center text-pink-600 text-sm font-bold shrink-0">
+                      {c.name?.charAt(0) || "؟"}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{c.name}</p>
+                      <p className="text-xs text-muted-foreground">{c.phone}</p>
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
           </div>
         ) : (
           <div className="space-y-3">
-            <Input placeholder="اسم العميل *" value={newName} onChange={e => setNewName(e.target.value)} />
+            <Input placeholder="اسم العميل *" value={newName} onChange={e => setNewName(e.target.value)} autoFocus />
             <Input placeholder="رقم الهاتف" value={newPhone} onChange={e => setNewPhone(e.target.value)} dir="ltr" />
             <Button className="w-full bg-pink-600 hover:bg-pink-700"
               onClick={() => createMutation.mutate()} disabled={!newName || createMutation.isPending}>
@@ -701,16 +728,18 @@ export default function POS() {
     onError: (e: Error) => toast({ title: "خطأ في الفاتورة", description: e.message, variant: "destructive" }),
   });
 
-  // ── Barcode scan ─────────────────────────────────────────────────────
+  // ── Barcode scan (physical scanner redirects to search) ──────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // لا تتدخل إذا كان المستخدم يكتب في أي حقل إدخال أو textarea أو select
+      // لا تتدخل إذا كان هناك أي مودال أو نافذة حوار مفتوحة
+      if (document.querySelector("[role='dialog']")) return;
+      // لا تتدخل إذا كان المستخدم يكتب في أي حقل
       const active = document.activeElement;
       if (!active) return;
       const tag = active.tagName.toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") return;
-      // لا تتدخل إذا كان هناك dialog مفتوح (مودال)
-      if (document.querySelector("[role='dialog']")) return;
+      if ((active as HTMLElement).isContentEditable) return;
+      // توجيه الضغطة لحقل البحث فقط في الشاشة الرئيسية
       if (e.key.length === 1 && /[a-zA-Z0-9\-]/.test(e.key)) {
         searchRef.current?.focus();
       }

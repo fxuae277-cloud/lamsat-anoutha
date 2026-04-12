@@ -4684,11 +4684,17 @@ export async function registerRoutes(
   app.get("/api/customers/search", requireAuth, requirePermission("customers.view"), async (req, res) => {
     try {
       const { q } = req.query;
-      if (!q) return res.json([]);
+      if (!q) {
+        // إرجاع كل العملاء عند عدم وجود بحث (حتى 50)
+        const all = await pool.query(
+          `SELECT id, name, phone, city FROM customers WHERE active = true ORDER BY name LIMIT 50`
+        );
+        return res.json(all.rows);
+      }
       const result = await pool.query(
         `SELECT id, name, phone, city FROM customers
          WHERE active = true AND (name ILIKE $1 OR phone ILIKE $1)
-         ORDER BY name LIMIT 10`,
+         ORDER BY name LIMIT 20`,
         [`%${q}%`]
       );
       res.json(result.rows);
