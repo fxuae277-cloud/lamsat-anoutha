@@ -1106,10 +1106,11 @@ export class DatabaseStorage implements IStorage {
       }
 
       const orderRes = await client.query(
-        `INSERT INTO orders (order_number, customer_name, customer_phone, city, address, branch_id, shift_id, employee_id, delivery_type, status, payment_method, bank_txn_id, total, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+        `INSERT INTO orders (order_number, customer_id, customer_name, customer_phone, city, address, branch_id, shift_id, employee_id, delivery_type, status, payment_method, bank_txn_id, total, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
         [
-          data.orderNumber, data.customerName, data.customerPhone || null,
+          data.orderNumber, (data as any).customerId || null,
+          data.customerName, data.customerPhone || null,
           data.city || null, data.address || null, data.branchId || null,
           data.shiftId || null, data.employeeId || null, data.deliveryType || "pickup",
           data.status || "new", data.paymentMethod || "cash",
