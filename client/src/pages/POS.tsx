@@ -768,24 +768,7 @@ export default function POS() {
       {/* ══ Cart (Right) ══ */}
       <div className="w-[400px] shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden shadow-md">
 
-        {/* Cart Header — بسيط في الأعلى */}
-        <div className="flex items-center justify-between px-3 py-2 border-b bg-gray-50 shrink-0">
-          <div className="flex items-center gap-2">
-            <ShoppingCart className="w-4 h-4 text-pink-600" />
-            <span className="font-bold text-sm">سلة المشتريات</span>
-            {cart.length > 0 && (
-              <span className="bg-pink-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">{cart.length}</span>
-            )}
-          </div>
-          {cart.length > 0 && (
-            <button className="text-red-400 hover:text-red-600 text-xs flex items-center gap-1"
-              onClick={() => setConfirmClear(true)}>
-              <XCircle className="w-3.5 h-3.5" /> مسح الكل
-            </button>
-          )}
-        </div>
-
-          {/* Customer */}
+          {/* Customer — أول شيء في السلة */}
           <div className="px-3 py-2 border-b shrink-0">
             <button className="w-full flex items-center justify-between bg-gray-50 hover:bg-pink-50 border border-dashed border-gray-300 hover:border-pink-300 rounded-lg px-3 py-2 transition-colors text-sm"
               onClick={() => setShowCustomer(true)}>
@@ -963,15 +946,33 @@ export default function POS() {
         {/* ══ Products (Left) ══ */}
         <div className="flex-1 flex flex-col overflow-hidden">
 
-          {/* ── الرأس الوردي: الفرع + معلق + إرجاع ── */}
-          <div className="flex items-center justify-between px-4 py-2 bg-gradient-to-l from-pink-600 to-rose-500 shrink-0">
-            <div className="flex items-center gap-2">
+          {/* ── الشريط الوردي: لمسة أنوثة | 🛒 السلة | إرجاع + معلق ── */}
+          <div className="flex items-center px-3 py-2 bg-gradient-to-l from-pink-600 to-rose-500 shrink-0 gap-3">
+
+            {/* يسار: لمسة أنوثة */}
+            <div className="flex items-center gap-1.5 shrink-0">
               <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
                 <Store className="w-3.5 h-3.5 text-white" />
               </div>
-              <span className="text-white text-sm font-semibold">{branchName}</span>
+              <span className="text-white text-xs font-bold whitespace-nowrap">لمسة أنوثة</span>
             </div>
-            <div className="flex items-center gap-2">
+
+            {/* وسط: 🛒 سلة المشتريات */}
+            <div className="flex-1 flex items-center justify-center gap-1.5">
+              <ShoppingCart className="w-4 h-4 text-white" />
+              <span className="text-white text-sm font-bold">سلة المشتريات</span>
+              {cart.length > 0 && (
+                <span className="bg-white text-pink-600 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">{cart.length}</span>
+              )}
+              {cart.length > 0 && (
+                <button className="text-white/70 hover:text-white ml-1" onClick={() => setConfirmClear(true)}>
+                  <XCircle className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* يمين: إرجاع + معلق */}
+            <div className="flex items-center gap-1 shrink-0">
               {isOwner && (
                 <Button size="sm" variant="ghost"
                   className="h-7 text-xs gap-1 text-white hover:bg-white/20 px-2"
