@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { fmtOMR, fmtDateTime, fmtDate } from "@/lib/formatters";
+import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 import type { Branch, Shift } from "@shared/schema";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -955,21 +956,31 @@ export default function POS() {
           {/* Search + Categories */}
           <div className="bg-white border-b px-4 py-3 space-y-2 shrink-0">
             {/* Search bar */}
-            <div className="relative">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              <Input
-                ref={searchRef}
-                placeholder="بحث بالاسم أو الباركود..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="pr-10 pl-4 h-9 text-sm bg-gray-50 border-gray-200 focus:border-pink-400"
-              />
-              {search && (
-                <button className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  onClick={() => setSearch("")}>
-                  <XCircle className="w-4 h-4" />
-                </button>
-              )}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <Input
+                  ref={searchRef}
+                  placeholder="بحث بالاسم أو الباركود..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="pr-10 pl-4 h-9 text-sm bg-gray-50 border-gray-200 focus:border-pink-400"
+                />
+                {search && (
+                  <button className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    onClick={() => setSearch("")}>
+                    <XCircle className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              <BarcodeScanButton onScan={(barcode) => {
+                const found = products.find(p => p.barcode === barcode);
+                if (found) {
+                  addToCart(found);
+                } else {
+                  setSearch(barcode);
+                }
+              }} />
             </div>
             {/* Category tabs */}
             <div className="flex gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">

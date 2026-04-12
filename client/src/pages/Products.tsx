@@ -353,15 +353,18 @@ export default function Products() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center bg-card p-4 border rounded-lg">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            className="pl-9"
-            placeholder={t("products.search_placeholder")}
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            data-testid="input-search"
-          />
+        <div className="flex gap-2 flex-1 min-w-[200px]">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder={t("products.search_placeholder")}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              data-testid="input-search"
+            />
+          </div>
+          <BarcodeScanButton onScan={(barcode) => setSearch(barcode)} />
         </div>
         <Select value={filterCat} onValueChange={setFilterCat}>
           <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>

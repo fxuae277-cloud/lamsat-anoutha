@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getQueryFn } from "@/lib/queryClient";
 import { useI18n } from "@/lib/i18n";
 import { fmtOMR, fmtDate } from "@/lib/formatters";
+import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 import type { Branch } from "@shared/schema";
 
 // ── أيقونة الفئة الافتراضية ──────────────────────────────────────────────
@@ -246,14 +247,17 @@ export default function InventoryOverview() {
         <TabsContent value="stock" className="space-y-4 border-none p-0 outline-none">
           {/* Filters */}
           <div className="flex flex-wrap gap-2 items-center bg-card border rounded-lg p-3">
-            <div className="relative flex-1 min-w-[180px]">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                className="pr-9 h-9"
-                placeholder={t("inv_overview.search_placeholder")}
-                value={stockSearch}
-                onChange={e => setStockSearch(e.target.value)}
-              />
+            <div className="flex gap-2 flex-1 min-w-[180px]">
+              <div className="relative flex-1">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  className="pr-9 h-9"
+                  placeholder={t("inv_overview.search_placeholder")}
+                  value={stockSearch}
+                  onChange={e => setStockSearch(e.target.value)}
+                />
+              </div>
+              <BarcodeScanButton onScan={(barcode) => setStockSearch(barcode)} />
             </div>
             <Select value={filterBranch} onValueChange={setFilterBranch}>
               <SelectTrigger className="w-44 h-9"><SelectValue /></SelectTrigger>
@@ -450,14 +454,17 @@ export default function InventoryOverview() {
         {/* ══ Tab 2: Inventory Movements ══ */}
         <TabsContent value="movements" className="space-y-4 border-none p-0 outline-none">
           <div className="flex flex-wrap gap-2 items-center bg-card border rounded-lg p-3">
-            <div className="relative min-w-[180px] flex-1">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                className="pr-9 h-9"
-                placeholder="بحث بالمنتج..."
-                value={movSearch}
-                onChange={e => setMovSearch(e.target.value)}
-              />
+            <div className="flex gap-2 min-w-[180px] flex-1">
+              <div className="relative flex-1">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  className="pr-9 h-9"
+                  placeholder="بحث بالمنتج..."
+                  value={movSearch}
+                  onChange={e => setMovSearch(e.target.value)}
+                />
+              </div>
+              <BarcodeScanButton onScan={(barcode) => setMovSearch(barcode)} />
             </div>
             <Select value={movType} onValueChange={setMovType}>
               <SelectTrigger className="w-44 h-9">

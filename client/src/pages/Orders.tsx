@@ -20,6 +20,7 @@ import { getQueryFn, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { fmtDate, fmtDateTime } from "@/lib/formatters";
+import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 import type { Branch } from "@shared/schema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -267,8 +268,11 @@ function OrderFormModal({ order, onClose, onSaved }: {
             </div>
             {showSearch && (
               <div className="relative">
-                <Input placeholder="ابحث عن منتج..." value={productSearch}
-                  onChange={e => setProductSearch(e.target.value)} autoFocus className="h-8 text-sm" />
+                <div className="flex gap-2 mb-1">
+                  <Input placeholder="ابحث عن منتج..." value={productSearch}
+                    onChange={e => setProductSearch(e.target.value)} autoFocus className="h-8 text-sm flex-1" />
+                  <BarcodeScanButton onScan={(barcode) => setProductSearch(barcode)} />
+                </div>
                 {productResults.length > 0 && (
                   <div className="absolute top-full right-0 left-0 bg-white border rounded-lg shadow-lg z-50 max-h-40 overflow-y-auto mt-1">
                     {productResults.map(p => (
