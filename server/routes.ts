@@ -4793,5 +4793,73 @@ export async function registerRoutes(
   registerBackupRoutes(app);
   registerMobileRoutes(app);
 
+  // ── Reset Demo Data ────────────────────────────────────────────────────────
+  app.post("/api/admin/reset-demo-data", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      await pool.query(`
+        BEGIN;
+
+        -- بنود وتفاصيل (أولاً لأنها تعتمد على الجداول الرئيسية)
+        TRUNCATE TABLE sale_return_items    RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE sale_returns         RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE sale_items           RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE order_items          RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE purchase_extra_costs RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE purchase_items       RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE location_transfer_items RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE stock_transfer_lines RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE stocktake_items      RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE payroll_details      RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE journal_entry_lines  RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE product_composite_items RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE price_list_items     RESTART IDENTITY CASCADE;
+
+        -- الجداول الرئيسية
+        TRUNCATE TABLE sales                RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE orders               RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE purchase_invoices    RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE held_invoices        RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE location_transfers   RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE stock_transfers      RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE stocktakes           RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE inventory_adjustments RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE inventory_ledger     RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE inventory_balances   RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE inventory_transactions RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE location_inventory   RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE journal_entries      RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE cash_ledger          RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE bank_ledger          RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE shifts               RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE expenses             RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE payroll_runs         RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE employee_advances    RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE employee_deductions  RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE employee_commissions RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE employee_entitlements RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE employee_financial_ledger RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE salary_payments      RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE notifications        RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE audit_log            RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE supplier_ocr_templates RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE price_lists          RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE discount_rules       RESTART IDENTITY CASCADE;
+
+        -- المنتجات والأطراف التجارية
+        TRUNCATE TABLE product_variants     RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE products             RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE categories           RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE customers            RESTART IDENTITY CASCADE;
+        TRUNCATE TABLE suppliers            RESTART IDENTITY CASCADE;
+
+        COMMIT;
+      `);
+      res.json({ success: true, message: "تم مسح جميع البيانات التجريبية بنجاح. النظام جاهز للبيانات الحقيقية." });
+    } catch (err: any) {
+      await pool.query("ROLLBACK;").catch(() => {});
+      res.status(500).json({ success: false, message: err?.message ?? "خطأ أثناء مسح البيانات" });
+    }
+  });
+
   return httpServer;
 }
