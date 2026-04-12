@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-10 (جلسة 11 — RBAC + Notifications + Account Lock + Ledger Snapshot + Balance Sheet)_
+_آخر تحديث: 2026-04-12 (جلسة 12 — Purchases enhancements + WhatsApp direct send)_
 
 ---
 
@@ -43,9 +43,18 @@ _آخر تحديث: 2026-04-10 (جلسة 11 — RBAC + Notifications + Account L
 - [x] إصلاح blank screen: `SortIcon` → دالة `sortIcon()` عادية
 - [x] إصلاح blank screen: `deleteConfirmProduct` نُقل بعد تعريف `products`
 
-### المشتريات (Purchases) — محدّث جلسة 5
+### المشتريات (Purchases) — محدّث جلسة 12
 - [x] بطاقات إحصائية: إجمالي الفواتير / المعلقة / المكتملة / إجمالي المبلغ
 - [x] شريط فلاتر: بحث + مورد + الحالة
+- [x] Migration 0015: حقول جديدة في purchase_invoices (payment_method/due_date/discount/discount_type/vat_rate/vat_amount)
+- [x] نموذج إنشاء موسّع: مسح باركود مباشر داخل النافذة → إضافة تلقائية للبنود
+- [x] جدول بنود داخل نافذة الإنشاء: كمية + سعر قابلان للتعديل، ملخص إجمالي حي
+- [x] حقول: طريقة الدفع (نقد/تحويل/شيك/آجل) + تاريخ الاستحقاق + خصم (قيمة/نسبة) + ضريبة %
+- [x] بطاقة خامسة "فواتير اليوم"
+- [x] أعمدة قابلة للترتيب (رقم الفاتورة / التاريخ / الإجمالي ↑↓)
+- [x] تحديد جماعي (checkbox في كل صف + تحديد الكل)
+- [x] حذف فردي + حذف جماعي مع نافذة تأكيد (للفواتير المعلقة فقط)
+- [x] DELETE /api/purchases/:id endpoint
 
 ### الفئات (Categories) — محدّث جلسة 3
 - [x] إعادة تصميم كاملة لصفحة الفئات
@@ -77,6 +86,12 @@ _آخر تحديث: 2026-04-10 (جلسة 11 — RBAC + Notifications + Account L
 - [x] إصلاح Array.isArray guard في Orders.tsx: `const safeOrders = Array.isArray(orders) ? orders : []` لمنع crash عند خطأ API
 - [x] إصلاح Purchases.tsx — React Error #300: 3 hooks (`invSearch`, `invSupplier`, `invStatus`) كانت مُعرَّفة بعد `if (selectedInvoice && invoiceDetail) { return }` — انتهاك Rules of Hooks — نُقلت إلى أعلى الكومبوننت
 - [x] إضافة Array.isArray guard في Purchases.tsx: `const safeInvoices = Array.isArray(invoices) ? invoices : []`
+
+### واتساب والفواتير — جديد جلسة 12
+- [x] POS ReceiptModal: إرسال واتساب مباشر لرقم العميل `wa.me/968XXXXXXXX` + اسم العميل في الإيصال
+- [x] Invoices.tsx: زر واتساب + كارت العميل (اسم + هاتف) في تفاصيل الفاتورة
+- [x] storage.getSaleWithDetails: LEFT JOIN customers لإرجاع customerName + customerPhone
+- [x] سجل المخزون (LedgerTab): عمودا "قبل" و"بعد" يعرضان qty_before/qty_after
 
 ### الأمان والإشعارات والتدقيق — جديد جلسة 11
 - [x] تطبيق `requirePermission(code)` على جميع الـ 94 API endpoint في routes.ts
@@ -163,6 +178,7 @@ _آخر تحديث: 2026-04-10 (جلسة 11 — RBAC + Notifications + Account L
 
 ## ⚠️ خطوات مطلوبة بعد الرفع على Railway
 - ~~Migration 0011, 0012, 0013, 0014 — تم تشغيلها جميعاً✅~~
+- تشغيل migration 0015: `fetch('/api/run-migration-0015',{method:'POST'}).then(r=>r.json()).then(console.log)`
 
 ## ⚠️ مشاكل مفتوحة
 - أسماء منتجات غير منظمة في DB
@@ -171,10 +187,9 @@ _آخر تحديث: 2026-04-10 (جلسة 11 — RBAC + Notifications + Account L
 ---
 
 ## ⏳ القادم
-- [ ] ربط WhatsApp automation
 - [ ] تنظيف بيانات المنتجات (أسماء مكررة وغير منظمة)
 - [ ] صفحة دليل الحسابات (Accounts.tsx) ربطها بالنظام الجديد
-- [ ] عرض qty_before/qty_after في واجهة سجل حركات المخزون (LedgerTab)
+- [ ] طباعة فاتورة الشراء (PDF/حراري من صفحة التفاصيل)
 
 ---
 
