@@ -161,6 +161,27 @@ app.use((req, res, next) => {
     console.error("[startup] migration 0020 failed:", err);
   }
 
+  // Migration 0021 — ensure central location exists (idempotent)
+  // approvePurchaseInvoice requires a location with is_central = true
+  try {
+    const { rows } = await pool.query(`SELECT id FROM locations WHERE is_central = true LIMIT 1`);
+    if (rows.length === 0) {
+      // إنشاء مخزن مركزي مرتبط بالفرع الرئيسي
+      const branchRes = await pool.query(`SELECT id FROM branches WHERE is_main = true ORDER BY id LIMIT 1`);
+      const branchId = branchRes.rows[0]?.id ?? null;
+      await pool.query(`
+        INSERT INTO locations (branch_id, code, name, is_central, is_branch_default, active)
+        VALUES ($1, 'central', 'المخزن المركزي', true, false, true)
+        ON CONFLICT DO NOTHING
+      `, [branchId]);
+      console.log("[startup] migration 0021: central location created");
+    } else {
+      console.log("[startup] migration 0021: central location already exists (id=" + rows[0].id + ")");
+    }
+  } catch (err) {
+    console.error("[startup] migration 0021 failed:", err);
+  }
+
   // Ensure every branch has exactly one is_branch_default location.
   // This fixes "لا يوجد مخزن افتراضي للفرع" that blocks all POS sales.
   try {

@@ -110,6 +110,21 @@ export async function seedDatabase() {
 }
 
 export async function bootstrapLocations() {
+  // ── مخزن مركزي (مطلوب لاعتماد فواتير الشراء) ──
+  const centralExists = await db.select().from(locations).where(eq(locations.isCentral, true)).limit(1);
+  if (centralExists.length === 0) {
+    const [mainBranch] = await db.select().from(branches).where(eq(branches.isMain, true)).limit(1);
+    await db.insert(locations).values({
+      branchId: mainBranch?.id ?? null,
+      code: "central",
+      name: "المخزن المركزي",
+      isCentral: true,
+      active: true,
+    });
+    console.log("Created central location");
+  }
+
+  // ── مخازن الفروع ──
   const allBranches = await db.select().from(branches);
   for (const branch of allBranches) {
     const existing = await db.select().from(locations).where(eq(locations.branchId, branch.id));
