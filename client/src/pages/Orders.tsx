@@ -900,6 +900,14 @@ export default function Orders() {
   const [sourceFilter, setSourceFilter] = useState("all");
   const [fromDate, setFromDate]       = useState("");
   const [toDate, setToDate]           = useState("");
+
+  // القيم المُطبَّقة فعلياً — تتغير فقط عند الضغط على "بحث"
+  const [appliedSearch, setAppliedSearch]           = useState("");
+  const [appliedStatus, setAppliedStatus]           = useState("all");
+  const [appliedSource, setAppliedSource]           = useState("all");
+  const [appliedFrom, setAppliedFrom]               = useState("");
+  const [appliedTo, setAppliedTo]                   = useState("");
+
   const [showForm, setShowForm]       = useState(false);
   const [editOrder, setEditOrder]     = useState<Order | null>(null);
   const [statusOrder, setStatusOrder] = useState<Order | null>(null);
@@ -914,14 +922,14 @@ export default function Orders() {
   });
 
   const { data: orders = [], isLoading, refetch } = useQuery<Order[]>({
-    queryKey: ["/api/orders/full", search, statusFilter, sourceFilter, fromDate, toDate],
+    queryKey: ["/api/orders/full", appliedSearch, appliedStatus, appliedSource, appliedFrom, appliedTo],
     queryFn: () => {
       const p = new URLSearchParams();
-      if (search) p.set("search", search);
-      if (statusFilter !== "all") p.set("status", statusFilter);
-      if (sourceFilter !== "all") p.set("source", sourceFilter);
-      if (fromDate) p.set("from", fromDate);
-      if (toDate) p.set("to", toDate);
+      if (appliedSearch) p.set("search", appliedSearch);
+      if (appliedStatus !== "all") p.set("status", appliedStatus);
+      if (appliedSource !== "all") p.set("source", appliedSource);
+      if (appliedFrom) p.set("from", appliedFrom);
+      if (appliedTo) p.set("to", appliedTo);
       return fetch(`/api/orders/full?${p}`, { credentials: "include" }).then(r => r.json());
     },
     placeholderData: prev => prev,
@@ -934,8 +942,18 @@ export default function Orders() {
   });
 
   const refresh = () => { refetch(); refetchStats(); };
-  const clearFilters = () => { setSearch(""); setStatusFilter("all"); setSourceFilter("all"); setFromDate(""); setToDate(""); setPage(1); };
-  const hasFilters = !!(search || statusFilter !== "all" || sourceFilter !== "all" || fromDate || toDate);
+  const applyFilters = () => {
+    setAppliedSearch(search); setAppliedStatus(statusFilter);
+    setAppliedSource(sourceFilter); setAppliedFrom(fromDate); setAppliedTo(toDate);
+    setPage(1);
+  };
+  const clearFilters = () => {
+    setSearch(""); setStatusFilter("all"); setSourceFilter("all"); setFromDate(""); setToDate("");
+    setAppliedSearch(""); setAppliedStatus("all"); setAppliedSource("all"); setAppliedFrom(""); setAppliedTo("");
+    setPage(1);
+  };
+  const hasFilters = !!(appliedSearch || appliedStatus !== "all" || appliedSource !== "all" || appliedFrom || appliedTo);
+  const hasPendingChange = search !== appliedSearch || statusFilter !== appliedStatus || sourceFilter !== appliedSource || fromDate !== appliedFrom || toDate !== appliedTo;
 
   const exportCSV = () => {
     const rows = [
@@ -996,16 +1014,18 @@ export default function Orders() {
           <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
             <Input placeholder="بحث برقم الطلب أو رقم الهاتف..." value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1); }} className="pr-9 h-8 text-sm" />
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && applyFilters()}
+              className="pr-9 h-8 text-sm" />
           </div>
-          <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
+          <Select value={statusFilter} onValueChange={v => setStatusFilter(v)}>
             <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="الحالة" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">كل الحالات</SelectItem>
               {Object.entries(STATUS_MAP).map(([v, s]) => <SelectItem key={v} value={v}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={sourceFilter} onValueChange={v => { setSourceFilter(v); setPage(1); }}>
+          <Select value={sourceFilter} onValueChange={v => setSourceFilter(v)}>
             <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="المصدر" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">كل المصادر</SelectItem>
@@ -1014,6 +1034,11 @@ export default function Orders() {
           </Select>
           <DateInput value={fromDate} onChange={e => setFromDate(e.target.value)} className="h-8 w-36 text-xs" />
           <DateInput value={toDate}   onChange={e => setToDate(e.target.value)}   className="h-8 w-36 text-xs" />
+          <Button size="sm"
+            className={`h-8 text-xs gap-1 ${hasPendingChange ? "bg-pink-600 hover:bg-pink-700 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}
+            onClick={applyFilters}>
+            <Search className="w-3 h-3" /> بحث
+          </Button>
           {hasFilters && (
             <Button size="sm" variant="outline" className="h-8 text-xs gap-1 text-red-500 border-red-200 hover:bg-red-50" onClick={clearFilters}>
               <X className="w-3 h-3" /> مسح
