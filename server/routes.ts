@@ -974,11 +974,38 @@ export async function registerRoutes(
       res.status(500).json({ message: error.message });
     }
   });
+  // ── توليد باركود تلقائي حسب الفئة ──────────────────────────────────────────
+  app.get("/api/products/next-barcode", requireAuth, async (req, res) => {
+    try {
+      const categoryId = Number(req.query.categoryId) || 0;
+      const countRes = await pool.query(
+        `SELECT COUNT(*) as cnt FROM products WHERE category_id = $1`,
+        [categoryId || null]
+      );
+      const seq = (Number(countRes.rows[0]?.cnt || 0) + 1).toString().padStart(4, "0");
+      const catPart = categoryId.toString().padStart(3, "0");
+      const barcode = `628${catPart}${seq}`;
+      // تأكد أنه غير مستخدم
+      const existing = await pool.query(`SELECT id FROM products WHERE barcode = $1`, [barcode]);
+      if (existing.rows.length > 0) {
+        const ts = Date.now().toString().slice(-4);
+        res.json({ barcode: `628${catPart}${ts}` });
+      } else {
+        res.json({ barcode });
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/products", requireAuth, requirePermission("products.create"), async (req, res) => {
     try {
       const parsed = createProductSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
       const { variants, ...productData } = parsed.data;
+      // فحص تكرار الاسم
+      const dupName = await pool.query(`SELECT id FROM products WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))`, [productData.name]);
+      if (dupName.rows.length > 0) return res.status(409).json({ message: `يوجد منتج بنفس الاسم "${productData.name}" بالفعل` });
       const result = await storage.createProductWithVariants(productData as any, variants ?? []);
       res.status(201).json(result);
     } catch (err: any) {
@@ -989,6 +1016,14 @@ export async function registerRoutes(
     const parsed = updateProductSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
     const productId = Number(req.params.id);
+    // فحص تكرار الاسم عند التعديل (تجاهل المنتج الحالي)
+    if (parsed.data.name) {
+      const dupName = await pool.query(
+        `SELECT id FROM products WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND id <> $2`,
+        [parsed.data.name, productId]
+      );
+      if (dupName.rows.length > 0) return res.status(409).json({ message: `يوجد منتج بنفس الاسم "${parsed.data.name}" بالفعل` });
+    }
     const oldProduct = await storage.getProduct(productId);
     const row = await storage.updateProduct(productId, parsed.data);
     if (!row) return res.status(404).json({ message: "المنتج غير موجود" });

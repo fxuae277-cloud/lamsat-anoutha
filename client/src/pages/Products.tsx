@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
-import { Plus, Search, Package, Edit2, Trash2, Eye, MapPin, AlertCircle, Download, ArrowUpDown, ArrowUp, ArrowDown, Copy } from "lucide-react";
+import { Plus, Search, Package, Edit2, Trash2, Eye, MapPin, AlertCircle, Download, ArrowUpDown, ArrowUp, ArrowDown, Copy, RefreshCw, Link, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -51,6 +51,12 @@ export default function Products() {
     name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "",
     description: "", costDefault: "", minQty: "5",
   });
+
+  // ── barcode auto-generate ─────────────────────────────────────────────
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
+
+  // ── price auto-calc ───────────────────────────────────────────────────
+  const [priceAutoCalc, setPriceAutoCalc] = useState(true); // true = linked to cost
 
   // ── detail modal ──────────────────────────────────────────────────────
   const [detailProductId, setDetailProductId] = useState<number | null>(null);
@@ -178,8 +184,42 @@ export default function Products() {
   });
 
   // ── helpers ───────────────────────────────────────────────────────────
+  // ── auto barcode fetch ────────────────────────────────────────────────
+  async function fetchNextBarcode(categoryId: string) {
+    if (!categoryId) return;
+    setBarcodeLoading(true);
+    try {
+      const res = await fetch(`/api/products/next-barcode?categoryId=${categoryId}`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setFormData(f => ({ ...f, barcode: data.barcode }));
+      }
+    } finally {
+      setBarcodeLoading(false);
+    }
+  }
+
+  // useEffect: when category changes in ADD mode → fetch new barcode
+  useEffect(() => {
+    if (!formProduct && formOpen && formData.categoryId) {
+      fetchNextBarcode(formData.categoryId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.categoryId, formOpen]);
+
+  // useEffect: when cost changes and auto-calc is on → update price
+  useEffect(() => {
+    if (!priceAutoCalc) return;
+    const cost = parseFloat(formData.costDefault);
+    if (!isNaN(cost) && cost > 0) {
+      setFormData(f => ({ ...f, price: (cost * 1.2).toFixed(3) }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.costDefault, priceAutoCalc]);
+
   function openAdd() {
     setFormProduct(null);
+    setPriceAutoCalc(true);
     setFormData({ name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "", description: "", costDefault: "", minQty: "5" });
 
     setShowAddCategory(false);
@@ -189,6 +229,7 @@ export default function Products() {
 
   function openEdit(p: any) {
     setFormProduct(p);
+    setPriceAutoCalc(false); // edit mode: price stays as-is unless user re-links
     setFormData({
       name: p.name,
       categoryId: p.categoryId?.toString() || "",
@@ -600,10 +641,37 @@ export default function Products() {
 
               {/* الباركود */}
               <div className="space-y-1 col-span-2">
-                <label className="text-sm font-medium">{t("products.code")}</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">{t("products.code")}</label>
+                  {!formProduct && (
+                    <span className="text-xs text-muted-foreground">
+                      {formData.categoryId ? "تلقائي حسب الفئة" : "اختر فئة لتوليد الباركود"}
+                    </span>
+                  )}
+                </div>
                 <div className="flex gap-2">
-                  <Input value={formData.barcode} onChange={e => setFormData(f => ({ ...f, barcode: e.target.value }))} placeholder={t("products.optional")} data-testid="input-product-barcode" />
-                  <BarcodeScanButton onScan={code => setFormData(f => ({ ...f, barcode: code }))} />
+                  <Input
+                    value={formData.barcode}
+                    onChange={e => setFormData(f => ({ ...f, barcode: e.target.value }))}
+                    placeholder={formData.categoryId && !formProduct ? "جاري التوليد..." : t("products.optional")}
+                    readOnly={!formProduct && !!formData.categoryId}
+                    className={!formProduct && formData.categoryId ? "bg-muted font-mono" : "font-mono"}
+                    data-testid="input-product-barcode"
+                  />
+                  {!formProduct && formData.categoryId ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => fetchNextBarcode(formData.categoryId)}
+                      disabled={barcodeLoading}
+                      title="توليد باركود جديد"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${barcodeLoading ? "animate-spin" : ""}`} />
+                    </Button>
+                  ) : (
+                    <BarcodeScanButton onScan={code => setFormData(f => ({ ...f, barcode: code }))} />
+                  )}
                 </div>
               </div>
             </div>
@@ -612,8 +680,30 @@ export default function Products() {
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b pb-1 pt-1">التسعير</p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-sm font-medium">{t("products.price_omr")}</label>
-                <Input type="number" step="0.001" value={formData.price} onChange={e => setFormData(f => ({ ...f, price: e.target.value }))} readOnly={!isOwnerOrAdmin} data-testid="input-price" />
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">{t("products.price_omr")}</label>
+                  <button
+                    type="button"
+                    onClick={() => setPriceAutoCalc(v => !v)}
+                    className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                      priceAutoCalc
+                        ? "bg-green-50 border-green-300 text-green-700 hover:bg-green-100"
+                        : "bg-muted border-border text-muted-foreground hover:bg-accent"
+                    }`}
+                    title={priceAutoCalc ? "الوضع التلقائي — اضغط للتحرير يدوياً" : "الوضع اليدوي — اضغط للربط بالتكلفة"}
+                  >
+                    {priceAutoCalc ? <Link className="w-3 h-3" /> : <Unlink className="w-3 h-3" />}
+                    {priceAutoCalc ? "تلقائي +20%" : "يدوي"}
+                  </button>
+                </div>
+                <Input
+                  type="number" step="0.001"
+                  value={formData.price}
+                  onChange={e => { setPriceAutoCalc(false); setFormData(f => ({ ...f, price: e.target.value })); }}
+                  readOnly={!isOwnerOrAdmin}
+                  className={priceAutoCalc ? "bg-green-50/50 border-green-200" : ""}
+                  data-testid="input-price"
+                />
               </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium">التكلفة الافتراضية (ر.ع)</label>
