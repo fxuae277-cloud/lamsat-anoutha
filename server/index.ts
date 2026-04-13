@@ -139,6 +139,17 @@ app.use((req, res, next) => {
     console.error("[startup] FAILED to create settings table:", err);
   }
 
+  // Migration 0019 — add address + phone to branches (idempotent)
+  try {
+    await pool.query(`
+      ALTER TABLE branches ADD COLUMN IF NOT EXISTS address TEXT;
+      ALTER TABLE branches ADD COLUMN IF NOT EXISTS phone   TEXT;
+    `);
+    console.log("[startup] migration 0019: branches address+phone ready");
+  } catch (err) {
+    console.error("[startup] migration 0019 failed:", err);
+  }
+
   // Ensure every branch has exactly one is_branch_default location.
   // This fixes "لا يوجد مخزن افتراضي للفرع" that blocks all POS sales.
   try {
