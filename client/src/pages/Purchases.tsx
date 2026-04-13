@@ -502,6 +502,8 @@ function PurchasesTab() {
   const canManage = user?.role === "owner" || user?.role === "admin" || user?.role === "manager";
 
   const [showCreate, setShowCreate] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
+  const [wizardDirectApprove, setWizardDirectApprove] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<number | null>(null);
   const [showPostConfirm, setShowPostConfirm] = useState(false);
   // ── فلاتر قائمة الفواتير (يجب أن تكون هنا في الأعلى — قبل أي return شرطي) ──
@@ -706,6 +708,18 @@ function PurchasesTab() {
     setTimeout(() => modalBarcodeRef.current?.focus(), 50);
   }
 
+  function resetCreate() {
+    setShowCreate(false); setWizardStep(1); setWizardDirectApprove(false);
+    setNewSupplierId(""); setNewBranchId(""); setNewNotes(""); setNewDueDate("");
+    setNewShipping("0"); setNewCustoms("0"); setNewClearance("0"); setNewOther("0");
+    setNewPayMethod("cash"); setNewDiscount("0"); setNewVatRate("0"); setNewDate(new Date().toISOString().slice(0,10));
+    setModalItems([]); setModalBarcode("");
+    setModalManualProductId(""); setModalManualVariantId(null); setModalProductSearch("");
+    setModalManualQty("1"); setModalManualCost(""); setModalManualSellPrice("");
+    setModalNewName(""); setModalNewColor(""); setModalNewSize(""); setModalNewQty("1"); setModalNewCost(""); setModalNewSellPrice("");
+    setModalBarcodeFound(null);
+  }
+
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!newSupplierId) throw new Error("اختر المورد");
@@ -726,7 +740,6 @@ function PurchasesTab() {
         notes: newNotes || null,
       });
       const inv = await res.json();
-      // إضافة البنود المسحوبة في النافذة
       for (const item of modalItems) {
         try {
           if (!item.productId && !item.variantId) {
@@ -748,18 +761,19 @@ function PurchasesTab() {
           }
         } catch {}
       }
+      // إذا اعتماد مباشر → approve الفاتورة فوراً
+      if (wizardDirectApprove) {
+        await apiRequest("PATCH", `/api/purchases/${inv.id}/status`, { status: "approved" });
+      }
       return inv;
     },
     onSuccess: (inv) => {
       qc.invalidateQueries({ queryKey: ["/api/purchases"] });
-      setShowCreate(false);
+      qc.invalidateQueries({ queryKey: ["/api/products"] });
+      const msg = wizardDirectApprove ? "تم اعتماد الفاتورة وتحديث المخزون ✓" : t("purchases.invoice_created");
+      toast({ title: msg });
+      resetCreate();
       setSelectedInvoice(inv.id);
-      toast({ title: t("purchases.invoice_created") });
-      setNewSupplierId(""); setNewBranchId(""); setNewNotes(""); setNewDueDate("");
-      setNewShipping("0"); setNewCustoms("0"); setNewClearance("0"); setNewOther("0");
-      setNewPayMethod("cash"); setNewDiscount("0"); setNewVatRate("0");
-      setModalItems([]); setModalBarcode("");
-      setModalManualProductId(""); setModalManualVariantId(null); setModalProductSearch(""); setModalManualQty("1"); setModalManualCost(""); setModalManualSellPrice("");
     },
     onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
@@ -2036,6 +2050,543 @@ function PurchasesTab() {
     return sortDir === "asc" ? (av < bv ? -1 : av > bv ? 1 : 0) : (av > bv ? -1 : av < bv ? 1 : 0);
   });
 
+  // ══════════════════════════════════════════════════════════════
+  // ── WIZARD إنشاء فاتورة مشتريات ──────────────────────────────
+  // ══════════════════════════════════════════════════════════════
+  if (showCreate) {
+    const STEPS = [
+      { num: 1, label: "المورد والتاريخ" },
+      { num: 2, label: "إضافة المنتجات" },
+      { num: 3, label: "التكاليف والخصومات" },
+      { num: 4, label: "المراجعة والاعتماد" },
+    ];
+    const canNext1 = !!newSupplierId;
+    const canNext2 = modalItems.length > 0;
+    const wSubtotal  = modalItems.reduce((s, i) => s + i.qty * i.unitCost, 0);
+    const wDiscVal   = newDiscType === "value" ? parseFloat(newDiscount || "0") : wSubtotal * parseFloat(newDiscount || "0") / 100;
+    const wAfterDisc = Math.max(0, wSubtotal - wDiscVal);
+    const wVat       = wAfterDisc * parseFloat(newVatRate || "0") / 100;
+    const wExtras    = (parseFloat(newShipping||"0")||0) + (parseFloat(newCustoms||"0")||0) + (parseFloat(newClearance||"0")||0) + (parseFloat(newOther||"0")||0);
+    const wTotal     = wAfterDisc + wVat + wExtras;
+    const supplierName = activeSuppliers.find(s => String(s.id) === newSupplierId)?.name || "—";
+
+    return (
+      <div dir="rtl" className="min-h-screen bg-muted/30 pb-10">
+
+        {/* ── رأس الصفحة ── */}
+        <div className="bg-background border-b sticky top-0 z-10">
+          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <FileText className="w-5 h-5" style={{ color: "#D4527E" }} />
+              <span className="font-bold text-lg">فاتورة مشتريات جديدة</span>
+            </div>
+            <button onClick={resetCreate} className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md hover:bg-muted">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* ── Progress bar ── */}
+          <div className="max-w-4xl mx-auto px-4 pb-4">
+            <div className="flex items-center gap-0">
+              {STEPS.map((s, i) => {
+                const done = wizardStep > s.num;
+                const active = wizardStep === s.num;
+                return (
+                  <div key={s.num} className="flex items-center flex-1">
+                    <div className="flex flex-col items-center">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all ${
+                        done    ? "border-emerald-500 bg-emerald-500 text-white" :
+                        active  ? "border-[#D4527E] bg-[#D4527E] text-white" :
+                                  "border-muted-foreground/30 bg-background text-muted-foreground"
+                      }`}>
+                        {done ? <CheckCircle2 className="w-4 h-4" /> : s.num}
+                      </div>
+                      <span className={`text-xs mt-1 font-medium whitespace-nowrap ${
+                        active ? "text-[#D4527E]" : done ? "text-emerald-600" : "text-muted-foreground"
+                      }`}>{s.label}</span>
+                    </div>
+                    {i < STEPS.length - 1 && (
+                      <div className={`flex-1 h-0.5 mb-4 mx-1 ${done ? "bg-emerald-400" : "bg-muted-foreground/20"}`} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* ── محتوى الخطوات ── */}
+        <div className="max-w-4xl mx-auto px-4 mt-6 space-y-4">
+
+          {/* ════ الخطوة 1: المورد والتاريخ ════ */}
+          {wizardStep === 1 && (
+            <div className="bg-background border rounded-xl p-6 space-y-5 shadow-sm">
+              <h2 className="text-base font-bold flex items-center gap-2">
+                <Building className="w-4 h-4 text-[#D4527E]" /> بيانات المورد والفاتورة
+              </h2>
+
+              {/* المورد */}
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">المورد <span className="text-red-500">*</span></label>
+                <div className="flex gap-2">
+                  <Select value={newSupplierId} onValueChange={setNewSupplierId}>
+                    <SelectTrigger className="flex-1"><SelectValue placeholder="اختر المورد..." /></SelectTrigger>
+                    <SelectContent>{activeSuppliers.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <Button variant="outline" size="icon" onClick={() => setShowQuickSupplier(true)} title="إضافة مورد جديد"><UserPlus className="w-4 h-4" /></Button>
+                </div>
+              </div>
+
+              {/* الفرع */}
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">الفرع</label>
+                <Select value={newBranchId} onValueChange={setNewBranchId}>
+                  <SelectTrigger><SelectValue placeholder="اختر الفرع..." /></SelectTrigger>
+                  <SelectContent>{(branches as any[]).map((b: any) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+
+              {/* التاريخ */}
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">تاريخ الفاتورة <span className="text-red-500">*</span></label>
+                <DateInput value={newDate} onChange={e => setNewDate(e.target.value)} />
+              </div>
+
+              {/* طريقة الدفع — أزرار بصرية */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">طريقة الدفع</label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { val: "cash", label: "نقداً", icon: "💵" },
+                    { val: "bank_transfer", label: "تحويل", icon: "🏦" },
+                    { val: "cheque", label: "شيك", icon: "📄" },
+                    { val: "credit", label: "آجل", icon: "🕐" },
+                  ].map(opt => (
+                    <button key={opt.val} type="button"
+                      onClick={() => setNewPayMethod(opt.val)}
+                      className={`p-3 rounded-xl border-2 text-sm font-medium flex flex-col items-center gap-1 transition-all ${
+                        newPayMethod === opt.val
+                          ? "border-[#D4527E] bg-[#D4527E]/10 text-[#D4527E]"
+                          : "border-muted hover:border-muted-foreground/40 text-muted-foreground"
+                      }`}>
+                      <span className="text-xl">{opt.icon}</span>{opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* تاريخ الاستحقاق — يظهر عند اختيار آجل */}
+              {newPayMethod === "credit" && (
+                <div className="space-y-1.5 border border-orange-200 bg-orange-50 rounded-lg p-3">
+                  <label className="text-sm font-medium text-orange-700">تاريخ الاستحقاق (الآجل) <span className="text-red-500">*</span></label>
+                  <DateInput value={newDueDate} onChange={e => setNewDueDate(e.target.value)} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ════ الخطوة 2: إضافة المنتجات ════ */}
+          {wizardStep === 2 && (
+            <div className="space-y-4">
+              <div className="bg-background border rounded-xl p-5 shadow-sm">
+                <h2 className="text-base font-bold flex items-center gap-2 mb-4">
+                  <Package className="w-4 h-4 text-[#D4527E]" /> إضافة المنتجات
+                </h2>
+                <Tabs defaultValue="search" className="w-full">
+                  <TabsList className="w-full mb-4">
+                    <TabsTrigger value="search" className="flex-1 gap-1"><Search className="w-3 h-3" /> بحث بالاسم</TabsTrigger>
+                    <TabsTrigger value="barcode" className="flex-1 gap-1"><Package className="w-3 h-3" /> باركود</TabsTrigger>
+                    <TabsTrigger value="newprod" className="flex-1 gap-1"><Plus className="w-3 h-3" /> إضافة يدوية</TabsTrigger>
+                  </TabsList>
+
+                  {/* تبويب البحث بالاسم */}
+                  <TabsContent value="search" className="space-y-3 mt-0">
+                    <div className="relative">
+                      <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                      <Input className="pr-9" placeholder="ابحث بالاسم أو الباركود أو SKU..."
+                        value={modalProductSearch}
+                        onChange={e => { setModalProductSearch(e.target.value); setModalSearchOpen(true); if (!e.target.value) { setModalManualProductId(""); setModalManualVariantId(null); } }}
+                        onFocus={() => { if (modalProductSearch) setModalSearchOpen(true); }}
+                        onBlur={() => setTimeout(() => setModalSearchOpen(false), 180)}
+                        autoComplete="off" />
+                      {modalSearchOpen && modalProductSearch.length >= 1 && (
+                        <div className="absolute z-50 top-full mt-1 left-0 right-0 border rounded-lg bg-background shadow-lg max-h-52 overflow-y-auto">
+                          {(() => {
+                            const q = modalProductSearch.toLowerCase();
+                            const results = (allProducts as Product[]).filter(p => p.name.toLowerCase().includes(q) || (p as any).barcode?.toLowerCase().includes(q) || (p as any).sku?.toLowerCase().includes(q)).slice(0, 15);
+                            const alreadyInCart = (pid: number) => modalItems.some(i => i.productId === pid);
+                            return results.length > 0 ? results.map(p => (
+                              <button key={p.id} type="button"
+                                className={`w-full text-right px-3 py-2 text-sm hover:bg-muted/60 border-b last:border-0 flex items-center justify-between gap-2 ${modalManualProductId === String(p.id) ? "bg-primary/10" : ""}`}
+                                onMouseDown={() => { setModalManualProductId(String(p.id)); setModalManualVariantId(null); setModalManualCost(""); setModalManualSellPrice(""); setModalProductSearch(p.name); setModalSearchOpen(false); }}>
+                                <span className="font-medium">{p.name}</span>
+                                <div className="flex items-center gap-2">
+                                  {(p as any).barcode && <span className="text-xs text-muted-foreground font-mono">{(p as any).barcode}</span>}
+                                  {alreadyInCart(p.id) && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">مضاف ✓</span>}
+                                </div>
+                              </button>
+                            )) : (
+                              <div className="px-3 py-2 text-sm text-muted-foreground">لا نتائج — جرّب التبويب اليدوي</div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                    {modalManualProductId && modalManualVariants.length > 0 && (
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-muted-foreground">اختر المتغير</label>
+                        <div className="flex flex-wrap gap-2">
+                          {modalManualVariants.map(v => {
+                            const label = [v.color, v.size].filter(Boolean).join(" / ") || v.sku || `#${v.id}`;
+                            const isSel = modalManualVariantId === v.id;
+                            return (
+                              <button key={v.id} type="button"
+                                onClick={() => { setModalManualVariantId(v.id); setModalManualCost(String(v.costDefault || "0")); setModalManualSellPrice(String((v as any).priceDefault || "0")); }}
+                                className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${isSel ? "bg-[#D4527E] text-white border-[#D4527E]" : "bg-background hover:bg-muted/50"}`}>
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {modalManualProductId && (
+                      <div className="flex gap-2 items-end">
+                        <div className="space-y-1 w-24"><label className="text-xs text-muted-foreground">الكمية</label><Input type="number" min="1" className="h-9 text-center" value={modalManualQty} onChange={e => setModalManualQty(e.target.value)} /></div>
+                        <div className="space-y-1 flex-1"><label className="text-xs text-muted-foreground">سعر الشراء</label><Input type="number" step="0.001" className="h-9 font-mono" value={modalManualCost} onChange={e => setModalManualCost(e.target.value)} placeholder="0.000" /></div>
+                        <div className="space-y-1 flex-1"><label className="text-xs text-emerald-700">سعر البيع</label><Input type="number" step="0.001" className="h-9 font-mono" value={modalManualSellPrice} onChange={e => setModalManualSellPrice(e.target.value)} placeholder="0.000" /></div>
+                        <Button className="h-9 px-5 gap-1" style={{ background: "#D4527E" }}
+                          disabled={!modalManualCost || !modalManualQty}
+                          onClick={() => {
+                            const prod = (allProducts as Product[]).find(p => String(p.id) === modalManualProductId);
+                            const variant = modalManualVariants.find(v => v.id === modalManualVariantId);
+                            setModalItems(prev => {
+                              if (modalManualVariantId) { const ex = prev.findIndex(i => i.variantId === modalManualVariantId); if (ex >= 0) return prev.map((i, n) => n === ex ? { ...i, qty: i.qty + (parseInt(modalManualQty)||1) } : i); }
+                              return [...prev, { uid: crypto.randomUUID(), variantId: modalManualVariantId, productId: Number(modalManualProductId), name: prod?.name || "صنف", barcode: variant?.barcode || "", color: variant?.color || "", size: variant?.size || "", qty: parseInt(modalManualQty)||1, unitCost: parseFloat(modalManualCost)||0, sellPrice: parseFloat(modalManualSellPrice)||0 }];
+                            });
+                            setModalManualVariantId(null); setModalManualQty("1"); setModalManualCost(""); setModalManualSellPrice(""); setModalManualProductId(""); setModalProductSearch("");
+                          }}>
+                          <Plus className="w-3.5 h-3.5" /> إضافة
+                        </Button>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  {/* تبويب الباركود */}
+                  <TabsContent value="barcode" className="space-y-3 mt-0">
+                    <div className="border-2 border-dashed rounded-xl p-5 text-center" onClick={() => !modalBarcodeFound && modalBarcodeRef.current?.focus()}>
+                      <Package className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
+                      <p className="text-sm font-medium mb-3">امسح أو أدخل الباركود</p>
+                      <div className="flex gap-2 max-w-xs mx-auto">
+                        <Input ref={modalBarcodeRef} className="font-mono text-center" placeholder="الباركود..." value={modalBarcode} onChange={e => setModalBarcode(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleModalBarcode(modalBarcode); } }} disabled={modalBarcodeLoading || !!modalBarcodeFound} dir="ltr" />
+                        <Button variant="outline" onClick={() => handleModalBarcode(modalBarcode)} disabled={modalBarcodeLoading || !modalBarcode.trim() || !!modalBarcodeFound}>
+                          {modalBarcodeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "بحث"}
+                        </Button>
+                      </div>
+                    </div>
+                    {modalBarcodeFound && (
+                      <div className="border rounded-xl bg-emerald-50 border-emerald-200 p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-600" /><div><p className="font-semibold text-emerald-800">{modalBarcodeFound.name}</p><p className="text-xs text-emerald-600 font-mono">{modalBarcodeFound.barcode}{modalBarcodeFound.color && ` · ${modalBarcodeFound.color}`}{modalBarcodeFound.size && ` · ${modalBarcodeFound.size}`}</p></div></div>
+                          <button onClick={() => setModalBarcodeFound(null)}><X className="w-4 h-4 text-muted-foreground" /></button>
+                        </div>
+                        <div className="flex gap-2 items-end">
+                          <div className="space-y-1 w-24"><label className="text-xs text-muted-foreground">الكمية</label><Input type="number" min="1" className="h-9 text-center" value={modalBarcodeConfirmQty} onChange={e => setModalBarcodeConfirmQty(e.target.value)} autoFocus /></div>
+                          <div className="space-y-1 flex-1"><label className="text-xs text-muted-foreground">سعر الشراء</label><Input type="number" step="0.001" className="h-9 font-mono" value={modalBarcodeConfirmCost} onChange={e => setModalBarcodeConfirmCost(e.target.value)} placeholder="0.000" /></div>
+                          <div className="space-y-1 flex-1"><label className="text-xs text-emerald-700">سعر البيع</label><Input type="number" step="0.001" className="h-9 font-mono" value={modalBarcodeConfirmSell} onChange={e => setModalBarcodeConfirmSell(e.target.value)} placeholder="0.000" /></div>
+                          <Button className="h-9 px-4 gap-1" style={{ background: "#D4527E" }} disabled={!modalBarcodeConfirmCost || !modalBarcodeConfirmQty} onClick={confirmBarcodeItem}><Plus className="w-3.5 h-3.5" /> إضافة</Button>
+                        </div>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  {/* تبويب الإضافة اليدوية */}
+                  <TabsContent value="newprod" className="space-y-3 mt-0">
+                    <div className="relative">
+                      <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                      <Input className="pr-9" placeholder="ابحث عن منتج مسجل أو أدخل اسم جديد..."
+                        value={modalNewName}
+                        onChange={e => { setModalNewName(e.target.value); setModalNewSearchOpen(true); if (!e.target.value) { setModalManualProductId(""); setModalManualVariantId(null); } }}
+                        onFocus={() => { if (modalNewName && !modalManualProductId) setModalNewSearchOpen(true); }}
+                        onBlur={() => setTimeout(() => setModalNewSearchOpen(false), 180)}
+                        autoComplete="off" />
+                      {modalManualProductId && <button className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => { setModalManualProductId(""); setModalManualVariantId(null); setModalManualCost(""); setModalManualSellPrice(""); setModalNewName(""); }}><X className="w-3.5 h-3.5" /></button>}
+                      {modalNewSearchOpen && modalNewName.length >= 1 && !modalManualProductId && (
+                        <div className="absolute z-50 top-full mt-1 left-0 right-0 border rounded-lg bg-background shadow-lg max-h-44 overflow-y-auto">
+                          {(() => {
+                            const q = modalNewName.toLowerCase();
+                            const results = (allProducts as Product[]).filter(p => p.name.toLowerCase().includes(q) || (p as any).barcode?.toLowerCase().includes(q)).slice(0, 10);
+                            return results.length > 0 ? results.map(p => (
+                              <button key={p.id} type="button" className="w-full text-right px-3 py-2 text-sm hover:bg-muted/60 border-b last:border-0 flex items-center justify-between"
+                                onMouseDown={() => { setModalManualProductId(String(p.id)); setModalManualVariantId(null); setModalManualCost(""); setModalManualSellPrice(""); setModalNewName(p.name); setModalNewSearchOpen(false); }}>
+                                <span>{p.name}</span><span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">مسجل ✓</span>
+                              </button>
+                            )) : <div className="px-3 py-2 text-xs text-muted-foreground flex items-center gap-2"><Plus className="w-3 h-3 text-[#D4527E]" /> سيُضاف كمنتج جديد</div>;
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                    {modalManualProductId ? (
+                      <>
+                        <div className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-2 py-1.5 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> منتج مسجل</div>
+                        {modalManualVariants.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {modalManualVariants.map(v => {
+                              const label = [v.color, v.size].filter(Boolean).join(" / ") || `#${v.id}`;
+                              return <button key={v.id} type="button" onClick={() => { setModalManualVariantId(v.id); setModalManualCost(String(v.costDefault || "0")); setModalManualSellPrice(String((v as any).priceDefault || "0")); }} className={`px-3 py-1.5 rounded-lg border text-xs font-medium ${modalManualVariantId === v.id ? "bg-[#D4527E] text-white border-[#D4527E]" : "hover:bg-muted/50"}`}>{label}</button>;
+                            })}
+                          </div>
+                        )}
+                        <div className="flex gap-2 items-end">
+                          <div className="space-y-1 w-24"><label className="text-xs text-muted-foreground">الكمية</label><Input type="number" min="1" className="h-9 text-center" value={modalManualQty} onChange={e => setModalManualQty(e.target.value)} /></div>
+                          <div className="space-y-1 flex-1"><label className="text-xs text-muted-foreground">سعر الشراء</label><Input type="number" step="0.001" className="h-9 font-mono" value={modalManualCost} onChange={e => setModalManualCost(e.target.value)} placeholder="0.000" /></div>
+                          <div className="space-y-1 flex-1"><label className="text-xs text-emerald-700">سعر البيع</label><Input type="number" step="0.001" className="h-9 font-mono" value={modalManualSellPrice} onChange={e => setModalManualSellPrice(e.target.value)} placeholder="0.000" /></div>
+                          <Button className="h-9 px-4 gap-1" style={{ background: "#D4527E" }} disabled={!modalManualCost || !modalManualQty}
+                            onClick={() => {
+                              const prod = (allProducts as Product[]).find(p => String(p.id) === modalManualProductId);
+                              const variant = modalManualVariants.find(v => v.id === modalManualVariantId);
+                              setModalItems(prev => {
+                                if (modalManualVariantId) { const ex = prev.findIndex(i => i.variantId === modalManualVariantId); if (ex >= 0) return prev.map((i, n) => n === ex ? { ...i, qty: i.qty + (parseInt(modalManualQty)||1) } : i); }
+                                return [...prev, { uid: crypto.randomUUID(), variantId: modalManualVariantId, productId: Number(modalManualProductId), name: prod?.name || "صنف", barcode: variant?.barcode || "", color: variant?.color || "", size: variant?.size || "", qty: parseInt(modalManualQty)||1, unitCost: parseFloat(modalManualCost)||0, sellPrice: parseFloat(modalManualSellPrice)||0 }];
+                              });
+                              setModalManualVariantId(null); setModalManualQty("1"); setModalManualCost(""); setModalManualSellPrice(""); setModalManualProductId(""); setModalNewName("");
+                            }}>
+                            <Plus className="w-3.5 h-3.5" /> إضافة
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1"><label className="text-xs text-muted-foreground">اللون</label><Input className="h-9" placeholder="ذهبي..." value={modalNewColor} onChange={e => setModalNewColor(e.target.value)} /></div>
+                        <div className="space-y-1"><label className="text-xs text-muted-foreground">المقاس / النوع</label><Input className="h-9" placeholder="50ml..." value={modalNewSize} onChange={e => setModalNewSize(e.target.value)} /></div>
+                        <div className="space-y-1"><label className="text-xs text-muted-foreground">الكمية</label><Input type="number" min="1" className="h-9 text-center" value={modalNewQty} onChange={e => setModalNewQty(e.target.value)} /></div>
+                        <div className="space-y-1"><label className="text-xs text-muted-foreground">سعر الشراء *</label><Input type="number" step="0.001" className="h-9 font-mono" placeholder="0.000" value={modalNewCost} onChange={e => setModalNewCost(e.target.value)} /></div>
+                        <div className="space-y-1"><label className="text-xs text-emerald-700">سعر البيع</label><Input type="number" step="0.001" className="h-9 font-mono" placeholder="0.000" value={modalNewSellPrice} onChange={e => setModalNewSellPrice(e.target.value)} /></div>
+                        <div className="flex items-end">
+                          <Button className="w-full h-9 gap-1" style={{ background: "#D4527E" }} disabled={!modalNewName.trim() || !modalNewCost || !modalNewQty}
+                            onClick={() => {
+                              setModalItems(prev => [...prev, { uid: crypto.randomUUID(), variantId: null, productId: null, name: modalNewName.trim(), barcode: "", color: modalNewColor, size: modalNewSize, qty: parseInt(modalNewQty)||1, unitCost: parseFloat(modalNewCost)||0, sellPrice: parseFloat(modalNewSellPrice)||0 }]);
+                              setModalNewName(""); setModalNewColor(""); setModalNewSize(""); setModalNewQty("1"); setModalNewCost(""); setModalNewSellPrice("");
+                            }}>
+                            <Plus className="w-3.5 h-3.5" /> إضافة جديد
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              </div>
+
+              {/* جدول المنتجات المضافة */}
+              <div className="bg-background border rounded-xl shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/20">
+                  <div className="flex items-center gap-2">
+                    <Package className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-semibold text-sm">المنتجات المضافة</span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ background: "#D4527E" }}>{modalItems.length}</span>
+                  </div>
+                  {modalItems.length > 0 && <Button variant="ghost" size="sm" className="text-xs text-muted-foreground gap-1 hover:text-red-500" onClick={() => setModalItems([])}><Trash2 className="w-3 h-3" /> تفريغ</Button>}
+                </div>
+                {modalItems.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-muted/30">
+                        <TableRow>
+                          <TableHead className="text-xs">الصنف</TableHead>
+                          <TableHead className="text-xs w-20">الكمية</TableHead>
+                          <TableHead className="text-xs w-28">سعر الشراء</TableHead>
+                          <TableHead className="text-xs w-24">الإجمالي</TableHead>
+                          <TableHead className="w-10" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {modalItems.map(item => (
+                          <TableRow key={item.uid}>
+                            <TableCell className="py-2">
+                              <p className="text-sm font-medium">{item.name}</p>
+                              {(item.color || item.size) && <p className="text-xs text-muted-foreground">{[item.color, item.size].filter(Boolean).join(" / ")}</p>}
+                            </TableCell>
+                            <TableCell className="py-2"><Input type="number" min="1" className="h-7 w-16 text-sm text-center p-1" value={item.qty} onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? { ...i, qty: parseInt(e.target.value) || 1 } : i))} /></TableCell>
+                            <TableCell className="py-2"><Input type="number" step="0.001" className="h-7 w-24 text-sm font-mono p-1" value={item.unitCost} onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? { ...i, unitCost: parseFloat(e.target.value) || 0 } : i))} /></TableCell>
+                            <TableCell className="py-2 font-mono text-sm">{omr(item.qty * item.unitCost)}</TableCell>
+                            <TableCell className="py-2"><Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-400 hover:text-red-600" onClick={() => setModalItems(prev => prev.filter(i => i.uid !== item.uid))}><X className="w-3.5 h-3.5" /></Button></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-center py-10 text-muted-foreground">
+                    <Package className="w-10 h-10 mx-auto mb-2 opacity-20" />
+                    <p className="text-sm">لم تتم إضافة أي منتجات بعد</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ════ الخطوة 3: التكاليف والخصومات ════ */}
+          {wizardStep === 3 && (
+            <div className="space-y-4">
+              <div className="bg-background border rounded-xl p-5 shadow-sm space-y-4">
+                <h2 className="text-base font-bold flex items-center gap-2">
+                  <Ship className="w-4 h-4 text-[#D4527E]" /> التكاليف الإضافية والخصومات
+                </h2>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5"><label className="text-sm font-medium flex items-center gap-1"><Truck className="w-3 h-3" /> الشحن</label><Input type="number" step="0.001" min="0" className="font-mono" placeholder="0.000" value={newShipping} onChange={e => setNewShipping(e.target.value)} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium">الجمارك</label><Input type="number" step="0.001" min="0" className="font-mono" placeholder="0.000" value={newCustoms} onChange={e => setNewCustoms(e.target.value)} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium">التخليص</label><Input type="number" step="0.001" min="0" className="font-mono" placeholder="0.000" value={newClearance} onChange={e => setNewClearance(e.target.value)} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium">أخرى</label><Input type="number" step="0.001" min="0" className="font-mono" placeholder="0.000" value={newOther} onChange={e => setNewOther(e.target.value)} /></div>
+                  <div className="space-y-1.5"><label className="text-sm font-medium">ضريبة القيمة المضافة %</label><Input type="number" min="0" max="100" step="0.1" className="font-mono" placeholder="0" value={newVatRate} onChange={e => setNewVatRate(e.target.value)} /></div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">الخصم</label>
+                    <div className="flex gap-1">
+                      <Input type="number" min="0" step="0.001" className="font-mono flex-1" placeholder="0" value={newDiscount} onChange={e => setNewDiscount(e.target.value)} />
+                      <Select value={newDiscType} onValueChange={(v: any) => setNewDiscType(v)}>
+                        <SelectTrigger className="w-20 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="value">ر.ع</SelectItem><SelectItem value="percent">%</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* حاسبة فورية */}
+              <div className="bg-background border rounded-xl p-5 shadow-sm space-y-2.5">
+                <h3 className="text-sm font-bold text-muted-foreground mb-3">ملخص الأرقام</h3>
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">المجموع الفرعي ({modalItems.length} صنف)</span><span className="font-mono font-medium">{omr(wSubtotal)} ر.ع</span></div>
+                {wDiscVal > 0 && <div className="flex justify-between text-sm text-red-500"><span>الخصم</span><span className="font-mono">- {omr(wDiscVal)} ر.ع</span></div>}
+                {wVat > 0 && <div className="flex justify-between text-sm text-amber-600"><span>ضريبة ({newVatRate}%)</span><span className="font-mono">{omr(wVat)} ر.ع</span></div>}
+                {wExtras > 0 && <div className="flex justify-between text-sm text-blue-600"><span>تكاليف إضافية</span><span className="font-mono">{omr(wExtras)} ر.ع</span></div>}
+                <div className="flex justify-between font-bold text-base border-t pt-2.5 mt-1">
+                  <span>الإجمالي النهائي</span>
+                  <span className="font-mono text-emerald-600">{omr(wTotal)} ر.ع</span>
+                </div>
+              </div>
+
+              {/* الملاحظات */}
+              <div className="bg-background border rounded-xl p-5 shadow-sm space-y-2">
+                <label className="text-sm font-medium">ملاحظات (اختياري)</label>
+                <textarea className="w-full border rounded-lg p-3 text-sm resize-none min-h-[80px] bg-background focus:outline-none focus:ring-2 focus:ring-[#D4527E]/30" placeholder="أي ملاحظات على الفاتورة..." value={newNotes} onChange={e => setNewNotes(e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          {/* ════ الخطوة 4: المراجعة والاعتماد ════ */}
+          {wizardStep === 4 && (
+            <div className="space-y-4">
+              {/* بيانات المورد */}
+              <div className="bg-background border rounded-xl p-5 shadow-sm">
+                <h2 className="text-base font-bold flex items-center gap-2 mb-4"><FileText className="w-4 h-4 text-[#D4527E]" /> ملخص الفاتورة</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                  <div><p className="text-xs text-muted-foreground">المورد</p><p className="font-bold">{supplierName}</p></div>
+                  <div><p className="text-xs text-muted-foreground">التاريخ</p><p className="font-bold">{newDate}</p></div>
+                  <div><p className="text-xs text-muted-foreground">طريقة الدفع</p><p className="font-bold">{newPayMethod === "cash" ? "نقداً" : newPayMethod === "bank_transfer" ? "تحويل بنكي" : newPayMethod === "cheque" ? "شيك" : "آجل"}</p></div>
+                  {newPayMethod === "credit" && newDueDate && <div><p className="text-xs text-muted-foreground">تاريخ الاستحقاق</p><p className="font-bold text-orange-600">{newDueDate}</p></div>}
+                  {newBranchId && <div><p className="text-xs text-muted-foreground">الفرع</p><p className="font-bold">{(branches as any[]).find((b: any) => String(b.id) === newBranchId)?.name || "—"}</p></div>}
+                </div>
+              </div>
+
+              {/* قائمة المنتجات */}
+              <div className="bg-background border rounded-xl shadow-sm overflow-hidden">
+                <div className="px-4 py-2.5 border-b bg-muted/20 flex items-center gap-2">
+                  <Package className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm font-semibold">المنتجات ({modalItems.length} صنف)</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-muted/20">
+                      <TableRow>
+                        <TableHead className="text-xs">#</TableHead>
+                        <TableHead className="text-xs">الصنف</TableHead>
+                        <TableHead className="text-xs text-center">الكمية</TableHead>
+                        <TableHead className="text-xs">سعر الشراء</TableHead>
+                        <TableHead className="text-xs">الإجمالي</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {modalItems.map((item, idx) => (
+                        <TableRow key={item.uid}>
+                          <TableCell className="text-xs text-muted-foreground py-2">{idx + 1}</TableCell>
+                          <TableCell className="py-2"><p className="text-sm font-medium">{item.name}</p>{(item.color || item.size) && <p className="text-xs text-muted-foreground">{[item.color, item.size].filter(Boolean).join(" / ")}</p>}</TableCell>
+                          <TableCell className="py-2 text-center font-mono text-sm">{item.qty}</TableCell>
+                          <TableCell className="py-2 font-mono text-sm">{omr(item.unitCost)}</TableCell>
+                          <TableCell className="py-2 font-mono text-sm font-medium">{omr(item.qty * item.unitCost)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              {/* الملخص المالي */}
+              <div className="bg-background border rounded-xl p-5 shadow-sm space-y-2">
+                <h3 className="text-sm font-bold text-muted-foreground">الملخص المالي</h3>
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">المجموع الفرعي</span><span className="font-mono">{omr(wSubtotal)} ر.ع</span></div>
+                {wDiscVal > 0 && <div className="flex justify-between text-sm text-red-500"><span>الخصم</span><span className="font-mono">- {omr(wDiscVal)} ر.ع</span></div>}
+                {wVat > 0 && <div className="flex justify-between text-sm text-amber-600"><span>ضريبة ({newVatRate}%)</span><span className="font-mono">{omr(wVat)} ر.ع</span></div>}
+                {wExtras > 0 && <div className="flex justify-between text-sm text-blue-600"><span>تكاليف إضافية (شحن + جمارك + ...)</span><span className="font-mono">{omr(wExtras)} ر.ع</span></div>}
+                <div className="flex justify-between font-bold text-lg border-t pt-3 mt-1">
+                  <span>الإجمالي النهائي</span>
+                  <span className="font-mono text-emerald-600">{omr(wTotal)} ر.ع</span>
+                </div>
+              </div>
+
+              {newNotes && (
+                <div className="bg-muted/30 border rounded-xl p-4 text-sm"><span className="font-medium text-muted-foreground">ملاحظات: </span>{newNotes}</div>
+              )}
+
+              {/* أزرار الاعتماد */}
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <Button variant="outline" size="lg" className="gap-2 border-2" disabled={createMutation.isPending}
+                  onClick={() => { setWizardDirectApprove(false); createMutation.mutate(); }}>
+                  {createMutation.isPending && !wizardDirectApprove ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                  حفظ كمسودة
+                </Button>
+                <Button size="lg" className="gap-2 bg-green-600 hover:bg-green-700 text-white" disabled={createMutation.isPending}
+                  onClick={() => { setWizardDirectApprove(true); createMutation.mutate(); }}>
+                  {createMutation.isPending && wizardDirectApprove ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileCheck className="w-4 h-4" />}
+                  اعتماد وتحديث المخزون
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── أزرار التنقل ── */}
+          <div className="flex items-center justify-between pt-2 pb-4">
+            <Button variant="outline" className="gap-2 px-6" onClick={() => wizardStep > 1 ? setWizardStep(s => s - 1) : resetCreate()}>
+              {wizardStep === 1 ? <><X className="w-4 h-4" /> إلغاء</> : <><span className="rotate-180 inline-block">←</span> رجوع</>}
+            </Button>
+            {wizardStep < 4 && (
+              <Button className="gap-2 px-8" style={{ background: "#D4527E" }}
+                disabled={(wizardStep === 1 && !canNext1) || (wizardStep === 2 && !canNext2)}
+                onClick={() => setWizardStep(s => s + 1)}>
+                التالي <span className="inline-block">←</span>
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Dialogs المساعدة */}
+        <Dialog open={showQuickSupplier} onOpenChange={setShowQuickSupplier}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>{t("purchases.quick_supplier")}</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-1"><label className="text-sm font-medium">{t("purchases.supplier_name")} *</label><Input value={quickName} onChange={e => setQuickName(e.target.value)} /></div>
+              <div className="space-y-1"><label className="text-sm font-medium">{t("purchases.phone")}</label><Input value={quickPhone} onChange={e => setQuickPhone(e.target.value)} placeholder="+968..." /></div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowQuickSupplier(false)}>{t("common.cancel")}</Button>
+              <Button onClick={() => quickSupplierMutation.mutate()} disabled={!quickName.trim() || quickSupplierMutation.isPending}>{quickSupplierMutation.isPending ? t("common.loading") : t("common.add")}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+      </div>
+    );
+  }
+  // ══════════════════════════════════════════════════════════════
+
   return (
     <div className="space-y-4">
       {/* إحصائيات سريعة */}
@@ -2094,7 +2645,7 @@ function PurchasesTab() {
             مسح الفلاتر ✕
           </Button>
         )}
-        <Button className="gap-2 ms-auto" onClick={() => setShowCreate(true)} data-testid="button-new-purchase">
+        <Button className="gap-2 ms-auto" style={{ background: "#D4527E" }} onClick={() => { setWizardStep(1); setShowCreate(true); }} data-testid="button-new-purchase">
           <Plus className="w-4 h-4" /> {t("purchases.new_purchase")}
         </Button>
       </div>
@@ -2190,554 +2741,6 @@ function PurchasesTab() {
           </Table>
         </CardContent>
       </Card>
-
-      {/* ── نافذة إنشاء فاتورة جديدة — تصميم محسّن ── */}
-      <Dialog open={showCreate} onOpenChange={(v) => { if (!v) { setShowCreate(false); setModalItems([]); setModalBarcode(""); setModalManualProductId(""); setModalManualVariantId(null); setModalProductSearch(""); setModalManualQty("1"); setModalManualCost(""); setModalManualSellPrice(""); setModalNewName(""); setModalNewColor(""); setModalNewSize(""); setModalNewQty("1"); setModalNewCost(""); setModalNewSellPrice(""); } }}>
-        <DialogContent className="max-w-6xl w-[95vw] h-[92vh] flex flex-col p-0 gap-0" dir="rtl">
-          {/* رأس النافذة */}
-          <div className="flex items-center justify-between px-5 py-3.5 border-b bg-muted/30 flex-shrink-0">
-            <div className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary" />
-              <span className="text-base font-bold">{t("purchases.new_purchase")}</span>
-            </div>
-          </div>
-
-          {/* المحتوى — عمودان */}
-          <div className="flex-1 overflow-hidden grid grid-cols-[1fr_380px]">
-
-            {/* ── العمود الأيسر: بيانات الفاتورة + إضافة المنتجات ── */}
-            <div className="overflow-y-auto p-4 space-y-4 border-l">
-
-              {/* بطاقة بيانات الفاتورة */}
-              <div className="border rounded-lg bg-card">
-                <div className="px-4 py-2.5 border-b bg-muted/30 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm font-semibold">بيانات الفاتورة</span>
-                </div>
-                <div className="p-4 grid grid-cols-2 gap-3">
-                  <div className="space-y-1 col-span-2">
-                    <label className="text-xs font-medium text-muted-foreground">{t("purchases.supplier")} *</label>
-                    <div className="flex gap-1">
-                      <Select value={newSupplierId} onValueChange={setNewSupplierId}>
-                        <SelectTrigger className="flex-1 h-9"><SelectValue placeholder={t("purchases.select_supplier")} /></SelectTrigger>
-                        <SelectContent>{activeSuppliers.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
-                      </Select>
-                      <Button variant="outline" size="icon" className="h-9 w-9 flex-shrink-0" onClick={() => setShowQuickSupplier(true)} title="مورد جديد">
-                        <UserPlus className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">{t("purchases.date")} *</label>
-                    <DateInput value={newDate} onChange={e => setNewDate(e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">طريقة الدفع</label>
-                    <Select value={newPayMethod} onValueChange={setNewPayMethod}>
-                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cash">نقداً</SelectItem>
-                        <SelectItem value="bank_transfer">تحويل بنكي</SelectItem>
-                        <SelectItem value="cheque">شيك</SelectItem>
-                        <SelectItem value="credit">آجل</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {newPayMethod === "credit" && (
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">تاريخ الاستحقاق</label>
-                      <DateInput value={newDueDate} onChange={e => setNewDueDate(e.target.value)} />
-                    </div>
-                  )}
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">{t("purchases.branch_label")}</label>
-                    <Select value={newBranchId} onValueChange={setNewBranchId}>
-                      <SelectTrigger className="h-9"><SelectValue placeholder={t("purchases.select_branch")} /></SelectTrigger>
-                      <SelectContent>{(branches as any[]).map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              {/* بطاقة إضافة المنتجات */}
-              <div className="border rounded-lg bg-card">
-                <div className="px-4 py-2.5 border-b bg-muted/30 flex items-center gap-2">
-                  <Package className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm font-semibold">إضافة المنتجات</span>
-                </div>
-                <Tabs defaultValue="search" className="w-full">
-                  <TabsList className="w-full rounded-none border-b h-9 bg-muted/20">
-                    <TabsTrigger value="search" className="flex-1 text-xs gap-1 h-full rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none">
-                      <Search className="w-3 h-3" /> بحث بالاسم
-                    </TabsTrigger>
-                    <TabsTrigger value="barcode" className="flex-1 text-xs gap-1 h-full rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none">
-                      <Package className="w-3 h-3" /> مسح الباركود
-                    </TabsTrigger>
-                    <TabsTrigger value="newprod" className="flex-1 text-xs gap-1 h-full rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none">
-                      <Plus className="w-3 h-3" /> إضافة يدوية
-                    </TabsTrigger>
-                  </TabsList>
-
-                  {/* ── تبويب البحث بالاسم ── */}
-                  <TabsContent value="search" className="p-4 space-y-3 mt-0">
-                    {/* حقل البحث الحي */}
-                    <div className="relative">
-                      <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                      <Input
-                        className="pr-9"
-                        placeholder="ابحث بالاسم أو الباركود أو SKU..."
-                        value={modalProductSearch}
-                        onChange={e => { setModalProductSearch(e.target.value); setModalSearchOpen(true); if (!e.target.value) { setModalManualProductId(""); setModalManualVariantId(null); } }}
-                        onFocus={() => { if (modalProductSearch) setModalSearchOpen(true); }}
-                        onBlur={() => setTimeout(() => setModalSearchOpen(false), 180)}
-                        autoComplete="off"
-                      />
-                      {/* Dropdown */}
-                      {modalSearchOpen && modalProductSearch.length >= 1 && (
-                        <div className="absolute z-50 top-full mt-1 left-0 right-0 border rounded-lg bg-background shadow-lg max-h-48 overflow-y-auto">
-                          {(() => {
-                            const q = modalProductSearch.toLowerCase();
-                            const results = (allProducts as Product[]).filter(p =>
-                              p.name.toLowerCase().includes(q) ||
-                              (p as any).barcode?.toLowerCase().includes(q) ||
-                              (p as any).sku?.toLowerCase().includes(q)
-                            ).slice(0, 15);
-                            const alreadyInCart = (pid: number) => modalItems.some(i => i.productId === pid);
-                            return results.length > 0 ? results.map(p => (
-                              <button key={p.id} type="button"
-                                className={`w-full text-right px-3 py-2 text-sm hover:bg-muted/60 border-b last:border-0 flex items-center justify-between gap-2 transition-colors ${modalManualProductId === String(p.id) ? "bg-primary/10" : ""}`}
-                                onMouseDown={() => { setModalManualProductId(String(p.id)); setModalManualVariantId(null); setModalManualCost(""); setModalManualSellPrice(""); setModalProductSearch(p.name); setModalSearchOpen(false); }}
-                              >
-                                <span className="font-medium">{p.name}</span>
-                                <div className="flex items-center gap-2 flex-shrink-0">
-                                  {(p as any).barcode && <span className="text-xs text-muted-foreground font-mono">{(p as any).barcode}</span>}
-                                  {alreadyInCart(p.id) && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium">مضاف ✓</span>}
-                                </div>
-                              </button>
-                            )) : (
-                              <button type="button" className="w-full text-right px-3 py-2.5 text-sm text-primary hover:bg-primary/5 flex items-center gap-2"
-                                onMouseDown={() => { setModalNewName(modalProductSearch); setModalProductSearch(""); setModalSearchOpen(false); }}>
-                                <Plus className="w-4 h-4" /> إضافة "{modalProductSearch}" كمنتج جديد
-                              </button>
-                            );
-                          })()}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* المتغيرات بعد اختيار المنتج */}
-                    {modalManualProductId && modalManualVariants.length > 0 && (
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground">اختر المتغير (لون / مقاس / نوع)</label>
-                        <div className="flex flex-wrap gap-2">
-                          {modalManualVariants.map(v => {
-                            const label = [v.color, v.size].filter(Boolean).join(" / ") || v.sku || v.barcode || `#${v.id}`;
-                            const isSelected = modalManualVariantId === v.id;
-                            return (
-                              <button key={v.id} type="button"
-                                onClick={() => { setModalManualVariantId(v.id); setModalManualCost(String(v.costDefault || "0")); setModalManualSellPrice(String((v as any).priceDefault || "0")); }}
-                                className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${isSelected ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted/50"}`}
-                              >
-                                {label}
-                                {v.barcode && <span className="opacity-50 mr-1 font-mono">({v.barcode})</span>}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* الكمية + السعر + زر الإضافة */}
-                    {modalManualProductId && (
-                      <div className="flex gap-2 items-end pt-1">
-                        <div className="space-y-1 w-20">
-                          <label className="text-xs text-muted-foreground">الكمية</label>
-                          <Input type="number" min="1" className="h-8 text-sm text-center" value={modalManualQty} onChange={e => setModalManualQty(e.target.value)} />
-                        </div>
-                        <div className="space-y-1 flex-1">
-                          <label className="text-xs text-muted-foreground">سعر الشراء</label>
-                          <Input type="number" step="0.001" min="0" className="h-8 text-sm font-mono" value={modalManualCost} onChange={e => setModalManualCost(e.target.value)} placeholder="0.000" />
-                        </div>
-                        <div className="space-y-1 flex-1">
-                          <label className="text-xs text-emerald-700">سعر البيع</label>
-                          <Input type="number" step="0.001" min="0" className="h-8 text-sm font-mono" value={modalManualSellPrice} onChange={e => setModalManualSellPrice(e.target.value)} placeholder="0.000" />
-                        </div>
-                        <Button className="h-8 px-4 bg-pink-500 hover:bg-pink-600 text-white text-sm gap-1 flex-shrink-0"
-                          disabled={!modalManualCost || !modalManualQty}
-                          onClick={() => {
-                            const prod = (allProducts as Product[]).find(p => String(p.id) === modalManualProductId);
-                            const variant = modalManualVariants.find(v => v.id === modalManualVariantId);
-                            const name = prod?.name || "صنف";
-                            setModalItems(prev => {
-                              if (modalManualVariantId) {
-                                const existing = prev.findIndex(i => i.variantId === modalManualVariantId);
-                                if (existing >= 0) return prev.map((i, idx) => idx === existing ? { ...i, qty: i.qty + (parseInt(modalManualQty) || 1) } : i);
-                              }
-                              return [...prev, { uid: crypto.randomUUID(), variantId: modalManualVariantId, productId: Number(modalManualProductId), name, barcode: variant?.barcode || "", color: variant?.color || "", size: variant?.size || "", qty: parseInt(modalManualQty) || 1, unitCost: parseFloat(modalManualCost) || 0, sellPrice: parseFloat(modalManualSellPrice) || 0 }];
-                            });
-                            setModalManualVariantId(null); setModalManualQty("1"); setModalManualCost(""); setModalManualSellPrice(""); setModalManualProductId(""); setModalProductSearch("");
-                          }}>
-                          <Plus className="w-3.5 h-3.5" /> إضافة
-                        </Button>
-                      </div>
-                    )}
-                  </TabsContent>
-
-                  {/* ── تبويب الباركود ── */}
-                  <TabsContent value="barcode" className="p-4 space-y-3 mt-0">
-                    {/* حقل المسح */}
-                    <div className="border-2 border-dashed rounded-xl p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
-                      onClick={() => !modalBarcodeFound && modalBarcodeRef.current?.focus()}>
-                      <Package className="w-8 h-8 mx-auto mb-1.5 text-muted-foreground/50" />
-                      <p className="text-sm font-medium mb-1">امسح باركود المنتج</p>
-                      <div className="flex gap-2 max-w-xs mx-auto">
-                        <Input ref={modalBarcodeRef} className="font-mono text-center" placeholder="الباركود..." value={modalBarcode}
-                          onChange={e => setModalBarcode(e.target.value)}
-                          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleModalBarcode(modalBarcode); } }}
-                          disabled={modalBarcodeLoading || !!modalBarcodeFound} dir="ltr" />
-                        <Button size="sm" variant="outline" onClick={() => handleModalBarcode(modalBarcode)} disabled={modalBarcodeLoading || !modalBarcode.trim() || !!modalBarcodeFound}>
-                          {modalBarcodeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "بحث"}
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* لوحة تأكيد المنتج الموجود */}
-                    {modalBarcodeFound && (
-                      <div className="border rounded-lg bg-emerald-50/60 border-emerald-200 p-3 space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                            <div>
-                              <p className="text-sm font-semibold text-emerald-800">{modalBarcodeFound.name}</p>
-                              <p className="text-xs text-emerald-600 font-mono">{modalBarcodeFound.barcode}{modalBarcodeFound.color && ` · ${modalBarcodeFound.color}`}{modalBarcodeFound.size && ` · ${modalBarcodeFound.size}`}</p>
-                            </div>
-                          </div>
-                          <button type="button" className="text-muted-foreground hover:text-foreground flex-shrink-0"
-                            onClick={() => setModalBarcodeFound(null)}>
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <div className="flex gap-2 items-end">
-                          <div className="space-y-1 w-20">
-                            <label className="text-xs text-muted-foreground">الكمية</label>
-                            <Input type="number" min="1" className="h-8 text-sm text-center" value={modalBarcodeConfirmQty} onChange={e => setModalBarcodeConfirmQty(e.target.value)} autoFocus />
-                          </div>
-                          <div className="space-y-1 flex-1">
-                            <label className="text-xs text-muted-foreground">سعر الشراء</label>
-                            <Input type="number" step="0.001" min="0" className="h-8 text-sm font-mono" value={modalBarcodeConfirmCost} onChange={e => setModalBarcodeConfirmCost(e.target.value)} placeholder="0.000" />
-                          </div>
-                          <div className="space-y-1 flex-1">
-                            <label className="text-xs text-emerald-700">سعر البيع</label>
-                            <Input type="number" step="0.001" min="0" className="h-8 text-sm font-mono" value={modalBarcodeConfirmSell} onChange={e => setModalBarcodeConfirmSell(e.target.value)} placeholder="0.000" />
-                          </div>
-                          <Button className="h-8 px-4 bg-pink-500 hover:bg-pink-600 text-white text-sm gap-1 flex-shrink-0"
-                            disabled={!modalBarcodeConfirmCost || !modalBarcodeConfirmQty}
-                            onClick={confirmBarcodeItem}>
-                            <Plus className="w-3.5 h-3.5" /> إضافة
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </TabsContent>
-
-                  {/* ── تبويب الإضافة اليدوية ── */}
-                  <TabsContent value="newprod" className="p-4 space-y-3 mt-0">
-                    {/* حقل الاسم مع بحث حي */}
-                    <div className="space-y-1 relative">
-                      <label className="text-xs font-medium text-muted-foreground">اسم المنتج *</label>
-                      <div className="relative">
-                        <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                        <Input
-                          className="h-8 text-sm pr-8"
-                          placeholder="ابحث عن منتج مسجل أو أدخل اسم جديد..."
-                          value={modalNewName}
-                          onChange={e => {
-                            setModalNewName(e.target.value);
-                            setModalNewSearchOpen(true);
-                            if (!e.target.value) { setModalManualProductId(""); setModalManualVariantId(null); }
-                          }}
-                          onFocus={() => { if (modalNewName && !modalManualProductId) setModalNewSearchOpen(true); }}
-                          onBlur={() => setTimeout(() => setModalNewSearchOpen(false), 180)}
-                          autoComplete="off"
-                        />
-                        {modalManualProductId && (
-                          <button type="button" className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                            onClick={() => { setModalManualProductId(""); setModalManualVariantId(null); setModalManualCost(""); setModalManualSellPrice(""); setModalNewName(""); }}>
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                      {/* Dropdown للبحث */}
-                      {modalNewSearchOpen && modalNewName.length >= 1 && !modalManualProductId && (
-                        <div className="absolute z-50 top-full mt-1 left-0 right-0 border rounded-lg bg-background shadow-lg max-h-44 overflow-y-auto">
-                          {(() => {
-                            const q = modalNewName.toLowerCase();
-                            const results = (allProducts as Product[]).filter(p =>
-                              p.name.toLowerCase().includes(q) ||
-                              (p as any).barcode?.toLowerCase().includes(q) ||
-                              (p as any).sku?.toLowerCase().includes(q)
-                            ).slice(0, 10);
-                            return results.length > 0 ? results.map(p => (
-                              <button key={p.id} type="button"
-                                className="w-full text-right px-3 py-2 text-sm hover:bg-muted/60 border-b last:border-0 flex items-center justify-between gap-2 transition-colors"
-                                onMouseDown={() => {
-                                  setModalManualProductId(String(p.id));
-                                  setModalManualVariantId(null);
-                                  setModalManualCost("");
-                                  setModalManualSellPrice("");
-                                  setModalNewName(p.name);
-                                  setModalNewSearchOpen(false);
-                                }}>
-                                <span className="font-medium">{p.name}</span>
-                                <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded flex-shrink-0">مسجل ✓</span>
-                              </button>
-                            )) : (
-                              <div className="px-3 py-2.5 text-xs text-muted-foreground flex items-center gap-2">
-                                <Plus className="w-3.5 h-3.5 text-primary" />
-                                لا يوجد منتج بهذا الاسم — سيُضاف كمنتج جديد
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* ── حالة 1: منتج مسجل تم اختياره ── */}
-                    {modalManualProductId ? (
-                      <>
-                        <div className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-2 py-1.5 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-                          منتج مسجل — اختر المتغير وأدخل الكميات
-                        </div>
-                        {modalManualVariants.length > 0 && (
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">اختر المتغير (لون / مقاس / نوع)</label>
-                            <div className="flex flex-wrap gap-1.5">
-                              {modalManualVariants.map(v => {
-                                const label = [v.color, v.size].filter(Boolean).join(" / ") || v.sku || v.barcode || `#${v.id}`;
-                                const isSelected = modalManualVariantId === v.id;
-                                return (
-                                  <button key={v.id} type="button"
-                                    onClick={() => { setModalManualVariantId(v.id); setModalManualCost(String(v.costDefault || "0")); setModalManualSellPrice(String((v as any).priceDefault || "0")); }}
-                                    className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${isSelected ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted/50"}`}>
-                                    {label}
-                                    {v.barcode && <span className="opacity-50 mr-1 font-mono text-[10px]">({v.barcode})</span>}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                        <div className="flex gap-2 items-end">
-                          <div className="space-y-1 w-20">
-                            <label className="text-xs text-muted-foreground">الكمية</label>
-                            <Input type="number" min="1" className="h-8 text-sm text-center" value={modalManualQty} onChange={e => setModalManualQty(e.target.value)} />
-                          </div>
-                          <div className="space-y-1 flex-1">
-                            <label className="text-xs text-muted-foreground">سعر الشراء</label>
-                            <Input type="number" step="0.001" min="0" className="h-8 text-sm font-mono" value={modalManualCost} onChange={e => setModalManualCost(e.target.value)} placeholder="0.000" />
-                          </div>
-                          <div className="space-y-1 flex-1">
-                            <label className="text-xs text-emerald-700">سعر البيع</label>
-                            <Input type="number" step="0.001" min="0" className="h-8 text-sm font-mono" value={modalManualSellPrice} onChange={e => setModalManualSellPrice(e.target.value)} placeholder="0.000" />
-                          </div>
-                          <Button className="h-8 px-3 bg-pink-500 hover:bg-pink-600 text-white text-sm gap-1 flex-shrink-0"
-                            disabled={!modalManualCost || !modalManualQty}
-                            onClick={() => {
-                              const prod = (allProducts as Product[]).find(p => String(p.id) === modalManualProductId);
-                              const variant = modalManualVariants.find(v => v.id === modalManualVariantId);
-                              const name = prod?.name || "صنف";
-                              setModalItems(prev => {
-                                if (modalManualVariantId) {
-                                  const existing = prev.findIndex(i => i.variantId === modalManualVariantId);
-                                  if (existing >= 0) return prev.map((i, idx) => idx === existing ? { ...i, qty: i.qty + (parseInt(modalManualQty) || 1) } : i);
-                                }
-                                return [...prev, { uid: crypto.randomUUID(), variantId: modalManualVariantId, productId: Number(modalManualProductId), name, barcode: variant?.barcode || "", color: variant?.color || "", size: variant?.size || "", qty: parseInt(modalManualQty) || 1, unitCost: parseFloat(modalManualCost) || 0, sellPrice: parseFloat(modalManualSellPrice) || 0 }];
-                              });
-                              setModalManualVariantId(null); setModalManualQty("1"); setModalManualCost(""); setModalManualSellPrice(""); setModalManualProductId(""); setModalNewName("");
-                            }}>
-                            <Plus className="w-3.5 h-3.5" /> إضافة
-                          </Button>
-                        </div>
-                      </>
-                    ) : (
-                      /* ── حالة 2: منتج جديد غير مسجل ── */
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted-foreground">اللون</label>
-                          <Input className="h-8 text-sm" placeholder="مثال: ذهبي" value={modalNewColor} onChange={e => setModalNewColor(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted-foreground">المقاس / النوع</label>
-                          <Input className="h-8 text-sm" placeholder="مثال: كبير / 50ml" value={modalNewSize} onChange={e => setModalNewSize(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted-foreground">الكمية</label>
-                          <Input type="number" min="1" className="h-8 text-sm text-center" value={modalNewQty} onChange={e => setModalNewQty(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted-foreground">سعر الشراء *</label>
-                          <Input type="number" step="0.001" min="0" className="h-8 text-sm font-mono" placeholder="0.000" value={modalNewCost} onChange={e => setModalNewCost(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-emerald-700">سعر البيع</label>
-                          <Input type="number" step="0.001" min="0" className="h-8 text-sm font-mono" placeholder="0.000" value={modalNewSellPrice} onChange={e => setModalNewSellPrice(e.target.value)} />
-                        </div>
-                        <div className="flex items-end">
-                          <Button className="w-full h-8 text-sm bg-pink-500 hover:bg-pink-600 text-white gap-1"
-                            disabled={!modalNewName.trim() || !modalNewCost || !modalNewQty}
-                            onClick={() => {
-                              setModalItems(prev => [...prev, {
-                                uid: crypto.randomUUID(), variantId: null, productId: null,
-                                name: modalNewName.trim(), barcode: "", color: modalNewColor, size: modalNewSize,
-                                qty: parseInt(modalNewQty) || 1,
-                                unitCost: parseFloat(modalNewCost) || 0,
-                                sellPrice: parseFloat(modalNewSellPrice) || 0,
-                              }]);
-                              setModalNewName(""); setModalNewColor(""); setModalNewSize(""); setModalNewQty("1"); setModalNewCost(""); setModalNewSellPrice("");
-                            }}>
-                            <Plus className="w-3.5 h-3.5" /> إضافة جديد
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </TabsContent>
-                </Tabs>
-              </div>
-            </div>
-
-            {/* ── العمود الأيمن: المنتجات + الإعدادات المالية + الملخص ── */}
-            <div className="overflow-y-auto p-4 space-y-3 bg-muted/10">
-
-              {/* جدول المنتجات المضافة */}
-              <div className="border rounded-lg bg-card">
-                <div className="px-3 py-2 border-b flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Package className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm font-semibold">المنتجات المضافة</span>
-                    <span className="bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-bold">{modalItems.length}</span>
-                  </div>
-                  {modalItems.length > 0 && (
-                    <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground gap-1 hover:text-red-500" onClick={() => setModalItems([])}>
-                      <Trash2 className="w-3 h-3" /> تفريغ
-                    </Button>
-                  )}
-                </div>
-                {modalItems.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader className="bg-muted/30">
-                        <TableRow>
-                          <TableHead className="text-xs py-2">الصنف</TableHead>
-                          <TableHead className="text-xs py-2 w-16">الكمية</TableHead>
-                          <TableHead className="text-xs py-2 w-24">سعر الشراء</TableHead>
-                          <TableHead className="text-xs py-2 w-20">الإجمالي</TableHead>
-                          <TableHead className="w-8 py-2"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {modalItems.map((item) => (
-                          <TableRow key={item.uid} className="hover:bg-muted/20">
-                            <TableCell className="py-1.5">
-                              <div className="text-sm font-medium leading-tight">{item.name}</div>
-                              {(item.color || item.size) && <div className="text-xs text-muted-foreground">{[item.color, item.size].filter(Boolean).join(" / ")}</div>}
-                              {item.barcode && <div className="text-xs text-muted-foreground font-mono">{item.barcode}</div>}
-                            </TableCell>
-                            <TableCell className="py-1.5">
-                              <Input type="number" min={1} className="h-7 w-14 text-center text-xs" value={item.qty}
-                                onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? {...i, qty: Math.max(1, parseInt(e.target.value)||1)} : i))} />
-                            </TableCell>
-                            <TableCell className="py-1.5">
-                              <Input type="number" min={0} step="0.001" className="h-7 w-20 text-xs font-mono" value={item.unitCost}
-                                onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? {...i, unitCost: parseFloat(e.target.value)||0} : i))} />
-                            </TableCell>
-                            <TableCell className="py-1.5 font-mono text-xs font-medium">{omr(item.qty * item.unitCost)}</TableCell>
-                            <TableCell className="py-1.5">
-                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
-                                onClick={() => setModalItems(prev => prev.filter(i => i.uid !== item.uid))}>
-                                <X className="w-3 h-3" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Package className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                    <p className="text-xs">لم تتم إضافة أي منتجات بعد</p>
-                  </div>
-                )}
-              </div>
-
-              {/* الإعدادات المالية */}
-              <div className="border rounded-lg bg-card">
-                <div className="px-3 py-2 border-b bg-muted/30">
-                  <span className="text-sm font-semibold">الإعدادات المالية</span>
-                </div>
-                <div className="p-3 grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">ضريبة %</label>
-                    <Input type="number" min={0} max={100} step="0.1" className="h-8 text-sm" value={newVatRate} onChange={e => setNewVatRate(e.target.value)} placeholder="0" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">خصم</label>
-                    <div className="flex gap-1">
-                      <Input type="number" min={0} step="0.001" className="h-8 text-sm flex-1" value={newDiscount} onChange={e => setNewDiscount(e.target.value)} />
-                      <Select value={newDiscType} onValueChange={(v: any) => setNewDiscType(v)}>
-                        <SelectTrigger className="h-8 w-16 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="value">ر.ع</SelectItem>
-                          <SelectItem value="percent">%</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">جمارك</label>
-                    <Input type="number" step="0.001" className="h-8 text-sm" value={newCustoms} onChange={e => setNewCustoms(e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">شحن</label>
-                    <Input type="number" step="0.001" className="h-8 text-sm" value={newShipping} onChange={e => setNewShipping(e.target.value)} />
-                  </div>
-                </div>
-              </div>
-
-              {/* ملخص الإجمالي */}
-              <div className="border rounded-lg bg-card p-3 space-y-1.5 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground text-xs">المجموع الفرعي</span><span className="font-mono text-sm">{omr(modalSubtotal)} ر.ع</span></div>
-                {modalDiscVal > 0 && <div className="flex justify-between text-red-500"><span className="text-xs">الخصم</span><span className="font-mono text-sm">- {omr(modalDiscVal)} ر.ع</span></div>}
-                {modalVat > 0 && <div className="flex justify-between text-amber-600"><span className="text-xs">الضريبة ({newVatRate}%)</span><span className="font-mono text-sm">{omr(modalVat)} ر.ع</span></div>}
-                {parseFloat(newCustoms||"0") > 0 && <div className="flex justify-between text-blue-600"><span className="text-xs">الجمارك</span><span className="font-mono text-sm">{omr(parseFloat(newCustoms||"0"))} ر.ع</span></div>}
-                {parseFloat(newShipping||"0") > 0 && <div className="flex justify-between text-purple-600"><span className="text-xs">الشحن</span><span className="font-mono text-sm">{omr(parseFloat(newShipping||"0"))} ر.ع</span></div>}
-                <div className="flex justify-between font-bold text-base border-t pt-2 mt-1">
-                  <span>الإجمالي</span>
-                  <span className="font-mono text-emerald-600">{omr(modalGrandTotal)} ر.ع</span>
-                </div>
-              </div>
-
-              {/* ملاحظات */}
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">ملاحظات</label>
-                <textarea className="w-full border rounded-lg p-2.5 text-sm bg-background resize-none focus:outline-none focus:ring-1 focus:ring-primary" rows={2}
-                  value={newNotes} onChange={e => setNewNotes(e.target.value)} placeholder="ملاحظات اختيارية..." />
-              </div>
-
-              {/* أزرار الحفظ والإلغاء */}
-              <div className="flex gap-2 pt-1">
-                <Button variant="outline" className="flex-1" onClick={() => { setShowCreate(false); setModalItems([]); setModalBarcode(""); setModalManualProductId(""); setModalManualVariantId(null); setModalProductSearch(""); setModalManualQty("1"); setModalManualCost(""); setModalManualSellPrice(""); setModalNewName(""); setModalNewColor(""); setModalNewSize(""); setModalNewQty("1"); setModalNewCost(""); setModalNewSellPrice(""); }}>
-                  {t("common.cancel")}
-                </Button>
-                <Button className="flex-1 bg-primary gap-2" onClick={() => createMutation.mutate()} disabled={!newSupplierId || createMutation.isPending} data-testid="button-save-purchase">
-                  <Plus className="w-4 h-4" /> {createMutation.isPending ? t("common.loading") : t("common.save")}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={showQuickSupplier} onOpenChange={setShowQuickSupplier}>
         <DialogContent className="max-w-sm">
