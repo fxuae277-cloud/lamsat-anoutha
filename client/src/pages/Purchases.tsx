@@ -1942,75 +1942,43 @@ function PurchasesTab() {
         </Dialog>
 
         <Dialog open={showPostConfirm} onOpenChange={setShowPostConfirm}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-md" dir="rtl">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-amber-500" /> {t("purchases.approve_confirm_title")}
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <FileCheck className="w-5 h-5 text-green-600" /> تأكيد اعتماد الفاتورة
               </DialogTitle>
-              <DialogDescription>
-                {t("purchases.approve_confirm_desc")}
+              <DialogDescription className="text-sm">
+                سيتم تحديث المخزون وتكلفة المنتجات. لا يمكن التراجع عن هذا الإجراء.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 text-sm">
-              <div className="p-3 bg-muted/50 rounded-lg border grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">{t("purchases.items")}</p>
-                  <p className="font-bold">{items.length}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">{t("purchases.subtotal")}</p>
-                  <p className="font-bold">{omr(itemsSubtotal)} {t("common.omr")}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">{t("purchases.total_extra")}</p>
-                  <p className="font-bold text-amber-600">{omr(extraTotal)} {t("common.omr")}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">{t("purchases.grand_total")}</p>
-                  <p className="font-bold text-emerald-700">{omr(itemsSubtotal + extraTotal)} {t("common.omr")}</p>
-                </div>
-              </div>
 
-              <div className="border rounded-lg overflow-hidden">
-                <div className="bg-muted p-2 text-xs font-bold border-b flex justify-between items-center">
-                  <span>{t("purchases.price_updated_on_approval")}</span>
-                  <span className="text-emerald-700">{t("products.profit_margin")}: {profitMargin}%</span>
+            {/* ملخص مالي مختصر */}
+            <div className="grid grid-cols-2 gap-3 py-2">
+              <div className="bg-muted/40 rounded-lg p-3 text-center">
+                <p className="text-xs text-muted-foreground mb-1">عدد الأصناف</p>
+                <p className="text-xl font-bold">{items.length}</p>
+              </div>
+              <div className="bg-muted/40 rounded-lg p-3 text-center">
+                <p className="text-xs text-muted-foreground mb-1">المجموع الفرعي</p>
+                <p className="text-lg font-bold font-mono">{omr(itemsSubtotal)} <span className="text-sm">ر.ع</span></p>
+              </div>
+              {extraTotal > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                  <p className="text-xs text-amber-600 mb-1">تكاليف إضافية</p>
+                  <p className="text-lg font-bold font-mono text-amber-700">{omr(extraTotal)} <span className="text-sm">ر.ع</span></p>
                 </div>
-                <div className="max-h-[300px] overflow-y-auto">
-                  <Table>
-                    <TableHeader className="bg-muted/30">
-                      <TableRow className="h-8">
-                        <TableHead className="h-8 py-0">{t("purchases.product")}</TableHead>
-                        <TableHead className="h-8 py-0 text-left">{t("purchases.table_unit_price")}</TableHead>
-                        <TableHead className="h-8 py-0 text-left">{t("products.suggested_price")}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {items.map((it: any) => {
-                        const unitCostFinal = parseFloat(it.unitCostFinal || "0");
-                        const suggestedPrice = unitCostFinal * (1 + profitMargin / 100);
-                        return (
-                          <TableRow key={it.id} className="h-8">
-                            <TableCell className="py-1">
-                              <p className="font-medium">{it.productName || productMap[it.productId] || "—"}</p>
-                              <p className="text-[10px] text-muted-foreground">
-                                {[it.color, it.size].filter(Boolean).join(" / ")}
-                              </p>
-                            </TableCell>
-                            <TableCell className="py-1 font-mono text-left">{omr(unitCostFinal)}</TableCell>
-                            <TableCell className="py-1 font-mono text-left font-bold text-emerald-700">{omr(suggestedPrice)}</TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
+              )}
+              <div className={`bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center ${extraTotal > 0 ? "" : "col-span-2"}`}>
+                <p className="text-xs text-emerald-600 mb-1">الإجمالي النهائي</p>
+                <p className="text-xl font-bold font-mono text-emerald-700">{omr(itemsSubtotal + extraTotal)} <span className="text-sm">ر.ع</span></p>
               </div>
             </div>
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setShowPostConfirm(false)}>{t("common.cancel")}</Button>
-              <Button className="bg-green-600 hover:bg-green-700 gap-2" onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending} data-testid="button-confirm-approve">
-                <FileCheck className="w-4 h-4" /> {approveMutation.isPending ? t("common.loading") : t("purchases.approve_invoice")}
+
+            <DialogFooter className="gap-2 sm:gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setShowPostConfirm(false)}>{t("common.cancel")}</Button>
+              <Button className="flex-1 bg-green-600 hover:bg-green-700 gap-2" onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending} data-testid="button-confirm-approve">
+                {approveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileCheck className="w-4 h-4" />}
+                {approveMutation.isPending ? "جاري الاعتماد..." : "اعتماد الفاتورة"}
               </Button>
             </DialogFooter>
           </DialogContent>
