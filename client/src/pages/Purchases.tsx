@@ -537,7 +537,7 @@ function PurchasesTab() {
   const [newDiscount, setNewDiscount]   = useState("0");
   const [newDiscType, setNewDiscType]   = useState<"value"|"percent">("value");
   const [newVatRate, setNewVatRate]     = useState("0");
-  const [modalItems, setModalItems]     = useState<Array<{uid:string;variantId:number|null;productId:number|null;name:string;barcode:string;color:string;size:string;qty:number;unitCost:number}>>([]);
+  const [modalItems, setModalItems]     = useState<Array<{uid:string;variantId:number|null;productId:number|null;name:string;barcode:string;color:string;size:string;qty:number;unitCost:number;sellPrice:number}>>([]);
   const [modalBarcode, setModalBarcode] = useState("");
   const [modalBarcodeLoading, setModalBarcodeLoading] = useState(false);
   const [selectedIds, setSelectedIds]   = useState<Set<number>>(new Set());
@@ -643,10 +643,10 @@ function PurchasesTab() {
         setModalItems(prev => {
           const idx = prev.findIndex(i => i.variantId === v.id);
           if (idx >= 0) return prev.map((i, n) => n === idx ? { ...i, qty: i.qty + 1 } : i);
-          return [...prev, { uid: crypto.randomUUID(), variantId: v.id, productId: v.productId, name: v.name || barcode, barcode: v.barcode || barcode, color: v.color || "", size: v.size || "", qty: 1, unitCost: parseFloat(v.costDefault || "0") }];
+          return [...prev, { uid: crypto.randomUUID(), variantId: v.id, productId: v.productId, name: v.name || barcode, barcode: v.barcode || barcode, color: v.color || "", size: v.size || "", qty: 1, unitCost: parseFloat(v.costDefault || "0"), sellPrice: parseFloat(v.priceDefault || "0") }];
         });
       } else {
-        setModalItems(prev => [...prev, { uid: crypto.randomUUID(), variantId: null, productId: null, name: barcode, barcode, color: "", size: "", qty: 1, unitCost: 0 }]);
+        setModalItems(prev => [...prev, { uid: crypto.randomUUID(), variantId: null, productId: null, name: barcode, barcode, color: "", size: "", qty: 1, unitCost: 0, sellPrice: 0 }]);
       }
     } finally {
       setModalBarcodeLoading(false);
@@ -682,7 +682,7 @@ function PurchasesTab() {
             const qcRes = await apiRequest("POST", "/api/variants/quick-create", {
               productName: item.name || "صنف",
               barcode: item.barcode || null, color: item.color || null, size: item.size || null,
-              price: item.unitCost || 0, costDefault: item.unitCost || 0,
+              price: item.sellPrice || item.unitCost || 0, costDefault: item.unitCost || 0,
             });
             const qcData = await qcRes.json();
             await apiRequest("POST", `/api/purchases/${inv.id}/items`, {
@@ -1780,10 +1780,11 @@ function PurchasesTab() {
   // ضمان أن invoices مصفوفة دائماً لتجنب أي crash
   const safeInvoices = Array.isArray(invoices) ? invoices : [];
   const invoiceStats = {
-    total:    safeInvoices.length,
-    amount:   safeInvoices.reduce((s, i) => s + parseFloat(String((i as any).grandTotal || 0)), 0),
-    pending:  safeInvoices.filter(i => i.status === "pending").length,
-    done:     safeInvoices.filter(i => i.status === "approved" || i.status === "received").length,
+    total:      safeInvoices.length,
+    amount:     safeInvoices.reduce((s, i) => s + parseFloat(String((i as any).grandTotal || 0)), 0),
+    pending:    safeInvoices.filter(i => i.status === "pending").length,
+    pendingAmt: safeInvoices.filter(i => i.status === "pending").reduce((s, i) => s + parseFloat(String((i as any).grandTotal || 0)), 0),
+    paidAmt:    safeInvoices.filter(i => i.status === "approved" || i.status === "received").reduce((s, i) => s + parseFloat(String((i as any).grandTotal || 0)), 0),
   };
 
   const today = new Date().toISOString().slice(0, 10);
@@ -1809,26 +1810,30 @@ function PurchasesTab() {
   return (
     <div className="space-y-4">
       {/* إحصائيات سريعة */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="bg-card border rounded-lg p-3 text-center">
           <p className="text-2xl font-bold">{invoiceStats.total}</p>
           <p className="text-xs text-muted-foreground mt-0.5">إجمالي الفواتير</p>
         </div>
         <div className="bg-card border rounded-lg p-3 text-center">
-          <p className="text-2xl font-bold text-primary">{omr(invoiceStats.amount)} <span className="text-sm">ر.ع</span></p>
+          <p className="text-lg font-bold text-primary">{omr(invoiceStats.amount)} <span className="text-sm">ر.ع</span></p>
           <p className="text-xs text-muted-foreground mt-0.5">إجمالي المشتريات</p>
         </div>
         <div className="bg-card border rounded-lg p-3 text-center cursor-pointer hover:border-amber-400/50" onClick={() => setInvStatus("pending")}>
-          <p className="text-2xl font-bold text-amber-500">{invoiceStats.pending}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">معلقة</p>
+          <p className="text-xl font-bold text-amber-500">{invoiceStats.pending} <span className="text-sm font-normal">({omr(invoiceStats.pendingAmt)})</span></p>
+          <p className="text-xs text-muted-foreground mt-0.5">المبالغ المعلقة</p>
         </div>
-        <div className="bg-card border rounded-lg p-3 text-center cursor-pointer hover:border-green-400/50" onClick={() => setInvStatus("approved")}>
-          <p className="text-2xl font-bold text-green-600">{invoiceStats.done}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">مكتملة</p>
+        <div className="bg-card border rounded-lg p-3 text-center cursor-pointer hover:border-green-400/50" onClick={() => { setInvStatus("approved"); }}>
+          <p className="text-lg font-bold text-green-600">{omr(invoiceStats.paidAmt)} <span className="text-sm">ر.ع</span></p>
+          <p className="text-xs text-muted-foreground mt-0.5">إجمالي المدفوع</p>
         </div>
         <div className="bg-card border rounded-lg p-3 text-center">
           <p className="text-2xl font-bold text-blue-600">{todayCount}</p>
           <p className="text-xs text-muted-foreground mt-0.5">فواتير اليوم</p>
+        </div>
+        <div className="bg-card border rounded-lg p-3 text-center">
+          <p className="text-2xl font-bold text-purple-600">{allSuppliers.length}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">عدد الموردين</p>
         </div>
       </div>
 
@@ -1897,6 +1902,8 @@ function PurchasesTab() {
                 <TableHead className="cursor-pointer select-none" onClick={() => { setSortCol("grandTotal"); setSortDir(d => sortCol === "grandTotal" && d === "asc" ? "desc" : "asc"); }}>
                   {t("purchases.grand_total")} {sortCol === "grandTotal" ? (sortDir === "asc" ? "↑" : "↓") : ""}
                 </TableHead>
+                <TableHead>طريقة الدفع</TableHead>
+                <TableHead>تاريخ الاستحقاق</TableHead>
                 <TableHead>{t("purchases.status")}</TableHead>
                 <TableHead>{t("purchases.table_actions")}</TableHead>
               </TableRow>
@@ -1904,7 +1911,7 @@ function PurchasesTab() {
             <TableBody>
               {sortedInvoices.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">{t("common.no_data")}</TableCell>
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">{t("common.no_data")}</TableCell>
                 </TableRow>
               )}
               {sortedInvoices.map((inv) => (
@@ -1919,6 +1926,20 @@ function PurchasesTab() {
                   <TableCell>{supplierMap[inv.supplierId] || "—"}</TableCell>
                   <TableCell>{inv.invoiceDate}</TableCell>
                   <TableCell className="font-mono">{omr(inv.grandTotal)} {t("common.omr")}</TableCell>
+                  <TableCell>
+                    {(inv as any).paymentMethod === "cash" && <Badge variant="outline" className="text-xs border-emerald-400 text-emerald-700">نقداً</Badge>}
+                    {(inv as any).paymentMethod === "bank_transfer" && <Badge variant="outline" className="text-xs border-blue-400 text-blue-700">تحويل بنكي</Badge>}
+                    {(inv as any).paymentMethod === "cheque" && <Badge variant="outline" className="text-xs border-purple-400 text-purple-700">شيك</Badge>}
+                    {(inv as any).paymentMethod === "credit" && <Badge variant="outline" className="text-xs border-orange-400 text-orange-700">آجل</Badge>}
+                    {!(inv as any).paymentMethod && <span className="text-muted-foreground text-xs">—</span>}
+                  </TableCell>
+                  <TableCell className="text-sm font-mono">
+                    {(inv as any).dueDate ? (
+                      <span className={(inv as any).paymentMethod === "credit" ? "text-orange-600 font-medium" : "text-muted-foreground"}>
+                        {(inv as any).dueDate}
+                      </span>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={inv.status === "pending" ? "outline" : "default"} className={inv.status === "pending" ? "border-amber-400 text-amber-600" : inv.status === "approved" ? "bg-green-600" : inv.status === "received" ? "bg-blue-600" : "bg-red-500"}>
                       {inv.status === "pending" ? t("purchases.pending") : inv.status === "approved" ? t("purchases.approved") : inv.status === "received" ? t("purchases.received") : t("purchases.cancelled")}
@@ -2018,7 +2039,8 @@ function PurchasesTab() {
                     <TableRow>
                       <TableHead className="text-xs">الصنف</TableHead>
                       <TableHead className="text-xs">الكمية</TableHead>
-                      <TableHead className="text-xs">سعر الوحدة</TableHead>
+                      <TableHead className="text-xs">سعر الشراء</TableHead>
+                      <TableHead className="text-xs text-emerald-700">سعر البيع</TableHead>
                       <TableHead className="text-xs">الإجمالي</TableHead>
                       <TableHead className="w-8"></TableHead>
                     </TableRow>
@@ -2038,6 +2060,10 @@ function PurchasesTab() {
                         <TableCell className="py-1.5">
                           <Input type="number" min={0} step="0.001" className="h-7 w-24 text-sm font-mono" value={item.unitCost}
                             onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? {...i, unitCost: parseFloat(e.target.value)||0} : i))} />
+                        </TableCell>
+                        <TableCell className="py-1.5">
+                          <Input type="number" min={0} step="0.001" className="h-7 w-24 text-sm font-mono text-emerald-700" value={item.sellPrice}
+                            onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? {...i, sellPrice: parseFloat(e.target.value)||0} : i))} />
                         </TableCell>
                         <TableCell className="font-mono text-sm py-1.5">{omr(item.qty * item.unitCost)} ر.ع</TableCell>
                         <TableCell className="py-1.5">
