@@ -1,5 +1,5 @@
 ﻿import { useState } from "react";
-import { FileSpreadsheet, Search, Eye, Printer, Download, X, Banknote, CreditCard, Building2, FileText, MessageSquare } from "lucide-react";
+import { FileSpreadsheet, Search, Eye, Printer, Download, X, Banknote, CreditCard, Building2, FileText, MessageSquare, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
@@ -356,8 +356,27 @@ export default function Invoices() {
   const [paymentMethod, setPaymentMethod] = useState<string>("all");
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
   const [selectedEmployee, setSelectedEmployee] = useState<string>("all");
+  const [search, setSearch] = useState("");
   const [detailSaleId, setDetailSaleId] = useState<number | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+
+  // القيم المُطبَّقة فعلياً للفلاتر الثقيلة (تاريخ / فرع / موظف / دفع)
+  const [appliedFrom, setAppliedFrom]             = useState(startOfMonthStr());
+  const [appliedTo, setAppliedTo]                 = useState(todayStr());
+  const [appliedPayment, setAppliedPayment]       = useState<string>("all");
+  const [appliedBranch, setAppliedBranch]         = useState<string>("all");
+  const [appliedEmployee, setAppliedEmployee]     = useState<string>("all");
+
+  const hasPendingChange =
+    fromDate !== appliedFrom || toDate !== appliedTo ||
+    paymentMethod !== appliedPayment || selectedBranch !== appliedBranch ||
+    selectedEmployee !== appliedEmployee;
+
+  const applyFilters = () => {
+    setAppliedFrom(fromDate); setAppliedTo(toDate);
+    setAppliedPayment(paymentMethod); setAppliedBranch(selectedBranch);
+    setAppliedEmployee(selectedEmployee);
+  };
 
   const { data: branches = [] } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
@@ -373,20 +392,29 @@ export default function Invoices() {
     },
   });
 
-  let queryUrl = `/api/sales?from=${fromDate}&to=${toDate}`;
-  if (paymentMethod !== "all") queryUrl += `&paymentMethod=${paymentMethod}`;
-  if (selectedBranch !== "all" && isOwnerOrAdmin) queryUrl += `&branchId=${selectedBranch}`;
-  if (selectedEmployee !== "all") queryUrl += `&employeeId=${selectedEmployee}`;
+  let queryUrl = `/api/sales?from=${appliedFrom}&to=${appliedTo}`;
+  if (appliedPayment !== "all") queryUrl += `&paymentMethod=${appliedPayment}`;
+  if (appliedBranch !== "all" && isOwnerOrAdmin) queryUrl += `&branchId=${appliedBranch}`;
+  if (appliedEmployee !== "all") queryUrl += `&employeeId=${appliedEmployee}`;
 
-  const { data: salesData = [], isLoading } = useQuery<any[]>({
-    queryKey: ["sales-invoices", fromDate, toDate, paymentMethod, selectedBranch, selectedEmployee],
+  const { data: rawSalesData = [], isLoading } = useQuery<any[]>({
+    queryKey: ["sales-invoices", appliedFrom, appliedTo, appliedPayment, appliedBranch, appliedEmployee],
     queryFn: async () => {
       const res = await fetch(queryUrl, { credentials: "include" });
       if (!res.ok) throw new Error(t("common.error"));
       return res.json();
     },
-    enabled: !!fromDate && !!toDate,
+    enabled: !!appliedFrom && !!appliedTo,
   });
+
+  // فلترة محلية بالبحث (رقم فاتورة أو اسم عميلة)
+  const salesData = search.trim()
+    ? rawSalesData.filter(s =>
+        (s.invoiceNumber || `#${s.id}`).toLowerCase().includes(search.toLowerCase()) ||
+        (s.customerName || "").toLowerCase().includes(search.toLowerCase()) ||
+        (s.customerPhone || "").includes(search)
+      )
+    : rawSalesData;
 
   const totals = salesData.reduce((acc, s) => ({
     subtotal: acc.subtotal + parseFloat(s.subtotal || "0"),
@@ -424,20 +452,36 @@ export default function Invoices() {
       </div>
 
       <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-wrap items-end gap-4">
+        <CardContent className="p-4 space-y-3">
+          {/* بحث سريع */}
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <Input
+              placeholder="بحث برقم الفاتورة أو اسم العميلة أو الهاتف..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="pr-10 h-9 text-sm"
+            />
+            {search && (
+              <button onClick={() => setSearch("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          {/* فلاتر التاريخ والتصنيف */}
+          <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <label className="text-sm font-medium">{t("common.from")}</label>
-              <DateInput value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-40" data-testid="input-invoices-from" />
+              <label className="text-xs font-medium text-gray-600">{t("common.from")}</label>
+              <DateInput value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-36 h-8 text-xs" data-testid="input-invoices-from" />
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">{t("common.to")}</label>
-              <DateInput value={toDate} onChange={e => setToDate(e.target.value)} className="w-40" data-testid="input-invoices-to" />
+              <label className="text-xs font-medium text-gray-600">{t("common.to")}</label>
+              <DateInput value={toDate} onChange={e => setToDate(e.target.value)} className="w-36 h-8 text-xs" data-testid="input-invoices-to" />
             </div>
-            <div className="space-y-1 min-w-[160px]">
-              <label className="text-sm font-medium">{t("invoices.table_payment")}</label>
+            <div className="space-y-1 min-w-[140px]">
+              <label className="text-xs font-medium text-gray-600">{t("invoices.table_payment")}</label>
               <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger data-testid="select-invoices-payment"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 text-xs" data-testid="select-invoices-payment"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("common.all")}</SelectItem>
                   <SelectItem value="cash">{t("payment_methods.cash")}</SelectItem>
@@ -446,10 +490,10 @@ export default function Invoices() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1 min-w-[160px]">
-              <label className="text-sm font-medium">{t("common.employee")}</label>
+            <div className="space-y-1 min-w-[140px]">
+              <label className="text-xs font-medium text-gray-600">{t("common.employee")}</label>
               <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                <SelectTrigger data-testid="select-invoices-employee"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 text-xs" data-testid="select-invoices-employee"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("common.all")}</SelectItem>
                   {allUsers.map((u: any) => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
@@ -457,10 +501,10 @@ export default function Invoices() {
               </Select>
             </div>
             {isOwnerOrAdmin && (
-              <div className="space-y-1 min-w-[180px]">
-                <label className="text-sm font-medium">{t("common.branch")}</label>
+              <div className="space-y-1 min-w-[160px]">
+                <label className="text-xs font-medium text-gray-600">{t("common.branch")}</label>
                 <Select value={selectedBranch} onValueChange={setSelectedBranch}>
-                  <SelectTrigger data-testid="select-invoices-branch"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs" data-testid="select-invoices-branch"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">{t("common.all_branches")}</SelectItem>
                     {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
@@ -468,7 +512,15 @@ export default function Invoices() {
                 </Select>
               </div>
             )}
+            <Button
+              size="sm"
+              className={`h-8 text-xs gap-1 self-end ${hasPendingChange ? "bg-pink-600 hover:bg-pink-700 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}
+              onClick={applyFilters}
+            >
+              <RefreshCw className="w-3 h-3" /> تطبيق
+            </Button>
           </div>
+          <p className="text-xs text-muted-foreground">{salesData.length} فاتورة</p>
         </CardContent>
       </Card>
 
@@ -518,6 +570,7 @@ export default function Invoices() {
                   <TableRow>
                     <TableHead className="w-[120px]">{t("invoices.table_invoice_no")}</TableHead>
                     {isOwnerOrAdmin && <TableHead>{t("invoices.table_branch")}</TableHead>}
+                    <TableHead>العميلة</TableHead>
                     <TableHead>{t("invoices.table_cashier")}</TableHead>
                     <TableHead className="text-center">{t("invoices.table_payment")}</TableHead>
                     <TableHead className="text-center font-mono">{t("invoices.table_total")}</TableHead>
@@ -530,6 +583,11 @@ export default function Invoices() {
                     <TableRow key={s.id} className="hover:bg-muted/30 transition-colors" data-testid={`row-invoice-${s.id}`}>
                       <TableCell className="font-mono font-bold">{s.invoiceNumber || `#${s.id}`}</TableCell>
                       {isOwnerOrAdmin && <TableCell>{s.branchName || "—"}</TableCell>}
+                      <TableCell>
+                        {s.customerName
+                          ? <span className="text-emerald-700 font-medium">{s.customerName}</span>
+                          : <span className="text-gray-400 text-xs">زائر</span>}
+                      </TableCell>
                       <TableCell>{s.cashierName || "—"}</TableCell>
                       <TableCell className="text-center">
                         <Badge className={PM_COLORS[s.paymentMethod] || ""}>
