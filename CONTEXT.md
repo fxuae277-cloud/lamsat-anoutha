@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-13 (جلسة 15 — تحسينات صفحة المنتجات والفواتير والطلبات)_
+_آخر تحديث: 2026-04-13 (جلسة 16 — تحسينات Purchases/Suppliers + إصلاح 502 + بحث حي)_
 
 ---
 
@@ -12,6 +12,52 @@ _آخر تحديث: 2026-04-13 (جلسة 15 — تحسينات صفحة المن
 ---
 
 ## ✅ مكتمل
+
+### جلسة 16 — تحسينات المشتريات والموردين + إصلاح بحث المنتجات
+
+#### Purchases.tsx — ميزات جديدة من المواصفة
+- [x] **إحصائيات موسّعة (6 بطاقات)**: إجمالي الفواتير / إجمالي المشتريات / المبالغ المعلقة (عدد+مبلغ) / إجمالي المدفوع / فواتير اليوم / عدد الموردين
+- [x] **أعمدة جديدة في قائمة الفواتير**: طريقة الدفع (badge ملون) + تاريخ الاستحقاق (برتقالي لآجل)
+- [x] **سعر البيع** كعمود منفصل في جدول بنود نافذة الإنشاء — يُجلب تلقائياً من priceDefault عند مسح الباركود
+
+#### Purchases.tsx — إضافة يدوية في نافذة الإنشاء (Tabs)
+- [x] نافذة "فاتورة شراء جديدة" الآن بها تبويبان: **مسح باركود** + **إضافة يدوية**
+- [x] الإضافة اليدوية: بحث حي بالاسم → dropdown → أزرار المتغيرات (لون/مقاس) → كمية/سعر شراء/سعر بيع → إضافة
+
+#### Purchases.tsx — إصلاح منع تكرار المنتجات
+- [x] **بحث حي في قسم "إضافة صنف"** داخل الفاتورة التفصيلية:
+  - حقل بحث واحد يبحث بالاسم + الباركود + SKU (بدلاً من Select منفصل + input)
+  - Dropdown نتائج فورية — المنتجات الموجودة أولاً
+  - "إضافة جديد" تظهر **فقط** إذا لم توجد أي نتيجة مطابقة
+  - أزرار المتغيرات تحل محل Select للاختيار السريع
+  - المنتج المختار يظهر مؤكداً مع زر ✕
+- [x] **`addItemMutation`**: حُذف مسار إنشاء منتج جديد تلقائي — `productId` مطلوب
+- [x] **`handleModalBarcode`**: الباركود غير الموجود يفتح نافذة "منتج جديد" بدل إضافة عنصر مجهول
+
+#### إصلاح 502 Bad Gateway على Railway
+- [x] **سبب المشكلة**: Drizzle يحاول SELECT على عمودَي `address` و `phone` في جدول `branches` وهما غير موجودَين في DB الإنتاج → crash عند startup
+- [x] **الحل**: إضافة migration 0019 تلقائياً في `server/index.ts` عند الـ startup:
+  ```sql
+  ALTER TABLE branches ADD COLUMN IF NOT EXISTS address TEXT;
+  ALTER TABLE branches ADD COLUMN IF NOT EXISTS phone   TEXT;
+  ```
+
+#### صفحة الفروع (Branches.tsx) — جلسة 15 (مكتملة)
+- [x] Migration 0019: إضافة `address TEXT` + `phone TEXT` إلى جدول branches
+- [x] `shared/schema.ts`: تحديث نوع Branch ليشمل address + phone
+- [x] واجهة محسّنة: عمود العنوان + عمود الهاتف + شارة رئيسي/فرع
+
+#### إصلاح رسائل الخطأ — جلسة 15 (مكتملة)
+- [x] `parseServerError()` في `queryClient.ts` — يستخرج `json.message` من API errors
+- [x] تحديث 6 صفحات: Accounts / Dashboard / InventoryAlerts / InventoryOverview / Products / Purchases
+
+#### صفحة المنتجات — جلسة 15 (مكتملة)
+- [x] باركود تلقائي (إصلاح ترتيب routes: `next-barcode` قبل `/:id`)
+- [x] باركود في وضع التعديل مفعّل
+- [x] SKU تلقائي: `GET /api/products/:id/next-sku` → `{catId:03}-{productId:04}-{seq:02}`
+- [x] إصلاح "Tabs is not defined" في modal تفاصيل المنتج
+
+---
 
 ### جلسة 15 — تحسينات المنتجات / الفواتير / الطلبات
 
@@ -205,10 +251,13 @@ fetch('/api/run-migration-0017',{method:'POST'}).then(r=>r.json()).then(console.
 
 // Migration 0018 (description + cost_default + min_qty في products):
 fetch('/api/run-migration-0018',{method:'POST'}).then(r=>r.json()).then(console.log)
+
+// Migration 0019 (address + phone في branches):
+// ✅ تُشغَّل تلقائياً عند startup — لا حاجة لتشغيلها يدوياً
 ```
 
 ## ⏳ القادم
-- [ ] تشغيل migration 0018 على Railway (إضافة حقول products)
+- [ ] تشغيل migration 0018 على Railway (إضافة حقول products) — إذا لم تُشغَّل بعد
 - [ ] صفحة دليل الحسابات (Accounts.tsx) ربطها بالنظام الجديد
 - [ ] طباعة فاتورة الشراء (PDF/حراري من صفحة التفاصيل)
 - [ ] تقرير الطلبات: مبيعات شهرية بالفئات والمنتجات
