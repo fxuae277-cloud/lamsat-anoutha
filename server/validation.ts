@@ -103,7 +103,7 @@ export const updateProductSchema = z.object({
   categoryId:   z.number().int().positive().optional().nullable(),
   price:        z.coerce.number().min(0, "السعر لا يمكن أن يكون سالباً").optional(),
   unitCostBase: z.coerce.number().min(0).optional(),
-  barcode:      z.string().max(50, "الباركود 50 حرفاً كحد أقصى").optional().nullable(),
+  barcode:      z.string().max(50, "الباركود 50 حرفاً كحد أقصى").optional().nullable().transform(v => v === "" ? null : v),
   active:       z.boolean().optional(),
   image:        z.string().optional().nullable(),
   branchId:     z.number().int().positive().optional().nullable(),
@@ -160,7 +160,7 @@ export const updateCustomerSchema = z.object({
 export const createProductSchema = z.object({
   name:          z.string({ required_error: "الاسم مطلوب" }).min(2, "الاسم يجب أن يحتوي على حرفين على الأقل"),
   price:         z.coerce.number({ required_error: "السعر مطلوب" }).min(0, "السعر لا يمكن أن يكون سالباً"),
-  barcode:       z.string().max(50, "الباركود 50 حرفاً كحد أقصى").optional().nullable(),
+  barcode:       z.string().max(50, "الباركود 50 حرفاً كحد أقصى").optional().nullable().transform(v => v === "" ? null : v),
   categoryId:    z.number().int().positive().optional().nullable(),
   branchId:      z.number().int().positive().optional().nullable(),
   productType:   z.enum(["simple", "variable", "composite"]).default("simple"),
