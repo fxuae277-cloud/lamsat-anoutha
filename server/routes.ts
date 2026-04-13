@@ -911,6 +911,30 @@ export async function registerRoutes(
     }
   });
 
+  // ── توليد باركود تلقائي حسب الفئة ──────────────────────────────────────────
+  app.get("/api/products/next-barcode", requireAuth, async (req, res) => {
+    try {
+      const categoryId = Number(req.query.categoryId) || 0;
+      const countRes = await pool.query(
+        `SELECT COUNT(*) as cnt FROM products WHERE category_id = $1`,
+        [categoryId || null]
+      );
+      const seq = (Number(countRes.rows[0]?.cnt || 0) + 1).toString().padStart(4, "0");
+      const catPart = categoryId.toString().padStart(3, "0");
+      const barcode = `628${catPart}${seq}`;
+      // تأكد أنه غير مستخدم
+      const existing = await pool.query(`SELECT id FROM products WHERE barcode = $1`, [barcode]);
+      if (existing.rows.length > 0) {
+        const ts = Date.now().toString().slice(-4);
+        res.json({ barcode: `628${catPart}${ts}` });
+      } else {
+        res.json({ barcode });
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/products/:id", requireAuth, requirePermission("products.view"), async (req, res) => {
     const product = await storage.getProduct(Number(req.params.id));
     if (!product) return res.status(404).json({ message: "المنتج غير موجود" });
@@ -972,29 +996,6 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
-    }
-  });
-  // ── توليد باركود تلقائي حسب الفئة ──────────────────────────────────────────
-  app.get("/api/products/next-barcode", requireAuth, async (req, res) => {
-    try {
-      const categoryId = Number(req.query.categoryId) || 0;
-      const countRes = await pool.query(
-        `SELECT COUNT(*) as cnt FROM products WHERE category_id = $1`,
-        [categoryId || null]
-      );
-      const seq = (Number(countRes.rows[0]?.cnt || 0) + 1).toString().padStart(4, "0");
-      const catPart = categoryId.toString().padStart(3, "0");
-      const barcode = `628${catPart}${seq}`;
-      // تأكد أنه غير مستخدم
-      const existing = await pool.query(`SELECT id FROM products WHERE barcode = $1`, [barcode]);
-      if (existing.rows.length > 0) {
-        const ts = Date.now().toString().slice(-4);
-        res.json({ barcode: `628${catPart}${ts}` });
-      } else {
-        res.json({ barcode });
-      }
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
     }
   });
 
