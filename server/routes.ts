@@ -1007,41 +1007,60 @@ export async function registerRoutes(
       // فحص تكرار الاسم
       const dupName = await pool.query(`SELECT id FROM products WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))`, [productData.name]);
       if (dupName.rows.length > 0) return res.status(409).json({ message: `يوجد منتج بنفس الاسم "${productData.name}" بالفعل` });
+      // فحص تكرار الباركود
+      if (productData.barcode) {
+        const dupBarcode = await pool.query(`SELECT id FROM products WHERE barcode = $1`, [productData.barcode]);
+        if (dupBarcode.rows.length > 0) return res.status(409).json({ message: `الباركود "${productData.barcode}" مستخدم لمنتج آخر` });
+      }
       const result = await storage.createProductWithVariants(productData as any, variants ?? []);
       res.status(201).json(result);
     } catch (err: any) {
+      if (err.code === "23505") return res.status(409).json({ message: "الباركود مستخدم بالفعل" });
       res.status(500).json({ message: err?.message ?? "خطأ في إنشاء المنتج" });
     }
   });
   app.patch("/api/products/:id", requireAuth, requirePermission("products.edit"), async (req, res) => {
-    const parsed = updateProductSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
-    const productId = Number(req.params.id);
-    // فحص تكرار الاسم عند التعديل (تجاهل المنتج الحالي)
-    if (parsed.data.name) {
-      const dupName = await pool.query(
-        `SELECT id FROM products WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND id <> $2`,
-        [parsed.data.name, productId]
-      );
-      if (dupName.rows.length > 0) return res.status(409).json({ message: `يوجد منتج بنفس الاسم "${parsed.data.name}" بالفعل` });
+    try {
+      const parsed = updateProductSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      const productId = Number(req.params.id);
+      // فحص تكرار الاسم
+      if (parsed.data.name) {
+        const dupName = await pool.query(
+          `SELECT id FROM products WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND id <> $2`,
+          [parsed.data.name, productId]
+        );
+        if (dupName.rows.length > 0) return res.status(409).json({ message: `يوجد منتج بنفس الاسم "${parsed.data.name}" بالفعل` });
+      }
+      // فحص تكرار الباركود
+      if (parsed.data.barcode) {
+        const dupBarcode = await pool.query(
+          `SELECT id FROM products WHERE barcode = $1 AND id <> $2`,
+          [parsed.data.barcode, productId]
+        );
+        if (dupBarcode.rows.length > 0) return res.status(409).json({ message: `الباركود "${parsed.data.barcode}" مستخدم لمنتج آخر` });
+      }
+      const oldProduct = await storage.getProduct(productId);
+      const row = await storage.updateProduct(productId, parsed.data);
+      if (!row) return res.status(404).json({ message: "المنتج غير موجود" });
+      if (oldProduct && parsed.data.price !== undefined && (oldProduct.price as any) !== parsed.data.price) {
+        storage.addAuditLog({
+          action: "product_price_change",
+          entityType: "product",
+          entityId: productId,
+          branchId: null,
+          userId: req.session.userId ?? null,
+          userName: null,
+          details: `تغيير سعر المنتج "${row.name}"`,
+          oldValue: JSON.stringify({ price: oldProduct.price }),
+          newValue: JSON.stringify({ price: row.price }),
+        }).catch(() => {});
+      }
+      res.json(row);
+    } catch (err: any) {
+      if (err.code === "23505") return res.status(409).json({ message: "الباركود مستخدم بالفعل" });
+      res.status(500).json({ message: err?.message ?? "خطأ في تحديث المنتج" });
     }
-    const oldProduct = await storage.getProduct(productId);
-    const row = await storage.updateProduct(productId, parsed.data);
-    if (!row) return res.status(404).json({ message: "المنتج غير موجود" });
-    if (oldProduct && parsed.data.price !== undefined && (oldProduct.price as any) !== parsed.data.price) {
-      storage.addAuditLog({
-        action: "product_price_change",
-        entityType: "product",
-        entityId: productId,
-        branchId: null,
-        userId: req.session.userId ?? null,
-        userName: null,
-        details: `تغيير سعر المنتج "${row.name}"`,
-        oldValue: JSON.stringify({ price: oldProduct.price }),
-        newValue: JSON.stringify({ price: row.price }),
-      }).catch(() => {});
-    }
-    res.json(row);
   });
   app.delete("/api/products/:id", requireAuth, requirePermission("products.delete"), async (req, res) => {
     try {
@@ -1157,8 +1176,13 @@ export async function registerRoutes(
     }
   });
   app.delete("/api/variants/:id", requireAuth, requirePermission("products.delete"), async (req, res) => {
-    await storage.deleteVariant(Number(req.params.id));
-    res.json({ message: "تم حذف المتغير" });
+    try {
+      await storage.deleteVariant(Number(req.params.id));
+      res.json({ message: "تم حذف المتغير" });
+    } catch (err: any) {
+      if (err.code === "23503") return res.status(400).json({ message: "لا يمكن حذف المتغير لأنه مستخدم في طلبات أو مخزون" });
+      res.status(500).json({ message: err?.message ?? "خطأ في حذف المتغير" });
+    }
   });
   app.post("/api/variants/quick-create", requireAuth, requirePermission("products.create"), async (req, res) => {
     try {

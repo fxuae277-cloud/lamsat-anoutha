@@ -134,13 +134,16 @@ export default function Products() {
     onSuccess: () => {
       toast({ title: t("products.deleted") });
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      setDeleteConfirmId(null);
     },
+    onError: (e: Error) => toast({ title: "لا يمكن الحذف", description: e.message, variant: "destructive" }),
   });
 
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, active }: { id: number; active: boolean }) =>
       apiRequest("PATCH", `/api/products/${id}`, { active }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/products"] }),
+    onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
 
   const createCategoryMutation = useMutation({
@@ -169,7 +172,8 @@ export default function Products() {
       setVariantDialogOpen(false);
     },
     onError: (e: Error) => {
-      if (e.message.includes("barcode")) toast({ title: t("products.barcode_duplicate"), variant: "destructive" });
+      if (e.message.includes("باركود") || e.message.includes("barcode")) toast({ title: "الباركود مكرر", description: e.message, variant: "destructive" });
+      else if (e.message.includes("SKU") || e.message.includes("sku")) toast({ title: "رمز SKU مكرر", description: e.message, variant: "destructive" });
       else toast({ title: t("common.error"), description: e.message, variant: "destructive" });
     },
   });
@@ -181,6 +185,7 @@ export default function Products() {
       queryClient.invalidateQueries({ queryKey: [`/api/products/${formProduct?.id}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
     },
+    onError: (e: Error) => toast({ title: "لا يمكن حذف المتغير", description: e.message, variant: "destructive" }),
   });
 
   // ── helpers ───────────────────────────────────────────────────────────
