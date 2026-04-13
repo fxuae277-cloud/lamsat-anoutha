@@ -4872,6 +4872,20 @@ export async function registerRoutes(
     }
   });
 
+  // ── Migration 0018 ─────────────────────────────────────────────────────────
+  app.post("/api/run-migration-0018", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const migPath = path.join(process.cwd(), "migrations", "0018_products_description_mincost.sql");
+      const sqlText = fs.readFileSync(migPath, "utf8");
+      await pool.query(sqlText);
+      res.json({ success: true, message: "تم تشغيل migration 0018 — إضافة description + cost_default + min_qty للمنتجات بنجاح" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+    }
+  });
+
   // ── Migration 0017 ─────────────────────────────────────────────────────────
   app.post("/api/run-migration-0017", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
     try {

@@ -51,6 +51,7 @@ export default function Products() {
   const [formTab, setFormTab] = useState("basic");
   const [formData, setFormData] = useState({
     name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "",
+    description: "", costDefault: "", minQty: "5",
   });
 
   // ── detail modal ──────────────────────────────────────────────────────
@@ -181,7 +182,7 @@ export default function Products() {
   // ── helpers ───────────────────────────────────────────────────────────
   function openAdd() {
     setFormProduct(null);
-    setFormData({ name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "" });
+    setFormData({ name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "", description: "", costDefault: "", minQty: "5" });
     setFormTab("basic");
     setShowAddCategory(false);
     setNewCategoryName("");
@@ -198,6 +199,9 @@ export default function Products() {
       productType: p.productType || "simple",
       active: p.active ?? true,
       image: p.image || "",
+      description: p.description || "",
+      costDefault: p.costDefault?.toString() || "",
+      minQty: p.minQty?.toString() || "5",
     });
     setFormTab("basic");
     setShowAddCategory(false);
@@ -214,12 +218,34 @@ export default function Products() {
       productType: formData.productType,
       active: formData.active,
       image: formData.image || null,
+      description: formData.description.trim() || null,
+      costDefault: formData.costDefault ? parseFloat(formData.costDefault) : null,
+      minQty: formData.minQty ? parseInt(formData.minQty) : 5,
     };
     if (formProduct) {
       updateProductMutation.mutate({ id: formProduct.id, ...payload });
     } else {
       createProductMutation.mutate({ ...payload, variants: [] });
     }
+  }
+
+  function processImageFile(file: File) {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 600;
+      let { width, height } = img;
+      if (width > MAX || height > MAX) {
+        if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+        else { width = Math.round(width * MAX / height); height = MAX; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+      setFormData(f => ({ ...f, image: canvas.toDataURL("image/jpeg", 0.7) }));
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
   }
 
   function openVariantDialog(v?: ProductVariant) {
@@ -600,53 +626,67 @@ export default function Products() {
                 </div>
               </div>
 
-              {/* Image Upload */}
+              {/* Image Upload with Drag & Drop */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("products.image")}</label>
-                <div className="flex items-center gap-3">
-                  <div className="w-16 h-16 rounded-lg border bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-                    {formData.image
-                      ? <img src={formData.image} alt="" className="w-full h-full object-cover" />
-                      : <Package className="w-6 h-6 text-muted-foreground" />}
+                <input type="file" accept="image/*" className="hidden" id="product-image-input"
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    processImageFile(file);
+                    e.target.value = "";
+                  }}
+                />
+                {formData.image ? (
+                  <div className="relative w-full h-40 rounded-lg border overflow-hidden group">
+                    <img src={formData.image} alt="" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <Button type="button" size="sm" variant="outline" className="bg-white/90 text-black" onClick={() => document.getElementById("product-image-input")?.click()}>تغيير</Button>
+                      <Button type="button" size="sm" variant="destructive" onClick={() => setFormData(f => ({ ...f, image: "" }))}>حذف</Button>
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-2 flex-1">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      id="product-image-input"
-                      onChange={e => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        const img = new Image();
-                        const url = URL.createObjectURL(file);
-                        img.onload = () => {
-                          const MAX = 600;
-                          let { width, height } = img;
-                          if (width > MAX || height > MAX) {
-                            if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
-                            else { width = Math.round(width * MAX / height); height = MAX; }
-                          }
-                          const canvas = document.createElement("canvas");
-                          canvas.width = width; canvas.height = height;
-                          canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
-                          setFormData(f => ({ ...f, image: canvas.toDataURL("image/jpeg", 0.7) }));
-                          URL.revokeObjectURL(url);
-                        };
-                        img.src = url;
-                        e.target.value = "";
-                      }}
-                    />
-                    <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById("product-image-input")?.click()}>
-                      اختر صورة
-                    </Button>
-                    {formData.image && (
-                      <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setFormData(f => ({ ...f, image: "" }))}>
-                        حذف الصورة
-                      </Button>
-                    )}
+                ) : (
+                  <div
+                    className="w-full h-32 rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-all"
+                    onClick={() => document.getElementById("product-image-input")?.click()}
+                    onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add("border-primary", "bg-primary/5"); }}
+                    onDragLeave={e => { e.currentTarget.classList.remove("border-primary", "bg-primary/5"); }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove("border-primary", "bg-primary/5");
+                      const file = e.dataTransfer.files?.[0];
+                      if (file && file.type.startsWith("image/")) processImageFile(file);
+                    }}
+                  >
+                    <Package className="w-8 h-8 text-muted-foreground/50" />
+                    <p className="text-sm text-muted-foreground">اسحب الصورة هنا أو اضغط للاختيار</p>
+                    <p className="text-xs text-muted-foreground/60">PNG, JPG, WEBP</p>
                   </div>
-                </div>
+                )}
+              </div>
+
+              {/* Description */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">الوصف</label>
+                <textarea
+                  value={formData.description}
+                  onChange={e => setFormData(f => ({ ...f, description: e.target.value }))}
+                  placeholder="وصف تفصيلي للمنتج (اختياري)..."
+                  rows={3}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+
+              {/* Min qty alert */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">حد التنبيه للمخزون المنخفض</label>
+                <Input
+                  type="number" min="0"
+                  value={formData.minQty}
+                  onChange={e => setFormData(f => ({ ...f, minQty: e.target.value }))}
+                  placeholder="5"
+                />
+                <p className="text-xs text-muted-foreground">عند وصول المخزون لهذا الرقم يظهر تنبيه</p>
               </div>
 
               <div className="flex items-center justify-between rounded-lg border p-3">
@@ -662,15 +702,27 @@ export default function Products() {
 
             {/* Pricing Tab */}
             <TabsContent value="pricing" className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t("products.price_omr")}</label>
-                <Input
-                  type="number" step="0.001"
-                  value={formData.price}
-                  onChange={e => setFormData(f => ({ ...f, price: e.target.value }))}
-                  readOnly={!isOwnerOrAdmin}
-                  data-testid="input-price"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("products.price_omr")}</label>
+                  <Input
+                    type="number" step="0.001"
+                    value={formData.price}
+                    onChange={e => setFormData(f => ({ ...f, price: e.target.value }))}
+                    readOnly={!isOwnerOrAdmin}
+                    data-testid="input-price"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">التكلفة الافتراضية (ر.ع)</label>
+                  <Input
+                    type="number" step="0.001" min="0"
+                    value={formData.costDefault}
+                    onChange={e => setFormData(f => ({ ...f, costDefault: e.target.value }))}
+                    placeholder="0.000"
+                  />
+                  <p className="text-xs text-muted-foreground">تُستخدم لحساب الربح</p>
+                </div>
               </div>
               {formProduct && (
                 <>
