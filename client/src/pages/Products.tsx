@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -48,7 +47,6 @@ export default function Products() {
   // ── product form (add / edit) ─────────────────────────────────────────
   const [formOpen, setFormOpen] = useState(false);
   const [formProduct, setFormProduct] = useState<any>(null); // null = add
-  const [formTab, setFormTab] = useState("basic");
   const [formData, setFormData] = useState({
     name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "",
     description: "", costDefault: "", minQty: "5",
@@ -183,7 +181,7 @@ export default function Products() {
   function openAdd() {
     setFormProduct(null);
     setFormData({ name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "", description: "", costDefault: "", minQty: "5" });
-    setFormTab("basic");
+
     setShowAddCategory(false);
     setNewCategoryName("");
     setFormOpen(true);
@@ -203,7 +201,7 @@ export default function Products() {
       costDefault: p.costDefault?.toString() || "",
       minQty: p.minQty?.toString() || "5",
     });
-    setFormTab("basic");
+
     setShowAddCategory(false);
     setNewCategoryName("");
     setFormOpen(true);
@@ -541,50 +539,35 @@ export default function Products() {
             <DialogTitle>{formProduct ? t("products.edit_product") : t("products.add_product")}</DialogTitle>
           </DialogHeader>
 
-          <Tabs value={formTab} onValueChange={setFormTab}>
-            <TabsList className="w-full">
-              <TabsTrigger value="basic" className="flex-1">{t("products.tab_basic")}</TabsTrigger>
-              <TabsTrigger value="pricing" className="flex-1">{t("products.tab_pricing")}</TabsTrigger>
-              {formProduct && <TabsTrigger value="variants" className="flex-1">{t("products.tab_variants")}</TabsTrigger>}
-              {formProduct && <TabsTrigger value="stock" className="flex-1">{t("products.tab_stock")}</TabsTrigger>}
-            </TabsList>
+          <div className="space-y-4 pt-2">
 
-            {/* Basic Tab */}
-            <TabsContent value="basic" className="space-y-4 pt-4">
-              <div className="space-y-2">
+            {/* ── المعلومات الأساسية ── */}
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b pb-1">المعلومات الأساسية</p>
+
+            <div className="grid grid-cols-2 gap-3">
+              {/* اسم المنتج */}
+              <div className="space-y-1 col-span-2">
                 <label className="text-sm font-medium">{t("products.product_name")}</label>
-                <Input
-                  value={formData.name}
-                  onChange={e => setFormData(f => ({ ...f, name: e.target.value }))}
-                  placeholder={t("products.product_name_placeholder")}
-                  data-testid="input-name"
-                />
+                <Input value={formData.name} onChange={e => setFormData(f => ({ ...f, name: e.target.value }))} placeholder={t("products.product_name_placeholder")} data-testid="input-name" />
               </div>
 
-              {/* Category with inline add */}
-              <div className="space-y-2">
+              {/* الفئة */}
+              <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium">{t("products.category")}</label>
                   {!showAddCategory && (
-                    <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs text-primary" onClick={() => setShowAddCategory(true)} data-testid="button-show-add-category">
+                    <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs text-primary" onClick={() => setShowAddCategory(true)} data-testid="button-show-add-category">
                       <Plus className="w-3 h-3 mr-1" />{t("products.add_category")}
                     </Button>
                   )}
                 </div>
                 {showAddCategory ? (
                   <div className="flex gap-2">
-                    <Input
-                      autoFocus
-                      placeholder={t("products.category_name_placeholder")}
-                      value={newCategoryName}
-                      onChange={e => setNewCategoryName(e.target.value)}
+                    <Input autoFocus placeholder={t("products.category_name_placeholder")} value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)}
                       onKeyDown={e => {
                         if (e.key === "Enter" && newCategoryName.trim()) createCategoryMutation.mutate(newCategoryName.trim());
                         if (e.key === "Escape") { setShowAddCategory(false); setNewCategoryName(""); }
-                      }}
-                      className="flex-1"
-                      data-testid="input-new-category-name"
-                    />
+                      }} className="flex-1" data-testid="input-new-category-name" />
                     <Button size="sm" disabled={!newCategoryName.trim() || createCategoryMutation.isPending} onClick={() => createCategoryMutation.mutate(newCategoryName.trim())} data-testid="button-save-category">{t("common.save")}</Button>
                     <Button variant="ghost" size="sm" onClick={() => { setShowAddCategory(false); setNewCategoryName(""); }} data-testid="button-cancel-add-category">{t("common.cancel")}</Button>
                   </div>
@@ -593,13 +576,9 @@ export default function Products() {
                     <SelectTrigger><SelectValue placeholder={t("products.all_categories")} /></SelectTrigger>
                     <SelectContent>
                       {categories.filter((c: any) => !c.parentId).map((parent: any) => [
-                        <SelectItem key={parent.id} value={parent.id.toString()} className="font-semibold">
-                          {parent.name}
-                        </SelectItem>,
+                        <SelectItem key={parent.id} value={parent.id.toString()} className="font-semibold">{parent.name}</SelectItem>,
                         ...categories.filter((c: any) => c.parentId === parent.id).map((child: any) => (
-                          <SelectItem key={child.id} value={child.id.toString()} className="pr-6 text-muted-foreground">
-                            ↳ {child.name}
-                          </SelectItem>
+                          <SelectItem key={child.id} value={child.id.toString()} className="pr-6 text-muted-foreground">↳ {child.name}</SelectItem>
                         ))
                       ])}
                     </SelectContent>
@@ -607,7 +586,8 @@ export default function Products() {
                 )}
               </div>
 
-              <div className="space-y-2">
+              {/* نوع المنتج */}
+              <div className="space-y-1">
                 <label className="text-sm font-medium">{t("products.product_type")}</label>
                 <Select value={formData.productType} onValueChange={v => setFormData(f => ({ ...f, productType: v }))}>
                   <SelectTrigger data-testid="select-product-type"><SelectValue /></SelectTrigger>
@@ -618,151 +598,112 @@ export default function Products() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
+              {/* الباركود */}
+              <div className="space-y-1 col-span-2">
                 <label className="text-sm font-medium">{t("products.code")}</label>
                 <div className="flex gap-2">
                   <Input value={formData.barcode} onChange={e => setFormData(f => ({ ...f, barcode: e.target.value }))} placeholder={t("products.optional")} data-testid="input-product-barcode" />
                   <BarcodeScanButton onScan={code => setFormData(f => ({ ...f, barcode: code }))} />
                 </div>
               </div>
+            </div>
 
-              {/* Image Upload with Drag & Drop */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t("products.image")}</label>
-                <input type="file" accept="image/*" className="hidden" id="product-image-input"
-                  onChange={e => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    processImageFile(file);
-                    e.target.value = "";
-                  }}
-                />
-                {formData.image ? (
-                  <div className="relative w-full h-40 rounded-lg border overflow-hidden group">
-                    <img src={formData.image} alt="" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                      <Button type="button" size="sm" variant="outline" className="bg-white/90 text-black" onClick={() => document.getElementById("product-image-input")?.click()}>تغيير</Button>
-                      <Button type="button" size="sm" variant="destructive" onClick={() => setFormData(f => ({ ...f, image: "" }))}>حذف</Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    className="w-full h-32 rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-all"
-                    onClick={() => document.getElementById("product-image-input")?.click()}
-                    onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add("border-primary", "bg-primary/5"); }}
-                    onDragLeave={e => { e.currentTarget.classList.remove("border-primary", "bg-primary/5"); }}
-                    onDrop={e => {
-                      e.preventDefault();
-                      e.currentTarget.classList.remove("border-primary", "bg-primary/5");
-                      const file = e.dataTransfer.files?.[0];
-                      if (file && file.type.startsWith("image/")) processImageFile(file);
-                    }}
-                  >
-                    <Package className="w-8 h-8 text-muted-foreground/50" />
-                    <p className="text-sm text-muted-foreground">اسحب الصورة هنا أو اضغط للاختيار</p>
-                    <p className="text-xs text-muted-foreground/60">PNG, JPG, WEBP</p>
-                  </div>
-                )}
+            {/* ── التسعير ── */}
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b pb-1 pt-1">التسعير</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{t("products.price_omr")}</label>
+                <Input type="number" step="0.001" value={formData.price} onChange={e => setFormData(f => ({ ...f, price: e.target.value }))} readOnly={!isOwnerOrAdmin} data-testid="input-price" />
               </div>
-
-              {/* Description */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">الوصف</label>
-                <textarea
-                  value={formData.description}
-                  onChange={e => setFormData(f => ({ ...f, description: e.target.value }))}
-                  placeholder="وصف تفصيلي للمنتج (اختياري)..."
-                  rows={3}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                />
+              <div className="space-y-1">
+                <label className="text-sm font-medium">التكلفة الافتراضية (ر.ع)</label>
+                <Input type="number" step="0.001" min="0" value={formData.costDefault} onChange={e => setFormData(f => ({ ...f, costDefault: e.target.value }))} placeholder="0.000" />
+                <p className="text-xs text-muted-foreground">تُستخدم لحساب الربح</p>
               </div>
-
-              {/* Min qty alert */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">حد التنبيه للمخزون المنخفض</label>
-                <Input
-                  type="number" min="0"
-                  value={formData.minQty}
-                  onChange={e => setFormData(f => ({ ...f, minQty: e.target.value }))}
-                  placeholder="5"
-                />
-                <p className="text-xs text-muted-foreground">عند وصول المخزون لهذا الرقم يظهر تنبيه</p>
-              </div>
-
-              <div className="flex items-center justify-between rounded-lg border p-3">
-                <div>
-                  <label className="text-sm font-medium">{t("products.product_status")}</label>
-                  <p className={`text-xs font-medium mt-0.5 ${formData.active ? "text-green-600" : "text-muted-foreground"}`}>
-                    {formData.active ? t("products.active") : t("products.inactive")}
-                  </p>
-                </div>
-                <Switch checked={formData.active} onCheckedChange={v => setFormData(f => ({ ...f, active: v }))} />
-              </div>
-            </TabsContent>
-
-            {/* Pricing Tab */}
-            <TabsContent value="pricing" className="space-y-4 pt-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">{t("products.price_omr")}</label>
-                  <Input
-                    type="number" step="0.001"
-                    value={formData.price}
-                    onChange={e => setFormData(f => ({ ...f, price: e.target.value }))}
-                    readOnly={!isOwnerOrAdmin}
-                    data-testid="input-price"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">التكلفة الافتراضية (ر.ع)</label>
-                  <Input
-                    type="number" step="0.001" min="0"
-                    value={formData.costDefault}
-                    onChange={e => setFormData(f => ({ ...f, costDefault: e.target.value }))}
-                    placeholder="0.000"
-                  />
-                  <p className="text-xs text-muted-foreground">تُستخدم لحساب الربح</p>
-                </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">حد التنبيه للمخزون</label>
+                <Input type="number" min="0" value={formData.minQty} onChange={e => setFormData(f => ({ ...f, minQty: e.target.value }))} placeholder="5" />
+                <p className="text-xs text-muted-foreground">تنبيه عند وصول المخزون لهذا الرقم</p>
               </div>
               {formProduct && (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">{t("products.avg_cost")}</label>
-                      <Input value={parseFloat(editProductDetail?.avgCost || formProduct?.avgCost || "0").toFixed(3)} readOnly className="bg-muted" />
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">{t("products.profit_margin")}</label>
+                    <div className="h-10 px-3 py-2 rounded-md border bg-muted text-sm flex items-center">
+                      {(() => {
+                        const price = parseFloat(formData.price);
+                        const avg = parseFloat(editProductDetail?.avgCost || formProduct?.avgCost || "0");
+                        if (avg > 0 && price > 0) return `${(((price - avg) / avg) * 100).toFixed(1)}%`;
+                        return "—";
+                      })()}
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">{t("products.last_purchase_price")}</label>
-                      <Input value={parseFloat(editProductDetail?.lastPurchasePrice || formProduct?.lastPurchasePrice || "0").toFixed(3)} readOnly className="bg-muted" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">{t("products.last_supplier")}</label>
-                      <Input value={editProductDetail?.lastSupplier || "—"} readOnly className="bg-muted" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">{t("products.profit_margin")}</label>
-                      <div className="h-10 px-3 py-2 rounded-md border bg-muted text-sm flex items-center">
-                        {(() => {
-                          const price = parseFloat(formData.price);
-                          const avg = parseFloat(editProductDetail?.avgCost || formProduct?.avgCost || "0");
-                          if (avg > 0 && price > 0) return `${(((price - avg) / avg) * 100).toFixed(1)}%`;
-                          return "—";
-                        })()}
-                      </div>
-                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">{t("products.avg_cost")}</label>
+                    <Input value={parseFloat(editProductDetail?.avgCost || formProduct?.avgCost || "0").toFixed(3)} readOnly className="bg-muted" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">{t("products.last_purchase_price")}</label>
+                    <Input value={parseFloat(editProductDetail?.lastPurchasePrice || formProduct?.lastPurchasePrice || "0").toFixed(3)} readOnly className="bg-muted" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">{t("products.last_supplier")}</label>
+                    <Input value={editProductDetail?.lastSupplier || "—"} readOnly className="bg-muted" />
                   </div>
                 </>
               )}
-            </TabsContent>
+            </div>
 
-            {/* Variants Tab (edit only) */}
-            {formProduct && (
-              <TabsContent value="variants" className="pt-4">
-                <div className="flex justify-end mb-3">
-                  <Button size="sm" className="gap-2" onClick={() => openVariantDialog()} data-testid="button-add-variant">
-                    <Plus className="w-4 h-4" />{t("products.add_variant")}
-                  </Button>
+            {/* ── الصورة والوصف ── */}
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b pb-1 pt-1">الصورة والوصف</p>
+            <input type="file" accept="image/*" className="hidden" id="product-image-input"
+              onChange={e => { const file = e.target.files?.[0]; if (!file) return; processImageFile(file); e.target.value = ""; }}
+            />
+            {formData.image ? (
+              <div className="relative w-full h-36 rounded-lg border overflow-hidden group">
+                <img src={formData.image} alt="" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  <Button type="button" size="sm" variant="outline" className="bg-white/90 text-black" onClick={() => document.getElementById("product-image-input")?.click()}>تغيير</Button>
+                  <Button type="button" size="sm" variant="destructive" onClick={() => setFormData(f => ({ ...f, image: "" }))}>حذف</Button>
                 </div>
+              </div>
+            ) : (
+              <div className="w-full h-24 rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-all"
+                onClick={() => document.getElementById("product-image-input")?.click()}
+                onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add("border-primary", "bg-primary/5"); }}
+                onDragLeave={e => { e.currentTarget.classList.remove("border-primary", "bg-primary/5"); }}
+                onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove("border-primary", "bg-primary/5"); const file = e.dataTransfer.files?.[0]; if (file?.type.startsWith("image/")) processImageFile(file); }}
+              >
+                <Package className="w-6 h-6 text-muted-foreground/50" />
+                <p className="text-xs text-muted-foreground">اسحب الصورة هنا أو اضغط للاختيار</p>
+              </div>
+            )}
+            <div className="space-y-1">
+              <label className="text-sm font-medium">الوصف</label>
+              <textarea value={formData.description} onChange={e => setFormData(f => ({ ...f, description: e.target.value }))} placeholder="وصف تفصيلي للمنتج (اختياري)..." rows={2}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
+            </div>
+
+            {/* ── الحالة ── */}
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <label className="text-sm font-medium">{t("products.product_status")}</label>
+                <p className={`text-xs font-medium mt-0.5 ${formData.active ? "text-green-600" : "text-muted-foreground"}`}>
+                  {formData.active ? t("products.active") : t("products.inactive")}
+                </p>
+              </div>
+              <Switch checked={formData.active} onCheckedChange={v => setFormData(f => ({ ...f, active: v }))} />
+            </div>
+
+            {/* ── المتغيرات (عند التعديل فقط) ── */}
+            {formProduct && (
+              <>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b pb-1 pt-1">
+                  {t("products.tab_variants")}
+                  <Button size="sm" className="gap-1 mr-3 h-6 text-xs" onClick={() => openVariantDialog()} data-testid="button-add-variant">
+                    <Plus className="w-3 h-3" />{t("products.add_variant")}
+                  </Button>
+                </p>
                 <Table>
                   <TableHeader className="bg-muted/50">
                     <TableRow>
@@ -775,7 +716,7 @@ export default function Products() {
                   </TableHeader>
                   <TableBody>
                     {!editProductDetail?.variants || editProductDetail.variants.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">{t("products.no_variants")}</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={5} className="text-center py-4 text-muted-foreground">{t("products.no_variants")}</TableCell></TableRow>
                     ) : editProductDetail.variants.map((v: any) => (
                       <TableRow key={v.id}>
                         <TableCell className="font-mono text-xs">{v.barcode || "—"}</TableCell>
@@ -792,43 +733,38 @@ export default function Products() {
                     ))}
                   </TableBody>
                 </Table>
-              </TabsContent>
+              </>
             )}
 
-            {/* Stock Tab (edit only) */}
-            {formProduct && (
-              <TabsContent value="stock" className="pt-4">
-                {!editProductDetail?.locationInventory || editProductDetail.locationInventory.length === 0 ? (
-                  <p className="text-center py-8 text-muted-foreground">{t("products.no_inventory_data")}</p>
-                ) : (
-                  <Table>
-                    <TableHeader className="bg-muted/50">
-                      <TableRow>
-                        <TableHead>{t("products.location_name")}</TableHead>
-                        <TableHead>{t("products.branch")}</TableHead>
-                        <TableHead>{t("products.qty_on_hand")}</TableHead>
-                        <TableHead>{t("products.reorder_level")}</TableHead>
+            {/* ── المخزون (عند التعديل فقط) ── */}
+            {formProduct && editProductDetail?.locationInventory?.length > 0 && (
+              <>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b pb-1 pt-1">{t("products.tab_stock")}</p>
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead>{t("products.location_name")}</TableHead>
+                      <TableHead>{t("products.branch")}</TableHead>
+                      <TableHead>{t("products.qty_on_hand")}</TableHead>
+                      <TableHead>{t("products.reorder_level")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {editProductDetail.locationInventory.map((loc: any) => (
+                      <TableRow key={loc.locationId}>
+                        <TableCell>{loc.locationName}</TableCell>
+                        <TableCell>{loc.branchName || t("products.central")}</TableCell>
+                        <TableCell>
+                          <Badge variant={loc.qtyOnHand <= (loc.reorderLevel || 0) ? "destructive" : "outline"}>{loc.qtyOnHand}</Badge>
+                        </TableCell>
+                        <TableCell>{loc.reorderLevel ?? "—"}</TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {editProductDetail.locationInventory.map((loc: any) => (
-                        <TableRow key={loc.locationId}>
-                          <TableCell>{loc.locationName}</TableCell>
-                          <TableCell>{loc.branchName || t("products.central")}</TableCell>
-                          <TableCell>
-                            <Badge variant={loc.qtyOnHand <= (loc.reorderLevel || 0) ? "destructive" : "outline"}>
-                              {loc.qtyOnHand}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{loc.reorderLevel ?? "—"}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </TabsContent>
+                    ))}
+                  </TableBody>
+                </Table>
+              </>
             )}
-          </Tabs>
+          </div>
 
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setFormOpen(false)}>{t("common.cancel")}</Button>
