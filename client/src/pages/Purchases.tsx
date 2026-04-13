@@ -558,6 +558,14 @@ function PurchasesTab() {
   const [quickName, setQuickName] = useState("");
   const [quickPhone, setQuickPhone] = useState("");
 
+  // إضافة يدوية داخل نافذة الإنشاء
+  const [modalManualProductId, setModalManualProductId] = useState("");
+  const [modalManualVariantId, setModalManualVariantId] = useState<number | null>(null);
+  const [modalManualQty, setModalManualQty] = useState("1");
+  const [modalManualCost, setModalManualCost] = useState("");
+  const [modalManualSellPrice, setModalManualSellPrice] = useState("");
+  const [modalProductSearch, setModalProductSearch] = useState("");
+
   // Quick Create Product Fields
   const [qpName, setQpName] = useState("");
   const [qpCategoryId, setQpCategoryId] = useState("");
@@ -595,6 +603,16 @@ function PurchasesTab() {
       if (!res.ok) throw new Error(await parseServerError(res));
       return res.json();
     },
+  });
+
+  const { data: modalManualVariants = [] } = useQuery<ProductVariant[]>({
+    queryKey: ["/api/products", modalManualProductId, "variants"],
+    queryFn: async () => {
+      const res = await fetch(`/api/products/${modalManualProductId}/variants`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!modalManualProductId,
   });
 
   const { data: allProducts = [] } = useQuery<Product[]>({
@@ -708,6 +726,7 @@ function PurchasesTab() {
       setNewShipping("0"); setNewCustoms("0"); setNewClearance("0"); setNewOther("0");
       setNewPayMethod("cash"); setNewDiscount("0"); setNewVatRate("0");
       setModalItems([]); setModalBarcode("");
+      setModalManualProductId(""); setModalManualVariantId(null); setModalProductSearch(""); setModalManualQty("1"); setModalManualCost(""); setModalManualSellPrice("");
     },
     onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
@@ -2012,28 +2031,173 @@ function PurchasesTab() {
             </div>
           </div>
 
-          {/* مسح الباركود + جدول البنود */}
-          <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
-            <div className="flex gap-2 items-center">
-              <div className="relative flex-1">
-                <Package className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  ref={modalBarcodeRef}
-                  className="pr-9 font-mono"
-                  placeholder="امسح الباركود أو اكتبه ثم Enter..."
-                  value={modalBarcode}
-                  onChange={e => setModalBarcode(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleModalBarcode(modalBarcode); } }}
-                  disabled={modalBarcodeLoading}
-                  dir="ltr"
-                />
-              </div>
-              <Button size="sm" variant="outline" onClick={() => handleModalBarcode(modalBarcode)} disabled={modalBarcodeLoading || !modalBarcode.trim()}>
-                {modalBarcodeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "إضافة"}
-              </Button>
-            </div>
+          {/* إضافة المنتجات — باركود أو يدوي */}
+          <div className="border rounded-lg bg-muted/30">
+            <Tabs defaultValue="barcode" className="w-full">
+              <TabsList className="w-full rounded-b-none border-b">
+                <TabsTrigger value="barcode" className="flex-1 gap-1"><Package className="w-3.5 h-3.5" /> مسح الباركود</TabsTrigger>
+                <TabsTrigger value="manual" className="flex-1 gap-1"><Search className="w-3.5 h-3.5" /> إضافة يدوية</TabsTrigger>
+              </TabsList>
+
+              {/* تبويب الباركود */}
+              <TabsContent value="barcode" className="p-3 space-y-0 mt-0">
+                <div className="flex gap-2 items-center">
+                  <div className="relative flex-1">
+                    <Package className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      ref={modalBarcodeRef}
+                      className="pr-9 font-mono"
+                      placeholder="امسح الباركود أو اكتبه ثم Enter..."
+                      value={modalBarcode}
+                      onChange={e => setModalBarcode(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleModalBarcode(modalBarcode); } }}
+                      disabled={modalBarcodeLoading}
+                      dir="ltr"
+                    />
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => handleModalBarcode(modalBarcode)} disabled={modalBarcodeLoading || !modalBarcode.trim()}>
+                    {modalBarcodeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "إضافة"}
+                  </Button>
+                </div>
+              </TabsContent>
+
+              {/* تبويب الإضافة اليدوية */}
+              <TabsContent value="manual" className="p-3 space-y-3 mt-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* بحث واختيار المنتج */}
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-xs font-medium text-muted-foreground">اسم المنتج</label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                        <Input
+                          className="pr-8 text-sm"
+                          placeholder="ابحث باسم المنتج..."
+                          value={modalProductSearch}
+                          onChange={e => setModalProductSearch(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    {modalProductSearch.length >= 1 && (
+                      <div className="border rounded-lg max-h-36 overflow-y-auto bg-background shadow-sm">
+                        {(allProducts as Product[])
+                          .filter(p => p.name.includes(modalProductSearch) || (p as any).nameEn?.toLowerCase().includes(modalProductSearch.toLowerCase()))
+                          .slice(0, 12)
+                          .map(p => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className={`w-full text-right px-3 py-2 text-sm hover:bg-muted/50 transition-colors border-b last:border-0 ${modalManualProductId === String(p.id) ? "bg-primary/10 font-medium" : ""}`}
+                              onClick={() => {
+                                setModalManualProductId(String(p.id));
+                                setModalManualVariantId(null);
+                                setModalManualCost("");
+                                setModalManualSellPrice("");
+                                setModalProductSearch(p.name);
+                              }}
+                            >
+                              {p.name}
+                            </button>
+                          ))}
+                        {(allProducts as Product[]).filter(p => p.name.includes(modalProductSearch)).length === 0 && (
+                          <p className="text-xs text-muted-foreground text-center py-3">لا توجد نتائج</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* اختيار المتغير (لون / مقاس / نوع) */}
+                  {modalManualProductId && modalManualVariants.length > 0 && (
+                    <div className="space-y-1 sm:col-span-2">
+                      <label className="text-xs font-medium text-muted-foreground">المتغير (لون / مقاس / نوع)</label>
+                      <div className="flex flex-wrap gap-2">
+                        {modalManualVariants.map(v => {
+                          const label = [v.color, v.size].filter(Boolean).join(" / ") || v.sku || v.barcode || `#${v.id}`;
+                          const isSelected = modalManualVariantId === v.id;
+                          return (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => {
+                                setModalManualVariantId(v.id);
+                                setModalManualCost(String(v.costDefault || "0"));
+                                setModalManualSellPrice(String((v as any).priceDefault || "0"));
+                              }}
+                              className={`px-3 py-1.5 rounded-lg border text-sm transition-colors ${isSelected ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted/50"}`}
+                            >
+                              <span className="font-medium">{label}</span>
+                              {v.barcode && <span className="text-xs opacity-60 mr-1 font-mono">({v.barcode})</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* الكمية وسعر الشراء وسعر البيع */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">الكمية</label>
+                    <Input type="number" min="1" className="h-8 text-sm" value={modalManualQty}
+                      onChange={e => setModalManualQty(e.target.value)} placeholder="1" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">سعر الشراء</label>
+                    <Input type="number" step="0.001" min="0" className="h-8 text-sm font-mono" value={modalManualCost}
+                      onChange={e => setModalManualCost(e.target.value)} placeholder="0.000" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-emerald-700">سعر البيع</label>
+                    <Input type="number" step="0.001" min="0" className="h-8 text-sm font-mono text-emerald-700" value={modalManualSellPrice}
+                      onChange={e => setModalManualSellPrice(e.target.value)} placeholder="0.000" />
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      className="w-full h-8 text-sm bg-pink-500 hover:bg-pink-600 text-white gap-1"
+                      disabled={!modalManualProductId || !modalManualQty || !modalManualCost}
+                      onClick={() => {
+                        const prod = (allProducts as Product[]).find(p => String(p.id) === modalManualProductId);
+                        const variant = modalManualVariants.find(v => v.id === modalManualVariantId);
+                        const name = prod?.name || "صنف";
+                        setModalItems(prev => {
+                          // لو نفس المتغير موجود زد الكمية
+                          if (modalManualVariantId) {
+                            const existing = prev.findIndex(i => i.variantId === modalManualVariantId);
+                            if (existing >= 0) {
+                              return prev.map((i, idx) => idx === existing ? { ...i, qty: i.qty + (parseInt(modalManualQty) || 1) } : i);
+                            }
+                          }
+                          return [...prev, {
+                            uid: crypto.randomUUID(),
+                            variantId: modalManualVariantId,
+                            productId: Number(modalManualProductId),
+                            name,
+                            barcode: variant?.barcode || "",
+                            color: variant?.color || "",
+                            size: variant?.size || "",
+                            qty: parseInt(modalManualQty) || 1,
+                            unitCost: parseFloat(modalManualCost) || 0,
+                            sellPrice: parseFloat(modalManualSellPrice) || 0,
+                          }];
+                        });
+                        // إعادة تعيين حقول الإضافة
+                        setModalManualVariantId(null);
+                        setModalManualQty("1");
+                        setModalManualCost("");
+                        setModalManualSellPrice("");
+                        setModalManualProductId("");
+                        setModalProductSearch("");
+                      }}
+                    >
+                      <Plus className="w-3.5 h-3.5" /> إضافة
+                    </Button>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+
+            {/* جدول البنود المضافة (مشترك بين التبويبين) */}
             {modalItems.length > 0 ? (
-              <div className="border rounded-lg overflow-hidden">
+              <div className="border-t">
                 <Table>
                   <TableHeader className="bg-muted/50">
                     <TableRow>
@@ -2077,7 +2241,7 @@ function PurchasesTab() {
                 </Table>
               </div>
             ) : (
-              <p className="text-center text-sm text-muted-foreground py-3">امسح باركود المنتجات لإضافتها</p>
+              <p className="text-center text-sm text-muted-foreground py-4">لم تُضف أي أصناف بعد</p>
             )}
           </div>
 
@@ -2126,7 +2290,7 @@ function PurchasesTab() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowCreate(false); setModalItems([]); setModalBarcode(""); }}>{t("common.cancel")}</Button>
+            <Button variant="outline" onClick={() => { setShowCreate(false); setModalItems([]); setModalBarcode(""); setModalManualProductId(""); setModalManualVariantId(null); setModalProductSearch(""); setModalManualQty("1"); setModalManualCost(""); setModalManualSellPrice(""); }}>{t("common.cancel")}</Button>
             <Button className="bg-primary gap-2" onClick={() => createMutation.mutate()} disabled={!newSupplierId || createMutation.isPending} data-testid="button-save-purchase">
               <Plus className="w-4 h-4" /> {createMutation.isPending ? t("common.loading") : t("common.save")}
             </Button>
