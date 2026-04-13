@@ -4627,9 +4627,9 @@ export async function registerRoutes(
         await pool.query(`DELETE FROM order_items WHERE order_id=$1`, [orderId]);
         for (const item of items) {
           await pool.query(
-            `INSERT INTO order_items (order_id,product_id,quantity,unit_price,total,unit_cost_at_sale,line_cogs,color,size)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-            [orderId, item.productId, item.quantity, item.unitPrice,
+            `INSERT INTO order_items (order_id,product_id,variant_id,quantity,unit_price,total,unit_cost_at_sale,line_cogs,color,size)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+            [orderId, item.productId, item.variantId||null, item.quantity, item.unitPrice,
              (parseFloat(item.unitPrice)*item.quantity).toFixed(3),
              item.costPrice||"0", "0", item.color||null, item.size||null]
           );
@@ -4867,6 +4867,20 @@ export async function registerRoutes(
       const sqlText = fs.readFileSync(migPath, "utf8");
       await pool.query(sqlText);
       res.json({ success: true, message: "تم تشغيل migration 0016 — قيود المخزون والفهارس بنجاح" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+    }
+  });
+
+  // ── Migration 0017 ─────────────────────────────────────────────────────────
+  app.post("/api/run-migration-0017", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const migPath = path.join(process.cwd(), "migrations", "0017_order_items_variant_id.sql");
+      const sqlText = fs.readFileSync(migPath, "utf8");
+      await pool.query(sqlText);
+      res.json({ success: true, message: "تم تشغيل migration 0017 — إضافة variant_id لـ order_items بنجاح" });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
     }

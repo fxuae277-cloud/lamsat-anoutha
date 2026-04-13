@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-12 (جلسة 13 — Orders enhancements + Variant picker + Barcode scan)_
+_آخر تحديث: 2026-04-13 (جلسة 14 — variant_id في order_items)_
 
 ---
 
@@ -12,6 +12,15 @@ _آخر تحديث: 2026-04-12 (جلسة 13 — Orders enhancements + Variant pi
 ---
 
 ## ✅ مكتمل
+
+### جلسة 14 — variant_id في order_items
+- [x] Migration 0017: إضافة `variant_id` (FK → product_variants) + فهرس على `order_items`
+- [x] `shared/schema.ts`: إضافة حقل `variantId` للجدول
+- [x] `server/storage.ts`: حفظ `variantId` في INSERT عند إنشاء الطلب الجديد
+- [x] `server/routes.ts`: حفظ `variantId` في INSERT عند تعديل بنود الطلب
+- [x] `POST /api/run-migration-0017` endpoint لتشغيل المايجريشن على Railway
+
+---
 
 ### جلسة 13 — Orders / POS / BarcodeScan
 
@@ -161,11 +170,13 @@ fetch('/api/run-migration-0015',{method:'POST'}).then(r=>r.json()).then(console.
 
 // Migration 0016 (قيود المخزون + فهارس الأداء):
 fetch('/api/run-migration-0016',{method:'POST'}).then(r=>r.json()).then(console.log)
+
+// Migration 0017 (variant_id في order_items):
+fetch('/api/run-migration-0017',{method:'POST'}).then(r=>r.json()).then(console.log)
 ```
 
 ## ⚠️ مشاكل مفتوحة
 - أسماء منتجات غير منظمة في DB
-- إضافة `variantId` للـ order_items في DB schema (حالياً يُحفظ color+size فقط)
 
 ---
 

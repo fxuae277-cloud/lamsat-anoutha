@@ -282,6 +282,7 @@ export const orderItems = pgTable("order_items", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   orderId: integer("order_id").references(() => orders.id).notNull(),
   productId: integer("product_id").references(() => products.id).notNull(),
+  variantId: integer("variant_id").references(() => productVariants.id),
   quantity: integer("quantity").notNull(),
   unitPrice: decimal("unit_price", { precision: 10, scale: 3 }).notNull(),
   total: decimal("total", { precision: 10, scale: 3 }).notNull(),

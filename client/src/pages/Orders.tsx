@@ -630,7 +630,7 @@ function OrderFormModal({ order, onClose, onSaved }: {
               <Select value={String(branchId)} onValueChange={v => setBranchId(Number(v))}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                  {branches.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.address ? `${b.name} - ${b.address}` : b.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

@@ -1122,9 +1122,9 @@ export class DatabaseStorage implements IStorage {
 
       for (const item of items) {
         await client.query(
-          `INSERT INTO order_items (order_id, product_id, quantity, unit_price, total)
-           VALUES ($1,$2,$3,$4,$5)`,
-          [orderId, item.productId, item.quantity, item.unitPrice || "0", item.total || "0"]
+          `INSERT INTO order_items (order_id, product_id, variant_id, quantity, unit_price, total)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [orderId, item.productId, (item as any).variantId || null, item.quantity, item.unitPrice || "0", item.total || "0"]
         );
       }
 
