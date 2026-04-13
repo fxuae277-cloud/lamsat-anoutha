@@ -31,6 +31,7 @@ export const branches = pgTable("branches", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
   address: text("address"),
+  phone: text("phone"),
   isMain: boolean("is_main").default(false),
 });
 export const insertBranchSchema = createInsertSchema(branches).omit({ id: true });

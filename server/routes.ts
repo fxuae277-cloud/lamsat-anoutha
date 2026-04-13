@@ -4958,6 +4958,20 @@ export async function registerRoutes(
   });
 
   // ── Migration 0018 ─────────────────────────────────────────────────────────
+  // ── Migration 0019 ─────────────────────────────────────────────────────────
+  app.post("/api/run-migration-0019", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const migPath = path.join(process.cwd(), "migrations", "0019_branches_address_phone.sql");
+      const sqlText = fs.readFileSync(migPath, "utf8");
+      await pool.query(sqlText);
+      res.json({ success: true, message: "تم تشغيل migration 0019 — إضافة address + phone للفروع بنجاح" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+    }
+  });
+
   app.post("/api/run-migration-0018", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
     try {
       const fs = await import("fs");
