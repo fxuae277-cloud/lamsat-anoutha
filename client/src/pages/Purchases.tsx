@@ -554,6 +554,8 @@ function PurchasesTab() {
   const [addColor, setAddColor] = useState("");
   const [addSize, setAddSize] = useState("");
   const [addProductName, setAddProductName] = useState("");
+  const [addSearch, setAddSearch] = useState("");
+  const [addSearchOpen, setAddSearchOpen] = useState(false);
 
   const [quickName, setQuickName] = useState("");
   const [quickPhone, setQuickPhone] = useState("");
@@ -664,7 +666,12 @@ function PurchasesTab() {
           return [...prev, { uid: crypto.randomUUID(), variantId: v.id, productId: v.productId, name: v.name || barcode, barcode: v.barcode || barcode, color: v.color || "", size: v.size || "", qty: 1, unitCost: parseFloat(v.costDefault || "0"), sellPrice: parseFloat(v.priceDefault || "0") }];
         });
       } else {
-        setModalItems(prev => [...prev, { uid: crypto.randomUUID(), variantId: null, productId: null, name: barcode, barcode, color: "", size: "", qty: 1, unitCost: 0, sellPrice: 0 }]);
+        // الباركود غير موجود → افتح نافذة إنشاء منتج جديد
+        setQpBarcode(barcode);
+        setQpName("");
+        setQpColor(""); setQpSize(""); setQpPrice(""); setQpCost("");
+        setShowQuickProduct(true);
+        toast({ title: "الباركود غير موجود", description: `${barcode} — يمكنك إضافته كمنتج جديد`, variant: "destructive" });
       }
     } finally {
       setModalBarcodeLoading(false);
@@ -751,24 +758,10 @@ function PurchasesTab() {
 
   const addItemMutation = useMutation({
     mutationFn: async () => {
-      let productId = addProductId ? Number(addProductId) : null;
-      let variantId = addVariantId;
+      const productId = addProductId ? Number(addProductId) : null;
+      const variantId = addVariantId;
 
-      if (!productId && addProductName.trim()) {
-        const qcRes = await apiRequest("POST", "/api/variants/quick-create", {
-          productName: addProductName.trim(),
-          barcode: null, sku: null,
-          color: addColor || null,
-          size: addSize || null,
-          price: Number(addUnitCost) || 0,
-          costDefault: Number(addUnitCost) || 0,
-        });
-        const qcData = await qcRes.json();
-        productId = qcData.product.id;
-        variantId = qcData.variant.id;
-      }
-
-      if (!productId) throw new Error(t("purchases.select_product"));
+      if (!productId) throw new Error("يرجى اختيار منتج من القائمة أولاً");
 
       const res = await apiRequest("POST", `/api/purchases/${selectedInvoice}/items`, {
         productId,
@@ -788,6 +781,8 @@ function PurchasesTab() {
       setAddColor("");
       setAddSize("");
       setAddProductName("");
+      setAddSearch("");
+      setAddSearchOpen(false);
       toast({ title: t("purchases.item_added") });
     },
     onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
@@ -1157,25 +1152,85 @@ function PurchasesTab() {
               <CardTitle className="text-base flex items-center gap-2"><Plus className="w-4 h-4" /> {t("purchases.add_item")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="space-y-1 min-w-[180px] flex-1">
-                  <label className="text-sm font-medium">{t("purchases.product")}</label>
-                  <div className="flex gap-2">
-                    <Select value={addProductId} onValueChange={(v) => {
-                      setAddProductId(v);
-                      setAddVariantId(null);
-                      setAddColor("");
-                      setAddSize("");
-                      const prod = allProducts.find(p => String(p.id) === v);
-                      if (prod) setAddProductName(prod.name);
-                    }}>
-                      <SelectTrigger data-testid="select-add-product" className="flex-1"><SelectValue placeholder={t("purchases.select_product")} /></SelectTrigger>
-                      <SelectContent>
-                        {allProducts.map(p => (
-                          <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+              {/* ── بحث حي عن المنتج ── */}
+              <div className="space-y-3">
+                <div className="flex gap-2 items-end">
+                  {/* حقل البحث الحي */}
+                  <div className="space-y-1 flex-1 relative">
+                    <label className="text-sm font-medium">{t("purchases.product")}</label>
+                    <div className="relative">
+                      <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        className="pr-9"
+                        placeholder="ابحث بالاسم أو الباركود أو SKU..."
+                        value={addSearch}
+                        data-testid="input-add-product-name"
+                        onChange={e => {
+                          setAddSearch(e.target.value);
+                          setAddSearchOpen(true);
+                          if (!e.target.value) { setAddProductId(""); setAddVariantId(null); setAddProductName(""); }
+                        }}
+                        onFocus={() => { if (addSearch) setAddSearchOpen(true); }}
+                        onBlur={() => setTimeout(() => setAddSearchOpen(false), 180)}
+                        autoComplete="off"
+                      />
+                    </div>
+                    {/* Dropdown نتائج البحث */}
+                    {addSearchOpen && addSearch.length >= 1 && (
+                      <div className="absolute z-50 top-full mt-1 left-0 right-0 border rounded-lg bg-background shadow-lg max-h-56 overflow-y-auto">
+                        {(() => {
+                          const q = addSearch.toLowerCase();
+                          const results = (allProducts as Product[]).filter(p =>
+                            p.name.toLowerCase().includes(q) ||
+                            (p as any).barcode?.toLowerCase().includes(q) ||
+                            (p as any).sku?.toLowerCase().includes(q)
+                          ).slice(0, 15);
+                          return (
+                            <>
+                              {results.map(p => (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  className="w-full text-right px-3 py-2 text-sm hover:bg-muted/60 transition-colors border-b last:border-0 flex items-center justify-between gap-2"
+                                  onMouseDown={() => {
+                                    setAddProductId(String(p.id));
+                                    setAddProductName(p.name);
+                                    setAddSearch(p.name);
+                                    setAddVariantId(null);
+                                    setAddColor(""); setAddSize("");
+                                    setAddSearchOpen(false);
+                                  }}
+                                >
+                                  <span className="font-medium">{p.name}</span>
+                                  {(p as any).barcode && <span className="text-xs text-muted-foreground font-mono">{(p as any).barcode}</span>}
+                                </button>
+                              ))}
+                              {/* خيار إضافة منتج جديد — فقط إذا لا توجد نتائج مطابقة تامة */}
+                              {results.length === 0 && (
+                                <button
+                                  type="button"
+                                  className="w-full text-right px-3 py-2.5 text-sm text-primary hover:bg-primary/5 flex items-center gap-2"
+                                  onMouseDown={() => {
+                                    setQpName(addSearch);
+                                    setQpBarcode(""); setQpSku(""); setQpColor(""); setQpSize(""); setQpPrice(""); setQpCost("");
+                                    setAddSearchOpen(false);
+                                    setShowQuickProduct(true);
+                                  }}
+                                >
+                                  <Plus className="w-4 h-4" />
+                                  إضافة "{addSearch}" كمنتج جديد
+                                </button>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* مسح الباركود */}
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">&nbsp;</label>
                     <BarcodeScanButton onScan={async (barcode) => {
                       try {
                         const res = await fetch(`/api/variants/barcode/${barcode}`, { credentials: "include" });
@@ -1186,12 +1241,16 @@ function PurchasesTab() {
                           setAddUnitCost(String(variant.costDefault || 0));
                           setAddColor(variant.color || "");
                           setAddSize(variant.size || "");
-                          const prod = allProducts.find(p => p.id === variant.productId);
-                          if (prod) setAddProductName(prod.name);
-                          toast({ title: t("common.success"), description: `${variant.color || ""} ${variant.size || ""} - ${variant.barcode}` });
+                          const prod = (allProducts as Product[]).find(p => p.id === variant.productId);
+                          const prodName = prod?.name || barcode;
+                          setAddProductName(prodName);
+                          setAddSearch(prodName);
+                          toast({ title: "تم العثور على المنتج", description: `${prodName}${variant.color ? " — " + variant.color : ""}${variant.size ? " / " + variant.size : ""}` });
                         } else {
                           setQpBarcode(barcode);
+                          setQpName(""); setQpColor(""); setQpSize(""); setQpPrice(""); setQpCost("");
                           setShowQuickProduct(true);
+                          toast({ title: "الباركود غير موجود", description: `${barcode} — يمكنك إضافته كمنتج جديد`, variant: "destructive" });
                         }
                       } catch (e) {
                         toast({ title: t("common.error"), description: String(e), variant: "destructive" });
@@ -1199,71 +1258,75 @@ function PurchasesTab() {
                     }} />
                   </div>
                 </div>
-                <div className="space-y-1 min-w-[140px] flex-1">
-                  <label className="text-sm font-medium">{t("products.name")}</label>
-                  <Input value={addProductName} onChange={e => { setAddProductName(e.target.value); if (addProductId) { setAddProductId(""); setAddVariantId(null); } }}
-                    placeholder={t("products.name")} data-testid="input-add-product-name" />
-                </div>
-                <div className="space-y-1 w-28">
-                  <label className="text-sm font-medium">{t("products.variant_color")}</label>
-                  <Input value={addColor} onChange={e => setAddColor(e.target.value)} placeholder={t("products.variant_color")} data-testid="input-add-color" />
-                </div>
-                <div className="space-y-1 w-28">
-                  <label className="text-sm font-medium">{t("products.variant_size")}</label>
-                  <Input value={addSize} onChange={e => setAddSize(e.target.value)} placeholder={t("products.variant_size")} data-testid="input-add-size" />
-                </div>
-              </div>
-              <div className="flex flex-wrap items-end gap-3 mt-3">
+
+                {/* المتغيرات (لون / مقاس / نوع) بعد اختيار المنتج */}
                 {addProductId && productVariants.length > 0 && (
-                  <div className="space-y-1 min-w-[180px] flex-1">
-                    <label className="text-sm font-medium">{t("products.variants")}</label>
-                    <Select value={addVariantId ? String(addVariantId) : ""} onValueChange={(v) => {
-                      const vid = Number(v);
-                      setAddVariantId(vid);
-                      const vr = productVariants.find(pv => pv.id === vid);
-                      if (vr) {
-                        if (vr.costDefault) setAddUnitCost(String(vr.costDefault));
-                        setAddColor(vr.color || "");
-                        setAddSize(vr.size || "");
-                      }
-                    }}>
-                      <SelectTrigger data-testid="select-add-variant"><SelectValue placeholder={t("transfers.select_variant")} /></SelectTrigger>
-                      <SelectContent>
-                        {productVariants.map(v => (
-                          <SelectItem key={v.id} value={String(v.id)}>
-                            {[v.color, v.size].filter(Boolean).join(" / ") || v.barcode || v.sku || `#${v.id}`}
-                            {v.barcode ? ` (${v.barcode})` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                {addProductId && productVariants.length === 0 && (
                   <div className="space-y-1">
-                    <label className="text-sm font-medium">&nbsp;</label>
-                    <Button variant="outline" size="sm" onClick={() => {
-                      setQpBarcode("");
-                      const prod = allProducts.find(p => String(p.id) === addProductId);
-                      if (prod) { setQpName(prod.name); setQpCategoryId(prod.categoryId ? String(prod.categoryId) : ""); setQpPrice(String(prod.price)); }
-                      setShowQuickProduct(true);
-                    }} data-testid="button-quick-create-variant">
-                      <Plus className="w-3 h-3 ml-1" /> {t("purchases_v2.quick_create")}
-                    </Button>
+                    <label className="text-sm font-medium text-muted-foreground text-xs">اختر المتغير (لون / مقاس / نوع)</label>
+                    <div className="flex flex-wrap gap-2">
+                      {productVariants.map(v => {
+                        const label = [v.color, v.size].filter(Boolean).join(" / ") || v.sku || v.barcode || `#${v.id}`;
+                        const isSelected = addVariantId === v.id;
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            data-testid={`select-add-variant`}
+                            onClick={() => {
+                              setAddVariantId(v.id);
+                              if (v.costDefault) setAddUnitCost(String(v.costDefault));
+                              setAddColor(v.color || "");
+                              setAddSize(v.size || "");
+                            }}
+                            className={`px-3 py-1.5 rounded-lg border text-sm transition-colors ${isSelected ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted/50"}`}
+                          >
+                            {label}
+                            {v.barcode && <span className="text-xs opacity-60 mr-1 font-mono">({v.barcode})</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
-                <div className="space-y-1 w-28">
-                  <label className="text-sm font-medium">{t("purchases.qty")}</label>
-                  <Input type="number" min="1" value={addQty} onChange={e => setAddQty(e.target.value)} placeholder="0" data-testid="input-add-qty" />
+
+                {/* إضافة متغير جديد للمنتج المختار — فقط إذا لا يوجد متغيرات */}
+                {addProductId && productVariants.length === 0 && (
+                  <Button variant="outline" size="sm" className="gap-1 text-xs" onClick={() => {
+                    const prod = (allProducts as Product[]).find(p => String(p.id) === addProductId);
+                    if (prod) { setQpName(prod.name); setQpCategoryId((prod as any).categoryId ? String((prod as any).categoryId) : ""); setQpPrice(String((prod as any).price || "")); }
+                    setQpBarcode(""); setQpColor(""); setQpSize(""); setQpCost("");
+                    setShowQuickProduct(true);
+                  }} data-testid="button-quick-create-variant">
+                    <Plus className="w-3 h-3" /> إضافة متغير جديد لهذا المنتج
+                  </Button>
+                )}
+
+                {/* الكمية + السعر + زر الإضافة */}
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="space-y-1 w-28">
+                    <label className="text-sm font-medium">{t("purchases.qty")}</label>
+                    <Input type="number" min="1" value={addQty} onChange={e => setAddQty(e.target.value)} placeholder="0" data-testid="input-add-qty" />
+                  </div>
+                  <div className="space-y-1 w-36">
+                    <label className="text-sm font-medium">{t("purchases.unit_cost")}</label>
+                    <Input type="number" step="0.001" min="0" value={addUnitCost} onChange={e => setAddUnitCost(e.target.value)} placeholder="0.000" data-testid="input-add-unit-cost" />
+                  </div>
+                  {addProductId && (
+                    <div className="space-y-1 flex-1">
+                      <label className="text-sm font-medium text-muted-foreground text-xs">المنتج المختار</label>
+                      <p className="text-sm font-medium text-primary bg-primary/5 px-3 py-2 rounded-lg border border-primary/20 flex items-center justify-between">
+                        {addProductName}
+                        <button type="button" className="text-muted-foreground hover:text-red-500 mr-2" onClick={() => { setAddProductId(""); setAddProductName(""); setAddSearch(""); setAddVariantId(null); setAddColor(""); setAddSize(""); }}>
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </p>
+                    </div>
+                  )}
+                  <Button onClick={() => addItemMutation.mutate()} disabled={!addProductId || !addQty || !addUnitCost || addItemMutation.isPending} data-testid="button-add-item"
+                    className="bg-pink-500 hover:bg-pink-600 text-white">
+                    <Plus className="w-4 h-4 ml-1" /> {t("purchases.add")}
+                  </Button>
                 </div>
-                <div className="space-y-1 w-36">
-                  <label className="text-sm font-medium">{t("purchases.unit_cost")}</label>
-                  <Input type="number" step="0.001" min="0" value={addUnitCost} onChange={e => setAddUnitCost(e.target.value)} placeholder="0.000" data-testid="input-add-unit-cost" />
-                </div>
-                <Button onClick={() => addItemMutation.mutate()} disabled={(!addProductId && !addProductName.trim()) || !addQty || !addUnitCost || addItemMutation.isPending} data-testid="button-add-item"
-                  className="bg-pink-500 hover:bg-pink-600 text-white">
-                  <Plus className="w-4 h-4 ml-1" /> {t("purchases.add")}
-                </Button>
               </div>
             </CardContent>
           </Card>
