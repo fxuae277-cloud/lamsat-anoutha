@@ -2587,14 +2587,21 @@ export async function registerRoutes(
 
   app.get("/api/purchases", requireAuth, requirePermission("purchases.view"), async (_req, res) => {
     const invoices = await storage.getPurchaseInvoices();
-    res.json(invoices);
+    // أضف attachment_url لكل فاتورة من raw SQL
+    const attRes = await pool.query("SELECT id, attachment_url FROM purchase_invoices WHERE attachment_url IS NOT NULL");
+    const attMap: Record<number, string> = {};
+    for (const r of attRes.rows) attMap[r.id] = r.attachment_url;
+    res.json(invoices.map(inv => ({ ...inv, attachmentUrl: attMap[inv.id] ?? null })));
   });
 
   app.get("/api/purchases/:id", requireAuth, requirePermission("purchases.view"), async (req, res) => {
     const invoice = await storage.getPurchaseInvoice(Number(req.params.id));
     if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
     const items = await storage.getPurchaseItems(invoice.id);
-    res.json({ ...invoice, items });
+    // إرجاع attachment_url من قاعدة البيانات مباشرة (عمود غير موجود في schema Drizzle)
+    const attRes = await pool.query("SELECT attachment_url FROM purchase_invoices WHERE id=$1", [invoice.id]);
+    const attachmentUrl = attRes.rows[0]?.attachment_url ?? null;
+    res.json({ ...invoice, items, attachmentUrl });
   });
 
   app.post("/api/purchases", requireAuth, requirePermission("purchases.create"), async (req, res) => {

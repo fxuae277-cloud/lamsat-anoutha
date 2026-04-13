@@ -2653,6 +2653,7 @@ function PurchasesTab() {
                 <TableHead>طريقة الدفع</TableHead>
                 <TableHead>تاريخ الاستحقاق</TableHead>
                 <TableHead>{t("purchases.status")}</TableHead>
+                <TableHead className="w-10 text-center" title="مرفق ورقي"><Upload className="w-3.5 h-3.5 mx-auto" /></TableHead>
                 <TableHead>{t("purchases.table_actions")}</TableHead>
               </TableRow>
             </TableHeader>
@@ -2692,6 +2693,11 @@ function PurchasesTab() {
                     <Badge variant={inv.status === "pending" ? "outline" : "default"} className={inv.status === "pending" ? "border-amber-400 text-amber-600" : inv.status === "approved" ? "bg-green-600" : inv.status === "received" ? "bg-blue-600" : "bg-red-500"}>
                       {inv.status === "pending" ? t("purchases.pending") : inv.status === "approved" ? t("purchases.approved") : inv.status === "received" ? t("purchases.received") : t("purchases.cancelled")}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {(inv as any).attachmentUrl
+                      ? <span title="يوجد فاتورة ورقية مرفقة"><FileText className="w-4 h-4 text-emerald-500 mx-auto" /></span>
+                      : <span className="text-muted-foreground/30 text-xs">—</span>}
                   </TableCell>
                   <TableCell onClick={e => e.stopPropagation()} className="flex items-center gap-1">
                     <Button variant="ghost" size="sm" className="gap-1 text-xs h-8" onClick={() => setSelectedInvoice(inv.id)}>
