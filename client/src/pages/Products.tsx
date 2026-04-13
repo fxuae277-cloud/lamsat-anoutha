@@ -199,9 +199,9 @@ export default function Products() {
     }
   }
 
-  // useEffect: when category changes in ADD mode → fetch new barcode
+  // useEffect: fetch barcode when form opens or category changes — if barcode is empty
   useEffect(() => {
-    if (!formProduct && formOpen && formData.categoryId) {
+    if (formOpen && formData.categoryId && !formData.barcode) {
       fetchNextBarcode(formData.categoryId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -653,12 +653,11 @@ export default function Products() {
                   <Input
                     value={formData.barcode}
                     onChange={e => setFormData(f => ({ ...f, barcode: e.target.value }))}
-                    placeholder={formData.categoryId && !formProduct ? "جاري التوليد..." : t("products.optional")}
-                    readOnly={!formProduct && !!formData.categoryId}
-                    className={!formProduct && formData.categoryId ? "bg-muted font-mono" : "font-mono"}
+                    placeholder={barcodeLoading ? "جاري التوليد..." : t("products.optional")}
+                    className="font-mono"
                     data-testid="input-product-barcode"
                   />
-                  {!formProduct && formData.categoryId ? (
+                  {formData.categoryId ? (
                     <Button
                       type="button"
                       variant="outline"
