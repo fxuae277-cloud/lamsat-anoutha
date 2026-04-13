@@ -518,6 +518,8 @@ function PurchasesTab() {
   const [editColor, setEditColor] = useState("");
   const [editSize, setEditSize] = useState("");
   const [ocrStage, setOcrStage] = useState<"idle" | "uploading" | "parsing" | "review" | "importing" | "done">("idle");
+  const [attachUploading, setAttachUploading] = useState(false);
+  const [showAttachment, setShowAttachment] = useState(false);
   const [ocrError, setOcrError] = useState<{ stage: string; error: string } | null>(null);
   const [ocrItems, setOcrItems] = useState<any[]>([]);
   const [ocrValidation, setOcrValidation] = useState<any>(null);
@@ -1159,7 +1161,50 @@ function PurchasesTab() {
               {supplierMap[invoiceDetail.supplierId] || "—"} | {invoiceDetail.invoiceDate}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* زر رفع صورة الفاتورة الورقية */}
+            <label className="cursor-pointer">
+              <input type="file" accept="image/*,.pdf" className="hidden"
+                disabled={attachUploading}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file || !selectedInvoice) return;
+                  e.target.value = "";
+                  setAttachUploading(true);
+                  try {
+                    const fd = new FormData();
+                    fd.append("file", file);
+                    const res = await fetch(`/api/purchases/${selectedInvoice}/attachment`, { method: "POST", body: fd, credentials: "include" });
+                    const data = await res.json();
+                    if (data.ok) {
+                      qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
+                      qc.invalidateQueries({ queryKey: ["/api/purchases"] });
+                      toast({ title: "تم حفظ صورة الفاتورة الورقية ✓" });
+                    } else {
+                      toast({ title: "فشل الرفع", description: data.error, variant: "destructive" });
+                    }
+                  } catch (err: any) {
+                    toast({ title: "خطأ", description: err.message, variant: "destructive" });
+                  } finally {
+                    setAttachUploading(false);
+                  }
+                }} />
+              <Button variant="outline" asChild disabled={attachUploading} className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50">
+                <span>
+                  {attachUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  {(invoiceDetail as any)?.attachmentUrl ? "تحديث الفاتورة الورقية" : "رفع الفاتورة الورقية"}
+                </span>
+              </Button>
+            </label>
+
+            {/* عرض المرفق الموجود */}
+            {(invoiceDetail as any)?.attachmentUrl && (
+              <Button variant="outline" size="sm" className="gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                onClick={() => setShowAttachment(true)}>
+                <FileText className="w-4 h-4" /> عرض الفاتورة الورقية
+              </Button>
+            )}
+
             {isPending && (
               <label className="cursor-pointer">
                 <input type="file" accept="image/*,.pdf" className="hidden" data-testid="input-ocr-upload"
@@ -1620,6 +1665,54 @@ function PurchasesTab() {
             </span>
           </div>
         )}
+
+        {/* ── Dialog عرض الفاتورة الورقية المرفقة ── */}
+        <Dialog open={showAttachment} onOpenChange={setShowAttachment}>
+          <DialogContent className="max-w-4xl max-h-[92vh] flex flex-col p-0">
+            <DialogHeader className="px-5 py-3.5 border-b flex-shrink-0">
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                صورة الفاتورة الورقية — #{invoiceDetail?.invoiceNumber}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-auto p-4 flex flex-col items-center gap-4">
+              {(invoiceDetail as any)?.attachmentUrl && (
+                <>
+                  {(invoiceDetail as any).attachmentUrl.toLowerCase().endsWith(".pdf") ? (
+                    <iframe src={(invoiceDetail as any).attachmentUrl} className="w-full h-[70vh] border rounded-lg" title="فاتورة" />
+                  ) : (
+                    <img src={(invoiceDetail as any).attachmentUrl} alt="فاتورة ورقية" className="max-w-full max-h-[70vh] object-contain rounded-lg border shadow-sm" />
+                  )}
+                  <div className="flex gap-3 flex-shrink-0">
+                    <a href={(invoiceDetail as any).attachmentUrl} download target="_blank" rel="noreferrer">
+                      <Button variant="outline" className="gap-2">
+                        <Upload className="w-4 h-4 rotate-180" /> تحميل
+                      </Button>
+                    </a>
+                    <Button variant="outline" className="gap-2 border-red-300 text-red-600 hover:bg-red-50"
+                      onClick={async () => {
+                        if (!selectedInvoice) return;
+                        try {
+                          const res = await fetch(`/api/purchases/${selectedInvoice}/attachment`, { method: "DELETE", credentials: "include" });
+                          const data = await res.json();
+                          if (data.ok) {
+                            qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
+                            qc.invalidateQueries({ queryKey: ["/api/purchases"] });
+                            setShowAttachment(false);
+                            toast({ title: "تم حذف المرفق" });
+                          }
+                        } catch (err: any) {
+                          toast({ title: "فشل الحذف", description: err.message, variant: "destructive" });
+                        }
+                      }}>
+                      <Trash2 className="w-4 h-4" /> حذف المرفق
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={ocrStage === "review"} onOpenChange={(open) => { if (!open) { setOcrStage("idle"); setOcrItems([]); setOcrValidation(null); setOcrMeta(null); } }}>
           <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto">

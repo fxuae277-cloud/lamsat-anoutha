@@ -2804,6 +2804,52 @@ export async function registerRoutes(
     }
   });
 
+  // ── رفع وحفظ نسخة الفاتورة الورقية (مرفق دائم) ──
+  app.post("/api/purchases/:purchaseId/attachment", requireAuth, requirePermission("purchases.edit"), uploadLimiter, upload.single("file"), async (req: any, res) => {
+    try {
+      const purchaseId = Number(req.params.purchaseId);
+      if (!req.file) return res.json({ ok: false, error: "لم يتم رفع صورة" });
+
+      // احفظ الملف في uploads/attachments/
+      const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
+      const fileName = `purchase_${purchaseId}_${Date.now()}${ext}`;
+      const attachDir = path.resolve("uploads/attachments");
+      await fs.mkdir(attachDir, { recursive: true });
+      const filePath = path.join(attachDir, fileName);
+      await fs.writeFile(filePath, req.file.buffer);
+      const attachmentUrl = `/uploads/attachments/${fileName}`;
+
+      // احذف المرفق القديم إن وجد
+      const old = await pool.query("SELECT attachment_url FROM purchase_invoices WHERE id=$1", [purchaseId]);
+      if (old.rows[0]?.attachment_url) {
+        try { await fs.unlink(path.resolve(old.rows[0].attachment_url.replace(/^\//, ""))); } catch {}
+      }
+
+      // حدّث قاعدة البيانات
+      await pool.query("UPDATE purchase_invoices SET attachment_url=$1 WHERE id=$2", [attachmentUrl, purchaseId]);
+
+      res.json({ ok: true, attachmentUrl });
+    } catch (err: any) {
+      console.error("Attachment upload error:", err);
+      res.json({ ok: false, error: err?.message ?? "فشل رفع المرفق" });
+    }
+  });
+
+  // ── حذف المرفق ──
+  app.delete("/api/purchases/:purchaseId/attachment", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
+    try {
+      const purchaseId = Number(req.params.purchaseId);
+      const old = await pool.query("SELECT attachment_url FROM purchase_invoices WHERE id=$1", [purchaseId]);
+      if (old.rows[0]?.attachment_url) {
+        try { await fs.unlink(path.resolve(old.rows[0].attachment_url.replace(/^\//, ""))); } catch {}
+      }
+      await pool.query("UPDATE purchase_invoices SET attachment_url=NULL WHERE id=$1", [purchaseId]);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.json({ ok: false, error: err?.message });
+    }
+  });
+
   app.post("/api/purchases/:purchaseId/parse-invoice", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
     try {
       const { fileId } = req.body;

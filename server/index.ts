@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import path from "path";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
@@ -150,6 +151,16 @@ app.use((req, res, next) => {
     console.error("[startup] migration 0019 failed:", err);
   }
 
+  // Migration 0020 — add attachment_url to purchase_invoices (idempotent)
+  try {
+    await pool.query(`
+      ALTER TABLE purchase_invoices ADD COLUMN IF NOT EXISTS attachment_url TEXT;
+    `);
+    console.log("[startup] migration 0020: purchase_invoices attachment_url ready");
+  } catch (err) {
+    console.error("[startup] migration 0020 failed:", err);
+  }
+
   // Ensure every branch has exactly one is_branch_default location.
   // This fixes "لا يوجد مخزن افتراضي للفرع" that blocks all POS sales.
   try {
@@ -173,6 +184,9 @@ app.use((req, res, next) => {
   } catch (err) {
     console.error("[startup] FAILED to set branch default locations:", err);
   }
+
+  // خدمة مجلد uploads/attachments كملفات ثابتة (صور الفواتير الورقية)
+  app.use("/uploads", express.static(path.resolve("uploads")));
 
   await seedDatabase();
   await registerRoutes(httpServer, app);
