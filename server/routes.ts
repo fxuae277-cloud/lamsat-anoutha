@@ -1057,6 +1057,31 @@ export async function registerRoutes(
     res.json(await storage.getVariantsByProduct(Number(req.params.id)));
   });
 
+  /** GET /api/products/:id/next-sku — توليد SKU تلقائي للمتغير */
+  app.get("/api/products/:id/next-sku", requireAuth, async (req, res) => {
+    try {
+      const productId = Number(req.params.id);
+      const productRes = await pool.query(`SELECT category_id FROM products WHERE id = $1`, [productId]);
+      if (!productRes.rows.length) return res.status(404).json({ message: "المنتج غير موجود" });
+      const categoryId = productRes.rows[0].category_id || 0;
+      const countRes = await pool.query(`SELECT COUNT(*) AS cnt FROM product_variants WHERE product_id = $1`, [productId]);
+      const seq = (Number(countRes.rows[0].cnt) + 1).toString().padStart(2, "0");
+      const catPart = categoryId.toString().padStart(3, "0");
+      const prodPart = productId.toString().padStart(4, "0");
+      const sku = `${catPart}-${prodPart}-${seq}`;
+      // تأكد من عدم التكرار
+      const existing = await pool.query(`SELECT id FROM product_variants WHERE sku = $1`, [sku]);
+      if (existing.rows.length > 0) {
+        const ts = Date.now().toString().slice(-2);
+        res.json({ sku: `${catPart}-${prodPart}-${ts}` });
+      } else {
+        res.json({ sku });
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   /** GET /api/products/:id/variants-with-stock — variants مع المخزون حسب الفرع */
   app.get("/api/products/:id/variants-with-stock", requireAuth, async (req, res) => {
     try {

@@ -287,13 +287,21 @@ export default function Products() {
     img.src = url;
   }
 
-  function openVariantDialog(v?: ProductVariant) {
+  async function openVariantDialog(v?: ProductVariant) {
     if (v) {
       setEditingVariant(v);
       setVariantForm({ barcode: v.barcode || "", sku: v.sku || "", color: v.color || "", size: v.size || "", price: v.price.toString(), cost: v.costDefault?.toString() || "" });
     } else {
       setEditingVariant(null);
-      setVariantForm({ barcode: "", sku: "", color: "", size: "", price: formProduct?.price?.toString() || "", cost: "" });
+      // توليد SKU تلقائي للمتغير الجديد
+      let autoSku = "";
+      if (formProduct?.id) {
+        try {
+          const res = await fetch(`/api/products/${formProduct.id}/next-sku`, { credentials: "include" });
+          if (res.ok) { const d = await res.json(); autoSku = d.sku || ""; }
+        } catch {}
+      }
+      setVariantForm({ barcode: "", sku: autoSku, color: "", size: "", price: formProduct?.price?.toString() || "", cost: "" });
     }
     setVariantDialogOpen(true);
   }
@@ -1042,8 +1050,13 @@ export default function Products() {
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t("products.variant_sku")}</label>
-              <Input value={variantForm.sku} onChange={e => setVariantForm(f => ({ ...f, sku: e.target.value }))} data-testid="input-variant-sku" />
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">{t("products.variant_sku")}</label>
+                {!editingVariant && variantForm.sku && (
+                  <span className="text-xs text-green-600 font-mono bg-green-50 px-2 py-0.5 rounded-full border border-green-200">تلقائي</span>
+                )}
+              </div>
+              <Input value={variantForm.sku} onChange={e => setVariantForm(f => ({ ...f, sku: e.target.value }))} placeholder="يتولد تلقائياً" className="font-mono" data-testid="input-variant-sku" />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("products.variant_color")}</label>
