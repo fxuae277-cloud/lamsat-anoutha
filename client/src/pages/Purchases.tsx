@@ -1,4 +1,4 @@
-﻿import { useState, useRef } from "react";
+﻿import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, parseServerError } from "@/lib/queryClient";
 import { fmtDate } from "@/lib/formatters";
@@ -967,13 +967,8 @@ function PurchasesTab() {
 
       const { items, invoiceNo, date, totalQty, totalAmount, rawText, validation } = parseData.parsed;
 
-      if (!items || items.length === 0) {
-        setOcrError({ stage: "parse", error: "لم يتم العثور على أصناف في الصورة" });
-        setOcrStage("idle");
-        return;
-      }
-
-      setOcrItems(items);
+      // حتى لو لم تُكتشف أصناف تلقائياً، ننتقل لمرحلة المراجعة لتمكين الإدخال اليدوي
+      setOcrItems(items || []);
       setOcrValidation(validation);
       setOcrMeta({ invoiceNo, date, totalQty, totalAmount, rawText });
       setOcrStage("review");
@@ -1125,6 +1120,20 @@ function PurchasesTab() {
 
   const items = invoiceDetail?.items || [];
   const isPending = invoiceDetail?.status === "pending";
+
+  // حقول التكاليف الإضافية — local state لتجنب إعادة التحميل عند كل ضغطة
+  const [localShipping,   setLocalShipping]   = useState("0");
+  const [localCustoms,    setLocalCustoms]    = useState("0");
+  const [localClearance,  setLocalClearance]  = useState("0");
+  const [localOther,      setLocalOther]      = useState("0");
+  useEffect(() => {
+    if (invoiceDetail) {
+      setLocalShipping(invoiceDetail.shippingCost   ?? "0");
+      setLocalCustoms(invoiceDetail.customsCost     ?? "0");
+      setLocalClearance(invoiceDetail.clearanceCost ?? "0");
+      setLocalOther(invoiceDetail.otherCost         ?? "0");
+    }
+  }, [invoiceDetail?.id, invoiceDetail?.shippingCost, invoiceDetail?.customsCost, invoiceDetail?.clearanceCost, invoiceDetail?.otherCost]);
   const { data: settings } = useQuery<Record<string, string>>({
     queryKey: ["/api/settings"],
     queryFn: getQueryFn({ on401: "throw" }),
@@ -1541,26 +1550,30 @@ function PurchasesTab() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="space-y-1">
                 <label className="text-sm font-medium flex items-center gap-1"><Truck className="w-3 h-3" /> {t("purchases.shipping")}</label>
-                <Input type="number" step="0.001" value={invoiceDetail.shippingCost || "0"} disabled={!isPending}
-                  onChange={e => updateCostsMutation.mutate({ shippingCost: Number(e.target.value) })}
+                <Input type="number" step="0.001" value={localShipping} disabled={!isPending}
+                  onChange={e => setLocalShipping(e.target.value)}
+                  onBlur={e => updateCostsMutation.mutate({ shippingCost: Number(e.target.value) || 0 })}
                   data-testid="input-shipping-cost" />
               </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium">{t("purchases.customs")}</label>
-                <Input type="number" step="0.001" value={invoiceDetail.customsCost || "0"} disabled={!isPending}
-                  onChange={e => updateCostsMutation.mutate({ customsCost: Number(e.target.value) })}
+                <Input type="number" step="0.001" value={localCustoms} disabled={!isPending}
+                  onChange={e => setLocalCustoms(e.target.value)}
+                  onBlur={e => updateCostsMutation.mutate({ customsCost: Number(e.target.value) || 0 })}
                   data-testid="input-customs-cost" />
               </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium">{t("purchases.clearance")}</label>
-                <Input type="number" step="0.001" value={invoiceDetail.clearanceCost || "0"} disabled={!isPending}
-                  onChange={e => updateCostsMutation.mutate({ clearanceCost: Number(e.target.value) })}
+                <Input type="number" step="0.001" value={localClearance} disabled={!isPending}
+                  onChange={e => setLocalClearance(e.target.value)}
+                  onBlur={e => updateCostsMutation.mutate({ clearanceCost: Number(e.target.value) || 0 })}
                   data-testid="input-clearance-cost" />
               </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium">{t("purchases.other")}</label>
-                <Input type="number" step="0.001" value={invoiceDetail.otherCost || "0"} disabled={!isPending}
-                  onChange={e => updateCostsMutation.mutate({ otherCost: Number(e.target.value) })}
+                <Input type="number" step="0.001" value={localOther} disabled={!isPending}
+                  onChange={e => setLocalOther(e.target.value)}
+                  onBlur={e => updateCostsMutation.mutate({ otherCost: Number(e.target.value) || 0 })}
                   data-testid="input-other-cost" />
               </div>
             </div>
@@ -1641,6 +1654,23 @@ function PurchasesTab() {
                 <div>
                   <p className="text-xs text-muted-foreground">{t("purchases_v2.ocr_total_qty")}</p>
                   <p className="font-bold">{ocrItems.reduce((s: number, i: any) => s + (i.qty || 0), 0)}</p>
+                </div>
+              </div>
+            )}
+
+            {/* تنبيه عند عدم اكتشاف أصناف تلقائياً */}
+            {ocrItems.length === 0 && (
+              <div className="p-3 rounded-lg border bg-amber-50 border-amber-300 flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="font-medium text-amber-800">لم يتم التعرف على الأصناف تلقائياً</p>
+                  <p className="text-amber-700 text-xs mt-0.5">يمكنك إضافة الأصناف يدوياً باستخدام زر "إضافة صنف" أدناه، أو مراجعة النص المستخرج</p>
+                  {ocrMeta?.rawText && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs text-amber-700 hover:text-amber-900 font-medium">عرض النص المستخرج من الصورة</summary>
+                      <pre className="mt-1 text-xs bg-white border rounded p-2 max-h-32 overflow-auto whitespace-pre-wrap font-mono text-gray-700">{ocrMeta.rawText}</pre>
+                    </details>
+                  )}
                 </div>
               </div>
             )}
