@@ -1,6 +1,6 @@
 ﻿import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getQueryFn, apiRequest } from "@/lib/queryClient";
+import { getQueryFn, apiRequest, parseServerError } from "@/lib/queryClient";
 import { fmtDate } from "@/lib/formatters";
 import { Plus, Trash2, FileCheck, Package, Truck, Ship, FileText, AlertTriangle, Search, Edit, Building, UserPlus, FileSpreadsheet, X, Loader2, CheckCircle2, Upload, Printer } from "lucide-react";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
@@ -380,7 +380,7 @@ function SupplierStatementDialog({ open, onOpenChange, supplierId }: { open: boo
     queryKey: ["/api/suppliers", supplierId, "statement", { from, to }],
     queryFn: async () => {
       const res = await fetch(`/api/suppliers/${supplierId}/statement?from=${from}&to=${to}`, { credentials: "include" });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await parseServerError(res));
       return res.json();
     },
     enabled: open && !!supplierId,
@@ -592,7 +592,7 @@ function PurchasesTab() {
     queryKey: ["/api/suppliers", "activeOnly"],
     queryFn: async () => {
       const res = await fetch("/api/suppliers?activeOnly=true", { credentials: "include" });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await parseServerError(res));
       return res.json();
     },
   });
@@ -616,7 +616,7 @@ function PurchasesTab() {
     queryKey: ["/api/purchases", selectedInvoice],
     queryFn: async () => {
       const res = await fetch(`/api/purchases/${selectedInvoice}`, { credentials: "include" });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await parseServerError(res));
       return res.json();
     },
     enabled: !!selectedInvoice,

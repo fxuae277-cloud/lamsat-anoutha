@@ -1,3 +1,4 @@
+import { parseServerError } from "@/lib/queryClient";
 import { AlertTriangle, Package } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,7 +12,7 @@ export default function InventoryAlerts() {
     queryKey: ["/api/dashboard"],
     queryFn: async () => {
       const res = await fetch("/api/dashboard", { credentials: "include" });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await parseServerError(res));
       return res.json();
     },
   });

@@ -1,15 +1,19 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+/** يستخرج رسالة الخطأ العربية من الـ response */
+export async function parseServerError(res: Response): Promise<string> {
+  const text = (await res.text()) || res.statusText;
+  try {
+    const json = JSON.parse(text);
+    return json.message || json.error || text;
+  } catch {
+    return text;
+  }
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    try {
-      const json = JSON.parse(text);
-      throw new Error(json.message || text);
-    } catch (e) {
-      if (e instanceof SyntaxError) throw new Error(text);
-      throw e;
-    }
+    throw new Error(await parseServerError(res));
   }
 }
 

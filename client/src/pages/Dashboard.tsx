@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ShoppingCart, AlertTriangle, Receipt, Store, Package, TrendingUp, Filter } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { getQueryFn } from "@/lib/queryClient";
+import { getQueryFn, parseServerError } from "@/lib/queryClient";
 import { fmtTime } from "@/lib/formatters";
 import { DateInput } from "@/components/ui/date-input";
 
@@ -73,7 +73,7 @@ export default function Dashboard() {
       if (filterBranch !== "all") p.set("branchId", filterBranch);
       if (filterPayment !== "all") p.set("paymentMethod", filterPayment);
       const res = await fetch(`/api/sales?${p.toString()}`, { credentials: "include" });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await parseServerError(res));
       return res.json();
     },
     select: (rows) => rows.slice(0, 20),

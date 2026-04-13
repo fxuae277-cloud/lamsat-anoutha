@@ -7,9 +7,10 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
+import { getQueryFn, apiRequest, queryClient, parseServerError } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import type { Category, ProductVariant } from "@shared/schema";
@@ -83,7 +84,7 @@ export default function Products() {
       if (filterCat !== "all") p.set("categoryId", filterCat);
       if (filterType !== "all") p.set("productType", filterType);
       const res = await fetch(`/api/products${p.toString() ? "?" + p.toString() : ""}`, { credentials: "include" });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await parseServerError(res));
       return res.json();
     },
   });

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest, getQueryFn } from "@/lib/queryClient";
+import { queryClient, apiRequest, getQueryFn, parseServerError } from "@/lib/queryClient";
 import { useI18n } from "@/lib/i18n";
 import { useToast } from "@/hooks/use-toast";
 import { Account, AccountType, ACCOUNT_TYPES } from "@shared/schema";
@@ -60,7 +60,7 @@ export default function Accounts() {
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiRequest("POST", "/api/accounts", data);
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await parseServerError(res));
       return res.json();
     },
     onSuccess: () => {
@@ -74,7 +74,7 @@ export default function Accounts() {
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: any }) => {
       const res = await apiRequest("PATCH", `/api/accounts/${id}`, data);
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await parseServerError(res));
       return res.json();
     },
     onSuccess: () => {

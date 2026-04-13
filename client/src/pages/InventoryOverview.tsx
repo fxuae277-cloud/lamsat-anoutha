@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getQueryFn } from "@/lib/queryClient";
+import { getQueryFn, parseServerError } from "@/lib/queryClient";
 import { useI18n } from "@/lib/i18n";
 import { fmtOMR, fmtDate } from "@/lib/formatters";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
@@ -88,7 +88,7 @@ export default function InventoryOverview() {
       if (movFrom) params.set("from", movFrom);
       if (movTo)   params.set("to",   movTo);
       const res = await fetch(`/api/inventory/transactions?${params}`, { credentials: "include" });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await parseServerError(res));
       return res.json();
     },
   });
