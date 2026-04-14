@@ -928,8 +928,8 @@ function PurchasesTab() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/purchases"] });
-      qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
       qc.invalidateQueries({ queryKey: ["/api/products"] });
+      setSelectedInvoice(null); // الرجوع لقائمة الفواتير
       toast({ title: t("purchases.invoice_received"), description: t("purchases.invoice_received_desc") });
     },
     onError: (e: Error) => toast({ title: t("purchases.approve_failed"), description: e.message, variant: "destructive" }),
@@ -1140,7 +1140,8 @@ function PurchasesTab() {
   }
 
   const items = invoiceDetail?.items || [];
-  const isPending = invoiceDetail?.status === "pending";
+  // pending + approved قابلان للتعديل — received/cancelled مقفلان
+  const isPending = invoiceDetail?.status === "pending" || invoiceDetail?.status === "approved";
 
   // حقول التكاليف الإضافية — local state لتجنب إعادة التحميل عند كل ضغطة
   const [localShipping,   setLocalShipping]   = useState("0");
@@ -2154,13 +2155,13 @@ function PurchasesTab() {
                 </div>
                 <div>
                   <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>التاريخ <span style={{ color: "#D4527E" }}>*</span></label>
-                  <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)}
+                  <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} dir="ltr"
                     style={{ width: "100%", padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", color: "#2C2C2A", background: "white" }} />
                 </div>
                 {newPayMethod === "credit" && (
                   <div>
                     <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>تاريخ الاستحقاق</label>
-                    <input type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)}
+                    <input type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} dir="ltr"
                       style={{ width: "100%", padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", color: "#2C2C2A", background: "white" }} />
                   </div>
                 )}
@@ -2191,7 +2192,7 @@ function PurchasesTab() {
               </div>
 
               {/* صف إضافة منتج */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 90px 60px auto", gap: "8px", alignItems: "end", marginBottom: "14px", padding: "16px", background: "#F7F7F5", borderRadius: "8px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 65px 85px 70px 65px auto", gap: "8px", alignItems: "end", marginBottom: "14px", padding: "16px", background: "#F7F7F5", borderRadius: "8px" }}>
                 <div style={{ position: "relative" }}>
                   <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>المنتج / SKU / باركود</label>
                   <input type="text" placeholder="ابحث أو اكتب اسم المنتج..."
@@ -2225,13 +2226,18 @@ function PurchasesTab() {
                 </div>
                 <div>
                   <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>الكمية</label>
-                  <input type="number" value={modalManualQty} min="1" onChange={e => setModalManualQty(e.target.value)}
+                  <input type="number" value={modalManualQty} min="1" onChange={e => setModalManualQty(e.target.value)} dir="ltr"
                     style={{ width: "100%", padding: "9px 6px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white" }} />
                 </div>
                 <div>
                   <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>سعر الوحدة</label>
-                  <input type="number" value={modalManualCost} min="0" step="0.001" onChange={e => setModalManualCost(e.target.value)} placeholder="0"
+                  <input type="number" value={modalManualCost} min="0" step="0.001" onChange={e => setModalManualCost(e.target.value)} placeholder="0" dir="ltr"
                     style={{ width: "100%", padding: "9px 6px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>اللون</label>
+                  <input type="text" value={modalNewColor} placeholder="—" onChange={e => setModalNewColor(e.target.value)}
+                    style={{ width: "100%", padding: "9px 4px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white" }} />
                 </div>
                 <div>
                   <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>المقاس</label>
@@ -2246,12 +2252,12 @@ function PurchasesTab() {
                     if (modalManualProductId && prod) {
                       setModalItems(prev => {
                         if (modalManualVariantId) { const ex = prev.findIndex(i => i.variantId === modalManualVariantId); if (ex >= 0) return prev.map((i, n) => n === ex ? { ...i, qty: i.qty + (parseInt(modalManualQty)||1), unitCost: parseFloat(modalManualCost)||i.unitCost } : i); }
-                        return [...prev, { uid: crypto.randomUUID(), variantId: modalManualVariantId, productId: Number(modalManualProductId), name: prod.name, barcode: variant?.barcode || "", color: variant?.color || "", size: modalNewSize, qty: parseInt(modalManualQty)||1, unitCost: parseFloat(modalManualCost)||0, sellPrice: 0 }];
+                        return [...prev, { uid: crypto.randomUUID(), variantId: modalManualVariantId, productId: Number(modalManualProductId), name: prod.name, barcode: variant?.barcode || "", color: modalNewColor || variant?.color || "", size: modalNewSize, qty: parseInt(modalManualQty)||1, unitCost: parseFloat(modalManualCost)||0, sellPrice: 0 }];
                       });
                     } else {
-                      setModalItems(prev => [...prev, { uid: crypto.randomUUID(), variantId: null, productId: null, name: modalNewName.trim(), barcode: "", color: "", size: modalNewSize, qty: parseInt(modalManualQty)||1, unitCost: parseFloat(modalManualCost)||0, sellPrice: 0 }]);
+                      setModalItems(prev => [...prev, { uid: crypto.randomUUID(), variantId: null, productId: null, name: modalNewName.trim(), barcode: "", color: modalNewColor, size: modalNewSize, qty: parseInt(modalManualQty)||1, unitCost: parseFloat(modalManualCost)||0, sellPrice: 0 }]);
                     }
-                    setModalNewName(""); setModalProductSearch(""); setModalManualProductId(""); setModalManualVariantId(null); setModalManualQty("1"); setModalManualCost(""); setModalNewSize(""); setModalManualSellPrice("");
+                    setModalNewName(""); setModalProductSearch(""); setModalManualProductId(""); setModalManualVariantId(null); setModalManualQty("1"); setModalManualCost(""); setModalNewSize(""); setModalNewColor(""); setModalManualSellPrice("");
                   }}
                   style={{ background: (!modalNewName.trim() || !modalManualQty) ? "#E5E3DC" : "#D4527E", color: (!modalNewName.trim() || !modalManualQty) ? "#888780" : "white", border: "none", padding: "9px 14px", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: (!modalNewName.trim() || !modalManualQty) ? "not-allowed" : "pointer", whiteSpace: "nowrap", alignSelf: "end" }}>
                   + إضافة
@@ -2293,6 +2299,7 @@ function PurchasesTab() {
                     <tr style={{ borderBottom: "0.5px solid #E5E3DC" }}>
                       <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500 }}>#</td>
                       <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500 }}>المنتج</td>
+                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "center" }}>اللون</td>
                       <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "center" }}>المقاس</td>
                       <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "center" }}>الكمية</td>
                       <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "center" }}>سعر الوحدة</td>
@@ -2304,18 +2311,24 @@ function PurchasesTab() {
                     {modalItems.map((item, idx) => (
                       <tr key={item.uid} style={{ borderBottom: "0.5px solid #E5E3DC" }}>
                         <td style={{ padding: "8px 6px", color: "#888780" }}>{idx + 1}</td>
-                        <td style={{ padding: "8px 6px", fontWeight: 500, color: "#2C2C2A" }}>
-                          {item.name}
-                          {item.color && <span style={{ fontSize: "11px", color: "#888780", marginRight: "4px" }}>({item.color})</span>}
-                        </td>
-                        <td style={{ padding: "8px 6px", textAlign: "center", color: "#888780" }}>{item.size || "—"}</td>
+                        <td style={{ padding: "8px 6px", fontWeight: 500, color: "#2C2C2A" }}>{item.name}</td>
                         <td style={{ padding: "8px 6px", textAlign: "center" }}>
-                          <input type="number" min="1" value={item.qty}
+                          <input type="text" value={item.color || ""}
+                            onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? { ...i, color: e.target.value } : i))}
+                            style={{ width: "60px", padding: "4px", border: "0.5px solid #E5E3DC", borderRadius: "4px", fontSize: "11px", textAlign: "center" }} placeholder="—" />
+                        </td>
+                        <td style={{ padding: "8px 6px", textAlign: "center" }}>
+                          <input type="text" value={item.size || ""}
+                            onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? { ...i, size: e.target.value } : i))}
+                            style={{ width: "55px", padding: "4px", border: "0.5px solid #E5E3DC", borderRadius: "4px", fontSize: "11px", textAlign: "center" }} placeholder="—" />
+                        </td>
+                        <td style={{ padding: "8px 6px", textAlign: "center" }}>
+                          <input type="number" min="1" value={item.qty} dir="ltr"
                             onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? { ...i, qty: parseInt(e.target.value) || 1 } : i))}
                             style={{ width: "55px", padding: "4px", border: "0.5px solid #E5E3DC", borderRadius: "4px", fontSize: "12px", textAlign: "center" }} />
                         </td>
                         <td style={{ padding: "8px 6px", textAlign: "center" }}>
-                          <input type="number" step="0.001" value={item.unitCost}
+                          <input type="number" step="0.001" value={item.unitCost} dir="ltr"
                             onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? { ...i, unitCost: parseFloat(e.target.value) || 0 } : i))}
                             style={{ width: "80px", padding: "4px", border: "0.5px solid #E5E3DC", borderRadius: "4px", fontSize: "12px", textAlign: "center", fontFamily: "monospace" }} />
                         </td>
@@ -2329,7 +2342,7 @@ function PurchasesTab() {
                   </tbody>
                   <tfoot>
                     <tr style={{ borderTop: "1px solid #E5E3DC", background: "#F7F7F5" }}>
-                      <td colSpan={3} style={{ padding: "10px 6px", fontWeight: 600, fontSize: "12px", color: "#2C2C2A" }}>الإجمالي الفرعي</td>
+                      <td colSpan={4} style={{ padding: "10px 6px", fontWeight: 600, fontSize: "12px", color: "#2C2C2A" }}>الإجمالي الفرعي</td>
                       <td style={{ padding: "10px 6px", textAlign: "center", fontWeight: 600 }}>{modalItems.reduce((s, i) => s + i.qty, 0)}</td>
                       <td />
                       <td style={{ padding: "10px 6px", textAlign: "left", fontWeight: 700, color: "#D4527E", fontFamily: "monospace" }}>ر.ع {omr(wSubtotal)}</td>
@@ -2372,7 +2385,7 @@ function PurchasesTab() {
                     <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>{label}</label>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <span style={{ fontSize: "11px", color: "#888780", whiteSpace: "nowrap" }}>ر.ع</span>
-                      <input type="number" value={val} min="0" step="0.001" onChange={e => set(e.target.value)}
+                      <input type="number" value={val} min="0" step="0.001" onChange={e => set(e.target.value)} dir="ltr"
                         style={{ flex: 1, padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", background: "white" }} />
                     </div>
                   </div>
