@@ -161,6 +161,25 @@ app.use((req, res, next) => {
     console.error("[startup] migration 0020 failed:", err);
   }
 
+  // Migration purchase_attachments — جدول مرفقات الفواتير الدائمة (PostgreSQL-backed)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS purchase_attachments (
+        id           SERIAL PRIMARY KEY,
+        purchase_id  INTEGER NOT NULL REFERENCES purchase_invoices(id) ON DELETE CASCADE,
+        filename     TEXT NOT NULL,
+        content_type TEXT NOT NULL DEFAULT 'image/jpeg',
+        data         TEXT NOT NULL,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_purchase_attachments_purchase_id
+        ON purchase_attachments(purchase_id);
+    `);
+    console.log("[startup] purchase_attachments table ready");
+  } catch (err) {
+    console.error("[startup] purchase_attachments migration failed:", err);
+  }
+
   // Migration 0021 — ensure central location exists (idempotent)
   // approvePurchaseInvoice requires a location with is_central = true
   try {
