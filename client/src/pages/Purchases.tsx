@@ -1217,10 +1217,11 @@ function PurchasesTab() {
             </label>
 
             {/* عرض المرفقات الموجودة */}
-            {((invoiceDetail as any)?.attachmentUrls?.length > 0) && (
+            {((invoiceDetail as any)?.attachmentUrls?.length > 0 || (invoiceDetail as any)?.attachmentUrl) && (
               <Button variant="outline" size="sm" className="gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
                 onClick={() => setShowAttachment(true)}>
-                <FileText className="w-4 h-4" /> عرض المرفقات ({(invoiceDetail as any).attachmentUrls.length})
+                <FileText className="w-4 h-4" /> عرض المرفقات
+                {((invoiceDetail as any)?.attachmentUrls?.length > 0) && ` (${(invoiceDetail as any).attachmentUrls.length})`}
               </Button>
             )}
 
