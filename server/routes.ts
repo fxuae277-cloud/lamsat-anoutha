@@ -2754,8 +2754,9 @@ export async function registerRoutes(
       if (!inv.rows.length) return res.status(404).json({ message: "الفاتورة غير موجودة" });
       const status = inv.rows[0].status;
       if (status === "received") return res.status(400).json({ message: "لا يمكن حذف فاتورة مستلمة — أثّرت على المخزون بالفعل" });
-      // حذف المرفقات أولاً
+      // حذف كل السجلات المرتبطة أولاً (FK بدون CASCADE)
       try { await pool.query("DELETE FROM purchase_attachments WHERE purchase_id=$1", [id]); } catch {}
+      try { await pool.query("DELETE FROM purchase_extra_costs WHERE purchase_invoice_id=$1", [id]); } catch {}
       await pool.query("DELETE FROM purchase_items WHERE purchase_id=$1", [id]);
       await pool.query("DELETE FROM purchase_invoices WHERE id=$1", [id]);
       res.json({ success: true });
