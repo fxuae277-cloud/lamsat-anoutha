@@ -140,6 +140,18 @@ app.use((req, res, next) => {
     console.error("[startup] FAILED to create settings table:", err);
   }
 
+  // Migration 0018 — add description + cost_default + min_qty to products (idempotent)
+  try {
+    await pool.query(`
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS description  TEXT;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS cost_default DECIMAL(10,3) DEFAULT 0;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS min_qty      INTEGER DEFAULT 5;
+    `);
+    console.log("[startup] migration 0018: products description+cost_default+min_qty ready");
+  } catch (err) {
+    console.error("[startup] migration 0018 failed:", err);
+  }
+
   // Migration 0019 — add address + phone to branches (idempotent)
   try {
     await pool.query(`

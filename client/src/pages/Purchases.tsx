@@ -1169,6 +1169,151 @@ function PurchasesTab() {
       parseFloat(invoiceDetail.clearanceCost || "0") + parseFloat(invoiceDetail.otherCost || "0")
     : 0;
 
+  const handlePrintInvoice = () => {
+    const storeName = settings?.store_name || "لمسة أنوثة";
+    const storePhone = settings?.store_phone || "";
+    const storeAddress = settings?.store_address || "";
+    const supplierName = supplierMap[invoiceDetail?.supplierId] || "—";
+    const inv = invoiceDetail!;
+    const itms: any[] = inv.items || [];
+    const isPendingInv = inv.status === "pending" || inv.status === "approved";
+    const subtotal = itms.reduce((s: number, it: any) => s + parseFloat(it.lineSubtotal || "0"), 0);
+    const extras = parseFloat(inv.shippingCost || "0") + parseFloat(inv.customsCost || "0") +
+                   parseFloat(inv.clearanceCost || "0") + parseFloat(inv.otherCost || "0");
+    const grandTotal = subtotal + extras;
+    const statusAr = inv.status === "pending" ? "معلق" : inv.status === "approved" ? "معتمد" : inv.status === "received" ? "مستلم" : "ملغي";
+    const paymentAr = inv.paymentMethod === "cash" ? "نقدي" : inv.paymentMethod === "transfer" ? "تحويل بنكي" : inv.paymentMethod === "check" ? "شيك" : inv.paymentMethod === "credit" ? "آجل" : (inv.paymentMethod || "—");
+
+    const rows = itms.map((it: any) => `
+      <tr>
+        <td>${it.productName || it.productId || "—"}</td>
+        <td>${it.barcode || "—"}</td>
+        <td>${it.color || "—"}</td>
+        <td>${it.size || "—"}</td>
+        <td style="text-align:center">${it.qty}</td>
+        <td style="text-align:left">${omr(it.unitCostBase)}</td>
+        <td style="text-align:left;font-weight:bold">${omr(it.lineSubtotal)}</td>
+        ${!isPendingInv ? `<td style="text-align:left;color:#b45309">${omr(it.allocatedExtraCost)}</td>` : ""}
+        ${!isPendingInv ? `<td style="text-align:left;color:#059669;font-weight:bold">${omr(it.unitCostFinal)}</td>` : ""}
+      </tr>`).join("");
+
+    const html = `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8"/>
+<title>فاتورة شراء — ${inv.invoiceNumber}</title>
+<style>
+  @page { margin: 15mm; size: A4; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", Tahoma, Arial, sans-serif; font-size: 13px; color: #111; direction: rtl; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e91e8c; padding-bottom: 12px; margin-bottom: 16px; }
+  .store-name { font-size: 22px; font-weight: 800; color: #e91e8c; }
+  .store-info { font-size: 11px; color: #555; margin-top: 4px; }
+  .invoice-title { font-size: 18px; font-weight: 700; text-align: left; }
+  .invoice-meta { font-size: 11px; color: #555; text-align: left; margin-top: 4px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: bold;
+    background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+  .badge.received { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 12px; }
+  .info-label { color: #6b7280; margin-bottom: 2px; }
+  .info-value { font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 12px; }
+  thead tr { background: #fce4f0; }
+  th { padding: 7px 8px; text-align: right; font-weight: 700; border: 1px solid #e5e7eb; color: #374151; }
+  td { padding: 6px 8px; border: 1px solid #e5e7eb; }
+  tr:nth-child(even) td { background: #fafafa; }
+  .total-row td { font-weight: bold; background: #f3f4f6; }
+  .summary { display: flex; gap: 24px; justify-content: flex-end; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 20px; margin-bottom: 16px; }
+  .sum-item { text-align: center; }
+  .sum-label { font-size: 11px; color: #6b7280; margin-bottom: 3px; }
+  .sum-value { font-size: 15px; font-weight: 800; font-family: monospace; }
+  .sum-value.grand { color: #059669; font-size: 18px; }
+  .sum-value.extra { color: #b45309; }
+  .footer { text-align: center; font-size: 11px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 10px; margin-top: 8px; }
+  @media print { button { display: none !important; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <div class="store-name">${storeName}</div>
+    ${storePhone ? `<div class="store-info">📞 ${storePhone}</div>` : ""}
+    ${storeAddress ? `<div class="store-info">📍 ${storeAddress}</div>` : ""}
+  </div>
+  <div>
+    <div class="invoice-title">فاتورة شراء</div>
+    <div class="invoice-meta">#${inv.invoiceNumber}</div>
+    <div class="invoice-meta" style="margin-top:6px"><span class="badge ${inv.status === 'received' ? 'received' : ''}">${statusAr}</span></div>
+  </div>
+</div>
+
+<div class="info-grid">
+  <div><div class="info-label">المورد</div><div class="info-value">${supplierName}</div></div>
+  <div><div class="info-label">تاريخ الفاتورة</div><div class="info-value">${inv.invoiceDate || "—"}</div></div>
+  <div><div class="info-label">طريقة الدفع</div><div class="info-value">${paymentAr}</div></div>
+  ${inv.dueDate ? `<div><div class="info-label">تاريخ الاستحقاق</div><div class="info-value">${inv.dueDate}</div></div>` : ""}
+  ${inv.notes ? `<div style="grid-column:1/-1"><div class="info-label">ملاحظات</div><div class="info-value">${inv.notes}</div></div>` : ""}
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>المنتج</th>
+      <th>الباركود</th>
+      <th>اللون</th>
+      <th>المقاس</th>
+      <th style="text-align:center">الكمية</th>
+      <th style="text-align:left">سعر الوحدة</th>
+      <th style="text-align:left">الإجمالي</th>
+      ${!isPendingInv ? '<th style="text-align:left">تكلفة إضافية</th>' : ""}
+      ${!isPendingInv ? '<th style="text-align:left">التكلفة الفعلية</th>' : ""}
+    </tr>
+  </thead>
+  <tbody>
+    ${rows}
+    <tr class="total-row">
+      <td colspan="4">الإجمالي</td>
+      <td style="text-align:center">${itms.reduce((s: number, it: any) => s + it.qty, 0)}</td>
+      <td></td>
+      <td style="text-align:left">${omr(subtotal)} ر.ع</td>
+      ${!isPendingInv ? `<td style="text-align:left;color:#b45309">${omr(extras)} ر.ع</td>` : ""}
+      ${!isPendingInv ? `<td style="text-align:left;color:#059669">${omr(parseFloat(inv.totalAmount))} ر.ع</td>` : ""}
+    </tr>
+  </tbody>
+</table>
+
+<div class="summary">
+  <div class="sum-item">
+    <div class="sum-label">إجمالي البضاعة</div>
+    <div class="sum-value">${omr(subtotal)} ر.ع</div>
+  </div>
+  ${extras > 0 ? `<div class="sum-item">
+    <div class="sum-label">تكاليف إضافية</div>
+    <div class="sum-value extra">${omr(extras)} ر.ع</div>
+  </div>` : ""}
+  <div class="sum-item">
+    <div class="sum-label">الإجمالي الكلي</div>
+    <div class="sum-value grand">${omr(grandTotal)} ر.ع</div>
+  </div>
+</div>
+
+${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:11px;color:#6b7280;margin-bottom:12px">
+  الشحن: ${omr(inv.shippingCost)} ر.ع &nbsp;|&nbsp;
+  الجمارك: ${omr(inv.customsCost)} ر.ع &nbsp;|&nbsp;
+  التخليص: ${omr(inv.clearanceCost)} ر.ع &nbsp;|&nbsp;
+  أخرى: ${omr(inv.otherCost)} ر.ع
+</div>` : ""}
+
+<div class="footer">تمت الطباعة في ${new Date().toLocaleDateString("ar-SA")} — ${storeName}</div>
+
+<script>window.onload = () => { window.print(); }</script>
+</body>
+</html>`;
+
+    const w = window.open("", "_blank", "width=900,height=700");
+    if (w) { w.document.write(html); w.document.close(); }
+  };
+
   if (selectedInvoice && invoiceDetail) {
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
@@ -1228,6 +1373,9 @@ function PurchasesTab() {
             <Badge variant={isPending ? "outline" : "default"} className={isPending ? "border-amber-400 text-amber-600" : invoiceDetail?.status === "approved" ? "bg-green-600" : invoiceDetail?.status === "received" ? "bg-blue-600" : "bg-red-500"}>
               {statusLabel}
             </Badge>
+            <Button variant="outline" className="gap-2" onClick={handlePrintInvoice}>
+              <Printer className="w-4 h-4" /> طباعة الفاتورة
+            </Button>
             <Button variant="outline" onClick={() => setSelectedInvoice(null)} data-testid="button-back-to-list">{t("purchases.back_to_list")}</Button>
           </div>
         </div>

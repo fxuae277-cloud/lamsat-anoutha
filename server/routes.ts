@@ -2594,31 +2594,35 @@ export async function registerRoutes(
   });
 
   app.get("/api/purchases/:id", requireAuth, requirePermission("purchases.view"), async (req, res) => {
-    const invoice = await storage.getPurchaseInvoice(Number(req.params.id));
-    if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
-    const items = await storage.getPurchaseItems(invoice.id);
-    // جلب المرفقات من جدول purchase_attachments
     try {
+      const invoice = await storage.getPurchaseInvoice(Number(req.params.id));
+      if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
+      const items = await storage.getPurchaseItems(invoice.id);
+
       const attRes = await pool.query("SELECT attachment_url FROM purchase_invoices WHERE id=$1", [invoice.id]);
       const attachmentUrl = attRes.rows[0]?.attachment_url ?? null;
-      const attachmentUrls: string[] = attRes.rows[0]?.attachment_urls ?? [];
-      res.json({ ...invoice, items, attachmentUrl, attachmentUrls });
-    } catch {
-      const attRes = await pool.query("SELECT attachment_url FROM purchase_invoices WHERE id=$1", [invoice.id]);
-      const attachmentUrl = attRes.rows[0]?.attachment_url ?? null;
-      // جلب المرفقات من الجدول الجديد
+
       let attachments: any[] = [];
       try {
-        const aRows = await pool.query("SELECT id, filename, content_type FROM purchase_attachments WHERE purchase_id=$1 ORDER BY id", [invoice.id]);
-        attachments = aRows.rows.map((r: any) => ({ id: r.id, url: `/api/attachments/${r.id}`, filename: r.filename, contentType: r.content_type }));
+        const aRows = await pool.query(
+          "SELECT id, filename, content_type FROM purchase_attachments WHERE purchase_id=$1 ORDER BY id",
+          [invoice.id]
+        );
+        attachments = aRows.rows.map((r: any) => ({
+          id: r.id,
+          url: `/api/attachments/${r.id}`,
+          filename: r.filename,
+          contentType: r.content_type,
+        }));
       } catch { /* الجدول غير موجود بعد — migration 0021 لم يُشغَّل */ }
-      // إذا لا يوجد في الجدول الجديد لكن يوجد attachment_url قديم → أضفه كمرفق واحد
+
       const attachmentUrls = attachments.length > 0
         ? attachments.map((a: any) => a.url)
         : attachmentUrl ? [attachmentUrl] : [];
+
       res.json({ ...invoice, items, attachmentUrl, attachmentUrls, attachments });
     } catch (err: any) {
-      res.json({ ...invoice, items, attachmentUrl: null, attachmentUrls: [], attachments: [] });
+      res.status(500).json({ message: "خطأ في جلب الفاتورة" });
     }
   });
 
