@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+// Tabs removed — wizard uses inline add-row instead
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -504,6 +504,7 @@ function PurchasesTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
   const [wizardDirectApprove, setWizardDirectApprove] = useState(false);
+  const [wizardSuccess, setWizardSuccess] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<number | null>(null);
   const [showPostConfirm, setShowPostConfirm] = useState(false);
   // ── فلاتر قائمة الفواتير (يجب أن تكون هنا في الأعلى — قبل أي return شرطي) ──
@@ -709,7 +710,7 @@ function PurchasesTab() {
   }
 
   function resetCreate() {
-    setShowCreate(false); setWizardStep(1); setWizardDirectApprove(false);
+    setShowCreate(false); setWizardStep(1); setWizardDirectApprove(false); setWizardSuccess(false);
     setNewSupplierId(""); setNewBranchId(""); setNewNotes(""); setNewDueDate("");
     setNewShipping("0"); setNewCustoms("0"); setNewClearance("0"); setNewOther("0");
     setNewPayMethod("cash"); setNewDiscount("0"); setNewVatRate("0"); setNewDate(new Date().toISOString().slice(0,10));
@@ -770,10 +771,14 @@ function PurchasesTab() {
     onSuccess: (inv) => {
       qc.invalidateQueries({ queryKey: ["/api/purchases"] });
       qc.invalidateQueries({ queryKey: ["/api/products"] });
-      const msg = wizardDirectApprove ? "تم اعتماد الفاتورة وتحديث المخزون ✓" : t("purchases.invoice_created");
-      toast({ title: msg });
-      resetCreate();
       setSelectedInvoice(inv.id);
+      if (wizardDirectApprove) {
+        toast({ title: "تم اعتماد الفاتورة وتحديث المخزون ✓" });
+        setWizardSuccess(true);
+      } else {
+        toast({ title: t("purchases.invoice_created") });
+        resetCreate();
+      }
     },
     onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
@@ -2023,10 +2028,10 @@ function PurchasesTab() {
   // ══════════════════════════════════════════════════════════════
   if (showCreate) {
     const STEPS = [
-      { num: 1, label: "المورد والتاريخ" },
-      { num: 2, label: "إضافة المنتجات" },
-      { num: 3, label: "التكاليف والخصومات" },
-      { num: 4, label: "المراجعة والاعتماد" },
+      { num: 1, label: "المورد والتاريخ",       arabicNum: "١" },
+      { num: 2, label: "المنتجات",              arabicNum: "٢" },
+      { num: 3, label: "التكاليف الإضافية",    arabicNum: "٣" },
+      { num: 4, label: "المراجعة والاعتماد",   arabicNum: "٤" },
     ];
     const canNext1 = !!newSupplierId;
     const canNext2 = modalItems.length > 0;
@@ -2037,507 +2042,452 @@ function PurchasesTab() {
     const wExtras    = (parseFloat(newShipping||"0")||0) + (parseFloat(newCustoms||"0")||0) + (parseFloat(newClearance||"0")||0) + (parseFloat(newOther||"0")||0);
     const wTotal     = wAfterDisc + wVat + wExtras;
     const supplierName = activeSuppliers.find(s => String(s.id) === newSupplierId)?.name || "—";
+    const progWidth = wizardStep === 1 ? "0%" : wizardStep === 2 ? "33%" : wizardStep === 3 ? "66%" : "100%";
+    const invNum = String(Date.now()).slice(-10);
+
+    // ── شاشة النجاح بعد الاعتماد ──
+    if (wizardSuccess) {
+      return (
+        <div dir="rtl" style={{ background: "#F7F7F5", minHeight: "100vh", padding: "16px" }}>
+          <div style={{ maxWidth: "860px", margin: "0 auto" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
+              <div>
+                <div style={{ fontSize: "11px", color: "#888780", marginBottom: "2px" }}>الموردون والمشتريات</div>
+                <div style={{ fontSize: "18px", fontWeight: 600, color: "#2C2C2A" }}>فاتورة مشتريات جديدة</div>
+              </div>
+            </div>
+            <div style={{ background: "#EAF3DE", border: "0.5px solid #C0DD97", borderRadius: "12px", padding: "36px", textAlign: "center" }}>
+              <div style={{ fontSize: "40px", marginBottom: "12px" }}>✅</div>
+              <div style={{ fontSize: "17px", fontWeight: 700, color: "#3B6D11", marginBottom: "4px" }}>تم اعتماد الفاتورة بنجاح!</div>
+              <div style={{ fontSize: "13px", color: "#3B6D11", marginBottom: "20px" }}>تم تحديث المخزون المركزي تلقائيًا</div>
+              <div style={{ display: "flex", justifyContent: "center", gap: "10px" }}>
+                <button onClick={resetCreate}
+                  style={{ background: "#D4527E", color: "white", border: "none", padding: "11px 22px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+                  + فاتورة جديدة
+                </button>
+                <button onClick={() => { setWizardSuccess(false); setShowCreate(false); }}
+                  style={{ background: "white", color: "#2C2C2A", border: "0.5px solid #E5E3DC", padding: "11px 22px", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>
+                  العودة للفواتير
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     return (
-      <div dir="rtl" className="min-h-screen bg-muted/30 pb-10">
+      <div dir="rtl" style={{ background: "#F7F7F5", minHeight: "100vh", padding: "16px" }}>
+        <div style={{ maxWidth: "860px", margin: "0 auto" }}>
 
         {/* ── رأس الصفحة ── */}
-        <div className="bg-background border-b sticky top-0 z-10">
-          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <FileText className="w-5 h-5" style={{ color: "#D4527E" }} />
-              <span className="font-bold text-lg">فاتورة مشتريات جديدة</span>
-            </div>
-            <button onClick={resetCreate} className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md hover:bg-muted">
-              <X className="w-5 h-5" />
-            </button>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
+          <div>
+            <div style={{ fontSize: "11px", color: "#888780", marginBottom: "2px" }}>الموردون والمشتريات</div>
+            <div style={{ fontSize: "18px", fontWeight: 600, color: "#2C2C2A" }}>فاتورة مشتريات جديدة</div>
           </div>
-
-          {/* ── Progress bar ── */}
-          <div className="max-w-4xl mx-auto px-4 pb-4">
-            <div className="flex items-center gap-0">
-              {STEPS.map((s, i) => {
-                const done = wizardStep > s.num;
-                const active = wizardStep === s.num;
-                return (
-                  <div key={s.num} className="flex items-center flex-1">
-                    <div className="flex flex-col items-center">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all ${
-                        done    ? "border-emerald-500 bg-emerald-500 text-white" :
-                        active  ? "border-[#D4527E] bg-[#D4527E] text-white" :
-                                  "border-muted-foreground/30 bg-background text-muted-foreground"
-                      }`}>
-                        {done ? <CheckCircle2 className="w-4 h-4" /> : s.num}
-                      </div>
-                      <span className={`text-xs mt-1 font-medium whitespace-nowrap ${
-                        active ? "text-[#D4527E]" : done ? "text-emerald-600" : "text-muted-foreground"
-                      }`}>{s.label}</span>
-                    </div>
-                    {i < STEPS.length - 1 && (
-                      <div className={`flex-1 h-0.5 mb-4 mx-1 ${done ? "bg-emerald-400" : "bg-muted-foreground/20"}`} />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ fontSize: "12px", color: "#888780", background: "white", border: "0.5px solid #E5E3DC", padding: "6px 12px", borderRadius: "8px" }}>PUR-{invNum}</div>
+            <button onClick={resetCreate} style={{ background: "white", border: "0.5px solid #E5E3DC", borderRadius: "8px", padding: "6px 10px", cursor: "pointer", color: "#888780", fontSize: "18px", lineHeight: 1 }}>✕</button>
           </div>
         </div>
 
-        {/* ── محتوى الخطوات ── */}
-        <div className="max-w-4xl mx-auto px-4 mt-6 space-y-4">
-
-          {/* ════ الخطوة 1: المورد والتاريخ ════ */}
-          {wizardStep === 1 && (
-            <div className="bg-background border rounded-xl p-6 space-y-5 shadow-sm">
-              <h2 className="text-base font-bold flex items-center gap-2">
-                <Building className="w-4 h-4 text-[#D4527E]" /> بيانات المورد والفاتورة
-              </h2>
-
-              {/* المورد */}
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">المورد <span className="text-red-500">*</span></label>
-                <div className="flex gap-2">
-                  <Select value={newSupplierId} onValueChange={setNewSupplierId}>
-                    <SelectTrigger className="flex-1"><SelectValue placeholder="اختر المورد..." /></SelectTrigger>
-                    <SelectContent>{activeSuppliers.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                  <Button variant="outline" size="icon" onClick={() => setShowQuickSupplier(true)} title="إضافة مورد جديد"><UserPlus className="w-4 h-4" /></Button>
+        {/* ── Progress bar ── */}
+        <div style={{ background: "white", border: "0.5px solid #E5E3DC", borderRadius: "12px", padding: "20px", marginBottom: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", position: "relative" }}>
+            <div style={{ position: "absolute", top: "18px", right: "8%", left: "8%", height: "2px", background: "#E5E3DC", zIndex: 0 }} />
+            <div style={{ position: "absolute", top: "18px", right: "8%", height: "2px", background: "#D4527E", zIndex: 0, width: progWidth, transition: "width 0.4s" }} />
+            {STEPS.map(s => {
+              const done = wizardStep > s.num;
+              const active = wizardStep === s.num;
+              return (
+                <div key={s.num} style={{ flex: 1, textAlign: "center", cursor: done ? "pointer" : "default", position: "relative", zIndex: 1 }}
+                  onClick={() => { if (done) setWizardStep(s.num); }}>
+                  <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: done ? "#27500A" : active ? "#D4527E" : "#E5E3DC", color: (done || active) ? "white" : "#888780", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto", fontSize: "13px", fontWeight: 600, transition: "all 0.3s" }}>
+                    {done ? "✓" : s.arabicNum}
+                  </div>
+                  <div style={{ fontSize: "11px", marginTop: "6px", color: done ? "#27500A" : active ? "#D4527E" : "#888780", fontWeight: (active || done) ? 600 : 400 }}>
+                    {s.label}
+                  </div>
                 </div>
-              </div>
+              );
+            })}
+          </div>
+        </div>
 
-              {/* المخزن الوجهة — ثابت دائماً */}
-              <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl p-3.5">
-                <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Building className="w-4 h-4 text-blue-600" />
+        {/* ════ الخطوة 1 ════ */}
+        {wizardStep === 1 && (
+          <>
+            <div style={{ background: "white", border: "0.5px solid #E5E3DC", borderRadius: "12px", padding: "24px", marginBottom: "12px" }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: "#2C2C2A", marginBottom: "16px", paddingBottom: "10px", borderBottom: "0.5px solid #E5E3DC" }}>بيانات الفاتورة الأساسية</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                <div>
+                  <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>المورد <span style={{ color: "#D4527E" }}>*</span></label>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <div style={{ position: "relative", flex: 1 }}>
+                      <select value={newSupplierId} onChange={e => setNewSupplierId(e.target.value)}
+                        style={{ width: "100%", padding: "10px 12px", border: `0.5px solid ${newSupplierId ? "#E5E3DC" : "#D4527E"}`, borderRadius: "8px", fontSize: "13px", appearance: "none", background: "white", color: newSupplierId ? "#2C2C2A" : "#888780", cursor: "pointer" }}>
+                        <option value="">اختر المورد...</option>
+                        {activeSuppliers.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
+                      </select>
+                      <span style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#888780", fontSize: "10px", pointerEvents: "none" }}>▼</span>
+                    </div>
+                    <button onClick={() => setShowQuickSupplier(true)} title="إضافة مورد جديد"
+                      style={{ padding: "0 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", background: "white", cursor: "pointer", color: "#D4527E", fontSize: "18px", fontWeight: 600 }}>+</button>
+                  </div>
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-blue-800">المخزن المركزي الرئيسي</p>
-                  <p className="text-xs text-blue-600 mt-0.5">جميع فواتير الشراء تُسجَّل مباشرةً في المخزن المركزي — بعد الاستلام يمكن التحويل للفروع</p>
-                </div>
-              </div>
-
-              {/* التاريخ */}
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">تاريخ الفاتورة <span className="text-red-500">*</span></label>
-                <DateInput value={newDate} onChange={e => setNewDate(e.target.value)} />
-              </div>
-
-              {/* طريقة الدفع — أزرار بصرية */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">طريقة الدفع</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {[
-                    { val: "cash", label: "نقداً", icon: "💵" },
-                    { val: "bank_transfer", label: "تحويل", icon: "🏦" },
-                    { val: "cheque", label: "شيك", icon: "📄" },
-                    { val: "credit", label: "آجل", icon: "🕐" },
-                  ].map(opt => (
-                    <button key={opt.val} type="button"
-                      onClick={() => setNewPayMethod(opt.val)}
-                      className={`p-3 rounded-xl border-2 text-sm font-medium flex flex-col items-center gap-1 transition-all ${
-                        newPayMethod === opt.val
-                          ? "border-[#D4527E] bg-[#D4527E]/10 text-[#D4527E]"
-                          : "border-muted hover:border-muted-foreground/40 text-muted-foreground"
-                      }`}>
-                      <span className="text-xl">{opt.icon}</span>{opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* تاريخ الاستحقاق — يظهر عند اختيار آجل */}
-              {newPayMethod === "credit" && (
-                <div className="space-y-1.5 border border-orange-200 bg-orange-50 rounded-lg p-3">
-                  <label className="text-sm font-medium text-orange-700">تاريخ الاستحقاق (الآجل) <span className="text-red-500">*</span></label>
-                  <DateInput value={newDueDate} onChange={e => setNewDueDate(e.target.value)} />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ════ الخطوة 2: إضافة المنتجات ════ */}
-          {wizardStep === 2 && (
-            <div className="space-y-4">
-              <div className="bg-background border rounded-xl p-5 shadow-sm">
-                <h2 className="text-base font-bold flex items-center gap-2 mb-4">
-                  <Package className="w-4 h-4 text-[#D4527E]" /> إضافة المنتجات
-                </h2>
-                <Tabs defaultValue="search" className="w-full">
-                  <TabsList className="w-full mb-4">
-                    <TabsTrigger value="search" className="flex-1 gap-1"><Search className="w-3 h-3" /> بحث بالاسم</TabsTrigger>
-                    <TabsTrigger value="barcode" className="flex-1 gap-1"><Package className="w-3 h-3" /> باركود</TabsTrigger>
-                    <TabsTrigger value="newprod" className="flex-1 gap-1"><Plus className="w-3 h-3" /> إضافة يدوية</TabsTrigger>
-                  </TabsList>
-
-                  {/* تبويب البحث بالاسم */}
-                  <TabsContent value="search" className="space-y-3 mt-0">
-                    <div className="relative">
-                      <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                      <Input className="pr-9" placeholder="ابحث بالاسم أو الباركود أو SKU..."
-                        value={modalProductSearch}
-                        onChange={e => { setModalProductSearch(e.target.value); setModalSearchOpen(true); if (!e.target.value) { setModalManualProductId(""); setModalManualVariantId(null); } }}
-                        onFocus={() => { if (modalProductSearch) setModalSearchOpen(true); }}
-                        onBlur={() => setTimeout(() => setModalSearchOpen(false), 180)}
-                        autoComplete="off" />
-                      {modalSearchOpen && modalProductSearch.length >= 1 && (
-                        <div className="absolute z-50 top-full mt-1 left-0 right-0 border rounded-lg bg-background shadow-lg max-h-52 overflow-y-auto">
-                          {(() => {
-                            const q = modalProductSearch.toLowerCase();
-                            const results = (allProducts as Product[]).filter(p => p.name.toLowerCase().includes(q) || (p as any).barcode?.toLowerCase().includes(q) || (p as any).sku?.toLowerCase().includes(q)).slice(0, 15);
-                            const alreadyInCart = (pid: number) => modalItems.some(i => i.productId === pid);
-                            return results.length > 0 ? results.map(p => (
-                              <button key={p.id} type="button"
-                                className={`w-full text-right px-3 py-2 text-sm hover:bg-muted/60 border-b last:border-0 flex items-center justify-between gap-2 ${modalManualProductId === String(p.id) ? "bg-primary/10" : ""}`}
-                                onMouseDown={() => { setModalManualProductId(String(p.id)); setModalManualVariantId(null); setModalManualCost(""); setModalManualSellPrice(""); setModalProductSearch(p.name); setModalSearchOpen(false); }}>
-                                <span className="font-medium">{p.name}</span>
-                                <div className="flex items-center gap-2">
-                                  {(p as any).barcode && <span className="text-xs text-muted-foreground font-mono">{(p as any).barcode}</span>}
-                                  {alreadyInCart(p.id) && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">مضاف ✓</span>}
-                                </div>
-                              </button>
-                            )) : (
-                              <div className="px-3 py-2 text-sm text-muted-foreground">لا نتائج — جرّب التبويب اليدوي</div>
-                            );
-                          })()}
-                        </div>
-                      )}
-                    </div>
-                    {modalManualProductId && modalManualVariants.length > 0 && (
-                      <div className="space-y-1.5">
-                        <label className="text-xs text-muted-foreground">اختر المتغير</label>
-                        <div className="flex flex-wrap gap-2">
-                          {modalManualVariants.map(v => {
-                            const label = [v.color, v.size].filter(Boolean).join(" / ") || v.sku || `#${v.id}`;
-                            const isSel = modalManualVariantId === v.id;
-                            return (
-                              <button key={v.id} type="button"
-                                onClick={() => { setModalManualVariantId(v.id); setModalManualCost(String(v.costDefault || "0")); setModalManualSellPrice(String((v as any).priceDefault || "0")); }}
-                                className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${isSel ? "bg-[#D4527E] text-white border-[#D4527E]" : "bg-background hover:bg-muted/50"}`}>
-                                {label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    {modalManualProductId && (
-                      <div className="flex gap-2 items-end">
-                        <div className="space-y-1 w-24"><label className="text-xs text-muted-foreground">الكمية</label><Input type="number" min="1" className="h-9 text-center" value={modalManualQty} onChange={e => setModalManualQty(e.target.value)} /></div>
-                        <div className="space-y-1 flex-1"><label className="text-xs text-muted-foreground">سعر الشراء</label><Input type="number" step="0.001" className="h-9 font-mono" value={modalManualCost} onChange={e => setModalManualCost(e.target.value)} placeholder="0.000" /></div>
-                        <div className="space-y-1 flex-1"><label className="text-xs text-emerald-700">سعر البيع</label><Input type="number" step="0.001" className="h-9 font-mono" value={modalManualSellPrice} onChange={e => setModalManualSellPrice(e.target.value)} placeholder="0.000" /></div>
-                        <Button className="h-9 px-5 gap-1" style={{ background: "#D4527E" }}
-                          disabled={!modalManualCost || !modalManualQty}
-                          onClick={() => {
-                            const prod = (allProducts as Product[]).find(p => String(p.id) === modalManualProductId);
-                            const variant = modalManualVariants.find(v => v.id === modalManualVariantId);
-                            setModalItems(prev => {
-                              if (modalManualVariantId) { const ex = prev.findIndex(i => i.variantId === modalManualVariantId); if (ex >= 0) return prev.map((i, n) => n === ex ? { ...i, qty: i.qty + (parseInt(modalManualQty)||1) } : i); }
-                              return [...prev, { uid: crypto.randomUUID(), variantId: modalManualVariantId, productId: Number(modalManualProductId), name: prod?.name || "صنف", barcode: variant?.barcode || "", color: variant?.color || "", size: variant?.size || "", qty: parseInt(modalManualQty)||1, unitCost: parseFloat(modalManualCost)||0, sellPrice: parseFloat(modalManualSellPrice)||0 }];
-                            });
-                            setModalManualVariantId(null); setModalManualQty("1"); setModalManualCost(""); setModalManualSellPrice(""); setModalManualProductId(""); setModalProductSearch("");
-                          }}>
-                          <Plus className="w-3.5 h-3.5" /> إضافة
-                        </Button>
-                      </div>
-                    )}
-                  </TabsContent>
-
-                  {/* تبويب الباركود */}
-                  <TabsContent value="barcode" className="space-y-3 mt-0">
-                    <div className="border-2 border-dashed rounded-xl p-5 text-center" onClick={() => !modalBarcodeFound && modalBarcodeRef.current?.focus()}>
-                      <Package className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
-                      <p className="text-sm font-medium mb-3">امسح أو أدخل الباركود</p>
-                      <div className="flex gap-2 max-w-xs mx-auto">
-                        <Input ref={modalBarcodeRef} className="font-mono text-center" placeholder="الباركود..." value={modalBarcode} onChange={e => setModalBarcode(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleModalBarcode(modalBarcode); } }} disabled={modalBarcodeLoading || !!modalBarcodeFound} dir="ltr" />
-                        <Button variant="outline" onClick={() => handleModalBarcode(modalBarcode)} disabled={modalBarcodeLoading || !modalBarcode.trim() || !!modalBarcodeFound}>
-                          {modalBarcodeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "بحث"}
-                        </Button>
-                      </div>
-                    </div>
-                    {modalBarcodeFound && (
-                      <div className="border rounded-xl bg-emerald-50 border-emerald-200 p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-600" /><div><p className="font-semibold text-emerald-800">{modalBarcodeFound.name}</p><p className="text-xs text-emerald-600 font-mono">{modalBarcodeFound.barcode}{modalBarcodeFound.color && ` · ${modalBarcodeFound.color}`}{modalBarcodeFound.size && ` · ${modalBarcodeFound.size}`}</p></div></div>
-                          <button onClick={() => setModalBarcodeFound(null)}><X className="w-4 h-4 text-muted-foreground" /></button>
-                        </div>
-                        <div className="flex gap-2 items-end">
-                          <div className="space-y-1 w-24"><label className="text-xs text-muted-foreground">الكمية</label><Input type="number" min="1" className="h-9 text-center" value={modalBarcodeConfirmQty} onChange={e => setModalBarcodeConfirmQty(e.target.value)} autoFocus /></div>
-                          <div className="space-y-1 flex-1"><label className="text-xs text-muted-foreground">سعر الشراء</label><Input type="number" step="0.001" className="h-9 font-mono" value={modalBarcodeConfirmCost} onChange={e => setModalBarcodeConfirmCost(e.target.value)} placeholder="0.000" /></div>
-                          <div className="space-y-1 flex-1"><label className="text-xs text-emerald-700">سعر البيع</label><Input type="number" step="0.001" className="h-9 font-mono" value={modalBarcodeConfirmSell} onChange={e => setModalBarcodeConfirmSell(e.target.value)} placeholder="0.000" /></div>
-                          <Button className="h-9 px-4 gap-1" style={{ background: "#D4527E" }} disabled={!modalBarcodeConfirmCost || !modalBarcodeConfirmQty} onClick={confirmBarcodeItem}><Plus className="w-3.5 h-3.5" /> إضافة</Button>
-                        </div>
-                      </div>
-                    )}
-                  </TabsContent>
-
-                  {/* تبويب الإضافة اليدوية */}
-                  <TabsContent value="newprod" className="space-y-3 mt-0">
-                    <div className="relative">
-                      <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                      <Input className="pr-9" placeholder="ابحث عن منتج مسجل أو أدخل اسم جديد..."
-                        value={modalNewName}
-                        onChange={e => { setModalNewName(e.target.value); setModalNewSearchOpen(true); if (!e.target.value) { setModalManualProductId(""); setModalManualVariantId(null); } }}
-                        onFocus={() => { if (modalNewName && !modalManualProductId) setModalNewSearchOpen(true); }}
-                        onBlur={() => setTimeout(() => setModalNewSearchOpen(false), 180)}
-                        autoComplete="off" />
-                      {modalManualProductId && <button className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => { setModalManualProductId(""); setModalManualVariantId(null); setModalManualCost(""); setModalManualSellPrice(""); setModalNewName(""); }}><X className="w-3.5 h-3.5" /></button>}
-                      {modalNewSearchOpen && modalNewName.length >= 1 && !modalManualProductId && (
-                        <div className="absolute z-50 top-full mt-1 left-0 right-0 border rounded-lg bg-background shadow-lg max-h-44 overflow-y-auto">
-                          {(() => {
-                            const q = modalNewName.toLowerCase();
-                            const results = (allProducts as Product[]).filter(p => p.name.toLowerCase().includes(q) || (p as any).barcode?.toLowerCase().includes(q)).slice(0, 10);
-                            return results.length > 0 ? results.map(p => (
-                              <button key={p.id} type="button" className="w-full text-right px-3 py-2 text-sm hover:bg-muted/60 border-b last:border-0 flex items-center justify-between"
-                                onMouseDown={() => { setModalManualProductId(String(p.id)); setModalManualVariantId(null); setModalManualCost(""); setModalManualSellPrice(""); setModalNewName(p.name); setModalNewSearchOpen(false); }}>
-                                <span>{p.name}</span><span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">مسجل ✓</span>
-                              </button>
-                            )) : <div className="px-3 py-2 text-xs text-muted-foreground flex items-center gap-2"><Plus className="w-3 h-3 text-[#D4527E]" /> سيُضاف كمنتج جديد</div>;
-                          })()}
-                        </div>
-                      )}
-                    </div>
-                    {modalManualProductId ? (
-                      <>
-                        <div className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-2 py-1.5 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> منتج مسجل</div>
-                        {modalManualVariants.length > 0 && (
-                          <div className="flex flex-wrap gap-2">
-                            {modalManualVariants.map(v => {
-                              const label = [v.color, v.size].filter(Boolean).join(" / ") || `#${v.id}`;
-                              return <button key={v.id} type="button" onClick={() => { setModalManualVariantId(v.id); setModalManualCost(String(v.costDefault || "0")); setModalManualSellPrice(String((v as any).priceDefault || "0")); }} className={`px-3 py-1.5 rounded-lg border text-xs font-medium ${modalManualVariantId === v.id ? "bg-[#D4527E] text-white border-[#D4527E]" : "hover:bg-muted/50"}`}>{label}</button>;
-                            })}
-                          </div>
-                        )}
-                        <div className="flex gap-2 items-end">
-                          <div className="space-y-1 w-24"><label className="text-xs text-muted-foreground">الكمية</label><Input type="number" min="1" className="h-9 text-center" value={modalManualQty} onChange={e => setModalManualQty(e.target.value)} /></div>
-                          <div className="space-y-1 flex-1"><label className="text-xs text-muted-foreground">سعر الشراء</label><Input type="number" step="0.001" className="h-9 font-mono" value={modalManualCost} onChange={e => setModalManualCost(e.target.value)} placeholder="0.000" /></div>
-                          <div className="space-y-1 flex-1"><label className="text-xs text-emerald-700">سعر البيع</label><Input type="number" step="0.001" className="h-9 font-mono" value={modalManualSellPrice} onChange={e => setModalManualSellPrice(e.target.value)} placeholder="0.000" /></div>
-                          <Button className="h-9 px-4 gap-1" style={{ background: "#D4527E" }} disabled={!modalManualCost || !modalManualQty}
-                            onClick={() => {
-                              const prod = (allProducts as Product[]).find(p => String(p.id) === modalManualProductId);
-                              const variant = modalManualVariants.find(v => v.id === modalManualVariantId);
-                              setModalItems(prev => {
-                                if (modalManualVariantId) { const ex = prev.findIndex(i => i.variantId === modalManualVariantId); if (ex >= 0) return prev.map((i, n) => n === ex ? { ...i, qty: i.qty + (parseInt(modalManualQty)||1) } : i); }
-                                return [...prev, { uid: crypto.randomUUID(), variantId: modalManualVariantId, productId: Number(modalManualProductId), name: prod?.name || "صنف", barcode: variant?.barcode || "", color: variant?.color || "", size: variant?.size || "", qty: parseInt(modalManualQty)||1, unitCost: parseFloat(modalManualCost)||0, sellPrice: parseFloat(modalManualSellPrice)||0 }];
-                              });
-                              setModalManualVariantId(null); setModalManualQty("1"); setModalManualCost(""); setModalManualSellPrice(""); setModalManualProductId(""); setModalNewName("");
-                            }}>
-                            <Plus className="w-3.5 h-3.5" /> إضافة
-                          </Button>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1"><label className="text-xs text-muted-foreground">اللون</label><Input className="h-9" placeholder="ذهبي..." value={modalNewColor} onChange={e => setModalNewColor(e.target.value)} /></div>
-                        <div className="space-y-1"><label className="text-xs text-muted-foreground">المقاس / النوع</label><Input className="h-9" placeholder="50ml..." value={modalNewSize} onChange={e => setModalNewSize(e.target.value)} /></div>
-                        <div className="space-y-1"><label className="text-xs text-muted-foreground">الكمية</label><Input type="number" min="1" className="h-9 text-center" value={modalNewQty} onChange={e => setModalNewQty(e.target.value)} /></div>
-                        <div className="space-y-1"><label className="text-xs text-muted-foreground">سعر الشراء *</label><Input type="number" step="0.001" className="h-9 font-mono" placeholder="0.000" value={modalNewCost} onChange={e => setModalNewCost(e.target.value)} /></div>
-                        <div className="space-y-1"><label className="text-xs text-emerald-700">سعر البيع</label><Input type="number" step="0.001" className="h-9 font-mono" placeholder="0.000" value={modalNewSellPrice} onChange={e => setModalNewSellPrice(e.target.value)} /></div>
-                        <div className="flex items-end">
-                          <Button className="w-full h-9 gap-1" style={{ background: "#D4527E" }} disabled={!modalNewName.trim() || !modalNewCost || !modalNewQty}
-                            onClick={() => {
-                              setModalItems(prev => [...prev, { uid: crypto.randomUUID(), variantId: null, productId: null, name: modalNewName.trim(), barcode: "", color: modalNewColor, size: modalNewSize, qty: parseInt(modalNewQty)||1, unitCost: parseFloat(modalNewCost)||0, sellPrice: parseFloat(modalNewSellPrice)||0 }]);
-                              setModalNewName(""); setModalNewColor(""); setModalNewSize(""); setModalNewQty("1"); setModalNewCost(""); setModalNewSellPrice("");
-                            }}>
-                            <Plus className="w-3.5 h-3.5" /> إضافة جديد
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </TabsContent>
-                </Tabs>
-              </div>
-
-              {/* جدول المنتجات المضافة */}
-              <div className="bg-background border rounded-xl shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/20">
-                  <div className="flex items-center gap-2">
-                    <Package className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-semibold text-sm">المنتجات المضافة</span>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ background: "#D4527E" }}>{modalItems.length}</span>
+                  <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>وجهة التخزين</label>
+                  <div style={{ padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", background: "#EAF3DE", color: "#27500A", fontWeight: 500 }}>
+                    🏭 المخزن المركزي (تلقائي)
                   </div>
-                  {modalItems.length > 0 && <Button variant="ghost" size="sm" className="text-xs text-muted-foreground gap-1 hover:text-red-500" onClick={() => setModalItems([])}><Trash2 className="w-3 h-3" /> تفريغ</Button>}
                 </div>
-                {modalItems.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader className="bg-muted/30">
-                        <TableRow>
-                          <TableHead className="text-xs">الصنف</TableHead>
-                          <TableHead className="text-xs w-20">الكمية</TableHead>
-                          <TableHead className="text-xs w-28">سعر الشراء</TableHead>
-                          <TableHead className="text-xs w-24">الإجمالي</TableHead>
-                          <TableHead className="w-10" />
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {modalItems.map(item => (
-                          <TableRow key={item.uid}>
-                            <TableCell className="py-2">
-                              <p className="text-sm font-medium">{item.name}</p>
-                              {(item.color || item.size) && <p className="text-xs text-muted-foreground">{[item.color, item.size].filter(Boolean).join(" / ")}</p>}
-                            </TableCell>
-                            <TableCell className="py-2"><Input type="number" min="1" className="h-7 w-16 text-sm text-center p-1" value={item.qty} onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? { ...i, qty: parseInt(e.target.value) || 1 } : i))} /></TableCell>
-                            <TableCell className="py-2"><Input type="number" step="0.001" className="h-7 w-24 text-sm font-mono p-1" value={item.unitCost} onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? { ...i, unitCost: parseFloat(e.target.value) || 0 } : i))} /></TableCell>
-                            <TableCell className="py-2 font-mono text-sm">{omr(item.qty * item.unitCost)}</TableCell>
-                            <TableCell className="py-2"><Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-400 hover:text-red-600" onClick={() => setModalItems(prev => prev.filter(i => i.uid !== item.uid))}><X className="w-3.5 h-3.5" /></Button></TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                <div>
+                  <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>طريقة الدفع <span style={{ color: "#D4527E" }}>*</span></label>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    {[{ val: "cash", label: "نقدًا" }, { val: "bank_transfer", label: "تحويل" }, { val: "credit", label: "آجل" }].map(opt => (
+                      <div key={opt.val} onClick={() => setNewPayMethod(opt.val)} style={{ flex: 1, padding: "10px", border: newPayMethod === opt.val ? "2px solid #D4527E" : "0.5px solid #E5E3DC", borderRadius: "8px", textAlign: "center", cursor: "pointer", background: newPayMethod === opt.val ? "#FBEAF0" : "white", fontSize: "12px", color: newPayMethod === opt.val ? "#72243E" : "#888780", fontWeight: newPayMethod === opt.val ? 600 : 400, transition: "all 0.15s" }}>
+                        {opt.label}
+                      </div>
+                    ))}
                   </div>
-                ) : (
-                  <div className="text-center py-10 text-muted-foreground">
-                    <Package className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                    <p className="text-sm">لم تتم إضافة أي منتجات بعد</p>
+                </div>
+                <div>
+                  <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>التاريخ <span style={{ color: "#D4527E" }}>*</span></label>
+                  <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)}
+                    style={{ width: "100%", padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", color: "#2C2C2A", background: "white" }} />
+                </div>
+                {newPayMethod === "credit" && (
+                  <div>
+                    <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>تاريخ الاستحقاق</label>
+                    <input type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)}
+                      style={{ width: "100%", padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", color: "#2C2C2A", background: "white" }} />
                   </div>
                 )}
+                <div style={{ gridColumn: "1/-1" }}>
+                  <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>ملاحظات</label>
+                  <textarea value={newNotes} onChange={e => setNewNotes(e.target.value)}
+                    style={{ width: "100%", padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", resize: "none", height: "64px", color: "#2C2C2A", background: "white", fontFamily: "inherit" }}
+                    placeholder="ملاحظات اختيارية..." />
+                </div>
               </div>
             </div>
-          )}
+            <div style={{ display: "flex", justifyContent: "flex-start" }}>
+              <button onClick={() => setWizardStep(2)} disabled={!canNext1}
+                style={{ background: canNext1 ? "#D4527E" : "#E5E3DC", color: canNext1 ? "white" : "#888780", border: "none", padding: "12px 28px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: canNext1 ? "pointer" : "not-allowed" }}>
+                التالي — إضافة المنتجات →
+              </button>
+            </div>
+          </>
+        )}
 
-          {/* ════ الخطوة 3: التكاليف والخصومات ════ */}
-          {wizardStep === 3 && (
-            <div className="space-y-4">
-              <div className="bg-background border rounded-xl p-5 shadow-sm space-y-4">
-                <h2 className="text-base font-bold flex items-center gap-2">
-                  <Ship className="w-4 h-4 text-[#D4527E]" /> التكاليف الإضافية والخصومات
-                </h2>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5"><label className="text-sm font-medium flex items-center gap-1"><Truck className="w-3 h-3" /> الشحن</label><Input type="number" step="0.001" min="0" className="font-mono" placeholder="0.000" value={newShipping} onChange={e => setNewShipping(e.target.value)} /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium">الجمارك</label><Input type="number" step="0.001" min="0" className="font-mono" placeholder="0.000" value={newCustoms} onChange={e => setNewCustoms(e.target.value)} /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium">التخليص</label><Input type="number" step="0.001" min="0" className="font-mono" placeholder="0.000" value={newClearance} onChange={e => setNewClearance(e.target.value)} /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium">أخرى</label><Input type="number" step="0.001" min="0" className="font-mono" placeholder="0.000" value={newOther} onChange={e => setNewOther(e.target.value)} /></div>
-                  <div className="space-y-1.5"><label className="text-sm font-medium">ضريبة القيمة المضافة %</label><Input type="number" min="0" max="100" step="0.1" className="font-mono" placeholder="0" value={newVatRate} onChange={e => setNewVatRate(e.target.value)} /></div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium">الخصم</label>
-                    <div className="flex gap-1">
-                      <Input type="number" min="0" step="0.001" className="font-mono flex-1" placeholder="0" value={newDiscount} onChange={e => setNewDiscount(e.target.value)} />
-                      <Select value={newDiscType} onValueChange={(v: any) => setNewDiscType(v)}>
-                        <SelectTrigger className="w-20 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="value">ر.ع</SelectItem><SelectItem value="percent">%</SelectItem></SelectContent>
-                      </Select>
+        {/* ════ الخطوة 2 ════ */}
+        {wizardStep === 2 && (
+          <>
+            <div style={{ background: "white", border: "0.5px solid #E5E3DC", borderRadius: "12px", padding: "24px", marginBottom: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", paddingBottom: "10px", borderBottom: "0.5px solid #E5E3DC" }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "#2C2C2A" }}>إضافة المنتجات</div>
+                <div style={{ fontSize: "12px", color: "#888780" }}>{modalItems.length} منتجات • {modalItems.reduce((s, i) => s + i.qty, 0)} قطعة</div>
+              </div>
+
+              {/* صف إضافة منتج */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 90px 60px auto", gap: "8px", alignItems: "end", marginBottom: "14px", padding: "16px", background: "#F7F7F5", borderRadius: "8px" }}>
+                <div style={{ position: "relative" }}>
+                  <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>المنتج / SKU / باركود</label>
+                  <input type="text" placeholder="ابحث أو اكتب اسم المنتج..."
+                    value={modalNewName}
+                    onChange={e => { const v = e.target.value; setModalNewName(v); setModalProductSearch(v); setModalNewSearchOpen(true); if (!v) { setModalManualProductId(""); setModalManualVariantId(null); } }}
+                    onFocus={() => { if (modalNewName) setModalNewSearchOpen(true); }}
+                    onBlur={() => setTimeout(() => setModalNewSearchOpen(false), 180)}
+                    autoComplete="off"
+                    style={{ width: "100%", padding: "9px 10px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", background: "white" }} />
+                  {modalNewSearchOpen && modalNewName.length >= 1 && (
+                    <div style={{ position: "absolute", zIndex: 50, top: "100%", marginTop: "2px", left: 0, right: 0, border: "0.5px solid #E5E3DC", borderRadius: "8px", background: "white", boxShadow: "0 4px 16px rgba(0,0,0,0.1)", maxHeight: "200px", overflowY: "auto" }}>
+                      {(() => {
+                        const q = modalNewName.toLowerCase();
+                        const results = (allProducts as Product[]).filter(p => p.name.toLowerCase().includes(q) || (p as any).barcode?.toLowerCase().includes(q) || (p as any).sku?.toLowerCase().includes(q)).slice(0, 12);
+                        return results.length > 0 ? results.map(p => (
+                          <div key={p.id}
+                            onMouseDown={() => { setModalManualProductId(String(p.id)); setModalManualVariantId(null); setModalManualCost(""); setModalNewName(p.name); setModalProductSearch(p.name); setModalNewSearchOpen(false); }}
+                            style={{ padding: "8px 12px", fontSize: "12px", cursor: "pointer", borderBottom: "0.5px solid #F7F7F5", display: "flex", justifyContent: "space-between", alignItems: "center", color: "#2C2C2A" }}>
+                            <span style={{ fontWeight: modalManualProductId === String(p.id) ? 600 : 400 }}>{p.name}</span>
+                            <span style={{ fontSize: "11px", color: "#888780", background: "#EAF3DE", padding: "2px 6px", borderRadius: "4px" }}>مسجل ✓</span>
+                          </div>
+                        )) : (
+                          <div style={{ padding: "8px 12px", fontSize: "12px", color: "#888780" }}>سيُضاف كمنتج جديد ← "{modalNewName}"</div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                  {modalManualProductId && (
+                    <div style={{ marginTop: "4px", fontSize: "11px", color: "#27500A", background: "#EAF3DE", padding: "3px 8px", borderRadius: "4px", display: "inline-block" }}>✓ منتج مسجل</div>
+                  )}
+                </div>
+                <div>
+                  <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>الكمية</label>
+                  <input type="number" value={modalManualQty} min="1" onChange={e => setModalManualQty(e.target.value)}
+                    style={{ width: "100%", padding: "9px 6px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>سعر الوحدة</label>
+                  <input type="number" value={modalManualCost} min="0" step="0.001" onChange={e => setModalManualCost(e.target.value)} placeholder="0"
+                    style={{ width: "100%", padding: "9px 6px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>المقاس</label>
+                  <input type="text" value={modalNewSize} placeholder="—" onChange={e => setModalNewSize(e.target.value)}
+                    style={{ width: "100%", padding: "9px 4px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white" }} />
+                </div>
+                <button
+                  disabled={!modalNewName.trim() || !modalManualQty}
+                  onClick={() => {
+                    const prod = (allProducts as Product[]).find(p => String(p.id) === modalManualProductId);
+                    const variant = modalManualVariants.find(v => v.id === modalManualVariantId);
+                    if (modalManualProductId && prod) {
+                      setModalItems(prev => {
+                        if (modalManualVariantId) { const ex = prev.findIndex(i => i.variantId === modalManualVariantId); if (ex >= 0) return prev.map((i, n) => n === ex ? { ...i, qty: i.qty + (parseInt(modalManualQty)||1), unitCost: parseFloat(modalManualCost)||i.unitCost } : i); }
+                        return [...prev, { uid: crypto.randomUUID(), variantId: modalManualVariantId, productId: Number(modalManualProductId), name: prod.name, barcode: variant?.barcode || "", color: variant?.color || "", size: modalNewSize, qty: parseInt(modalManualQty)||1, unitCost: parseFloat(modalManualCost)||0, sellPrice: 0 }];
+                      });
+                    } else {
+                      setModalItems(prev => [...prev, { uid: crypto.randomUUID(), variantId: null, productId: null, name: modalNewName.trim(), barcode: "", color: "", size: modalNewSize, qty: parseInt(modalManualQty)||1, unitCost: parseFloat(modalManualCost)||0, sellPrice: 0 }]);
+                    }
+                    setModalNewName(""); setModalProductSearch(""); setModalManualProductId(""); setModalManualVariantId(null); setModalManualQty("1"); setModalManualCost(""); setModalNewSize(""); setModalManualSellPrice("");
+                  }}
+                  style={{ background: (!modalNewName.trim() || !modalManualQty) ? "#E5E3DC" : "#D4527E", color: (!modalNewName.trim() || !modalManualQty) ? "#888780" : "white", border: "none", padding: "9px 14px", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: (!modalNewName.trim() || !modalManualQty) ? "not-allowed" : "pointer", whiteSpace: "nowrap", alignSelf: "end" }}>
+                  + إضافة
+                </button>
+              </div>
+
+              {/* باركود */}
+              {modalBarcodeFound ? (
+                <div style={{ border: "0.5px solid #C0DD97", borderRadius: "8px", background: "#EAF3DE", padding: "12px 16px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: "120px" }}>
+                    <div style={{ fontSize: "13px", fontWeight: 600, color: "#27500A" }}>✓ {modalBarcodeFound.name}</div>
+                    <div style={{ fontSize: "11px", color: "#3B6D11", fontFamily: "monospace" }}>{modalBarcodeFound.barcode}{modalBarcodeFound.color && ` · ${modalBarcodeFound.color}`}{modalBarcodeFound.size && ` · ${modalBarcodeFound.size}`}</div>
+                  </div>
+                  <input type="number" value={modalBarcodeConfirmQty} min="1" onChange={e => setModalBarcodeConfirmQty(e.target.value)}
+                    style={{ width: "65px", padding: "7px", border: "0.5px solid #C0DD97", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white" }} placeholder="الكمية" />
+                  <input type="number" value={modalBarcodeConfirmCost} step="0.001" onChange={e => setModalBarcodeConfirmCost(e.target.value)}
+                    style={{ width: "90px", padding: "7px", border: "0.5px solid #C0DD97", borderRadius: "6px", fontSize: "12px", background: "white" }} placeholder="السعر" />
+                  <button onClick={confirmBarcodeItem} style={{ background: "#27500A", color: "white", border: "none", padding: "8px 14px", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>تأكيد +</button>
+                  <button onClick={() => setModalBarcodeFound(null)} style={{ background: "none", border: "none", color: "#888780", cursor: "pointer", fontSize: "18px", padding: "0 4px" }}>✕</button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                  <input ref={modalBarcodeRef} type="text" value={modalBarcode} onChange={e => setModalBarcode(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleModalBarcode(modalBarcode); } }}
+                    placeholder="امسح باركود هنا..." dir="ltr"
+                    style={{ width: "190px", padding: "8px 10px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", fontFamily: "monospace", background: "white" }} />
+                  <button onClick={() => handleModalBarcode(modalBarcode)} disabled={modalBarcodeLoading || !modalBarcode.trim()}
+                    style={{ padding: "8px 12px", border: "0.5px solid #E5E3DC", borderRadius: "6px", background: "white", fontSize: "12px", cursor: modalBarcode.trim() ? "pointer" : "not-allowed", color: "#888780" }}>
+                    {modalBarcodeLoading ? "⏳" : "🔍 بحث"}
+                  </button>
+                  <BarcodeScanButton onScan={handleModalBarcode} />
+                </div>
+              )}
+
+              {/* جدول المنتجات */}
+              {modalItems.length > 0 ? (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "0.5px solid #E5E3DC" }}>
+                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500 }}>#</td>
+                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500 }}>المنتج</td>
+                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "center" }}>المقاس</td>
+                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "center" }}>الكمية</td>
+                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "center" }}>سعر الوحدة</td>
+                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "left" }}>الإجمالي</td>
+                      <td style={{ padding: "8px 6px" }} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modalItems.map((item, idx) => (
+                      <tr key={item.uid} style={{ borderBottom: "0.5px solid #E5E3DC" }}>
+                        <td style={{ padding: "8px 6px", color: "#888780" }}>{idx + 1}</td>
+                        <td style={{ padding: "8px 6px", fontWeight: 500, color: "#2C2C2A" }}>
+                          {item.name}
+                          {item.color && <span style={{ fontSize: "11px", color: "#888780", marginRight: "4px" }}>({item.color})</span>}
+                        </td>
+                        <td style={{ padding: "8px 6px", textAlign: "center", color: "#888780" }}>{item.size || "—"}</td>
+                        <td style={{ padding: "8px 6px", textAlign: "center" }}>
+                          <input type="number" min="1" value={item.qty}
+                            onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? { ...i, qty: parseInt(e.target.value) || 1 } : i))}
+                            style={{ width: "55px", padding: "4px", border: "0.5px solid #E5E3DC", borderRadius: "4px", fontSize: "12px", textAlign: "center" }} />
+                        </td>
+                        <td style={{ padding: "8px 6px", textAlign: "center" }}>
+                          <input type="number" step="0.001" value={item.unitCost}
+                            onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? { ...i, unitCost: parseFloat(e.target.value) || 0 } : i))}
+                            style={{ width: "80px", padding: "4px", border: "0.5px solid #E5E3DC", borderRadius: "4px", fontSize: "12px", textAlign: "center", fontFamily: "monospace" }} />
+                        </td>
+                        <td style={{ padding: "8px 6px", textAlign: "left", fontFamily: "monospace", color: "#D4527E", fontWeight: 600 }}>ر.ع {omr(item.qty * item.unitCost)}</td>
+                        <td style={{ padding: "8px 6px" }}>
+                          <button onClick={() => setModalItems(prev => prev.filter(i => i.uid !== item.uid))}
+                            style={{ background: "none", border: "none", color: "#CCCCCC", cursor: "pointer", fontSize: "16px" }}>✕</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: "1px solid #E5E3DC", background: "#F7F7F5" }}>
+                      <td colSpan={3} style={{ padding: "10px 6px", fontWeight: 600, fontSize: "12px", color: "#2C2C2A" }}>الإجمالي الفرعي</td>
+                      <td style={{ padding: "10px 6px", textAlign: "center", fontWeight: 600 }}>{modalItems.reduce((s, i) => s + i.qty, 0)}</td>
+                      <td />
+                      <td style={{ padding: "10px 6px", textAlign: "left", fontWeight: 700, color: "#D4527E", fontFamily: "monospace" }}>ر.ع {omr(wSubtotal)}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              ) : (
+                <div style={{ textAlign: "center", padding: "32px", color: "#888780" }}>
+                  <div style={{ fontSize: "32px", marginBottom: "8px", opacity: 0.3 }}>📦</div>
+                  <div style={{ fontSize: "13px" }}>لم تتم إضافة أي منتجات بعد</div>
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <button onClick={() => setWizardStep(1)} style={{ background: "white", color: "#2C2C2A", border: "0.5px solid #E5E3DC", padding: "12px 24px", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>← رجوع</button>
+              <button onClick={() => setWizardStep(3)} disabled={!canNext2}
+                style={{ background: canNext2 ? "#D4527E" : "#E5E3DC", color: canNext2 ? "white" : "#888780", border: "none", padding: "12px 28px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: canNext2 ? "pointer" : "not-allowed" }}>
+                التالي — التكاليف الإضافية →
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ════ الخطوة 3 ════ */}
+        {wizardStep === 3 && (
+          <>
+            <div style={{ background: "white", border: "0.5px solid #E5E3DC", borderRadius: "12px", padding: "24px", marginBottom: "12px" }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: "#2C2C2A", paddingBottom: "10px", borderBottom: "0.5px solid #E5E3DC", marginBottom: "4px" }}>
+                التكاليف الإضافية <span style={{ fontSize: "11px", fontWeight: 400, color: "#888780" }}>(اختيارية)</span>
+              </div>
+              <div style={{ paddingTop: "16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                {[
+                  { label: "الشحن", val: newShipping, set: setNewShipping },
+                  { label: "الجمارك", val: newCustoms, set: setNewCustoms },
+                  { label: "التخليص", val: newClearance, set: setNewClearance },
+                  { label: "أخرى", val: newOther, set: setNewOther },
+                ].map(({ label, val, set }) => (
+                  <div key={label}>
+                    <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>{label}</label>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span style={{ fontSize: "11px", color: "#888780", whiteSpace: "nowrap" }}>ر.ع</span>
+                      <input type="number" value={val} min="0" step="0.001" onChange={e => set(e.target.value)}
+                        style={{ flex: 1, padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", background: "white" }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* ملخص 3 أعمدة */}
+              <div style={{ marginTop: "16px", padding: "16px", background: "#F7F7F5", borderRadius: "8px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", textAlign: "center" }}>
+                <div>
+                  <div style={{ fontSize: "11px", color: "#888780", marginBottom: "4px" }}>المجموع الفرعي</div>
+                  <div style={{ fontSize: "14px", fontWeight: 500, color: "#2C2C2A", fontFamily: "monospace" }}>ر.ع {omr(wSubtotal)}</div>
+                </div>
+                <div style={{ borderRight: "0.5px solid #E5E3DC", borderLeft: "0.5px solid #E5E3DC" }}>
+                  <div style={{ fontSize: "11px", color: "#888780", marginBottom: "4px" }}>التكاليف الإضافية</div>
+                  <div style={{ fontSize: "14px", fontWeight: 500, color: "#BA7517", fontFamily: "monospace" }}>ر.ع {omr(wExtras)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: "11px", color: "#888780", marginBottom: "4px" }}>الإجمالي النهائي</div>
+                  <div style={{ fontSize: "16px", fontWeight: 700, color: "#D4527E", fontFamily: "monospace" }}>ر.ع {omr(wTotal)}</div>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <button onClick={() => setWizardStep(2)} style={{ background: "white", color: "#2C2C2A", border: "0.5px solid #E5E3DC", padding: "12px 24px", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>← رجوع</button>
+              <button onClick={() => setWizardStep(4)} style={{ background: "#D4527E", color: "white", border: "none", padding: "12px 28px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>التالي — المراجعة والاعتماد →</button>
+            </div>
+          </>
+        )}
+
+        {/* ════ الخطوة 4 ════ */}
+        {wizardStep === 4 && (
+          <>
+            <div style={{ background: "white", border: "0.5px solid #E5E3DC", borderRadius: "12px", padding: "24px", marginBottom: "12px" }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: "#2C2C2A", marginBottom: "16px", paddingBottom: "10px", borderBottom: "0.5px solid #E5E3DC" }}>مراجعة الفاتورة قبل الاعتماد</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "20px" }}>
+                <div style={{ background: "#F7F7F5", borderRadius: "8px", padding: "14px" }}>
+                  <div style={{ fontSize: "11px", color: "#888780", marginBottom: "8px", fontWeight: 500 }}>بيانات الفاتورة</div>
+                  <div style={{ fontSize: "12px", color: "#2C2C2A", display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>ا��مورد</span><span style={{ fontWeight: 500 }}>{supplierName}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>الطريقة</span><span style={{ fontWeight: 500 }}>{newPayMethod === "cash" ? "نقدًا" : newPayMethod === "bank_transfer" ? "تحويل" : "آجل"}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>التاريخ</span><span style={{ fontWeight: 500 }}>{newDate}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>التخزين</span><span style={{ fontWeight: 500, color: "#3B6D11" }}>المخزن المركزي</span></div>
+                    {newNotes && <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>ملاحظات</span><span style={{ fontWeight: 500, maxWidth: "140px", textAlign: "left", wordBreak: "break-word" }}>{newNotes}</span></div>}
+                  </div>
+                </div>
+                <div style={{ background: "#F7F7F5", borderRadius: "8px", padding: "14px" }}>
+                  <div style={{ fontSize: "11px", color: "#888780", marginBottom: "8px", fontWeight: 500 }}>ملخص مالي</div>
+                  <div style={{ fontSize: "12px", color: "#2C2C2A", display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>عدد الأصناف</span><span style={{ fontWeight: 500 }}>{modalItems.length}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>المجموع الفرعي</span><span style={{ fontWeight: 500, fontFamily: "monospace" }}>ر.ع {omr(wSubtotal)}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>التكاليف الإضافية</span><span style={{ fontWeight: 500, color: "#BA7517", fontFamily: "monospace" }}>ر.ع {omr(wExtras)}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between", borderTop: "0.5px solid #E5E3DC", paddingTop: "6px", marginTop: "2px" }}>
+                      <span style={{ fontWeight: 600 }}>الإجمالي النهائي</span>
+                      <span style={{ fontWeight: 700, color: "#D4527E", fontFamily: "monospace" }}>ر.ع {omr(wTotal)}</span>
                     </div>
                   </div>
                 </div>
               </div>
-
-              {/* حاسبة فورية */}
-              <div className="bg-background border rounded-xl p-5 shadow-sm space-y-2.5">
-                <h3 className="text-sm font-bold text-muted-foreground mb-3">ملخص الأرقام</h3>
-                <div className="flex justify-between text-sm"><span className="text-muted-foreground">المجموع الفرعي ({modalItems.length} صنف)</span><span className="font-mono font-medium">{omr(wSubtotal)} ر.ع</span></div>
-                {wDiscVal > 0 && <div className="flex justify-between text-sm text-red-500"><span>الخصم</span><span className="font-mono">- {omr(wDiscVal)} ر.ع</span></div>}
-                {wVat > 0 && <div className="flex justify-between text-sm text-amber-600"><span>ضريبة ({newVatRate}%)</span><span className="font-mono">{omr(wVat)} ر.ع</span></div>}
-                {wExtras > 0 && <div className="flex justify-between text-sm text-blue-600"><span>تكاليف إضافية</span><span className="font-mono">{omr(wExtras)} ر.ع</span></div>}
-                <div className="flex justify-between font-bold text-base border-t pt-2.5 mt-1">
-                  <span>الإجمالي النهائي</span>
-                  <span className="font-mono text-emerald-600">{omr(wTotal)} ر.ع</span>
-                </div>
-              </div>
-
-              {/* الملاحظات */}
-              <div className="bg-background border rounded-xl p-5 shadow-sm space-y-2">
-                <label className="text-sm font-medium">ملاحظات (اختياري)</label>
-                <textarea className="w-full border rounded-lg p-3 text-sm resize-none min-h-[80px] bg-background focus:outline-none focus:ring-2 focus:ring-[#D4527E]/30" placeholder="أي ملاحظات على الفاتورة..." value={newNotes} onChange={e => setNewNotes(e.target.value)} />
-              </div>
-            </div>
-          )}
-
-          {/* ════ الخطوة 4: المراجعة والاعتماد ════ */}
-          {wizardStep === 4 && (
-            <div className="space-y-4">
-              {/* بيانات المورد */}
-              <div className="bg-background border rounded-xl p-5 shadow-sm">
-                <h2 className="text-base font-bold flex items-center gap-2 mb-4"><FileText className="w-4 h-4 text-[#D4527E]" /> ملخص الفاتورة</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-                  <div><p className="text-xs text-muted-foreground">المورد</p><p className="font-bold">{supplierName}</p></div>
-                  <div><p className="text-xs text-muted-foreground">التاريخ</p><p className="font-bold">{newDate}</p></div>
-                  <div><p className="text-xs text-muted-foreground">طريقة الدفع</p><p className="font-bold">{newPayMethod === "cash" ? "نقداً" : newPayMethod === "bank_transfer" ? "تحويل بنكي" : newPayMethod === "cheque" ? "شيك" : "آجل"}</p></div>
-                  {newPayMethod === "credit" && newDueDate && <div><p className="text-xs text-muted-foreground">تاريخ الاستحقاق</p><p className="font-bold text-orange-600">{newDueDate}</p></div>}
-                  <div><p className="text-xs text-muted-foreground">وجهة التخزين</p><p className="font-bold text-blue-700">المخزن المركزي الرئيسي</p></div>
-                </div>
-              </div>
-
-              {/* قائمة المنتجات */}
-              <div className="bg-background border rounded-xl shadow-sm overflow-hidden">
-                <div className="px-4 py-2.5 border-b bg-muted/20 flex items-center gap-2">
-                  <Package className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm font-semibold">المنتجات ({modalItems.length} صنف)</span>
-                </div>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader className="bg-muted/20">
-                      <TableRow>
-                        <TableHead className="text-xs">#</TableHead>
-                        <TableHead className="text-xs">الصنف</TableHead>
-                        <TableHead className="text-xs text-center">الكمية</TableHead>
-                        <TableHead className="text-xs">سعر الشراء</TableHead>
-                        <TableHead className="text-xs">الإجمالي</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+              {/* جدول الأصناف */}
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ fontSize: "11px", color: "#888780", marginBottom: "8px", fontWeight: 500 }}>الأصناف ({modalItems.length})</div>
+                {modalItems.length > 0 ? (
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "0.5px solid #E5E3DC" }}>
+                        <td style={{ padding: "6px", color: "#888780" }}>#</td>
+                        <td style={{ padding: "6px", color: "#888780" }}>المنتج</td>
+                        <td style={{ padding: "6px", color: "#888780", textAlign: "center" }}>الكمية</td>
+                        <td style={{ padding: "6px", color: "#888780", textAlign: "center" }}>سعر الوحدة</td>
+                        <td style={{ padding: "6px", color: "#888780", textAlign: "left" }}>الإجمالي</td>
+                      </tr>
+                    </thead>
+                    <tbody>
                       {modalItems.map((item, idx) => (
-                        <TableRow key={item.uid}>
-                          <TableCell className="text-xs text-muted-foreground py-2">{idx + 1}</TableCell>
-                          <TableCell className="py-2"><p className="text-sm font-medium">{item.name}</p>{(item.color || item.size) && <p className="text-xs text-muted-foreground">{[item.color, item.size].filter(Boolean).join(" / ")}</p>}</TableCell>
-                          <TableCell className="py-2 text-center font-mono text-sm">{item.qty}</TableCell>
-                          <TableCell className="py-2 font-mono text-sm">{omr(item.unitCost)}</TableCell>
-                          <TableCell className="py-2 font-mono text-sm font-medium">{omr(item.qty * item.unitCost)}</TableCell>
-                        </TableRow>
+                        <tr key={item.uid} style={{ borderBottom: "0.5px solid #E5E3DC" }}>
+                          <td style={{ padding: "6px", color: "#888780" }}>{idx + 1}</td>
+                          <td style={{ padding: "6px", fontWeight: 500, color: "#2C2C2A" }}>{item.name}{item.size && <span style={{ fontSize: "11px", color: "#888780", marginRight: "4px" }}>({item.size})</span>}</td>
+                          <td style={{ padding: "6px", textAlign: "center" }}>{item.qty}</td>
+                          <td style={{ padding: "6px", textAlign: "center", fontFamily: "monospace" }}>{omr(item.unitCost)}</td>
+                          <td style={{ padding: "6px", textAlign: "left", fontFamily: "monospace", color: "#D4527E", fontWeight: 600 }}>ر.ع {omr(item.qty * item.unitCost)}</td>
+                        </tr>
                       ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                    </tbody>
+                  </table>
+                ) : (
+                  <div style={{ textAlign: "center", padding: "16px", color: "#888780", fontSize: "12px" }}>لم يتم إضافة منتجات</div>
+                )}
               </div>
-
-              {/* الملخص المالي */}
-              <div className="bg-background border rounded-xl p-5 shadow-sm space-y-2">
-                <h3 className="text-sm font-bold text-muted-foreground">الملخص المالي</h3>
-                <div className="flex justify-between text-sm"><span className="text-muted-foreground">المجموع الفرعي</span><span className="font-mono">{omr(wSubtotal)} ر.ع</span></div>
-                {wDiscVal > 0 && <div className="flex justify-between text-sm text-red-500"><span>الخصم</span><span className="font-mono">- {omr(wDiscVal)} ر.ع</span></div>}
-                {wVat > 0 && <div className="flex justify-between text-sm text-amber-600"><span>ضريبة ({newVatRate}%)</span><span className="font-mono">{omr(wVat)} ر.ع</span></div>}
-                {wExtras > 0 && <div className="flex justify-between text-sm text-blue-600"><span>تكاليف إضافية (شحن + جمارك + ...)</span><span className="font-mono">{omr(wExtras)} ر.ع</span></div>}
-                <div className="flex justify-between font-bold text-lg border-t pt-3 mt-1">
-                  <span>الإجمالي النهائي</span>
-                  <span className="font-mono text-emerald-600">{omr(wTotal)} ر.ع</span>
+              {/* بانر التحقق */}
+              <div style={{ background: "#EAF3DE", border: "0.5px solid #C0DD97", borderRadius: "8px", padding: "14px", display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "#3B6D11", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <span style={{ color: "white", fontSize: "11px", fontWeight: 700 }}>✓</span>
                 </div>
-              </div>
-
-              {newNotes && (
-                <div className="bg-muted/30 border rounded-xl p-4 text-sm"><span className="font-medium text-muted-foreground">ملاحظات: </span>{newNotes}</div>
-              )}
-
-              {/* أزرار الاعتماد */}
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <Button variant="outline" size="lg" className="gap-2 border-2" disabled={createMutation.isPending}
-                  onClick={() => { setWizardDirectApprove(false); createMutation.mutate(); }}>
-                  {createMutation.isPending && !wizardDirectApprove ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-                  حفظ كمسودة
-                </Button>
-                <Button size="lg" className="gap-2 bg-green-600 hover:bg-green-700 text-white" disabled={createMutation.isPending}
-                  onClick={() => { setWizardDirectApprove(true); createMutation.mutate(); }}>
-                  {createMutation.isPending && wizardDirectApprove ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileCheck className="w-4 h-4" />}
-                  اعتماد وتحديث المخزون
-                </Button>
+                <div>
+                  <div style={{ fontSize: "12px", fontWeight: 600, color: "#3B6D11" }}>جميع التحققات ناجحة — بإمكانك الاعتماد</div>
+                  <div style={{ fontSize: "11px", color: "#3B6D11", marginTop: "2px" }}>سيتم تحديث المخزون المركزي تلقائيًا بعد الاعتماد</div>
+                </div>
               </div>
             </div>
-          )}
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <button onClick={() => setWizardStep(3)} style={{ background: "white", color: "#2C2C2A", border: "0.5px solid #E5E3DC", padding: "12px 24px", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>← رجوع</button>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button disabled={createMutation.isPending} onClick={() => { setWizardDirectApprove(false); createMutation.mutate(); }}
+                  style={{ background: "white", color: "#2C2C2A", border: "0.5px solid #E5E3DC", padding: "12px 20px", borderRadius: "8px", fontSize: "13px", cursor: createMutation.isPending ? "not-allowed" : "pointer", opacity: createMutation.isPending ? 0.6 : 1 }}>
+                  {createMutation.isPending && !wizardDirectApprove ? "جاري الحفظ..." : "حفظ كمسودة"}
+                </button>
+                <button disabled={createMutation.isPending || modalItems.length === 0} onClick={() => { setWizardDirectApprove(true); createMutation.mutate(); }}
+                  style={{ background: "#27500A", color: "white", border: "none", padding: "12px 28px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: (createMutation.isPending || modalItems.length === 0) ? "not-allowed" : "pointer", opacity: (createMutation.isPending || modalItems.length === 0) ? 0.6 : 1 }}>
+                  {createMutation.isPending && wizardDirectApprove ? "جاري الاعتماد..." : "اعتماد الفاتورة وتحديث المخزون"}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
 
-          {/* ── أزرار التنقل ── */}
-          <div className="flex items-center justify-between pt-2 pb-4">
-            <Button variant="outline" className="gap-2 px-6" onClick={() => wizardStep > 1 ? setWizardStep(s => s - 1) : resetCreate()}>
-              {wizardStep === 1 ? <><X className="w-4 h-4" /> إلغاء</> : <><span className="rotate-180 inline-block">←</span> رجوع</>}
-            </Button>
-            {wizardStep < 4 && (
-              <Button className="gap-2 px-8" style={{ background: "#D4527E" }}
-                disabled={(wizardStep === 1 && !canNext1) || (wizardStep === 2 && !canNext2)}
-                onClick={() => setWizardStep(s => s + 1)}>
-                التالي <span className="inline-block">←</span>
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Dialogs المساعدة */}
+        {/* Dialog: إضافة مورد سريع */}
         <Dialog open={showQuickSupplier} onOpenChange={setShowQuickSupplier}>
           <DialogContent className="max-w-sm">
             <DialogHeader><DialogTitle>{t("purchases.quick_supplier")}</DialogTitle></DialogHeader>
@@ -2552,6 +2502,7 @@ function PurchasesTab() {
           </DialogContent>
         </Dialog>
 
+        </div>
       </div>
     );
   }
