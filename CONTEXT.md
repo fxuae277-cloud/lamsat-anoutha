@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-13 (جلسة 16 — تحسينات Purchases/Suppliers + إصلاح 502 + بحث حي)_
+_آخر تحديث: 2026-04-14 (جلسة 17 — wizard المشتريات + مرفقات PostgreSQL + نسبة الربح)_
 
 ---
 
@@ -12,6 +12,46 @@ _آخر تحديث: 2026-04-13 (جلسة 16 — تحسينات Purchases/Supplie
 ---
 
 ## ✅ مكتمل
+
+### جلسة 17 — wizard المشتريات + مرفقات PostgreSQL + نسبة الربح
+
+#### Purchases.tsx — إصلاح الأرقام العربية في حقول wizard
+- [x] حقول الكمية + سعر الوحدة + اللون + المقاسات: تحويل من `type="number"` إلى `type="text" inputMode="numeric/decimal"` مع `direction: "ltr"` لإجبار ظهور الأرقام الإنجليزية
+
+#### Purchases.tsx — حذف نافذة مراجعة OCR
+- [x] حُذف الـ Dialog الكامل (250+ سطر) الخاص بمراجعة OCR + زر رفع OCR من شريط الأدوات — لا حاجة له
+
+#### Purchases.tsx — دعم رفع مرفقات متعددة
+- [x] زر "رفع مرفق" يقبل الآن `multiple` ملفات
+- [x] كل ملف يُرفع على حدة لـ `/api/purchases/:id/attachment`
+- [x] أيقونة المرفق في قائمة الفواتير أصبحت رابط `<a>` مباشر يفتح الملف في تبويب جديد
+- [x] نافذة المرفقات تعرض الصور من جدول `purchase_attachments` الجديد (مع fallback لـ `attachmentUrls`/`attachmentUrl`)
+- [x] زر "فتح" لكل مرفق + `onError` handler للصور المكسورة
+
+#### Purchases.tsx — إصلاح زر حذف الفاتورة
+- [x] زر الحذف يظهر للفواتير `pending` و `approved` (كان يقتصر على pending فقط)
+- [x] `requirePermission("purchases.manage")` → `requireManager` لأن الصلاحيات لم تُضبط في DB الإنتاج
+
+#### نظام المرفقات الدائمة (PostgreSQL-backed)
+- [x] **Migration 0021**: جدول `purchase_attachments` (id, purchase_id FK, filename, content_type, data TEXT base64, created_at)
+- [x] **Migration تلقائي في startup**: يُشغَّل عند بدء الخادم (`IF NOT EXISTS`) — لا حاجة لتشغيل يدوي
+- [x] **حل Railway ephemeral FS**: الملفات لا تُحفظ في الـ filesystem بل كـ base64 في PostgreSQL → تبقى بعد كل redeploy
+- [x] **API endpoints جديدة**:
+  - `POST /api/purchases/:id/attachment` → يخزن الملف في `purchase_attachments`
+  - `GET /api/attachments/:id` → يُرجع الملف من DB
+  - `DELETE /api/attachments/:id` → يحذف من DB
+  - `GET /api/purchases/:id/attachments` → قائمة مرفقات الفاتورة
+
+#### Products.tsx — نسبة الربح
+- [x] **حقل "هامش الربح %"** في نموذج الإضافة/التعديل: قابل للتعديل — تغييره يُعيد حساب السعر تلقائياً، وتغيير السعر يُحدّث النسبة
+- [x] **عمود "هامش الربح"** في جدول المنتجات: ملون (أخضر ≥30% / أصفر ≥10% / أحمر <10%)
+- [x] **أداة "تحديث الأسعار"** (batch pricing dialog): اختيار الفئة + تحديد نسبة ربح → تحديث أسعار جميع المنتجات التي لها تكلفة مسجلة دفعة واحدة
+
+#### Migrations
+- [x] **0020**: إضافة `attachment_urls JSONB DEFAULT '[]'` إلى `purchase_invoices` + نقل `attachment_url` القديم
+- [x] **0021**: جدول `purchase_attachments` — يُشغَّل تلقائياً عند startup
+
+---
 
 ### جلسة 16 — تحسينات المشتريات والموردين + إصلاح بحث المنتجات
 
@@ -252,7 +292,7 @@ fetch('/api/run-migration-0017',{method:'POST'}).then(r=>r.json()).then(console.
 // Migration 0018 (description + cost_default + min_qty في products):
 fetch('/api/run-migration-0018',{method:'POST'}).then(r=>r.json()).then(console.log)
 
-// Migration 0019 (address + phone في branches):
+// Migrations 0019, 0020, 0021:
 // ✅ تُشغَّل تلقائياً عند startup — لا حاجة لتشغيلها يدوياً
 ```
 
@@ -261,6 +301,7 @@ fetch('/api/run-migration-0018',{method:'POST'}).then(r=>r.json()).then(console.
 - [ ] صفحة دليل الحسابات (Accounts.tsx) ربطها بالنظام الجديد
 - [ ] طباعة فاتورة الشراء (PDF/حراري من صفحة التفاصيل)
 - [ ] تقرير الطلبات: مبيعات شهرية بالفئات والمنتجات
+- [ ] حل نهائي لأرقام التاريخ العربية في `input[type="date"]` (قيد المتصفح)
 
 ---
 
@@ -279,6 +320,7 @@ fetch('/api/run-migration-0018',{method:'POST'}).then(r=>r.json()).then(console.
 - Hosting: Railway
 - Tool: Claude Code
 - Images: base64 في PostgreSQL (مضغوطة client-side)
+- Attachments: base64 في جدول `purchase_attachments` (Railway ephemeral FS لا يحفظ الملفات)
 - Category Hierarchy: parentId self-reference
 - Inventory filters: branches via `/api/branches` للـ BalancesTab و LedgerTab
 - Transfers: `/api/transfer-locations` يستخدم locations (وليس branches) لأن التحويل بين مواقع محددة
