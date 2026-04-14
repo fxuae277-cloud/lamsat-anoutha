@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
-import { Plus, Search, Package, Edit2, Trash2, Eye, MapPin, AlertCircle, Download, ArrowUpDown, ArrowUp, ArrowDown, Copy, RefreshCw, Link, Unlink } from "lucide-react";
+import { Plus, Search, Package, Edit2, Trash2, Eye, MapPin, AlertCircle, Download, ArrowUpDown, ArrowUp, ArrowDown, Copy, RefreshCw, Link, Unlink, Percent } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -50,8 +50,14 @@ export default function Products() {
   const [formProduct, setFormProduct] = useState<any>(null); // null = add
   const [formData, setFormData] = useState({
     name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "",
-    description: "", costDefault: "", minQty: "5",
+    description: "", costDefault: "", minQty: "5", marginInput: "20",
   });
+
+  // ── batch price update ────────────────────────────────────────────────
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchMargin, setBatchMargin] = useState("50");
+  const [batchCatId, setBatchCatId] = useState("all");
+  const [batchLoading, setBatchLoading] = useState(false);
 
   // ── barcode auto-generate ─────────────────────────────────────────────
   const [barcodeLoading, setBarcodeLoading] = useState(false);
@@ -213,20 +219,21 @@ export default function Products() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.categoryId, formOpen]);
 
-  // useEffect: when cost changes and auto-calc is on → update price
+  // useEffect: when cost changes and auto-calc is on → update price using marginInput
   useEffect(() => {
     if (!priceAutoCalc) return;
     const cost = parseFloat(formData.costDefault);
-    if (!isNaN(cost) && cost > 0) {
-      setFormData(f => ({ ...f, price: (cost * 1.2).toFixed(3) }));
+    const margin = parseFloat(formData.marginInput || "20");
+    if (!isNaN(cost) && cost > 0 && !isNaN(margin)) {
+      setFormData(f => ({ ...f, price: (cost * (1 + margin / 100)).toFixed(3) }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData.costDefault, priceAutoCalc]);
+  }, [formData.costDefault, formData.marginInput, priceAutoCalc]);
 
   function openAdd() {
     setFormProduct(null);
     setPriceAutoCalc(true);
-    setFormData({ name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "", description: "", costDefault: "", minQty: "5" });
+    setFormData({ name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "", description: "", costDefault: "", minQty: "5", marginInput: "20" });
 
     setShowAddCategory(false);
     setNewCategoryName("");
@@ -235,7 +242,11 @@ export default function Products() {
 
   function openEdit(p: any) {
     setFormProduct(p);
-    setPriceAutoCalc(false); // edit mode: price stays as-is unless user re-links
+    setPriceAutoCalc(false);
+    // احسب نسبة الربح الحالية من السعر والتكلفة
+    const cost = parseFloat(p.costDefault || p.avgCost || "0");
+    const price = parseFloat(p.price || "0");
+    const currentMargin = cost > 0 && price > 0 ? (((price - cost) / cost) * 100).toFixed(1) : "20";
     setFormData({
       name: p.name,
       categoryId: p.categoryId?.toString() || "",
@@ -247,6 +258,7 @@ export default function Products() {
       description: p.description || "",
       costDefault: p.costDefault?.toString() || "",
       minQty: p.minQty?.toString() || "5",
+      marginInput: currentMargin,
     });
 
     setShowAddCategory(false);
@@ -404,6 +416,11 @@ export default function Products() {
               </Button>
             ) : null;
           })()}
+          {isOwnerOrAdmin && (
+            <Button variant="outline" className="gap-2" onClick={() => setBatchOpen(true)}>
+              <Percent className="w-4 h-4" /> تحديث الأسعار
+            </Button>
+          )}
           <Button onClick={openAdd} className="gap-2" data-testid="button-add-product">
             <Plus className="w-4 h-4" /> {t("products.add_product")}
           </Button>
@@ -510,6 +527,7 @@ export default function Products() {
               <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("price")}>
                 {t("products.default_price")}{sortIcon("price")}
               </TableHead>
+              <TableHead className="text-center">هامش الربح</TableHead>
               <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("stock")}>
                 الكمية{sortIcon("stock")}
               </TableHead>
@@ -549,6 +567,18 @@ export default function Products() {
                     : "—"}
                 </TableCell>
                 <TableCell className="font-medium">{parseFloat(p.price).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} <span className="text-xs text-muted-foreground">ر.ع</span></TableCell>
+                <TableCell className="text-center">
+                  {(() => {
+                    const cost = parseFloat(p.avgCost || p.costDefault || "0");
+                    const price = parseFloat(p.price || "0");
+                    if (cost > 0 && price > 0) {
+                      const margin = ((price - cost) / cost) * 100;
+                      const color = margin >= 30 ? "text-green-600" : margin >= 10 ? "text-amber-600" : "text-red-500";
+                      return <span className={`text-xs font-medium ${color}`}>{margin.toFixed(1)}%</span>;
+                    }
+                    return <span className="text-xs text-muted-foreground">—</span>;
+                  })()}
+                </TableCell>
                 <TableCell>
                   <Badge variant={stock === 0 ? "destructive" : stock < 5 ? "secondary" : "outline"} className={stock > 0 && stock < 5 ? "border-orange-400 text-orange-600 bg-orange-50" : ""}>
                     {stock}
@@ -692,6 +722,32 @@ export default function Products() {
             {/* ── التسعير ── */}
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b pb-1 pt-1">التسعير</p>
             <div className="grid grid-cols-2 gap-3">
+              {/* نسبة الربح — قابلة للتعديل */}
+              <div className="space-y-1">
+                <label className="text-sm font-medium flex items-center gap-1"><Percent className="w-3.5 h-3.5" /> نسبة الربح %</label>
+                <div className="flex gap-2 items-center">
+                  <Input
+                    type="text" inputMode="decimal"
+                    value={formData.marginInput}
+                    onChange={e => {
+                      const val = e.target.value.replace(/[^0-9.]/g, "");
+                      setFormData(f => {
+                        const cost = parseFloat(f.costDefault);
+                        const margin = parseFloat(val);
+                        const newPrice = !isNaN(cost) && cost > 0 && !isNaN(margin)
+                          ? (cost * (1 + margin / 100)).toFixed(3)
+                          : f.price;
+                        return { ...f, marginInput: val, price: newPrice };
+                      });
+                      setPriceAutoCalc(false);
+                    }}
+                    className="w-24"
+                    placeholder="20"
+                  />
+                  <span className="text-xs text-muted-foreground">← تغيير النسبة يحدّث السعر تلقائياً</span>
+                </div>
+              </div>
+              {/* سعر البيع */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium">{t("products.price_omr")}</label>
@@ -706,13 +762,19 @@ export default function Products() {
                     title={priceAutoCalc ? "الوضع التلقائي — اضغط للتحرير يدوياً" : "الوضع اليدوي — اضغط للربط بالتكلفة"}
                   >
                     {priceAutoCalc ? <Link className="w-3 h-3" /> : <Unlink className="w-3 h-3" />}
-                    {priceAutoCalc ? "تلقائي +20%" : "يدوي"}
+                    {priceAutoCalc ? "تلقائي" : "يدوي"}
                   </button>
                 </div>
                 <Input
                   type="number" step="0.001"
                   value={formData.price}
-                  onChange={e => { setPriceAutoCalc(false); setFormData(f => ({ ...f, price: e.target.value })); }}
+                  onChange={e => {
+                    setPriceAutoCalc(false);
+                    const price = parseFloat(e.target.value);
+                    const cost = parseFloat(formData.costDefault);
+                    const newMargin = cost > 0 && price > 0 ? (((price - cost) / cost) * 100).toFixed(1) : formData.marginInput;
+                    setFormData(f => ({ ...f, price: e.target.value, marginInput: newMargin }));
+                  }}
                   readOnly={!isOwnerOrAdmin}
                   className={priceAutoCalc ? "bg-green-50/50 border-green-200" : ""}
                   data-testid="input-price"
@@ -730,17 +792,6 @@ export default function Products() {
               </div>
               {formProduct && (
                 <>
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium">{t("products.profit_margin")}</label>
-                    <div className="h-10 px-3 py-2 rounded-md border bg-muted text-sm flex items-center">
-                      {(() => {
-                        const price = parseFloat(formData.price);
-                        const avg = parseFloat(editProductDetail?.avgCost || formProduct?.avgCost || "0");
-                        if (avg > 0 && price > 0) return `${(((price - avg) / avg) * 100).toFixed(1)}%`;
-                        return "—";
-                      })()}
-                    </div>
-                  </div>
                   <div className="space-y-1">
                     <label className="text-sm font-medium">{t("products.avg_cost")}</label>
                     <Input value={parseFloat(editProductDetail?.avgCost || formProduct?.avgCost || "0").toFixed(3)} readOnly className="bg-muted" />
@@ -1142,6 +1193,97 @@ export default function Products() {
               }}
             >
               {deleteProductMutation.isPending ? "جارٍ الحذف..." : "نعم، احذف"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog تحديث الأسعار بالجملة ── */}
+      <Dialog open={batchOpen} onOpenChange={setBatchOpen}>
+        <DialogContent className="max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Percent className="w-5 h-5" /> تحديث الأسعار بالجملة
+            </DialogTitle>
+            <DialogDescription>
+              يحدّث سعر البيع لكل منتج بناءً على متوسط تكلفته ونسبة الربح المحددة
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">الفئة</label>
+              <Select value={batchCatId} onValueChange={setBatchCatId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="كل الفئات" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الفئات</SelectItem>
+                  {(categories as any[]).map((c: any) => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">نسبة الربح %</label>
+              <div className="flex gap-2 items-center">
+                <Input
+                  type="text" inputMode="decimal"
+                  value={batchMargin}
+                  onChange={e => setBatchMargin(e.target.value.replace(/[^0-9.]/g, ""))}
+                  className="w-28"
+                  placeholder="50"
+                />
+                <span className="text-sm text-muted-foreground">
+                  = سعر البيع × {(1 + parseFloat(batchMargin || "0") / 100).toFixed(2)}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">مثال: تكلفة 1.000 + 50% ربح = سعر 1.500</p>
+            </div>
+            {/* معاينة عدد المنتجات */}
+            <div className="p-3 bg-muted rounded-lg text-sm">
+              سيتم تحديث أسعار{" "}
+              <strong>
+                {(products as any[]).filter((p: any) =>
+                  (batchCatId === "all" || String(p.categoryId) === batchCatId) &&
+                  parseFloat(p.avgCost || p.costDefault || "0") > 0
+                ).length}
+              </strong>
+              {" "}منتج (لديها تكلفة مسجّلة)
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setBatchOpen(false)}>إلغاء</Button>
+            <Button
+              disabled={batchLoading || !batchMargin}
+              onClick={async () => {
+                const margin = parseFloat(batchMargin);
+                if (isNaN(margin)) return;
+                setBatchLoading(true);
+                let updated = 0;
+                try {
+                  const targets = (products as any[]).filter((p: any) =>
+                    (batchCatId === "all" || String(p.categoryId) === batchCatId) &&
+                    parseFloat(p.avgCost || p.costDefault || "0") > 0
+                  );
+                  for (const p of targets) {
+                    const cost = parseFloat(p.avgCost || p.costDefault || "0");
+                    const newPrice = (cost * (1 + margin / 100)).toFixed(3);
+                    await apiRequest("PATCH", `/api/products/${p.id}`, { price: newPrice });
+                    updated++;
+                  }
+                  await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+                  toast({ title: `تم تحديث ${updated} منتج بنسبة ربح ${margin}% ✓` });
+                  setBatchOpen(false);
+                } catch (e: any) {
+                  toast({ title: "خطأ", description: e.message, variant: "destructive" });
+                } finally {
+                  setBatchLoading(false);
+                }
+              }}
+            >
+              {batchLoading ? <RefreshCw className="w-4 h-4 animate-spin ml-2" /> : null}
+              تحديث الأسعار
             </Button>
           </DialogFooter>
         </DialogContent>
