@@ -938,9 +938,10 @@ export async function registerRoutes(
   app.get("/api/products/:id", requireAuth, requirePermission("products.view"), async (req, res) => {
     const product = await storage.getProduct(Number(req.params.id));
     if (!product) return res.status(404).json({ message: "المنتج غير موجود" });
-    const [variants, locationInventory, lastPurchaseResult] = await Promise.all([
+    const [variants, locationInventory, lastPurchaseResult, variantPricesResult] = await Promise.all([
       storage.getVariantsByProduct(product.id),
       storage.getLocationInventoryByProduct(product.id),
+      // آخر سعر شراء للمنتج (من purchase_items)
       db.execute(sql`
         SELECT pi.unit_cost_final AS last_purchase_price, s.name AS last_supplier
         FROM purchase_items pi
@@ -950,11 +951,33 @@ export async function registerRoutes(
         ORDER BY inv.invoice_date DESC, inv.id DESC
         LIMIT 1
       `),
+      // آخر سعر شراء لكل variant على حدة (من purchase_items بالـ variant_id)
+      pool.query(`
+        SELECT DISTINCT ON (pi.variant_id)
+               pi.variant_id,
+               pi.unit_cost_final AS last_purchase_price
+        FROM purchase_items pi
+        JOIN purchase_invoices inv ON inv.id = pi.purchase_id
+        WHERE pi.product_id = $1
+          AND pi.variant_id IS NOT NULL
+          AND inv.status IN ('approved', 'received')
+        ORDER BY pi.variant_id, inv.invoice_date DESC, inv.id DESC
+      `, [product.id]),
     ]);
     const lp = (lastPurchaseResult.rows[0] as any) || null;
+    // map: variantId → last_purchase_price من الفواتير الحقيقية
+    const variantPriceMap: Record<number, string> = {};
+    for (const row of variantPricesResult.rows) {
+      variantPriceMap[row.variant_id] = row.last_purchase_price;
+    }
+    // تحديث lastPurchasePrice في كل variant بالقيمة الحقيقية من الفواتير
+    const enrichedVariants = variants.map((v: any) => ({
+      ...v,
+      lastPurchasePrice: variantPriceMap[v.id] ?? v.lastPurchasePrice,
+    }));
     res.json({
       ...product,
-      variants,
+      variants: enrichedVariants,
       locationInventory,
       lastPurchasePrice: lp?.last_purchase_price ?? null,
       lastSupplier: lp?.last_supplier ?? null,
