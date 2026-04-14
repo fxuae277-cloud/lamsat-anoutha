@@ -254,6 +254,14 @@ export async function registerRoutes(
     if (!row) return res.status(404).json({ message: "لم يتم العثور على الفرع" });
     res.json(row);
   });
+  app.delete("/api/branches/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      await storage.deleteBranch(Number(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(400).json({ message: "لا يمكن حذف الفرع — قد يكون مرتبطاً ببيانات أخرى" });
+    }
+  });
 
   app.get("/api/cities", requireAuth, async (_req, res) => {
     res.json(await storage.getCities());

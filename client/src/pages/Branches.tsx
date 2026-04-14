@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Edit2, GitBranch, Phone, MapPin, Star } from "lucide-react";
+import { Plus, Edit2, Trash2, GitBranch, Phone, MapPin, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ export default function Branches() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
   const [formData, setFormData] = useState({ name: "", address: "", phone: "", isMain: false });
+  const [deletingBranch, setDeletingBranch] = useState<Branch | null>(null);
 
   const { data: branches = [] } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
@@ -46,6 +47,18 @@ export default function Branches() {
       toast({ title: t("common.saved") });
       queryClient.invalidateQueries({ queryKey: ["/api/branches"] });
       setFormOpen(false);
+    },
+    onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return (await apiRequest("DELETE", `/api/branches/${id}`)).json();
+    },
+    onSuccess: () => {
+      toast({ title: "تم حذف الفرع بنجاح" });
+      queryClient.invalidateQueries({ queryKey: ["/api/branches"] });
+      setDeletingBranch(null);
     },
     onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
@@ -119,9 +132,14 @@ export default function Branches() {
                 </TableCell>
                 {isOwnerOrAdmin && (
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="تعديل" onClick={() => openEdit(b)}>
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" title="تعديل" onClick={() => openEdit(b)}>
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" title="حذف" onClick={() => setDeletingBranch(b)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 )}
               </TableRow>
@@ -129,6 +147,30 @@ export default function Branches() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Delete Confirm Dialog */}
+      <Dialog open={!!deletingBranch} onOpenChange={open => { if (!open) setDeletingBranch(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="w-5 h-5" /> حذف الفرع
+            </DialogTitle>
+            <DialogDescription>
+              هل أنت متأكد من حذف <strong>{deletingBranch?.name}</strong>؟ لا يمكن التراجع عن هذا الإجراء.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeletingBranch(null)}>إلغاء</Button>
+            <Button
+              variant="destructive"
+              onClick={() => deletingBranch && deleteMutation.mutate(deletingBranch.id)}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "جاري الحذف..." : "حذف"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add / Edit Dialog */}
       <Dialog open={formOpen} onOpenChange={open => { if (!open) setFormOpen(false); }}>
