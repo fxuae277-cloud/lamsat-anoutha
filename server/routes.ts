@@ -2747,12 +2747,15 @@ export async function registerRoutes(
     res.json({ message: "تم الحذف" });
   });
 
-  app.delete("/api/purchases/:id", requireAuth, requirePermission("purchases.manage"), async (req, res) => {
+  app.delete("/api/purchases/:id", requireAuth, requireManager, async (req, res) => {
     try {
       const id = Number(req.params.id);
       const inv = await pool.query("SELECT status FROM purchase_invoices WHERE id=$1", [id]);
       if (!inv.rows.length) return res.status(404).json({ message: "الفاتورة غير موجودة" });
-      if (inv.rows[0].status !== "pending") return res.status(400).json({ message: "لا يمكن حذف فاتورة غير معلقة" });
+      const status = inv.rows[0].status;
+      if (status === "received") return res.status(400).json({ message: "لا يمكن حذف فاتورة مستلمة — أثّرت على المخزون بالفعل" });
+      // حذف المرفقات أولاً
+      try { await pool.query("DELETE FROM purchase_attachments WHERE purchase_id=$1", [id]); } catch {}
       await pool.query("DELETE FROM purchase_items WHERE purchase_id=$1", [id]);
       await pool.query("DELETE FROM purchase_invoices WHERE id=$1", [id]);
       res.json({ success: true });

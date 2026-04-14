@@ -2447,7 +2447,7 @@ function PurchasesTab() {
                     <Button variant="ghost" size="sm" className="gap-1 text-xs h-8" onClick={() => setSelectedInvoice(inv.id)}>
                       <FileText className="w-3.5 h-3.5" /> {t("purchases.open_invoice")}
                     </Button>
-                    {inv.status === "pending" && canManage && (
+                    {(inv.status === "pending" || inv.status === "approved") && canManage && (
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700" onClick={() => setShowDeleteConfirm(inv.id)} title="حذف">
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
