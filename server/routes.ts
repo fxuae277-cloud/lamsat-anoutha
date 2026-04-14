@@ -1279,7 +1279,9 @@ export async function registerRoutes(
       SELECT 'central' as type, l.id as location_id, l.name as label, NULL::int as branch_id
       FROM locations l WHERE l.is_central = true AND l.active = true
       UNION ALL
-      SELECT 'branch' as type, l.id as location_id, b.name as label, b.id as branch_id
+      SELECT 'branch' as type, l.id as location_id,
+        b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END AS label,
+        b.id as branch_id
       FROM branches b
       JOIN locations l ON l.branch_id = b.id AND l.is_branch_default = true AND l.active = true
       ORDER BY type DESC, label
