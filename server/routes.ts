@@ -945,8 +945,8 @@ export async function registerRoutes(
         SELECT pi.unit_cost_final AS last_purchase_price, s.name AS last_supplier
         FROM purchase_items pi
         JOIN purchase_invoices inv ON inv.id = pi.purchase_id
-        JOIN suppliers s ON s.id = inv.supplier_id
-        WHERE pi.product_id = ${product.id} AND inv.status = 'approved'
+        LEFT JOIN suppliers s ON s.id = inv.supplier_id
+        WHERE pi.product_id = ${product.id} AND inv.status IN ('approved', 'received')
         ORDER BY inv.invoice_date DESC, inv.id DESC
         LIMIT 1
       `),
