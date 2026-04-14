@@ -3,7 +3,8 @@ import { Plus, Edit2, GitBranch, Phone, MapPin, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
@@ -21,7 +22,7 @@ export default function Branches() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
-  const [formData, setFormData] = useState({ name: "", address: "", phone: "" });
+  const [formData, setFormData] = useState({ name: "", address: "", phone: "", isMain: false });
 
   const { data: branches = [] } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
@@ -34,6 +35,7 @@ export default function Branches() {
         name: payload.name.trim(),
         address: payload.address.trim() || null,
         phone: payload.phone.trim() || null,
+        isMain: payload.isMain,
       };
       if (editingBranch) {
         return (await apiRequest("PATCH", `/api/branches/${editingBranch.id}`, body)).json();
@@ -50,7 +52,7 @@ export default function Branches() {
 
   function openAdd() {
     setEditingBranch(null);
-    setFormData({ name: "", address: "", phone: "" });
+    setFormData({ name: "", address: "", phone: "", isMain: false });
     setFormOpen(true);
   }
 
@@ -60,6 +62,7 @@ export default function Branches() {
       name: b.name,
       address: b.address || "",
       phone: b.phone || "",
+      isMain: b.isMain ?? false,
     });
     setFormOpen(true);
   }
@@ -135,6 +138,7 @@ export default function Branches() {
               <GitBranch className="w-5 h-5" />
               {editingBranch ? "تعديل الفرع" : "إضافة فرع جديد"}
             </DialogTitle>
+            <DialogDescription>أدخل بيانات الفرع ثم اضغط حفظ</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
@@ -169,6 +173,21 @@ export default function Branches() {
                 placeholder="+968 XXXX XXXX"
                 type="tel"
                 dir="ltr"
+              />
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
+              <div className="space-y-0.5">
+                <label className="text-sm font-medium flex items-center gap-1">
+                  <Star className="w-3 h-3 text-primary" /> نوع الفرع
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {formData.isMain ? "مركز رئيسي — يظهر كأساس للنظام" : "فرع عادي"}
+                </p>
+              </div>
+              <Switch
+                checked={formData.isMain}
+                onCheckedChange={val => setFormData(f => ({ ...f, isMain: val }))}
               />
             </div>
           </div>
