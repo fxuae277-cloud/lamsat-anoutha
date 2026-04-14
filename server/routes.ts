@@ -2588,10 +2588,18 @@ export async function registerRoutes(
   app.get("/api/purchases", requireAuth, requirePermission("purchases.view"), async (_req, res) => {
     const invoices = await storage.getPurchaseInvoices();
     // أضف attachment_url + attachment_urls لكل فاتورة من raw SQL
-    const attRes = await pool.query("SELECT id, attachment_url, attachment_urls FROM purchase_invoices");
-    const attMap: Record<number, { url: string | null; urls: string[] }> = {};
-    for (const r of attRes.rows) attMap[r.id] = { url: r.attachment_url, urls: r.attachment_urls ?? [] };
-    res.json(invoices.map(inv => ({ ...inv, attachmentUrl: attMap[inv.id]?.url ?? null, attachmentUrls: attMap[inv.id]?.urls ?? [] })));
+    try {
+      const attRes = await pool.query("SELECT id, attachment_url, attachment_urls FROM purchase_invoices");
+      const attMap: Record<number, { url: string | null; urls: string[] }> = {};
+      for (const r of attRes.rows) attMap[r.id] = { url: r.attachment_url, urls: r.attachment_urls ?? [] };
+      res.json(invoices.map(inv => ({ ...inv, attachmentUrl: attMap[inv.id]?.url ?? null, attachmentUrls: attMap[inv.id]?.urls ?? [] })));
+    } catch {
+      // العمود attachment_urls غير موجود بعد — fallback للعمود القديم فقط
+      const attRes = await pool.query("SELECT id, attachment_url FROM purchase_invoices WHERE attachment_url IS NOT NULL");
+      const attMap: Record<number, string> = {};
+      for (const r of attRes.rows) attMap[r.id] = r.attachment_url;
+      res.json(invoices.map(inv => ({ ...inv, attachmentUrl: attMap[inv.id] ?? null, attachmentUrls: attMap[inv.id] ? [attMap[inv.id]] : [] })));
+    }
   });
 
   app.get("/api/purchases/:id", requireAuth, requirePermission("purchases.view"), async (req, res) => {
@@ -2599,10 +2607,16 @@ export async function registerRoutes(
     if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
     const items = await storage.getPurchaseItems(invoice.id);
     // إرجاع attachment_url + attachment_urls من قاعدة البيانات مباشرة
-    const attRes = await pool.query("SELECT attachment_url, attachment_urls FROM purchase_invoices WHERE id=$1", [invoice.id]);
-    const attachmentUrl = attRes.rows[0]?.attachment_url ?? null;
-    const attachmentUrls: string[] = attRes.rows[0]?.attachment_urls ?? [];
-    res.json({ ...invoice, items, attachmentUrl, attachmentUrls });
+    try {
+      const attRes = await pool.query("SELECT attachment_url, attachment_urls FROM purchase_invoices WHERE id=$1", [invoice.id]);
+      const attachmentUrl = attRes.rows[0]?.attachment_url ?? null;
+      const attachmentUrls: string[] = attRes.rows[0]?.attachment_urls ?? [];
+      res.json({ ...invoice, items, attachmentUrl, attachmentUrls });
+    } catch {
+      const attRes = await pool.query("SELECT attachment_url FROM purchase_invoices WHERE id=$1", [invoice.id]);
+      const attachmentUrl = attRes.rows[0]?.attachment_url ?? null;
+      res.json({ ...invoice, items, attachmentUrl, attachmentUrls: attachmentUrl ? [attachmentUrl] : [] });
+    }
   });
 
   app.post("/api/purchases", requireAuth, requirePermission("purchases.create"), async (req, res) => {
@@ -2828,13 +2842,20 @@ export async function registerRoutes(
       const attachmentUrl = `/uploads/attachments/${fileName}`;
 
       // أضف URL للمصفوفة (attachment_urls) وحدّث attachment_url للتوافق مع القديم
-      const cur = await pool.query("SELECT attachment_urls FROM purchase_invoices WHERE id=$1", [purchaseId]);
-      const existing: string[] = cur.rows[0]?.attachment_urls ?? [];
+      let existing: string[] = [];
+      try {
+        const cur = await pool.query("SELECT attachment_urls FROM purchase_invoices WHERE id=$1", [purchaseId]);
+        existing = cur.rows[0]?.attachment_urls ?? [];
+      } catch { /* العمود غير موجود بعد */ }
       const updated = [...existing, attachmentUrl];
-      await pool.query(
-        "UPDATE purchase_invoices SET attachment_url=$1, attachment_urls=$2 WHERE id=$3",
-        [attachmentUrl, JSON.stringify(updated), purchaseId]
-      );
+      try {
+        await pool.query(
+          "UPDATE purchase_invoices SET attachment_url=$1, attachment_urls=$2 WHERE id=$3",
+          [attachmentUrl, JSON.stringify(updated), purchaseId]
+        );
+      } catch {
+        await pool.query("UPDATE purchase_invoices SET attachment_url=$1 WHERE id=$2", [attachmentUrl, purchaseId]);
+      }
 
       res.json({ ok: true, attachmentUrl, attachmentUrls: updated });
     } catch (err: any) {
