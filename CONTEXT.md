@@ -31,6 +31,7 @@ _آخر تحديث: 2026-04-14 (جلسة 17 — wizard المشتريات + مر
 #### Purchases.tsx — إصلاح زر حذف الفاتورة
 - [x] زر الحذف يظهر للفواتير `pending` و `approved` (كان يقتصر على pending فقط)
 - [x] `requirePermission("purchases.manage")` → `requireManager` لأن الصلاحيات لم تُضبط في DB الإنتاج
+- [x] إضافة `DELETE FROM purchase_extra_costs WHERE purchase_invoice_id=$1` قبل حذف الفاتورة — كان FK بدون CASCADE يمنع الحذف صامتاً
 
 #### نظام المرفقات الدائمة (PostgreSQL-backed)
 - [x] **Migration 0021**: جدول `purchase_attachments` (id, purchase_id FK, filename, content_type, data TEXT base64, created_at)
