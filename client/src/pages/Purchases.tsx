@@ -2595,7 +2595,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                     <Button variant="ghost" size="sm" className="gap-1 text-xs h-8" onClick={() => setSelectedInvoice(inv.id)}>
                       <FileText className="w-3.5 h-3.5" /> {t("purchases.open_invoice")}
                     </Button>
-                    {(inv.status === "pending" || inv.status === "approved") && canManage && (
+                    {inv.status !== "cancelled" && canManage && (
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700" onClick={() => setShowDeleteConfirm(inv.id)} title="حذف">
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
@@ -2701,20 +2701,33 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
       </Dialog>
 
       {/* تأكيد حذف فردي */}
-      <Dialog open={!!showDeleteConfirm} onOpenChange={() => setShowDeleteConfirm(null)}>
-        <DialogContent className="max-w-sm" dir="rtl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600"><Trash2 className="w-5 h-5" /> تأكيد الحذف</DialogTitle>
-            <DialogDescription>سيتم حذف الفاتورة نهائياً. لا يمكن التراجع عن هذا الإجراء.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteConfirm(null)}>{t("common.cancel")}</Button>
-            <Button variant="destructive" onClick={() => { if (showDeleteConfirm) deleteMutation.mutate(showDeleteConfirm); }} disabled={deleteMutation.isPending}>
-              {deleteMutation.isPending ? t("common.loading") : "حذف"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {(() => {
+        const confirmInv = invoices.find((inv: any) => inv.id === showDeleteConfirm);
+        const isReceived = confirmInv?.status === "received";
+        return (
+          <Dialog open={!!showDeleteConfirm} onOpenChange={() => setShowDeleteConfirm(null)}>
+            <DialogContent className="max-w-sm" dir="rtl">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-red-600"><Trash2 className="w-5 h-5" /> تأكيد الحذف</DialogTitle>
+                <DialogDescription className="space-y-2">
+                  {isReceived ? (
+                    <span className="block text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 text-xs mt-1">
+                      ⚠️ هذه فاتورة <strong>مستلمة</strong> — سيتم عكس كميات المخزون المضافة عند اعتمادها تلقائياً.
+                    </span>
+                  ) : null}
+                  <span className="block">سيتم حذف الفاتورة نهائياً. لا يمكن التراجع عن هذا الإجراء.</span>
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowDeleteConfirm(null)}>{t("common.cancel")}</Button>
+                <Button variant="destructive" onClick={() => { if (showDeleteConfirm) deleteMutation.mutate(showDeleteConfirm); }} disabled={deleteMutation.isPending}>
+                  {deleteMutation.isPending ? t("common.loading") : "حذف"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* تأكيد حذف جماعي */}
       <Dialog open={showBulkDelete} onOpenChange={setShowBulkDelete}>

@@ -2752,20 +2752,92 @@ export async function registerRoutes(
   });
 
   app.delete("/api/purchases/:id", requireAuth, requireManager, async (req, res) => {
+    const client = await pool.connect();
     try {
       const id = Number(req.params.id);
-      const inv = await pool.query("SELECT status FROM purchase_invoices WHERE id=$1", [id]);
-      if (!inv.rows.length) return res.status(404).json({ message: "الفاتورة غير موجودة" });
-      const status = inv.rows[0].status;
-      if (status === "received") return res.status(400).json({ message: "لا يمكن حذف فاتورة مستلمة — أثّرت على المخزون بالفعل" });
-      // حذف كل السجلات المرتبطة أولاً (FK بدون CASCADE)
-      try { await pool.query("DELETE FROM purchase_attachments WHERE purchase_id=$1", [id]); } catch {}
-      try { await pool.query("DELETE FROM purchase_extra_costs WHERE purchase_invoice_id=$1", [id]); } catch {}
-      await pool.query("DELETE FROM purchase_items WHERE purchase_id=$1", [id]);
-      await pool.query("DELETE FROM purchase_invoices WHERE id=$1", [id]);
+      const invRes = await client.query(
+        "SELECT pi.*, COALESCE(pi.grand_total::numeric, 0) AS grand_total_num FROM purchase_invoices pi WHERE pi.id=$1",
+        [id]
+      );
+      if (!invRes.rows.length) return res.status(404).json({ message: "الفاتورة غير موجودة" });
+      const inv = invRes.rows[0];
+
+      await client.query("BEGIN");
+
+      // إذا كانت الفاتورة معتمدة أو مستلمة → عكس تأثيرها على المخزون
+      if (inv.status === "approved" || inv.status === "received") {
+        const itemsRes = await client.query(
+          `SELECT pi.*, pv.id AS resolved_variant_id
+           FROM purchase_items pi
+           LEFT JOIN product_variants pv ON pv.id = pi.variant_id
+           WHERE pi.purchase_id = $1`,
+          [id]
+        );
+        const items = itemsRes.rows;
+
+        for (const item of items) {
+          const qty = item.qty;
+          const variantId = item.variant_id;
+
+          // عكس inventory_balances
+          if (variantId) {
+            await client.query(
+              `UPDATE inventory_balances
+               SET qty_on_hand = GREATEST(0, qty_on_hand - $1)
+               WHERE variant_id = $2`,
+              [qty, variantId]
+            );
+            // سجل حركة عكسية في inventory_ledger
+            await client.query(
+              `INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by, created_at)
+               SELECT $1, location_id, $2, 'purchase_reversed', 'purchase_invoices', $3, $4, now()
+               FROM inventory_balances WHERE variant_id = $1 LIMIT 1`,
+              [variantId, -qty, id, req.session.userId]
+            );
+          }
+
+          // عكس location_inventory
+          await client.query(
+            `UPDATE location_inventory
+             SET qty_on_hand = GREATEST(0, qty_on_hand - $1), updated_at = now()
+             WHERE product_id = $2`,
+            [qty, item.product_id]
+          );
+
+          // عكس stock_qty في products
+          await client.query(
+            `UPDATE products SET stock_qty = GREATEST(0, COALESCE(stock_qty,0) - $1) WHERE id = $2`,
+            [qty, item.product_id]
+          );
+        }
+
+        // عكس رصيد المورد
+        const grandTotal = parseFloat(inv.grand_total || inv.total_amount || "0");
+        if (grandTotal > 0 && inv.supplier_id) {
+          await client.query(
+            `UPDATE suppliers
+             SET total_purchases = GREATEST(0, COALESCE(total_purchases,0) - $1),
+                 balance         = GREATEST(0, COALESCE(balance,0) - $1)
+             WHERE id = $2`,
+            [grandTotal, inv.supplier_id]
+          );
+        }
+      }
+
+      // حذف السجلات المرتبطة ثم الفاتورة
+      try { await client.query("DELETE FROM purchase_attachments WHERE purchase_id=$1", [id]); } catch {}
+      try { await client.query("DELETE FROM purchase_extra_costs WHERE purchase_invoice_id=$1", [id]); } catch {}
+      try { await client.query("DELETE FROM inventory_transactions WHERE ref_table='purchase_invoices' AND ref_id=$1", [id]); } catch {}
+      await client.query("DELETE FROM purchase_items WHERE purchase_id=$1", [id]);
+      await client.query("DELETE FROM purchase_invoices WHERE id=$1", [id]);
+
+      await client.query("COMMIT");
       res.json({ success: true });
     } catch (err: any) {
+      await client.query("ROLLBACK");
       res.status(500).json({ message: err?.message ?? "خطأ في الحذف" });
+    } finally {
+      client.release();
     }
   });
 
