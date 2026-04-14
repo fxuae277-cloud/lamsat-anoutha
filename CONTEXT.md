@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-14 (جلسة 18 — طباعة فاتورة الشراء + حذف المستلمة + إصلاح الأسعار)_
+_آخر تحديث: 2026-04-14 (جلسة 19 — إصلاح الكميات + الفروع + التحويلات)_
 
 ---
 
@@ -12,6 +12,39 @@ _آخر تحديث: 2026-04-14 (جلسة 18 — طباعة فاتورة الشر
 ---
 
 ## ✅ مكتمل
+
+### جلسة 19 — إصلاح الكميات + الفروع + التحويلات
+
+#### Branches.tsx — switch نوع الفرع
+- [x] إضافة Switch "رئيسي / فرع" في نموذج الإضافة/التعديل — يُرسل `isMain` للـ API
+- [x] عند التعديل يقرأ القيمة الحالية تلقائياً
+- [x] إضافة `DialogDescription` لإصلاح تحذير accessibility
+
+#### Branches.tsx — حذف الفرع
+- [x] زر سلة حمراء بجانب كل فرع (للمالك/الأدمن فقط)
+- [x] Dialog تأكيد يعرض اسم الفرع قبل الحذف
+- [x] `DELETE /api/branches/:id` endpoint — يُرجع 400 إذا الفرع مرتبط ببيانات
+- [x] `deleteBranch(id)` في `storage.ts` و `IStorage`
+
+#### server/storage.ts — إصلاح عرض الكميات في صفحة المنتجات
+- [x] **المشكلة:** query يجلب الكمية من `inventory_balances` فقط (عبر `product_variants`) — المنتجات بدون variants تعرض 0 دائماً
+- [x] **الحل:** UNION query يشمل `location_inventory` للمنتجات التي ليس لها variants:
+  - المنتجات WITH variants → `inventory_balances`
+  - المنتجات WITHOUT variants → `location_inventory`
+- [x] نفس الإصلاح طُبّق على `getProducts()` و `searchProducts()`
+
+#### server/routes.ts — أسماء الفروع في dropdown التحويل
+- [x] `GET /api/transfer-locations`: label الفرع أصبح `اسم الفرع - المدينة` بدل الاسم فقط
+- [x] يحل مشكلة ظهور "لمسة أنوثة" مرتين بدون تمييز
+
+#### Migrations تم تشغيلها على Railway (جلسة 19)
+- [x] Migration 0015 ✅ payment_method/due_date/discount/vat
+- [x] Migration 0016 ✅ قيود المخزون والفهارس
+- [x] Migration 0017 ✅ variant_id في order_items
+- [x] Migration 0018 ✅ description + cost_default + min_qty للمنتجات
+- [x] Migrations 0019→0021 ✅ تعمل تلقائياً عند startup
+
+---
 
 ### جلسة 18 — طباعة فاتورة الشراء + حذف المستلمة + إصلاحات الأسعار
 
@@ -332,6 +365,9 @@ fetch('/api/run-migration-0018',{method:'POST'}).then(r=>r.json()).then(console.
 - [ ] صفحة دليل الحسابات (Accounts.tsx) ربطها بالنظام الجديد
 - [ ] تقرير الطلبات: مبيعات شهرية بالفئات والمنتجات
 - [ ] حل نهائي لأرقام التاريخ العربية في `input[type="date"]` (قيد المتصفح)
+
+## ⚠️ ملاحظة
+- "المخزن المركزي" في dropdown التحويل هو موقع `is_central=true` من جدول `locations` — منفصل عن الفروع — يظهر مع 4 فروع = 5 خيارات إجمالاً
 
 ---
 
