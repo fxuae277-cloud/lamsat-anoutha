@@ -2606,7 +2606,8 @@ export async function registerRoutes(
 
   app.post("/api/purchases", requireAuth, requirePermission("purchases.create"), async (req, res) => {
     try {
-      const { supplierId, invoiceDate, shippingCost, customsCost, clearanceCost, otherCost, notes, branchId } = req.body;
+      // القاعدة: branchId يُتجاهل دائماً — فواتير الشراء تُسجَّل في المخزن المركزي فقط
+      const { supplierId, invoiceDate, shippingCost, customsCost, clearanceCost, otherCost, notes } = req.body;
       if (!invoiceDate) {
         return res.status(400).json({ message: "تاريخ الفاتورة مطلوب" });
       }
@@ -2614,7 +2615,7 @@ export async function registerRoutes(
       const data = {
         invoiceNumber,
         supplierId: supplierId || null,
-        branchId: branchId ? Number(branchId) : null,
+        branchId: null,  // ← دائماً null — المخزن المركزي هو الوجهة الوحيدة
         invoiceDate,
         shippingCost: String(shippingCost || 0),
         customsCost: String(customsCost || 0),

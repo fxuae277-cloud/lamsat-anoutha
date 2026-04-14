@@ -725,7 +725,7 @@ function PurchasesTab() {
       if (!newSupplierId) throw new Error("اختر المورد");
       const res = await apiRequest("POST", "/api/purchases", {
         supplierId: Number(newSupplierId),
-        branchId: newBranchId ? Number(newBranchId) : null,
+        // branchId مُتجاهل — القاعدة: المخزن المركزي دائماً
         invoiceDate: newDate,
         paymentMethod: newPayMethod,
         dueDate: newDueDate || null,
@@ -2105,13 +2105,15 @@ function PurchasesTab() {
                 </div>
               </div>
 
-              {/* الفرع */}
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">الفرع</label>
-                <Select value={newBranchId} onValueChange={setNewBranchId}>
-                  <SelectTrigger><SelectValue placeholder="اختر الفرع..." /></SelectTrigger>
-                  <SelectContent>{(branches as any[]).map((b: any) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}</SelectContent>
-                </Select>
+              {/* المخزن الوجهة — ثابت دائماً */}
+              <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl p-3.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Building className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-blue-800">المخزن المركزي الرئيسي</p>
+                  <p className="text-xs text-blue-600 mt-0.5">جميع فواتير الشراء تُسجَّل مباشرةً في المخزن المركزي — بعد الاستلام يمكن التحويل للفروع</p>
+                </div>
               </div>
 
               {/* التاريخ */}
@@ -2451,7 +2453,7 @@ function PurchasesTab() {
                   <div><p className="text-xs text-muted-foreground">التاريخ</p><p className="font-bold">{newDate}</p></div>
                   <div><p className="text-xs text-muted-foreground">طريقة الدفع</p><p className="font-bold">{newPayMethod === "cash" ? "نقداً" : newPayMethod === "bank_transfer" ? "تحويل بنكي" : newPayMethod === "cheque" ? "شيك" : "آجل"}</p></div>
                   {newPayMethod === "credit" && newDueDate && <div><p className="text-xs text-muted-foreground">تاريخ الاستحقاق</p><p className="font-bold text-orange-600">{newDueDate}</p></div>}
-                  {newBranchId && <div><p className="text-xs text-muted-foreground">الفرع</p><p className="font-bold">{(branches as any[]).find((b: any) => String(b.id) === newBranchId)?.name || "—"}</p></div>}
+                  <div><p className="text-xs text-muted-foreground">وجهة التخزين</p><p className="font-bold text-blue-700">المخزن المركزي الرئيسي</p></div>
                 </div>
               </div>
 

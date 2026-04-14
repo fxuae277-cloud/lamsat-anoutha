@@ -2066,6 +2066,8 @@ export class DatabaseStorage implements IStorage {
       parseFloat(invoice.otherCost || "0");
     const grandTotal = subtotalItems + totalExtraCost;
 
+    // ── القاعدة الثابتة: جميع فواتير الشراء تذهب للمخزن المركزي ONLY ──
+    // لا يُسمح بالتسجيل في أي فرع مباشرةً — التوزيع يتم لاحقاً عبر التحويلات
     const [centralLoc] = await db.select({ id: locations.id })
       .from(locations)
       .where(eq(locations.isCentral, true))
