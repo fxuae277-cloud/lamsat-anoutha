@@ -389,12 +389,24 @@ export class DatabaseStorage implements IStorage {
     }
     if (rows.length === 0) return rows.map(r => ({ ...r, totalStock: 0 }));
     const ids = rows.map(r => r.id);
+    const idsArr = sql.join(ids.map(id => sql`${id}::int`), sql`, `);
     const stockResult = await db.execute(sql`
-      SELECT pv.product_id, COALESCE(SUM(ib.qty_on_hand), 0)::int AS total_stock
-      FROM product_variants pv
-      LEFT JOIN inventory_balances ib ON ib.variant_id = pv.id
-      WHERE pv.product_id = ANY(ARRAY[${sql.join(ids.map(id => sql`${id}::int`), sql`, `)}])
-      GROUP BY pv.product_id
+      SELECT product_id, COALESCE(SUM(total), 0)::int AS total_stock FROM (
+        -- products WITH variants → inventory_balances
+        SELECT pv.product_id, COALESCE(SUM(ib.qty_on_hand), 0) AS total
+        FROM product_variants pv
+        LEFT JOIN inventory_balances ib ON ib.variant_id = pv.id
+        WHERE pv.product_id = ANY(ARRAY[${idsArr}])
+        GROUP BY pv.product_id
+        UNION ALL
+        -- products WITHOUT variants → location_inventory
+        SELECT li.product_id, COALESCE(SUM(li.qty_on_hand), 0) AS total
+        FROM location_inventory li
+        WHERE li.product_id = ANY(ARRAY[${idsArr}])
+          AND NOT EXISTS (SELECT 1 FROM product_variants pv2 WHERE pv2.product_id = li.product_id)
+        GROUP BY li.product_id
+      ) combined
+      GROUP BY product_id
     `);
     const stockMap = new Map<number, number>();
     for (const r of stockResult.rows as any[]) stockMap.set(Number(r.product_id), Number(r.total_stock));
@@ -437,12 +449,22 @@ export class DatabaseStorage implements IStorage {
     if (rows.length === 0) return { products: [], total };
 
     const ids = rows.map(r => r.id);
+    const idsArr = sql.join(ids.map(id => sql`${id}::int`), sql`, `);
     const stockResult = await db.execute(sql`
-      SELECT pv.product_id, COALESCE(SUM(ib.qty_on_hand), 0)::int AS total_stock
-      FROM product_variants pv
-      LEFT JOIN inventory_balances ib ON ib.variant_id = pv.id
-      WHERE pv.product_id = ANY(ARRAY[${sql.join(ids.map(id => sql`${id}::int`), sql`, `)}])
-      GROUP BY pv.product_id
+      SELECT product_id, COALESCE(SUM(total), 0)::int AS total_stock FROM (
+        SELECT pv.product_id, COALESCE(SUM(ib.qty_on_hand), 0) AS total
+        FROM product_variants pv
+        LEFT JOIN inventory_balances ib ON ib.variant_id = pv.id
+        WHERE pv.product_id = ANY(ARRAY[${idsArr}])
+        GROUP BY pv.product_id
+        UNION ALL
+        SELECT li.product_id, COALESCE(SUM(li.qty_on_hand), 0) AS total
+        FROM location_inventory li
+        WHERE li.product_id = ANY(ARRAY[${idsArr}])
+          AND NOT EXISTS (SELECT 1 FROM product_variants pv2 WHERE pv2.product_id = li.product_id)
+        GROUP BY li.product_id
+      ) combined
+      GROUP BY product_id
     `);
     const stockMap = new Map<number, number>();
     for (const r of stockResult.rows as any[]) stockMap.set(Number(r.product_id), Number(r.total_stock));
