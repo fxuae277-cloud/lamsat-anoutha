@@ -2226,13 +2226,13 @@ function PurchasesTab() {
                 </div>
                 <div>
                   <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>الكمية</label>
-                  <input type="number" value={modalManualQty} min="1" onChange={e => setModalManualQty(e.target.value)} dir="ltr"
-                    style={{ width: "100%", padding: "9px 6px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white" }} />
+                  <input type="text" inputMode="numeric" value={modalManualQty} onChange={e => setModalManualQty(e.target.value.replace(/[^0-9]/g, ""))}
+                    style={{ width: "100%", padding: "9px 6px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white", direction: "ltr" }} />
                 </div>
                 <div>
                   <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>سعر الوحدة</label>
-                  <input type="number" value={modalManualCost} min="0" step="0.001" onChange={e => setModalManualCost(e.target.value)} placeholder="0" dir="ltr"
-                    style={{ width: "100%", padding: "9px 6px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white" }} />
+                  <input type="text" inputMode="decimal" value={modalManualCost} onChange={e => setModalManualCost(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0"
+                    style={{ width: "100%", padding: "9px 6px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white", direction: "ltr" }} />
                 </div>
                 <div>
                   <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>اللون</label>
@@ -2323,14 +2323,14 @@ function PurchasesTab() {
                             style={{ width: "55px", padding: "4px", border: "0.5px solid #E5E3DC", borderRadius: "4px", fontSize: "11px", textAlign: "center" }} placeholder="—" />
                         </td>
                         <td style={{ padding: "8px 6px", textAlign: "center" }}>
-                          <input type="number" min="1" value={item.qty} dir="ltr"
-                            onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? { ...i, qty: parseInt(e.target.value) || 1 } : i))}
-                            style={{ width: "55px", padding: "4px", border: "0.5px solid #E5E3DC", borderRadius: "4px", fontSize: "12px", textAlign: "center" }} />
+                          <input type="text" inputMode="numeric" value={item.qty}
+                            onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? { ...i, qty: parseInt(e.target.value.replace(/[^0-9]/g, "")) || 1 } : i))}
+                            style={{ width: "55px", padding: "4px", border: "0.5px solid #E5E3DC", borderRadius: "4px", fontSize: "12px", textAlign: "center", direction: "ltr" }} />
                         </td>
                         <td style={{ padding: "8px 6px", textAlign: "center" }}>
-                          <input type="number" step="0.001" value={item.unitCost} dir="ltr"
-                            onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? { ...i, unitCost: parseFloat(e.target.value) || 0 } : i))}
-                            style={{ width: "80px", padding: "4px", border: "0.5px solid #E5E3DC", borderRadius: "4px", fontSize: "12px", textAlign: "center", fontFamily: "monospace" }} />
+                          <input type="text" inputMode="decimal" value={item.unitCost}
+                            onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? { ...i, unitCost: parseFloat(e.target.value.replace(/[^0-9.]/g, "")) || 0 } : i))}
+                            style={{ width: "80px", padding: "4px", border: "0.5px solid #E5E3DC", borderRadius: "4px", fontSize: "12px", textAlign: "center", fontFamily: "monospace", direction: "ltr" }} />
                         </td>
                         <td style={{ padding: "8px 6px", textAlign: "left", fontFamily: "monospace", color: "#D4527E", fontWeight: 600 }}>ر.ع {omr(item.qty * item.unitCost)}</td>
                         <td style={{ padding: "8px 6px" }}>
@@ -2385,8 +2385,8 @@ function PurchasesTab() {
                     <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>{label}</label>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <span style={{ fontSize: "11px", color: "#888780", whiteSpace: "nowrap" }}>ر.ع</span>
-                      <input type="number" value={val} min="0" step="0.001" onChange={e => set(e.target.value)} dir="ltr"
-                        style={{ flex: 1, padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", background: "white" }} />
+                      <input type="text" inputMode="decimal" value={val} onChange={e => set(e.target.value.replace(/[^0-9.]/g, ""))}
+                        style={{ flex: 1, padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", background: "white", direction: "ltr" }} />
                     </div>
                   </div>
                 ))}
