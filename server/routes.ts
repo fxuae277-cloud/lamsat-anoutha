@@ -2587,21 +2587,22 @@ export async function registerRoutes(
 
   app.get("/api/purchases", requireAuth, requirePermission("purchases.view"), async (_req, res) => {
     const invoices = await storage.getPurchaseInvoices();
-    // أضف attachment_url لكل فاتورة من raw SQL
-    const attRes = await pool.query("SELECT id, attachment_url FROM purchase_invoices WHERE attachment_url IS NOT NULL");
-    const attMap: Record<number, string> = {};
-    for (const r of attRes.rows) attMap[r.id] = r.attachment_url;
-    res.json(invoices.map(inv => ({ ...inv, attachmentUrl: attMap[inv.id] ?? null })));
+    // أضف attachment_url + attachment_urls لكل فاتورة من raw SQL
+    const attRes = await pool.query("SELECT id, attachment_url, attachment_urls FROM purchase_invoices");
+    const attMap: Record<number, { url: string | null; urls: string[] }> = {};
+    for (const r of attRes.rows) attMap[r.id] = { url: r.attachment_url, urls: r.attachment_urls ?? [] };
+    res.json(invoices.map(inv => ({ ...inv, attachmentUrl: attMap[inv.id]?.url ?? null, attachmentUrls: attMap[inv.id]?.urls ?? [] })));
   });
 
   app.get("/api/purchases/:id", requireAuth, requirePermission("purchases.view"), async (req, res) => {
     const invoice = await storage.getPurchaseInvoice(Number(req.params.id));
     if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
     const items = await storage.getPurchaseItems(invoice.id);
-    // إرجاع attachment_url من قاعدة البيانات مباشرة (عمود غير موجود في schema Drizzle)
-    const attRes = await pool.query("SELECT attachment_url FROM purchase_invoices WHERE id=$1", [invoice.id]);
+    // إرجاع attachment_url + attachment_urls من قاعدة البيانات مباشرة
+    const attRes = await pool.query("SELECT attachment_url, attachment_urls FROM purchase_invoices WHERE id=$1", [invoice.id]);
     const attachmentUrl = attRes.rows[0]?.attachment_url ?? null;
-    res.json({ ...invoice, items, attachmentUrl });
+    const attachmentUrls: string[] = attRes.rows[0]?.attachment_urls ?? [];
+    res.json({ ...invoice, items, attachmentUrl, attachmentUrls });
   });
 
   app.post("/api/purchases", requireAuth, requirePermission("purchases.create"), async (req, res) => {
@@ -2813,45 +2814,63 @@ export async function registerRoutes(
   });
 
   // ── رفع وحفظ نسخة الفاتورة الورقية (مرفق دائم) ──
+  // ── رفع مرفق (يُضاف للمصفوفة) ──
   app.post("/api/purchases/:purchaseId/attachment", requireAuth, requirePermission("purchases.edit"), uploadLimiter, upload.single("file"), async (req: any, res) => {
     try {
       const purchaseId = Number(req.params.purchaseId);
       if (!req.file) return res.json({ ok: false, error: "لم يتم رفع صورة" });
 
-      // احفظ الملف في uploads/attachments/
       const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
       const fileName = `purchase_${purchaseId}_${Date.now()}${ext}`;
       const attachDir = path.resolve("uploads/attachments");
       await fs.mkdir(attachDir, { recursive: true });
-      const filePath = path.join(attachDir, fileName);
-      await fs.writeFile(filePath, req.file.buffer);
+      await fs.writeFile(path.join(attachDir, fileName), req.file.buffer);
       const attachmentUrl = `/uploads/attachments/${fileName}`;
 
-      // احذف المرفق القديم إن وجد
-      const old = await pool.query("SELECT attachment_url FROM purchase_invoices WHERE id=$1", [purchaseId]);
-      if (old.rows[0]?.attachment_url) {
-        try { await fs.unlink(path.resolve(old.rows[0].attachment_url.replace(/^\//, ""))); } catch {}
-      }
+      // أضف URL للمصفوفة (attachment_urls) وحدّث attachment_url للتوافق مع القديم
+      const cur = await pool.query("SELECT attachment_urls FROM purchase_invoices WHERE id=$1", [purchaseId]);
+      const existing: string[] = cur.rows[0]?.attachment_urls ?? [];
+      const updated = [...existing, attachmentUrl];
+      await pool.query(
+        "UPDATE purchase_invoices SET attachment_url=$1, attachment_urls=$2 WHERE id=$3",
+        [attachmentUrl, JSON.stringify(updated), purchaseId]
+      );
 
-      // حدّث قاعدة البيانات
-      await pool.query("UPDATE purchase_invoices SET attachment_url=$1 WHERE id=$2", [attachmentUrl, purchaseId]);
-
-      res.json({ ok: true, attachmentUrl });
+      res.json({ ok: true, attachmentUrl, attachmentUrls: updated });
     } catch (err: any) {
       console.error("Attachment upload error:", err);
       res.json({ ok: false, error: err?.message ?? "فشل رفع المرفق" });
     }
   });
 
-  // ── حذف المرفق ──
+  // ── حذف مرفق بالـ index ──
+  app.delete("/api/purchases/:purchaseId/attachment/:index", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
+    try {
+      const purchaseId = Number(req.params.purchaseId);
+      const index = Number(req.params.index);
+      const cur = await pool.query("SELECT attachment_urls FROM purchase_invoices WHERE id=$1", [purchaseId]);
+      const existing: string[] = cur.rows[0]?.attachment_urls ?? [];
+      const toDelete = existing[index];
+      if (toDelete) { try { await fs.unlink(path.resolve(toDelete.replace(/^\//, ""))); } catch {} }
+      const updated = existing.filter((_, i) => i !== index);
+      await pool.query(
+        "UPDATE purchase_invoices SET attachment_url=$1, attachment_urls=$2 WHERE id=$3",
+        [updated[updated.length - 1] ?? null, JSON.stringify(updated), purchaseId]
+      );
+      res.json({ ok: true, attachmentUrls: updated });
+    } catch (err: any) {
+      res.json({ ok: false, error: err?.message });
+    }
+  });
+
+  // ── حذف كل المرفقات (للتوافق مع القديم) ──
   app.delete("/api/purchases/:purchaseId/attachment", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
     try {
       const purchaseId = Number(req.params.purchaseId);
-      const old = await pool.query("SELECT attachment_url FROM purchase_invoices WHERE id=$1", [purchaseId]);
-      if (old.rows[0]?.attachment_url) {
-        try { await fs.unlink(path.resolve(old.rows[0].attachment_url.replace(/^\//, ""))); } catch {}
-      }
-      await pool.query("UPDATE purchase_invoices SET attachment_url=NULL WHERE id=$1", [purchaseId]);
+      const cur = await pool.query("SELECT attachment_urls FROM purchase_invoices WHERE id=$1", [purchaseId]);
+      const existing: string[] = cur.rows[0]?.attachment_urls ?? [];
+      for (const u of existing) { try { await fs.unlink(path.resolve(u.replace(/^\//, ""))); } catch {} }
+      await pool.query("UPDATE purchase_invoices SET attachment_url=NULL, attachment_urls='[]' WHERE id=$1", [purchaseId]);
       res.json({ ok: true });
     } catch (err: any) {
       res.json({ ok: false, error: err?.message });
@@ -4996,6 +5015,20 @@ export async function registerRoutes(
   registerExportRoutes(app);
   registerBackupRoutes(app);
   registerMobileRoutes(app);
+
+  // ── Migration 0020 ─────────────────────────────────────────────────────────
+  app.post("/api/run-migration-0020", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const migPath = path.join(process.cwd(), "migrations", "0020_purchase_multi_attachments.sql");
+      const sqlText = fs.readFileSync(migPath, "utf8");
+      await pool.query(sqlText);
+      res.json({ success: true, message: "تم تشغيل migration 0020 — دعم مرفقات متعددة بنجاح" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+    }
+  });
 
   // ── Migration 0016 ─────────────────────────────────────────────────────────
   app.post("/api/run-migration-0016", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
