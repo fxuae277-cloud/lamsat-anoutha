@@ -1651,44 +1651,73 @@ function PurchasesTab() {
               </DialogTitle>
             </DialogHeader>
             <div className="flex-1 overflow-auto p-4 flex flex-col gap-6">
-              {((invoiceDetail as any)?.attachmentUrls?.length > 0
-                ? (invoiceDetail as any).attachmentUrls
-                : (invoiceDetail as any)?.attachmentUrl ? [(invoiceDetail as any).attachmentUrl] : []
-              ).map((url: string, idx: number) => (
-                <div key={idx} className="flex flex-col items-center gap-3 border rounded-xl p-4 bg-gray-50">
-                  <div className="text-sm text-muted-foreground font-medium">مرفق {idx + 1}</div>
-                  {url.toLowerCase().endsWith(".pdf") ? (
-                    <iframe src={url} className="w-full h-[60vh] border rounded-lg" title={`مرفق ${idx + 1}`} />
-                  ) : (
-                    <img src={url} alt={`مرفق ${idx + 1}`} className="max-w-full max-h-[60vh] object-contain rounded-lg border shadow-sm" />
-                  )}
-                  <div className="flex gap-3">
-                    <a href={url} download target="_blank" rel="noreferrer">
-                      <Button variant="outline" size="sm" className="gap-2">
-                        <Upload className="w-4 h-4 rotate-180" /> تحميل
-                      </Button>
-                    </a>
-                    <Button variant="outline" size="sm" className="gap-2 border-red-300 text-red-600 hover:bg-red-50"
-                      onClick={async () => {
-                        if (!selectedInvoice) return;
-                        try {
-                          const res = await fetch(`/api/purchases/${selectedInvoice}/attachment/${idx}`, { method: "DELETE", credentials: "include" });
-                          const data = await res.json();
-                          if (data.ok) {
-                            qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
-                            qc.invalidateQueries({ queryKey: ["/api/purchases"] });
-                            if (data.attachmentUrls?.length === 0) setShowAttachment(false);
-                            toast({ title: "تم حذف المرفق" });
-                          }
-                        } catch (err: any) {
-                          toast({ title: "فشل الحذف", description: err.message, variant: "destructive" });
-                        }
-                      }}>
-                      <Trash2 className="w-4 h-4" /> حذف
-                    </Button>
-                  </div>
-                </div>
-              ))}
+              {(() => {
+                // استخدم attachments الجديدة أولاً، ثم attachmentUrls، ثم attachmentUrl
+                const attachments: any[] = (invoiceDetail as any)?.attachments?.length > 0
+                  ? (invoiceDetail as any).attachments
+                  : (invoiceDetail as any)?.attachmentUrls?.length > 0
+                    ? (invoiceDetail as any).attachmentUrls.map((url: string, i: number) => ({ id: null, url, filename: `مرفق ${i + 1}` }))
+                    : (invoiceDetail as any)?.attachmentUrl
+                      ? [{ id: null, url: (invoiceDetail as any).attachmentUrl, filename: "مرفق 1" }]
+                      : [];
+                if (attachments.length === 0) return <p className="text-center text-muted-foreground py-8">لا توجد مرفقات</p>;
+                return attachments.map((att: any, idx: number) => {
+                  const url: string = att.url || att;
+                  const isPdf = typeof url === "string" && url.toLowerCase().includes(".pdf");
+                  const attachId = att.id;
+                  return (
+                    <div key={idx} className="flex flex-col items-center gap-3 border rounded-xl p-4 bg-gray-50">
+                      <div className="text-sm text-muted-foreground font-medium">مرفق {idx + 1}{att.filename && att.filename !== `مرفق ${idx + 1}` ? ` — ${att.filename}` : ""}</div>
+                      {isPdf ? (
+                        <iframe src={url} className="w-full h-[60vh] border rounded-lg" title={`مرفق ${idx + 1}`} />
+                      ) : (
+                        <img
+                          src={url}
+                          alt={`مرفق ${idx + 1}`}
+                          className="max-w-full max-h-[60vh] object-contain rounded-lg border shadow-sm"
+                          onError={e => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.removeAttribute("hidden"); }}
+                        />
+                      )}
+                      <p hidden className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded p-2 w-full text-center">
+                        تعذّر عرض الصورة — استخدم زر "فتح" أدناه
+                      </p>
+                      <div className="flex gap-3">
+                        <a href={url} target="_blank" rel="noreferrer">
+                          <Button variant="outline" size="sm" className="gap-2">
+                            <FileText className="w-4 h-4" /> فتح
+                          </Button>
+                        </a>
+                        <a href={url} download target="_blank" rel="noreferrer">
+                          <Button variant="outline" size="sm" className="gap-2">
+                            <Upload className="w-4 h-4 rotate-180" /> تحميل
+                          </Button>
+                        </a>
+                        <Button variant="outline" size="sm" className="gap-2 border-red-300 text-red-600 hover:bg-red-50"
+                          onClick={async () => {
+                            if (!selectedInvoice) return;
+                            try {
+                              const endpoint = attachId
+                                ? `/api/attachments/${attachId}`
+                                : `/api/purchases/${selectedInvoice}/attachment`;
+                              const r = await fetch(endpoint, { method: "DELETE", credentials: "include" });
+                              const d = await r.json();
+                              if (d.ok) {
+                                qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
+                                qc.invalidateQueries({ queryKey: ["/api/purchases"] });
+                                toast({ title: "تم حذف المرفق" });
+                                if ((d.attachments?.length ?? 0) === 0) setShowAttachment(false);
+                              }
+                            } catch (err: any) {
+                              toast({ title: "فشل الحذف", description: err.message, variant: "destructive" });
+                            }
+                          }}>
+                          <Trash2 className="w-4 h-4" /> حذف
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </DialogContent>
         </Dialog>

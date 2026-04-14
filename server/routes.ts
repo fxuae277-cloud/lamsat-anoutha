@@ -2587,35 +2587,38 @@ export async function registerRoutes(
 
   app.get("/api/purchases", requireAuth, requirePermission("purchases.view"), async (_req, res) => {
     const invoices = await storage.getPurchaseInvoices();
-    // أضف attachment_url + attachment_urls لكل فاتورة من raw SQL
-    try {
-      const attRes = await pool.query("SELECT id, attachment_url, attachment_urls FROM purchase_invoices");
-      const attMap: Record<number, { url: string | null; urls: string[] }> = {};
-      for (const r of attRes.rows) attMap[r.id] = { url: r.attachment_url, urls: r.attachment_urls ?? [] };
-      res.json(invoices.map(inv => ({ ...inv, attachmentUrl: attMap[inv.id]?.url ?? null, attachmentUrls: attMap[inv.id]?.urls ?? [] })));
-    } catch {
-      // العمود attachment_urls غير موجود بعد — fallback للعمود القديم فقط
-      const attRes = await pool.query("SELECT id, attachment_url FROM purchase_invoices WHERE attachment_url IS NOT NULL");
-      const attMap: Record<number, string> = {};
-      for (const r of attRes.rows) attMap[r.id] = r.attachment_url;
-      res.json(invoices.map(inv => ({ ...inv, attachmentUrl: attMap[inv.id] ?? null, attachmentUrls: attMap[inv.id] ? [attMap[inv.id]] : [] })));
-    }
+    const attRes = await pool.query("SELECT id, attachment_url FROM purchase_invoices");
+    const attMap: Record<number, string | null> = {};
+    for (const r of attRes.rows) attMap[r.id] = r.attachment_url;
+    res.json(invoices.map(inv => ({ ...inv, attachmentUrl: attMap[inv.id] ?? null })));
   });
 
   app.get("/api/purchases/:id", requireAuth, requirePermission("purchases.view"), async (req, res) => {
     const invoice = await storage.getPurchaseInvoice(Number(req.params.id));
     if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
     const items = await storage.getPurchaseItems(invoice.id);
-    // إرجاع attachment_url + attachment_urls من قاعدة البيانات مباشرة
+    // جلب المرفقات من جدول purchase_attachments
     try {
-      const attRes = await pool.query("SELECT attachment_url, attachment_urls FROM purchase_invoices WHERE id=$1", [invoice.id]);
+      const attRes = await pool.query("SELECT attachment_url FROM purchase_invoices WHERE id=$1", [invoice.id]);
       const attachmentUrl = attRes.rows[0]?.attachment_url ?? null;
       const attachmentUrls: string[] = attRes.rows[0]?.attachment_urls ?? [];
       res.json({ ...invoice, items, attachmentUrl, attachmentUrls });
     } catch {
       const attRes = await pool.query("SELECT attachment_url FROM purchase_invoices WHERE id=$1", [invoice.id]);
       const attachmentUrl = attRes.rows[0]?.attachment_url ?? null;
-      res.json({ ...invoice, items, attachmentUrl, attachmentUrls: attachmentUrl ? [attachmentUrl] : [] });
+      // جلب المرفقات من الجدول الجديد
+      let attachments: any[] = [];
+      try {
+        const aRows = await pool.query("SELECT id, filename, content_type FROM purchase_attachments WHERE purchase_id=$1 ORDER BY id", [invoice.id]);
+        attachments = aRows.rows.map((r: any) => ({ id: r.id, url: `/api/attachments/${r.id}`, filename: r.filename, contentType: r.content_type }));
+      } catch { /* الجدول غير موجود بعد — migration 0021 لم يُشغَّل */ }
+      // إذا لا يوجد في الجدول الجديد لكن يوجد attachment_url قديم → أضفه كمرفق واحد
+      const attachmentUrls = attachments.length > 0
+        ? attachments.map((a: any) => a.url)
+        : attachmentUrl ? [attachmentUrl] : [];
+      res.json({ ...invoice, items, attachmentUrl, attachmentUrls, attachments });
+    } catch (err: any) {
+      res.json({ ...invoice, items, attachmentUrl: null, attachmentUrls: [], attachments: [] });
     }
   });
 
@@ -2827,71 +2830,88 @@ export async function registerRoutes(
     }
   });
 
-  // ── رفع وحفظ نسخة الفاتورة الورقية (مرفق دائم) ──
-  // ── رفع مرفق (يُضاف للمصفوفة) ──
+  // ── رفع مرفق — يُخزَّن في PostgreSQL (دائم، لا يُحذف عند إعادة النشر) ──
   app.post("/api/purchases/:purchaseId/attachment", requireAuth, requirePermission("purchases.edit"), uploadLimiter, upload.single("file"), async (req: any, res) => {
     try {
       const purchaseId = Number(req.params.purchaseId);
       if (!req.file) return res.json({ ok: false, error: "لم يتم رفع صورة" });
 
-      const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
-      const fileName = `purchase_${purchaseId}_${Date.now()}${ext}`;
-      const attachDir = path.resolve("uploads/attachments");
-      await fs.mkdir(attachDir, { recursive: true });
-      await fs.writeFile(path.join(attachDir, fileName), req.file.buffer);
-      const attachmentUrl = `/uploads/attachments/${fileName}`;
+      // خزّن في جدول purchase_attachments (بيانات base64 في PostgreSQL)
+      const base64Data = req.file.buffer.toString("base64");
+      const contentType = req.file.mimetype || "image/jpeg";
+      const filename = req.file.originalname || `attachment_${Date.now()}`;
 
-      // أضف URL للمصفوفة (attachment_urls) وحدّث attachment_url للتوافق مع القديم
-      let existing: string[] = [];
-      try {
-        const cur = await pool.query("SELECT attachment_urls FROM purchase_invoices WHERE id=$1", [purchaseId]);
-        existing = cur.rows[0]?.attachment_urls ?? [];
-      } catch { /* العمود غير موجود بعد */ }
-      const updated = [...existing, attachmentUrl];
-      try {
-        await pool.query(
-          "UPDATE purchase_invoices SET attachment_url=$1, attachment_urls=$2 WHERE id=$3",
-          [attachmentUrl, JSON.stringify(updated), purchaseId]
-        );
-      } catch {
-        await pool.query("UPDATE purchase_invoices SET attachment_url=$1 WHERE id=$2", [attachmentUrl, purchaseId]);
-      }
+      const ins = await pool.query(
+        "INSERT INTO purchase_attachments (purchase_id, filename, content_type, data) VALUES ($1,$2,$3,$4) RETURNING id",
+        [purchaseId, filename, contentType, base64Data]
+      );
+      const attachId = ins.rows[0].id;
+      const attachmentUrl = `/api/attachments/${attachId}`;
 
-      res.json({ ok: true, attachmentUrl, attachmentUrls: updated });
+      // حدّث attachment_url للتوافق مع قائمة الفواتير
+      await pool.query("UPDATE purchase_invoices SET attachment_url=$1 WHERE id=$2", [attachmentUrl, purchaseId]);
+
+      res.json({ ok: true, attachmentUrl, attachmentId: attachId });
     } catch (err: any) {
       console.error("Attachment upload error:", err);
       res.json({ ok: false, error: err?.message ?? "فشل رفع المرفق" });
     }
   });
 
-  // ── حذف مرفق بالـ index ──
-  app.delete("/api/purchases/:purchaseId/attachment/:index", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
+  // ── خدمة المرفق من قاعدة البيانات ──
+  app.get("/api/attachments/:id", async (req, res) => {
     try {
-      const purchaseId = Number(req.params.purchaseId);
-      const index = Number(req.params.index);
-      const cur = await pool.query("SELECT attachment_urls FROM purchase_invoices WHERE id=$1", [purchaseId]);
-      const existing: string[] = cur.rows[0]?.attachment_urls ?? [];
-      const toDelete = existing[index];
-      if (toDelete) { try { await fs.unlink(path.resolve(toDelete.replace(/^\//, ""))); } catch {} }
-      const updated = existing.filter((_, i) => i !== index);
-      await pool.query(
-        "UPDATE purchase_invoices SET attachment_url=$1, attachment_urls=$2 WHERE id=$3",
-        [updated[updated.length - 1] ?? null, JSON.stringify(updated), purchaseId]
-      );
-      res.json({ ok: true, attachmentUrls: updated });
+      const attachId = Number(req.params.id);
+      const row = await pool.query("SELECT filename, content_type, data FROM purchase_attachments WHERE id=$1", [attachId]);
+      if (!row.rows[0]) return res.status(404).json({ error: "المرفق غير موجود" });
+      const { filename, content_type, data } = row.rows[0];
+      const buffer = Buffer.from(data, "base64");
+      res.setHeader("Content-Type", content_type);
+      res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(filename)}"`);
+      res.send(buffer);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ── حذف مرفق بالـ ID ──
+  app.delete("/api/attachments/:id", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
+    try {
+      const attachId = Number(req.params.id);
+      // جلب purchase_id لتحديث attachment_url
+      const row = await pool.query("SELECT purchase_id FROM purchase_attachments WHERE id=$1", [attachId]);
+      if (!row.rows[0]) return res.json({ ok: false, error: "المرفق غير موجود" });
+      const purchaseId = row.rows[0].purchase_id;
+      await pool.query("DELETE FROM purchase_attachments WHERE id=$1", [attachId]);
+      // تحديث attachment_url لآخر مرفق متبقي
+      const remaining = await pool.query("SELECT id FROM purchase_attachments WHERE purchase_id=$1 ORDER BY id DESC LIMIT 1", [purchaseId]);
+      const newUrl = remaining.rows[0] ? `/api/attachments/${remaining.rows[0].id}` : null;
+      await pool.query("UPDATE purchase_invoices SET attachment_url=$1 WHERE id=$2", [newUrl, purchaseId]);
+      // إرجاع قائمة المرفقات المتبقية
+      const all = await pool.query("SELECT id, filename FROM purchase_attachments WHERE purchase_id=$1 ORDER BY id", [purchaseId]);
+      res.json({ ok: true, attachments: all.rows.map((r: any) => ({ id: r.id, url: `/api/attachments/${r.id}`, filename: r.filename })) });
     } catch (err: any) {
       res.json({ ok: false, error: err?.message });
     }
   });
 
-  // ── حذف كل المرفقات (للتوافق مع القديم) ──
+  // ── قائمة مرفقات فاتورة ──
+  app.get("/api/purchases/:purchaseId/attachments", requireAuth, requirePermission("purchases.view"), async (req, res) => {
+    try {
+      const purchaseId = Number(req.params.purchaseId);
+      const rows = await pool.query("SELECT id, filename, content_type, created_at FROM purchase_attachments WHERE purchase_id=$1 ORDER BY id", [purchaseId]);
+      res.json(rows.rows.map((r: any) => ({ id: r.id, url: `/api/attachments/${r.id}`, filename: r.filename, contentType: r.content_type })));
+    } catch (err: any) {
+      res.json([]);
+    }
+  });
+
+  // ── حذف كل المرفقات (للتوافق القديم) ──
   app.delete("/api/purchases/:purchaseId/attachment", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
     try {
       const purchaseId = Number(req.params.purchaseId);
-      const cur = await pool.query("SELECT attachment_urls FROM purchase_invoices WHERE id=$1", [purchaseId]);
-      const existing: string[] = cur.rows[0]?.attachment_urls ?? [];
-      for (const u of existing) { try { await fs.unlink(path.resolve(u.replace(/^\//, ""))); } catch {} }
-      await pool.query("UPDATE purchase_invoices SET attachment_url=NULL, attachment_urls='[]' WHERE id=$1", [purchaseId]);
+      await pool.query("DELETE FROM purchase_attachments WHERE purchase_id=$1", [purchaseId]);
+      await pool.query("UPDATE purchase_invoices SET attachment_url=NULL WHERE id=$1", [purchaseId]);
       res.json({ ok: true });
     } catch (err: any) {
       res.json({ ok: false, error: err?.message });
@@ -5036,6 +5056,20 @@ export async function registerRoutes(
   registerExportRoutes(app);
   registerBackupRoutes(app);
   registerMobileRoutes(app);
+
+  // ── Migration 0021 ─────────────────────────────────────────────────────────
+  app.post("/api/run-migration-0021", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const migPath = path.join(process.cwd(), "migrations", "0021_purchase_attachments_table.sql");
+      const sqlText = fs.readFileSync(migPath, "utf8");
+      await pool.query(sqlText);
+      res.json({ success: true, message: "تم تشغيل migration 0021 — جدول المرفقات الدائمة بنجاح" });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+    }
+  });
 
   // ── Migration 0020 ─────────────────────────────────────────────────────────
   app.post("/api/run-migration-0020", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
