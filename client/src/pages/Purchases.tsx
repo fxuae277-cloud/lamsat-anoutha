@@ -1811,12 +1811,19 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                 if (attachments.length === 0) return <p className="text-center text-muted-foreground py-8">لا توجد مرفقات</p>;
                 return attachments.map((att: any, idx: number) => {
                   const url: string = att.url || att;
+                  const isLegacy = typeof url === "string" && url.startsWith("/uploads/");
                   const isPdf = typeof url === "string" && url.toLowerCase().includes(".pdf");
                   const attachId = att.id;
                   return (
                     <div key={idx} className="flex flex-col items-center gap-3 border rounded-xl p-4 bg-gray-50">
                       <div className="text-sm text-muted-foreground font-medium">مرفق {idx + 1}{att.filename && att.filename !== `مرفق ${idx + 1}` ? ` — ${att.filename}` : ""}</div>
-                      {isPdf ? (
+                      {isLegacy ? (
+                        <div className="w-full text-center bg-amber-50 border border-amber-200 rounded-lg p-6">
+                          <p className="text-amber-700 font-medium text-sm">⚠️ الملف لم يعد متاحاً</p>
+                          <p className="text-amber-600 text-xs mt-1">هذا المرفق كان محفوظاً على الخادم القديم وتم فقدانه عند آخر تحديث.</p>
+                          <p className="text-amber-600 text-xs mt-1">يرجى رفعه مجدداً باستخدام زر "رفع مرفقات".</p>
+                        </div>
+                      ) : isPdf ? (
                         <iframe src={url} className="w-full h-[60vh] border rounded-lg" title={`مرفق ${idx + 1}`} />
                       ) : (
                         <img
@@ -1826,20 +1833,20 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                           onError={e => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.removeAttribute("hidden"); }}
                         />
                       )}
-                      <p hidden className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded p-2 w-full text-center">
+                      {!isLegacy && <p hidden className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded p-2 w-full text-center">
                         تعذّر عرض الصورة — استخدم زر "فتح" أدناه
-                      </p>
+                      </p>}
                       <div className="flex gap-3">
-                        <a href={url} target="_blank" rel="noreferrer">
+                        {!isLegacy && <a href={url} target="_blank" rel="noreferrer">
                           <Button variant="outline" size="sm" className="gap-2">
                             <FileText className="w-4 h-4" /> فتح
                           </Button>
-                        </a>
-                        <a href={url} download target="_blank" rel="noreferrer">
+                        </a>}
+                        {!isLegacy && <a href={url} download target="_blank" rel="noreferrer">
                           <Button variant="outline" size="sm" className="gap-2">
                             <Upload className="w-4 h-4 rotate-180" /> تحميل
                           </Button>
-                        </a>
+                        </a>}
                         <Button variant="outline" size="sm" className="gap-2 border-red-300 text-red-600 hover:bg-red-50"
                           onClick={async () => {
                             if (!selectedInvoice) return;
@@ -2585,11 +2592,20 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                     </Badge>
                   </TableCell>
                   <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                    {(inv as any).attachmentUrl
-                      ? <a href={(inv as any).attachmentUrl} target="_blank" rel="noreferrer" title="عرض الفاتورة الورقية">
+                    {(() => {
+                      const hasNew = (inv as any).attachments?.length > 0;
+                      const oldUrl: string = (inv as any).attachmentUrl || "";
+                      const oldIsValid = oldUrl && !oldUrl.startsWith("/uploads/");
+                      if (hasNew) return (
+                        <FileText className="w-4 h-4 text-emerald-500 mx-auto cursor-pointer" title="يوجد مرفقات — افتح الفاتورة لعرضها" onClick={() => setSelectedInvoice(inv.id)} />
+                      );
+                      if (oldIsValid) return (
+                        <a href={oldUrl} target="_blank" rel="noreferrer" title="عرض الفاتورة الورقية">
                           <FileText className="w-4 h-4 text-emerald-500 mx-auto hover:text-emerald-700 cursor-pointer" />
                         </a>
-                      : <span className="text-muted-foreground/30 text-xs">—</span>}
+                      );
+                      return <span className="text-muted-foreground/30 text-xs">—</span>;
+                    })()}
                   </TableCell>
                   <TableCell onClick={e => e.stopPropagation()} className="flex items-center gap-1">
                     <Button variant="ghost" size="sm" className="gap-1 text-xs h-8" onClick={() => setSelectedInvoice(inv.id)}>
