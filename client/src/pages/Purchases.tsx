@@ -2407,9 +2407,11 @@ function PurchasesTab() {
                       {inv.status === "pending" ? t("purchases.pending") : inv.status === "approved" ? t("purchases.approved") : inv.status === "received" ? t("purchases.received") : t("purchases.cancelled")}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-center">
+                  <TableCell className="text-center" onClick={e => e.stopPropagation()}>
                     {(inv as any).attachmentUrl
-                      ? <span title="يوجد فاتورة ورقية مرفقة"><FileText className="w-4 h-4 text-emerald-500 mx-auto" /></span>
+                      ? <a href={(inv as any).attachmentUrl} target="_blank" rel="noreferrer" title="عرض الفاتورة الورقية">
+                          <FileText className="w-4 h-4 text-emerald-500 mx-auto hover:text-emerald-700 cursor-pointer" />
+                        </a>
                       : <span className="text-muted-foreground/30 text-xs">—</span>}
                   </TableCell>
                   <TableCell onClick={e => e.stopPropagation()} className="flex items-center gap-1">
