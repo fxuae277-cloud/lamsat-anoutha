@@ -1814,61 +1814,54 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                   const isLegacy = typeof url === "string" && url.startsWith("/uploads/");
                   const isPdf = typeof url === "string" && url.toLowerCase().includes(".pdf");
                   const attachId = att.id;
+                  const label = att.filename && att.filename !== `مرفق ${idx + 1}` ? att.filename : `مرفق ${idx + 1}`;
                   return (
-                    <div key={idx} className="flex flex-col items-center gap-3 border rounded-xl p-4 bg-gray-50">
-                      <div className="text-sm text-muted-foreground font-medium">مرفق {idx + 1}{att.filename && att.filename !== `مرفق ${idx + 1}` ? ` — ${att.filename}` : ""}</div>
+                    <div key={idx} className="flex flex-col gap-2">
+                      {/* اسم الملف + زر حذف */}
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-sm text-muted-foreground">{label}</span>
+                        {!isLegacy && (
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            title="حذف المرفق"
+                            onClick={async () => {
+                              if (!selectedInvoice) return;
+                              try {
+                                const endpoint = attachId
+                                  ? `/api/attachments/${attachId}`
+                                  : `/api/purchases/${selectedInvoice}/attachment`;
+                                const r = await fetch(endpoint, { method: "DELETE", credentials: "include" });
+                                const d = await r.json();
+                                if (d.ok) {
+                                  qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
+                                  qc.invalidateQueries({ queryKey: ["/api/purchases"] });
+                                  toast({ title: "تم حذف المرفق" });
+                                  if ((d.attachments?.length ?? 0) === 0) setShowAttachment(false);
+                                }
+                              } catch (err: any) {
+                                toast({ title: "فشل الحذف", description: err.message, variant: "destructive" });
+                              }
+                            }}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                      {/* المحتوى */}
                       {isLegacy ? (
                         <div className="w-full text-center bg-amber-50 border border-amber-200 rounded-lg p-6">
                           <p className="text-amber-700 font-medium text-sm">⚠️ الملف لم يعد متاحاً</p>
-                          <p className="text-amber-600 text-xs mt-1">هذا المرفق كان محفوظاً على الخادم القديم وتم فقدانه عند آخر تحديث.</p>
                           <p className="text-amber-600 text-xs mt-1">يرجى رفعه مجدداً باستخدام زر "رفع مرفقات".</p>
                         </div>
                       ) : isPdf ? (
-                        <iframe src={url} className="w-full h-[60vh] border rounded-lg" title={`مرفق ${idx + 1}`} />
+                        <iframe src={url} className="w-full h-[75vh] border rounded-lg" title={label} />
                       ) : (
                         <img
                           src={url}
-                          alt={`مرفق ${idx + 1}`}
-                          className="max-w-full max-h-[60vh] object-contain rounded-lg border shadow-sm"
-                          onError={e => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.removeAttribute("hidden"); }}
+                          alt={label}
+                          className="w-full max-h-[75vh] object-contain rounded-lg border shadow-sm bg-white cursor-zoom-in"
+                          onClick={() => window.open(url, "_blank")}
+                          title="اضغط للعرض الكامل"
                         />
                       )}
-                      {!isLegacy && <p hidden className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded p-2 w-full text-center">
-                        تعذّر عرض الصورة — استخدم زر "فتح" أدناه
-                      </p>}
-                      <div className="flex gap-3">
-                        {!isLegacy && <a href={url} target="_blank" rel="noreferrer">
-                          <Button variant="outline" size="sm" className="gap-2">
-                            <FileText className="w-4 h-4" /> فتح
-                          </Button>
-                        </a>}
-                        {!isLegacy && <a href={url} download target="_blank" rel="noreferrer">
-                          <Button variant="outline" size="sm" className="gap-2">
-                            <Upload className="w-4 h-4 rotate-180" /> تحميل
-                          </Button>
-                        </a>}
-                        <Button variant="outline" size="sm" className="gap-2 border-red-300 text-red-600 hover:bg-red-50"
-                          onClick={async () => {
-                            if (!selectedInvoice) return;
-                            try {
-                              const endpoint = attachId
-                                ? `/api/attachments/${attachId}`
-                                : `/api/purchases/${selectedInvoice}/attachment`;
-                              const r = await fetch(endpoint, { method: "DELETE", credentials: "include" });
-                              const d = await r.json();
-                              if (d.ok) {
-                                qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
-                                qc.invalidateQueries({ queryKey: ["/api/purchases"] });
-                                toast({ title: "تم حذف المرفق" });
-                                if ((d.attachments?.length ?? 0) === 0) setShowAttachment(false);
-                              }
-                            } catch (err: any) {
-                              toast({ title: "فشل الحذف", description: err.message, variant: "destructive" });
-                            }
-                          }}>
-                          <Trash2 className="w-4 h-4" /> حذف
-                        </Button>
-                      </div>
                     </div>
                   );
                 });
