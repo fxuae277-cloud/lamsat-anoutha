@@ -2155,14 +2155,34 @@ function PurchasesTab() {
                 </div>
                 <div>
                   <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>التاريخ <span style={{ color: "#D4527E" }}>*</span></label>
-                  <input type="date" lang="en" value={newDate} onChange={e => setNewDate(e.target.value)} dir="ltr"
-                    style={{ width: "100%", padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", color: "#2C2C2A", background: "white", direction: "ltr" }} />
+                  <div style={{ display: "flex", gap: "6px", direction: "ltr" }}>
+                    {(() => {
+                      const [y, m, d] = newDate ? newDate.split("-") : ["", "", ""];
+                      const inputStyle = { flex: 1, padding: "10px 8px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", color: "#2C2C2A", background: "white", textAlign: "center" as const, minWidth: 0 };
+                      const update = (ny: string, nm: string, nd: string) => { if (ny && nm && nd) setNewDate(`${ny}-${nm.padStart(2,"0")}-${nd.padStart(2,"0")}`); };
+                      return (<>
+                        <input type="number" placeholder="YYYY" min="2000" max="2100" value={y} onChange={e => update(e.target.value, m, d)} style={inputStyle} />
+                        <input type="number" placeholder="MM" min="1" max="12" value={m} onChange={e => update(y, e.target.value, d)} style={inputStyle} />
+                        <input type="number" placeholder="DD" min="1" max="31" value={d} onChange={e => update(y, m, e.target.value)} style={inputStyle} />
+                      </>);
+                    })()}
+                  </div>
                 </div>
                 {newPayMethod === "credit" && (
                   <div>
                     <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>تاريخ الاستحقاق</label>
-                    <input type="date" lang="en" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} dir="ltr"
-                      style={{ width: "100%", padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", color: "#2C2C2A", background: "white", direction: "ltr" }} />
+                    <div style={{ display: "flex", gap: "6px", direction: "ltr" }}>
+                      {(() => {
+                        const [y, m, d] = newDueDate ? newDueDate.split("-") : ["", "", ""];
+                        const inputStyle = { flex: 1, padding: "10px 8px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", color: "#2C2C2A", background: "white", textAlign: "center" as const, minWidth: 0 };
+                        const update = (ny: string, nm: string, nd: string) => { if (ny && nm && nd) setNewDueDate(`${ny}-${nm.padStart(2,"0")}-${nd.padStart(2,"0")}`); };
+                        return (<>
+                          <input type="number" placeholder="YYYY" min="2000" max="2100" value={y} onChange={e => update(e.target.value, m, d)} style={inputStyle} />
+                          <input type="number" placeholder="MM" min="1" max="12" value={m} onChange={e => update(y, e.target.value, d)} style={inputStyle} />
+                          <input type="number" placeholder="DD" min="1" max="31" value={d} onChange={e => update(y, m, e.target.value)} style={inputStyle} />
+                        </>);
+                      })()}
+                    </div>
                   </div>
                 )}
                 <div style={{ gridColumn: "1/-1" }}>
