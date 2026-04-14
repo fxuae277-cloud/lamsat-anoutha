@@ -2515,28 +2515,13 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
         </Button>
       </div>
 
-      {/* شريط الحذف الجماعي */}
-      {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-lg px-4 py-2">
-          <span className="text-sm font-medium">{selectedIds.size} فاتورة محددة</span>
-          <Button size="sm" variant="destructive" className="gap-1 h-7 text-xs" onClick={() => setShowBulkDelete(true)}>
-            <Trash2 className="w-3 h-3" /> حذف المحددة
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedIds(new Set())}>إلغاء التحديد</Button>
-        </div>
-      )}
 
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
-                <TableHead className="w-10">
-                  <input type="checkbox" className="h-4 w-4 cursor-pointer"
-                    checked={sortedInvoices.length > 0 && sortedInvoices.every(i => selectedIds.has(i.id))}
-                    onChange={e => setSelectedIds(e.target.checked ? new Set(sortedInvoices.map(i => i.id)) : new Set())}
-                  />
-                </TableHead>
+                <TableHead className="w-10"></TableHead>
                 <TableHead className="cursor-pointer select-none" onClick={() => { setSortCol("invoiceNumber"); setSortDir(d => sortCol === "invoiceNumber" && d === "asc" ? "desc" : "asc"); }}>
                   # {sortCol === "invoiceNumber" ? (sortDir === "asc" ? "↑" : "↓") : ""}
                 </TableHead>
@@ -2561,13 +2546,8 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                 </TableRow>
               )}
               {sortedInvoices.map((inv) => (
-                <TableRow key={inv.id} className={`cursor-pointer hover:bg-muted/30 ${selectedIds.has(inv.id) ? "bg-primary/5" : ""}`} onClick={() => setSelectedInvoice(inv.id)} data-testid={`row-purchase-${inv.id}`}>
-                  <TableCell onClick={e => e.stopPropagation()}>
-                    <input type="checkbox" className="h-4 w-4 cursor-pointer"
-                      checked={selectedIds.has(inv.id)}
-                      onChange={e => { e.stopPropagation(); setSelectedIds(prev => { const s = new Set(prev); e.target.checked ? s.add(inv.id) : s.delete(inv.id); return s; }); }}
-                    />
-                  </TableCell>
+                <TableRow key={inv.id} className="cursor-pointer hover:bg-muted/30" onClick={() => setSelectedInvoice(inv.id)} data-testid={`row-purchase-${inv.id}`}>
+                  <TableCell></TableCell>
                   <TableCell className="font-mono">{inv.invoiceNumber}</TableCell>
                   <TableCell>{supplierMap[inv.supplierId] || "—"}</TableCell>
                   <TableCell>{inv.invoiceDate}</TableCell>
@@ -2746,27 +2726,6 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
       })()}
 
       {/* تأكيد حذف جماعي */}
-      <Dialog open={showBulkDelete} onOpenChange={setShowBulkDelete}>
-        <DialogContent className="max-w-sm" dir="rtl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600"><Trash2 className="w-5 h-5" /> حذف {selectedIds.size} فاتورة</DialogTitle>
-            <DialogDescription>سيتم حذف الفواتير المعلقة المحددة فقط. هذا الإجراء لا يمكن التراجع عنه.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowBulkDelete(false)}>{t("common.cancel")}</Button>
-            <Button variant="destructive" disabled={deleteMutation.isPending} onClick={async () => {
-              for (const id of Array.from(selectedIds)) {
-                const inv = safeInvoices.find(i => i.id === id);
-                if (inv?.status === "pending") await deleteMutation.mutateAsync(id).catch(() => {});
-              }
-              setShowBulkDelete(false);
-              setSelectedIds(new Set());
-            }}>
-              حذف المحددة
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
     </div>
   );
