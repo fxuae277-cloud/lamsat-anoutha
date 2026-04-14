@@ -2155,13 +2155,13 @@ function PurchasesTab() {
                 </div>
                 <div>
                   <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>التاريخ <span style={{ color: "#D4527E" }}>*</span></label>
-                  <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} dir="ltr"
+                  <input type="date" lang="en" value={newDate} onChange={e => setNewDate(e.target.value)} dir="ltr"
                     style={{ width: "100%", padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", color: "#2C2C2A", background: "white", direction: "ltr" }} />
                 </div>
                 {newPayMethod === "credit" && (
                   <div>
                     <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>تاريخ الاستحقاق</label>
-                    <input type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} dir="ltr"
+                    <input type="date" lang="en" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} dir="ltr"
                       style={{ width: "100%", padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", color: "#2C2C2A", background: "white", direction: "ltr" }} />
                   </div>
                 )}
