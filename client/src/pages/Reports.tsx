@@ -3,7 +3,7 @@ import {
   BarChart3, TrendingUp, TrendingDown, DollarSign, CreditCard, Building2,
   Download, FileText, Package, Users, Layers, PieChart as PieIcon,
   ArrowUpRight, ArrowDownRight, Minus, RefreshCw, Calendar, GitBranch,
-  Banknote, Receipt, Activity, ChevronDown, ChevronUp, Scale,
+  Banknote, Receipt, Activity, ChevronDown, ChevronUp, Scale, CalendarDays,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -107,6 +107,8 @@ export default function Reports() {
   const [to,   setTo]             = useState(todayStr());
   const [branch, setBranch]       = useState("all");
   const [bsExpanded, setBsExpanded] = useState<Record<string, boolean>>({});
+  const [monthlyYear, setMonthlyYear] = useState(String(new Date().getFullYear()));
+  const [monthlyView, setMonthlyView] = useState<"category"|"product">("category");
 
   const branchId = branch !== "all" ? Number(branch) : undefined;
   const branchQs = branchId ? `&branchId=${branchId}` : "";
@@ -122,6 +124,7 @@ export default function Reports() {
   const { data: cashFlow }      = useQuery<any>({ queryKey: [`/api/reports/cash-flow?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
   const { data: _expCats }      = useQuery<any[]>({ queryKey: [`/api/reports/expenses-by-category?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
   const { data: balanceSheet }  = useQuery<any>({ queryKey: [`/api/reports/balance-sheet?asOf=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
+  const { data: monthlySales }  = useQuery<any>({ queryKey: [`/api/reports/monthly-sales?year=${monthlyYear}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
 
   // ── null-safe array coercion (= [] لا يحمي من null، فقط من undefined) ───
   const branches     : Branch[] = Array.isArray(_branches)     ? _branches     : [];
@@ -245,6 +248,7 @@ export default function Reports() {
             <TabsTrigger value="products" className="gap-1 whitespace-nowrap"><Package className="h-4 w-4" />المنتجات</TabsTrigger>
             <TabsTrigger value="categories" className="gap-1 whitespace-nowrap"><Layers className="h-4 w-4" />الفئات</TabsTrigger>
             <TabsTrigger value="shifts"   className="gap-1 whitespace-nowrap"><Activity className="h-4 w-4" />الورديات</TabsTrigger>
+            <TabsTrigger value="monthly"  className="gap-1 whitespace-nowrap"><CalendarDays className="h-4 w-4" />شهري</TabsTrigger>
             {isAdmin && <TabsTrigger value="branches"      className="gap-1 whitespace-nowrap"><GitBranch className="h-4 w-4" />مقارنة الفروع</TabsTrigger>}
             {isAdmin && <TabsTrigger value="cashflow"      className="gap-1 whitespace-nowrap"><Banknote className="h-4 w-4" />التدفقات النقدية</TabsTrigger>}
             {isAdmin && <TabsTrigger value="balance-sheet" className="gap-1 whitespace-nowrap"><Scale className="h-4 w-4" />الميزانية العمومية</TabsTrigger>}
@@ -580,6 +584,179 @@ export default function Reports() {
               </TableBody>
             </Table>
           </div>
+        </TabsContent>
+
+        {/* ══ التقرير الشهري ══════════════════════════════════════════════════ */}
+        <TabsContent value="monthly" className="space-y-4">
+          <div className="flex flex-wrap gap-3 items-center justify-between">
+            <h2 className="font-bold text-lg flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" />التقرير الشهري</h2>
+            <div className="flex gap-2 items-center">
+              <select
+                value={monthlyYear}
+                onChange={e => setMonthlyYear(e.target.value)}
+                className="border rounded-md px-3 py-1.5 text-sm bg-background"
+              >
+                {[0,1,2].map(offset => {
+                  const y = String(new Date().getFullYear() - offset);
+                  return <option key={y} value={y}>{y}</option>;
+                })}
+              </select>
+              <div className="flex rounded-md border overflow-hidden text-sm">
+                <button
+                  className={`px-3 py-1.5 transition-colors ${monthlyView === "category" ? "bg-primary text-white" : "hover:bg-muted"}`}
+                  onClick={() => setMonthlyView("category")}
+                >حسب الفئة</button>
+                <button
+                  className={`px-3 py-1.5 transition-colors ${monthlyView === "product" ? "bg-primary text-white" : "hover:bg-muted"}`}
+                  onClick={() => setMonthlyView("product")}
+                >حسب المنتج</button>
+              </div>
+            </div>
+          </div>
+
+          {/* مخطط المبيعات الشهرية */}
+          {(monthlySales?.monthly || []).length > 0 && (
+            <Card className="rounded-2xl">
+              <CardHeader className="pb-2"><CardTitle className="text-sm">إجمالي المبيعات الشهرية — {monthlyYear}</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={(monthlySales?.monthly || []).map((m: any) => ({
+                    name: m.month?.slice(5),
+                    مبيعات: parseFloat(m.total_revenue || 0),
+                    ربح: parseFloat(m.gross_profit || 0),
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend />
+                    <Bar dataKey="مبيعات" fill={PINK} radius={[4,4,0,0]} />
+                    <Bar dataKey="ربح" fill="#9C27B0" radius={[4,4,0,0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* جدول الملخص الشهري */}
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead>الشهر</TableHead>
+                  <TableHead className="text-center">عدد الفواتير</TableHead>
+                  <TableHead className="text-center">الكمية</TableHead>
+                  <TableHead className="text-right">المبيعات</TableHead>
+                  <TableHead className="text-right">التكلفة</TableHead>
+                  <TableHead className="text-right">إجمالي الربح</TableHead>
+                  <TableHead className="text-center">الهامش%</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(monthlySales?.monthly || []).length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="text-center py-10 text-muted-foreground">لا توجد بيانات للسنة المحددة</TableCell></TableRow>
+                ) : (monthlySales?.monthly || []).map((m: any) => {
+                  const margin = parseFloat(m.total_revenue) > 0
+                    ? ((parseFloat(m.gross_profit) / parseFloat(m.total_revenue)) * 100).toFixed(1)
+                    : "0.0";
+                  const MONTH_AR: Record<string, string> = {
+                    "01":"يناير","02":"فبراير","03":"مارس","04":"أبريل",
+                    "05":"مايو","06":"يونيو","07":"يوليو","08":"أغسطس",
+                    "09":"سبتمبر","10":"أكتوبر","11":"نوفمبر","12":"ديسمبر",
+                  };
+                  const mm = m.month?.slice(5);
+                  return (
+                    <TableRow key={m.month} className="hover:bg-pink-50/30">
+                      <TableCell className="font-medium">{MONTH_AR[mm] || mm} {m.month?.slice(0,4)}</TableCell>
+                      <TableCell className="text-center">{m.invoice_count}</TableCell>
+                      <TableCell className="text-center">{m.total_qty}</TableCell>
+                      <TableCell className="text-right text-green-600 font-medium">{fmtOMR(m.total_revenue)}</TableCell>
+                      <TableCell className="text-right text-orange-600">{fmtOMR(m.total_cogs)}</TableCell>
+                      <TableCell className="text-right text-blue-600 font-medium">{fmtOMR(m.gross_profit)}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge className={`text-xs ${parseFloat(margin) >= 30 ? "bg-green-100 text-green-800" : parseFloat(margin) >= 15 ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}>
+                          {margin}%
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* تفصيل حسب الفئة أو المنتج */}
+          {monthlyView === "category" && (
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b font-semibold text-sm bg-muted/30">مبيعات أعلى 8 فئات — شهرياً</div>
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead>الشهر</TableHead>
+                    <TableHead>الفئة</TableHead>
+                    <TableHead className="text-center">الكمية</TableHead>
+                    <TableHead className="text-right">المبيعات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(monthlySales?.by_category || []).length === 0 ? (
+                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">لا توجد بيانات</TableCell></TableRow>
+                  ) : (monthlySales?.by_category || []).map((row: any, i: number) => {
+                    const MONTH_AR: Record<string, string> = {
+                      "01":"يناير","02":"فبراير","03":"مارس","04":"أبريل",
+                      "05":"مايو","06":"يونيو","07":"يوليو","08":"أغسطس",
+                      "09":"سبتمبر","10":"أكتوبر","11":"نوفمبر","12":"ديسمبر",
+                    };
+                    const mm = row.month?.slice(5);
+                    return (
+                      <TableRow key={i} className="hover:bg-pink-50/30">
+                        <TableCell className="text-sm text-muted-foreground">{MONTH_AR[mm] || mm}</TableCell>
+                        <TableCell className="font-medium">{row.category_name}</TableCell>
+                        <TableCell className="text-center">{row.total_qty}</TableCell>
+                        <TableCell className="text-right text-green-600 font-medium">{fmtOMR(row.total_revenue)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {monthlyView === "product" && (
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b font-semibold text-sm bg-muted/30">مبيعات أعلى 15 منتجاً — شهرياً</div>
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead>الشهر</TableHead>
+                    <TableHead>المنتج</TableHead>
+                    <TableHead className="text-center">الكمية</TableHead>
+                    <TableHead className="text-right">المبيعات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(monthlySales?.by_product || []).length === 0 ? (
+                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">لا توجد بيانات</TableCell></TableRow>
+                  ) : (monthlySales?.by_product || []).map((row: any, i: number) => {
+                    const MONTH_AR: Record<string, string> = {
+                      "01":"يناير","02":"فبراير","03":"مارس","04":"أبريل",
+                      "05":"مايو","06":"يونيو","07":"يوليو","08":"أغسطس",
+                      "09":"سبتمبر","10":"أكتوبر","11":"نوفمبر","12":"ديسمبر",
+                    };
+                    const mm = row.month?.slice(5);
+                    return (
+                      <TableRow key={i} className="hover:bg-pink-50/30">
+                        <TableCell className="text-sm text-muted-foreground">{MONTH_AR[mm] || mm}</TableCell>
+                        <TableCell className="font-medium">{row.product_name}</TableCell>
+                        <TableCell className="text-center">{row.total_qty}</TableCell>
+                        <TableCell className="text-right text-green-600 font-medium">{fmtOMR(row.total_revenue)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </TabsContent>
 
         {/* ══ مقارنة الفروع ════════════════════════════════════════════════ */}

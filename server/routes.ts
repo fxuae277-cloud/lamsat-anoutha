@@ -2584,6 +2584,99 @@ export async function registerRoutes(
     res.json(await storage.getProfitByProducts(from, to, branchId));
   });
 
+  // ── التقرير الشهري — مبيعات كل شهر حسب الفئة والمنتج ──────────────────────
+  app.get("/api/reports/monthly-sales", requireAuth, requirePermission("reports.view"), async (req, res) => {
+    try {
+      const year      = req.query.year ? Number(req.query.year) : new Date().getFullYear();
+      const branchId  = req.query.branchId ? Number(req.query.branchId) : null;
+      const branchSql = branchId ? `AND s.branch_id = ${branchId}` : "";
+
+      // 1. ملخص شهري إجمالي
+      const monthly = await pool.query(`
+        SELECT
+          TO_CHAR(s.created_at AT TIME ZONE 'Asia/Muscat', 'YYYY-MM') AS month,
+          COUNT(DISTINCT s.id)            AS invoice_count,
+          SUM(si.quantity)                AS total_qty,
+          SUM(si.total)                   AS total_revenue,
+          SUM(si.line_cogs)               AS total_cogs,
+          SUM(si.total) - SUM(si.line_cogs) AS gross_profit
+        FROM sales s
+        JOIN sale_items si ON si.sale_id = s.id
+        WHERE s.status NOT IN ('cancelled','returned')
+          AND EXTRACT(YEAR FROM s.created_at AT TIME ZONE 'Asia/Muscat') = $1
+          ${branchSql}
+        GROUP BY month
+        ORDER BY month
+      `, [year]);
+
+      // 2. مبيعات شهرية حسب الفئة (أعلى 8 فئات)
+      const byCategory = await pool.query(`
+        WITH ranked AS (
+          SELECT
+            TO_CHAR(s.created_at AT TIME ZONE 'Asia/Muscat', 'YYYY-MM') AS month,
+            COALESCE(c.name, 'غير مصنف')   AS category_name,
+            SUM(si.total)                   AS total_revenue,
+            SUM(si.quantity)                AS total_qty
+          FROM sales s
+          JOIN sale_items si ON si.sale_id = s.id
+          JOIN products p    ON p.id = si.product_id
+          LEFT JOIN categories c ON c.id = p.category_id
+          WHERE s.status NOT IN ('cancelled','returned')
+            AND EXTRACT(YEAR FROM s.created_at AT TIME ZONE 'Asia/Muscat') = $1
+            ${branchSql}
+          GROUP BY month, c.name
+        ),
+        top_cats AS (
+          SELECT category_name, SUM(total_revenue) AS yr_rev
+          FROM ranked GROUP BY category_name
+          ORDER BY yr_rev DESC LIMIT 8
+        )
+        SELECT r.month, r.category_name, r.total_revenue, r.total_qty
+        FROM ranked r
+        JOIN top_cats t ON t.category_name = r.category_name
+        ORDER BY r.month, r.total_revenue DESC
+      `, [year]);
+
+      // 3. أعلى 15 منتجاً للسنة مع تفصيل شهري
+      const byProduct = await pool.query(`
+        WITH top_prods AS (
+          SELECT p.id, p.name AS product_name, SUM(si.total) AS yr_rev
+          FROM sales s
+          JOIN sale_items si ON si.sale_id = s.id
+          JOIN products p    ON p.id = si.product_id
+          WHERE s.status NOT IN ('cancelled','returned')
+            AND EXTRACT(YEAR FROM s.created_at AT TIME ZONE 'Asia/Muscat') = $1
+            ${branchSql}
+          GROUP BY p.id, p.name
+          ORDER BY yr_rev DESC LIMIT 15
+        )
+        SELECT
+          TO_CHAR(s.created_at AT TIME ZONE 'Asia/Muscat', 'YYYY-MM') AS month,
+          p.name        AS product_name,
+          SUM(si.total) AS total_revenue,
+          SUM(si.quantity) AS total_qty
+        FROM sales s
+        JOIN sale_items si ON si.sale_id = s.id
+        JOIN products p    ON p.id = si.product_id
+        JOIN top_prods tp  ON tp.id = p.id
+        WHERE s.status NOT IN ('cancelled','returned')
+          AND EXTRACT(YEAR FROM s.created_at AT TIME ZONE 'Asia/Muscat') = $1
+          ${branchSql}
+        GROUP BY month, p.name
+        ORDER BY month, total_revenue DESC
+      `, [year]);
+
+      res.json({
+        year,
+        monthly:     monthly.rows,
+        by_category: byCategory.rows,
+        by_product:  byProduct.rows,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ" });
+    }
+  });
+
   app.get("/api/reports/branch-comparison-range", requireOwnerOrAdmin, async (req, res) => {
     const from = req.query.from as string;
     const to = req.query.to as string;
