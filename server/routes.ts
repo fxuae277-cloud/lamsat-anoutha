@@ -266,7 +266,12 @@ export async function registerRoutes(
       await client.query(`UPDATE shifts          SET branch_id = NULL WHERE branch_id = $1`, [branchId]);
       await client.query(`UPDATE sales           SET branch_id = NULL WHERE branch_id = $1`, [branchId]);
       await client.query(`UPDATE expenses        SET branch_id = NULL WHERE branch_id = $1`, [branchId]);
-      await client.query(`UPDATE orders          SET branch_id = NULL WHERE branch_id = $1 AND branch_id IS NOT NULL`, [branchId]).catch(() => {});
+      await client.query(`UPDATE orders            SET branch_id = NULL WHERE branch_id = $1`, [branchId]).catch(() => {});
+      await client.query(`UPDATE purchase_invoices SET branch_id = NULL WHERE branch_id = $1`, [branchId]).catch(() => {});
+      await client.query(`UPDATE inventory_transactions SET branch_id = NULL WHERE branch_id = $1`, [branchId]).catch(() => {});
+      await client.query(`UPDATE cash_ledger       SET branch_id = NULL WHERE branch_id = $1`, [branchId]).catch(() => {});
+      await client.query(`UPDATE bank_ledger       SET branch_id = NULL WHERE branch_id = $1`, [branchId]).catch(() => {});
+      await client.query(`UPDATE journal_entries   SET branch_id = NULL WHERE branch_id = $1`, [branchId]).catch(() => {});
       await client.query(`DELETE FROM branches WHERE id = $1`, [branchId]);
       await client.query("COMMIT");
       res.json({ success: true });
