@@ -5285,80 +5285,57 @@ export async function registerRoutes(
 
   // ── تشخيص وإصلاح فواتير الشراء المفقودة من الأرصدة ──────────────────────────
 
-  // تشخيص عميق: مقارنة مجموع المشتريات مقابل رصيد المخزن الفعلي لكل variant
   app.get("/api/admin/purchase-inventory-diagnostic", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
     try {
-      const result = await pool.query(`
-        WITH central AS (
-          SELECT id FROM locations WHERE is_central = TRUE LIMIT 1
-        ),
-        -- مجموع كل ما تم شراؤه واعتماده لكل variant
-        purchased AS (
-          SELECT
-            pit.variant_id,
-            pit.product_id,
-            p.name               AS product_name,
-            SUM(pit.qty)         AS total_purchased,
-            COUNT(DISTINCT pi.id) AS invoice_count,
-            STRING_AGG(pi.invoice_number::text, ', ' ORDER BY pi.id) AS invoices
-          FROM purchase_invoices pi
-          JOIN purchase_items pit ON pit.purchase_id = pi.id
-          LEFT JOIN products p    ON p.id = pit.product_id
-          WHERE pi.status IN ('approved', 'received')
-            AND pit.variant_id IS NOT NULL
-          GROUP BY pit.variant_id, pit.product_id, p.name
-        ),
-        -- مجموع ما تم بيعه لكل variant (يقلل من الرصيد)
-        sold AS (
-          SELECT si.variant_id, SUM(si.quantity) AS total_sold
-          FROM sale_items si
-          JOIN sales s ON s.id = si.sale_id
-          WHERE s.status NOT IN ('cancelled', 'returned')
-          GROUP BY si.variant_id
-        ),
-        -- الرصيد الفعلي في المخزن المركزي
-        actual AS (
-          SELECT ib.variant_id, ib.qty_on_hand
-          FROM inventory_balances ib
-          WHERE ib.location_id = (SELECT id FROM central)
-        )
-        SELECT
-          p.variant_id,
-          p.product_id,
-          p.product_name,
-          p.total_purchased,
-          COALESCE(s.total_sold, 0)   AS total_sold,
-          p.total_purchased - COALESCE(s.total_sold, 0) AS expected_balance,
-          COALESCE(a.qty_on_hand, 0)  AS actual_balance,
-          (p.total_purchased - COALESCE(s.total_sold, 0)) - COALESCE(a.qty_on_hand, 0) AS discrepancy,
-          p.invoice_count,
-          p.invoices
-        FROM purchased p
-        LEFT JOIN sold s    ON s.variant_id = p.variant_id
-        LEFT JOIN actual a  ON a.variant_id = p.variant_id
-        WHERE (p.total_purchased - COALESCE(s.total_sold, 0)) - COALESCE(a.qty_on_hand, 0) > 0.001
-        ORDER BY discrepancy DESC
-      `);
+      const centralRes = await pool.query(`SELECT id FROM locations WHERE is_central = TRUE LIMIT 1`);
+      const centralId = centralRes.rows[0]?.id;
+      if (!centralId) return res.status(400).json({ ok: false, message: "لا يوجد مخزن مركزي" });
 
-      // أيضاً: فواتير بها بنود variant_id = NULL
+      // variants من فواتير معتمدة غائبة كلياً عن inventory_balances
+      const missing = await pool.query(`
+        SELECT DISTINCT
+          pit.variant_id,
+          pit.product_id,
+          p.name        AS product_name,
+          pi.id         AS purchase_id,
+          pi.invoice_number,
+          pi.status,
+          pit.qty
+        FROM purchase_invoices pi
+        JOIN purchase_items pit ON pit.purchase_id = pi.id
+        LEFT JOIN products p    ON p.id = pit.product_id
+        WHERE pi.status IN ('approved','received')
+          AND pit.variant_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM inventory_balances ib
+            WHERE ib.variant_id = pit.variant_id AND ib.location_id = $1
+          )
+        ORDER BY pi.id
+      `, [centralId]);
+
+      // فواتير بها بنود variant_id = NULL
       const nullVariants = await pool.query(`
         SELECT pi.id, pi.invoice_number, pi.status, pi.invoice_date,
                COUNT(pit.id) AS items_without_variant
         FROM purchase_invoices pi
         JOIN purchase_items pit ON pit.purchase_id = pi.id
-        WHERE pi.status IN ('approved', 'received')
+        WHERE pi.status IN ('approved','received')
           AND pit.variant_id IS NULL
         GROUP BY pi.id, pi.invoice_number, pi.status, pi.invoice_date
       `);
 
+      // ملخص رصيد المخزن المركزي الحالي
+      const balSummary = await pool.query(`
+        SELECT COUNT(*) AS variant_count, COALESCE(SUM(qty_on_hand),0) AS total_qty
+        FROM inventory_balances WHERE location_id = $1
+      `, [centralId]);
+
       res.json({
         ok: true,
-        discrepancies: result.rows,
+        central_id: centralId,
+        inventory_summary: balSummary.rows[0],
+        missing_from_balances: missing.rows,
         invoices_with_null_variant: nullVariants.rows,
-        summary: {
-          total_discrepancies: result.rows.length,
-          total_qty_missing: result.rows.reduce((s: number, r: any) => s + parseFloat(r.discrepancy), 0),
-        }
       });
     } catch (err: any) {
       res.status(500).json({ ok: false, message: err?.message ?? "خطأ" });
@@ -5368,65 +5345,46 @@ export async function registerRoutes(
   app.post("/api/admin/repair-purchase-inventory", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
     const client = await pool.connect();
     try {
-      // 1. المخزن المركزي
       const centralRes = await client.query(`SELECT id FROM locations WHERE is_central = TRUE LIMIT 1`);
       if (centralRes.rows.length === 0) {
         return res.status(400).json({ ok: false, message: "لا يوجد مخزن مركزي" });
       }
       const centralId = centralRes.rows[0].id;
 
-      // 2. احسب الفجوة الحقيقية: (مجموع المشتريات - مجموع المبيعات) - رصيد فعلي
+      // البنود التي variant_id موجود لكن غائب كلياً من inventory_balances
+      // (ما لم يُضف أصلاً لا يمكن أن تُخصم منه مبيعات → نضيف كامل الكمية)
       const gapRes = await client.query(`
-        WITH purchased AS (
-          SELECT pit.variant_id, pit.product_id, SUM(pit.qty) AS total_purchased,
-                 MIN(pi.created_by) AS created_by
-          FROM purchase_invoices pi
-          JOIN purchase_items pit ON pit.purchase_id = pi.id
-          WHERE pi.status IN ('approved', 'received')
-            AND pit.variant_id IS NOT NULL
-          GROUP BY pit.variant_id, pit.product_id
-        ),
-        sold AS (
-          SELECT si.variant_id, SUM(si.quantity) AS total_sold
-          FROM sale_items si
-          JOIN sales s ON s.id = si.sale_id
-          WHERE s.status NOT IN ('cancelled', 'returned')
-          GROUP BY si.variant_id
-        ),
-        actual AS (
-          SELECT variant_id, qty_on_hand
-          FROM inventory_balances
-          WHERE location_id = $1
-        )
         SELECT
-          p.variant_id,
-          p.product_id,
-          p.created_by,
-          p.total_purchased,
-          COALESCE(s.total_sold, 0) AS total_sold,
-          COALESCE(a.qty_on_hand, 0) AS actual_balance,
-          (p.total_purchased - COALESCE(s.total_sold, 0)) - COALESCE(a.qty_on_hand, 0) AS gap
-        FROM purchased p
-        LEFT JOIN sold s   ON s.variant_id = p.variant_id
-        LEFT JOIN actual a ON a.variant_id = p.variant_id
-        WHERE (p.total_purchased - COALESCE(s.total_sold, 0)) - COALESCE(a.qty_on_hand, 0) > 0.001
+          pit.variant_id,
+          pit.product_id,
+          MIN(pi.created_by) AS created_by,
+          SUM(pit.qty)       AS total_qty,
+          MIN(pi.id)         AS ref_purchase_id
+        FROM purchase_invoices pi
+        JOIN purchase_items pit ON pit.purchase_id = pi.id
+        WHERE pi.status IN ('approved','received')
+          AND pit.variant_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM inventory_balances ib
+            WHERE ib.variant_id = pit.variant_id AND ib.location_id = $1
+          )
+        GROUP BY pit.variant_id, pit.product_id
       `, [centralId]);
 
       if (gapRes.rows.length === 0) {
-        return res.json({ ok: true, message: "لا توجد فجوات — الأرصدة مطابقة للمشتريات", fixed: 0 });
+        return res.json({ ok: true, message: "لا توجد بنود مفقودة — الأرصدة مكتملة", fixed: 0 });
       }
 
       await client.query("BEGIN");
 
       for (const row of gapRes.rows) {
-        const gap = parseFloat(row.gap);
-        // أضف الفجوة فقط (ليس كامل المشتريات) حتى لا تتضاعف الكميات
+        const qty = parseFloat(row.total_qty);
         await client.query(
           `INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
            VALUES ($1, $2, $3, 0)
            ON CONFLICT (location_id, variant_id)
            DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + EXCLUDED.qty_on_hand`,
-          [centralId, row.variant_id, gap]
+          [centralId, row.variant_id, qty]
         );
         await client.query(
           `INSERT INTO location_inventory (location_id, product_id, qty_on_hand, updated_at)
@@ -5434,12 +5392,12 @@ export async function registerRoutes(
            ON CONFLICT (location_id, product_id)
            DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand + EXCLUDED.qty_on_hand,
                          updated_at = now()`,
-          [centralId, row.product_id, gap]
+          [centralId, row.product_id, qty]
         );
         await client.query(
           `INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by, created_at)
-           VALUES ($1, $2, $3, 'purchase_repair_gap', 'purchase_invoices', 0, $4, now())`,
-          [row.variant_id, centralId, gap, row.created_by ?? 1]
+           VALUES ($1, $2, $3, 'purchase_repair', 'purchase_invoices', $4, $5, now())`,
+          [row.variant_id, centralId, qty, row.ref_purchase_id, row.created_by ?? 1]
         );
       }
 
@@ -5447,14 +5405,12 @@ export async function registerRoutes(
 
       res.json({
         ok: true,
-        message: `تم إصلاح ${gapRes.rows.length} فجوة في أرصدة المخزن المركزي`,
+        message: `تم إصلاح ${gapRes.rows.length} بند مفقود وإضافتها للمخزن المركزي`,
         fixed: gapRes.rows.length,
         details: gapRes.rows.map((r: any) => ({
           variant_id: r.variant_id,
-          total_purchased: r.total_purchased,
-          total_sold: r.total_sold,
-          actual_balance: r.actual_balance,
-          gap_added: r.gap,
+          product_id: r.product_id,
+          qty_added: r.total_qty,
         })),
       });
     } catch (err: any) {
