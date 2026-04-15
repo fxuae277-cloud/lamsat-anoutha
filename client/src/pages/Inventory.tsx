@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Package, Search, ArrowRightLeft, ArrowLeft, History, Plus, CheckCircle, Barcode, MapPin, AlertTriangle, TrendingUp, Layers, Printer } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Package, Search, ArrowRightLeft, ArrowLeft, History, Plus, CheckCircle, Barcode, MapPin, AlertTriangle, TrendingUp, Layers, Printer, CheckCircle2, Clock, XCircle, BarChart3 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -151,6 +152,7 @@ function TransfersTab() {
   const [mode, setMode] = useState<"list" | "create">("list");
   const [selectedTransfer, setSelectedTransfer] = useState<any>(null);
   const [txSearch, setTxSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [fromLoc, setFromLoc] = useState("");
   const [toLoc, setToLoc] = useState("");
   const [scanBarcode, setScanBarcode] = useState("");
@@ -419,7 +421,46 @@ function TransfersTab() {
     );
   }
 
-  const filteredTransfers = transfers.filter((tx: any) => {
+  // ── KPI & chart data ─────────────────────────────────────────────────────
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const thisMonthTx  = (transfers as any[]).filter((tx: any) => {
+    const d = new Date(tx.created_at || tx.createdAt);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === currentMonthKey;
+  });
+  const completedAll = (transfers as any[]).filter((tx: any) => tx.status === "approved").length;
+  const pendingAll   = (transfers as any[]).filter((tx: any) => tx.status !== "approved" && tx.status !== "cancelled").length;
+  const completionRate = (transfers as any[]).length > 0 ? Math.round((completedAll / (transfers as any[]).length) * 100) : 0;
+
+  const MONTH_AR: Record<string,string> = {"01":"يناير","02":"فبراير","03":"مارس","04":"أبريل","05":"مايو","06":"يونيو","07":"يوليو","08":"أغسطس","09":"سبتمبر","10":"أكتوبر","11":"نوفمبر","12":"ديسمبر"};
+  const monthlyMap: Record<string,number> = {};
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    monthlyMap[`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`] = 0;
+  }
+  (transfers as any[]).forEach((tx: any) => {
+    const d = new Date(tx.created_at || tx.createdAt);
+    const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    if (monthlyMap[k] !== undefined) monthlyMap[k]++;
+  });
+  const monthlyChartData = Object.entries(monthlyMap).map(([k,v]) => ({ name: MONTH_AR[k.slice(5)]||k.slice(5), تحويلات: v }));
+
+  const statusPieData = [
+    { name: "مكتملة", value: completedAll, color: "#10b981" },
+    { name: "قيد التنفيذ", value: pendingAll, color: "#f59e0b" },
+  ].filter(d => d.value > 0);
+
+  const locCounts: Record<string,number> = {};
+  (transfers as any[]).forEach((tx: any) => {
+    const f = tx.from_location_name || tx.fromLocationName;
+    const tl = tx.to_location_name || tx.toLocationName;
+    if (f) locCounts[f] = (locCounts[f]||0)+1;
+    if (tl) locCounts[tl] = (locCounts[tl]||0)+1;
+  });
+  const activeLocations = Object.entries(locCounts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  const filteredTransfers = (transfers as any[]).filter((tx: any) => {
+    if (statusFilter !== "all" && tx.status !== statusFilter) return false;
     if (!txSearch.trim()) return true;
     const q = txSearch.toLowerCase();
     return (
@@ -431,36 +472,203 @@ function TransfersTab() {
   });
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-3 items-center justify-between">
-        <div className="relative flex-1 min-w-[200px] md:max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="بحث بالموقع أو الموظف..."
-            className="pl-9"
-            value={txSearch}
-            onChange={e => setTxSearch(e.target.value)}
-          />
+    <div className="space-y-5">
+
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="text-xl font-bold flex items-center gap-2">
+            <ArrowRightLeft className="w-5 h-5 text-primary" />
+            التحويلات بين المخازن
+          </h3>
+          <p className="text-sm text-muted-foreground mt-0.5">متابعة عمليات نقل المخزون بين المواقع</p>
         </div>
-        <Button onClick={() => setMode("create")} data-testid="button-create-transfer">
-          <Plus className="w-4 h-4 mr-2" /> {t("transfers.create_transfer")}
+        <Button onClick={() => setMode("create")} className="gap-2" data-testid="button-create-transfer">
+          <Plus className="w-4 h-4" /> {t("transfers.create_transfer")}
         </Button>
       </div>
 
-      {filteredTransfers.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <ArrowRightLeft className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p>{t("transfers.no_transfers")}</p>
+      {/* ── KPI Cards ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "إجمالي هذا الشهر", value: thisMonthTx.length, icon: BarChart3, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
+          { label: "مكتملة (الكل)", value: completedAll, icon: CheckCircle2, color: "text-green-600", bg: "bg-green-50", border: "border-green-100" },
+          { label: "قيد التنفيذ", value: pendingAll, icon: Clock, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" },
+          { label: "معدل الإنجاز", value: `${completionRate}%`, icon: TrendingUp, color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-100" },
+        ].map((kpi, i) => (
+          <Card key={i} className={`border ${kpi.border} shadow-sm hover:shadow-md transition-shadow`}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs text-muted-foreground font-medium">{kpi.label}</p>
+                <div className={`w-8 h-8 rounded-lg ${kpi.bg} flex items-center justify-center`}>
+                  <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
+                </div>
+              </div>
+              <p className={`text-2xl font-bold ${kpi.color}`}>{kpi.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* ── Charts Row ── */}
+      {(transfers as any[]).length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Monthly bar chart */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-2 pt-4 px-4">
+              <CardTitle className="text-sm font-semibold text-muted-foreground">التحويلات الشهرية (آخر 6 أشهر)</CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={monthlyChartData} barSize={28}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip cursor={{ fill: "#f9fafb" }} />
+                  <Bar dataKey="تحويلات" fill="#3b82f6" radius={[6,6,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Status donut */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-2 pt-4 px-4">
+              <CardTitle className="text-sm font-semibold text-muted-foreground">توزيع حالات التحويلات</CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <div className="flex items-center gap-4">
+                <ResponsiveContainer width={140} height={140}>
+                  <PieChart>
+                    <Pie data={statusPieData} cx="50%" cy="50%" innerRadius={40} outerRadius={60} dataKey="value" paddingAngle={3}>
+                      {statusPieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(v: any) => [`${v} تحويل`, ""]} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="space-y-3 flex-1">
+                  {statusPieData.map((s, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: s.color }} />
+                        <span className="text-sm text-muted-foreground">{s.name}</span>
+                      </div>
+                      <span className="font-bold text-sm">{s.value}</span>
+                    </div>
+                  ))}
+                  <div className="pt-2 border-t">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">الإجمالي</span>
+                      <span className="font-bold text-sm">{(transfers as any[]).length}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      ) : (
-        <div className="border rounded-md">
+      )}
+
+      {/* ── Active Locations + Quick Stats ── */}
+      {(transfers as any[]).length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Active locations */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-2 pt-4 px-4">
+              <CardTitle className="text-sm font-semibold text-muted-foreground">أكثر المواقع نشاطاً</CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-2">
+              {activeLocations.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">لا توجد بيانات</p>
+              ) : activeLocations.map(([name, count], i) => (
+                <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-primary/60" />
+                    <span className="text-sm font-medium">{name}</span>
+                  </div>
+                  <Badge variant="outline" className="font-bold">{count} تحويل</Badge>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* Quick stats */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-2 pt-4 px-4">
+              <CardTitle className="text-sm font-semibold text-muted-foreground">إحصائيات سريعة</CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-2">
+              {[
+                { label: "إجمالي التحويلات (كل الوقت)", value: (transfers as any[]).length, color: "" },
+                { label: "تحويلات هذا الشهر", value: thisMonthTx.length, color: "text-blue-600" },
+                { label: "مكتملة هذا الشهر", value: thisMonthTx.filter((tx:any)=>tx.status==="approved").length, color: "text-green-600" },
+                { label: "معدل إنجاز الكل", value: `${completionRate}%`, color: "text-purple-600" },
+                { label: "عدد المواقع النشطة", value: Object.keys(locCounts).length, color: "text-amber-600" },
+              ].map((stat, i) => (
+                <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <span className="text-sm text-muted-foreground">{stat.label}</span>
+                  <span className={`font-bold text-sm ${stat.color}`}>{stat.value}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ── Table ── */}
+      <Card className="shadow-sm overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b bg-muted/30">
+          <h4 className="font-semibold text-sm flex items-center gap-2">
+            <ArrowRightLeft className="w-4 h-4 text-muted-foreground" />
+            سجل التحويلات التفصيلي
+          </h4>
+          <div className="flex flex-wrap gap-2 items-center">
+            {/* Filter pills */}
+            <div className="flex gap-1">
+              {[
+                { key: "all", label: "الكل", count: (transfers as any[]).length },
+                { key: "approved", label: "مكتمل", count: completedAll },
+                { key: "pending", label: "قيد التنفيذ", count: pendingAll },
+              ].map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => setStatusFilter(f.key)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                    statusFilter === f.key
+                      ? "bg-primary text-white border-primary"
+                      : "bg-transparent border-border text-muted-foreground hover:border-primary/50"
+                  }`}
+                >
+                  {f.label} ({f.count})
+                </button>
+              ))}
+            </div>
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                placeholder="بحث..."
+                className="pr-9 h-8 w-44 text-sm"
+                value={txSearch}
+                onChange={e => setTxSearch(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {filteredTransfers.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <ArrowRightLeft className="w-10 h-10 mx-auto mb-3 opacity-20" />
+            <p className="text-sm">{t("transfers.no_transfers")}</p>
+          </div>
+        ) : (
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-muted/20">
               <TableRow>
-                <TableHead>#</TableHead>
+                <TableHead className="w-12">#</TableHead>
                 <TableHead>{t("common.date")}</TableHead>
                 <TableHead>{t("transfers.from_location")}</TableHead>
-                <TableHead></TableHead>
+                <TableHead className="w-8"></TableHead>
                 <TableHead>{t("transfers.to_location")}</TableHead>
                 <TableHead>{t("common.status")}</TableHead>
                 <TableHead>{t("common.employee")}</TableHead>
@@ -468,24 +676,44 @@ function TransfersTab() {
             </TableHeader>
             <TableBody>
               {filteredTransfers.map((tx: any) => (
-                <TableRow key={tx.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedTransfer(tx)} data-testid={`row-transfer-${tx.id}`}>
-                  <TableCell className="font-mono text-xs">{tx.id}</TableCell>
-                  <TableCell>{fmtDate(tx.created_at || tx.createdAt)}</TableCell>
-                  <TableCell className="font-medium">{tx.from_location_name || tx.fromLocationName}</TableCell>
-                  <TableCell className="text-center text-muted-foreground"><ArrowLeft className="w-4 h-4 inline rotate-180" /></TableCell>
-                  <TableCell className="font-medium">{tx.to_location_name || tx.toLocationName}</TableCell>
+                <TableRow key={tx.id} className="cursor-pointer hover:bg-primary/5 transition-colors" onClick={() => setSelectedTransfer(tx)} data-testid={`row-transfer-${tx.id}`}>
+                  <TableCell className="font-mono text-xs text-muted-foreground">#{tx.id}</TableCell>
+                  <TableCell className="text-sm">{fmtDate(tx.created_at || tx.createdAt)}</TableCell>
                   <TableCell>
-                    <Badge variant={tx.status === "approved" ? "outline" : tx.status === "cancelled" ? "destructive" : "secondary"} className={tx.status === "approved" ? "border-green-500 text-green-700 bg-green-50" : ""}>
-                      {t(`transfers.status_${tx.status}`)}
-                    </Badge>
+                    <span className="inline-block bg-purple-50 text-purple-700 border border-purple-100 rounded-md px-2 py-0.5 text-xs font-semibold">
+                      {tx.from_location_name || tx.fromLocationName}
+                    </span>
                   </TableCell>
-                  <TableCell>{tx.creator_name || tx.creatorName}</TableCell>
+                  <TableCell className="text-center">
+                    <ArrowLeft className="w-3.5 h-3.5 inline text-muted-foreground rotate-180" />
+                  </TableCell>
+                  <TableCell>
+                    <span className="inline-block bg-blue-50 text-blue-700 border border-blue-100 rounded-md px-2 py-0.5 text-xs font-semibold">
+                      {tx.to_location_name || tx.toLocationName}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    {tx.status === "approved" ? (
+                      <Badge className="bg-green-50 text-green-700 border-green-200 text-xs gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> مكتمل
+                      </Badge>
+                    ) : tx.status === "cancelled" ? (
+                      <Badge className="bg-red-50 text-red-700 border-red-200 text-xs gap-1">
+                        <XCircle className="w-3 h-3" /> ملغي
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-xs gap-1">
+                        <Clock className="w-3 h-3" /> قيد التنفيذ
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{tx.creator_name || tx.creatorName || "—"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </div>
-      )}
+        )}
+      </Card>
 
       <Dialog open={!!selectedTransfer} onOpenChange={(open) => { if (!open) setSelectedTransfer(null); }}>
         <DialogContent className="max-w-3xl">
