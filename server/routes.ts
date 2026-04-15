@@ -255,11 +255,26 @@ export async function registerRoutes(
     res.json(row);
   });
   app.delete("/api/branches/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    const branchId = Number(req.params.id);
+    const client = await pool.connect();
     try {
-      await storage.deleteBranch(Number(req.params.id));
+      await client.query("BEGIN");
+      // فكّ الروابط قبل الحذف
+      await client.query(`UPDATE locations       SET branch_id = NULL WHERE branch_id = $1`, [branchId]);
+      await client.query(`UPDATE users           SET branch_id = NULL WHERE branch_id = $1`, [branchId]);
+      await client.query(`UPDATE employees       SET branch_id = NULL WHERE branch_id = $1`, [branchId]);
+      await client.query(`UPDATE shifts          SET branch_id = NULL WHERE branch_id = $1`, [branchId]);
+      await client.query(`UPDATE sales           SET branch_id = NULL WHERE branch_id = $1`, [branchId]);
+      await client.query(`UPDATE expenses        SET branch_id = NULL WHERE branch_id = $1`, [branchId]);
+      await client.query(`UPDATE orders          SET branch_id = NULL WHERE branch_id = $1 AND branch_id IS NOT NULL`, [branchId]).catch(() => {});
+      await client.query(`DELETE FROM branches WHERE id = $1`, [branchId]);
+      await client.query("COMMIT");
       res.json({ success: true });
     } catch (e: any) {
-      res.status(400).json({ message: "لا يمكن حذف الفرع — قد يكون مرتبطاً ببيانات أخرى" });
+      await client.query("ROLLBACK");
+      res.status(400).json({ message: e?.message ?? "لا يمكن حذف الفرع" });
+    } finally {
+      client.release();
     }
   });
 
