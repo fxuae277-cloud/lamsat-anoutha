@@ -94,10 +94,11 @@ export const OWNER_SIDEBAR: SidebarSection[] = [
   {
     sectionKey: "sidebar.section_finance",
     items: [
-      { labelKey: "nav.expenses", icon: Banknote,    path: "/expenses" },
-      { labelKey: "nav.finance",  icon: Calculator,  path: "/finance" },
-      { labelKey: "nav.returns",  icon: RotateCcw,   path: "/returns" },
-      { labelKey: "nav.reports",  icon: FileText,    path: "/reports" },
+      { labelKey: "nav.financeSummary", icon: TrendingUp,  path: "/finance-summary" },
+      { labelKey: "nav.expenses",       icon: Banknote,    path: "/expenses" },
+      { labelKey: "nav.finance",        icon: Calculator,  path: "/finance" },
+      { labelKey: "nav.returns",        icon: RotateCcw,   path: "/returns" },
+      { labelKey: "nav.reports",        icon: FileText,    path: "/reports" },
     ],
   },
   {

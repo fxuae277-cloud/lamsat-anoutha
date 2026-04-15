@@ -26,6 +26,7 @@ import Reports from "@/pages/Reports";
 import Purchases from "@/pages/Purchases";
 import Invoices from "@/pages/Invoices";
 import Finance from "@/pages/Finance";
+import FinanceSummary from "@/pages/FinanceSummary";
 import HR from "@/pages/HR";
 import Returns from "@/pages/Returns";
 import AuditLog from "@/pages/AuditLog";
@@ -232,6 +233,9 @@ function DesktopRouter() {
         </Route>
         <Route path="/finance">
           <RequireOwner><Finance /></RequireOwner>
+        </Route>
+        <Route path="/finance-summary">
+          <RequireOwner><FinanceSummary /></RequireOwner>
         </Route>
         <Route path="/stock-control">
           <RequireOwner><StockControl /></RequireOwner>
