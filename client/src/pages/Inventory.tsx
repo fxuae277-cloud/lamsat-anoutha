@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Package, Search, ArrowRightLeft, ArrowLeft, History, Plus, CheckCircle, Barcode, MapPin, AlertTriangle, TrendingUp, Layers } from "lucide-react";
+import { Package, Search, ArrowRightLeft, ArrowLeft, History, Plus, CheckCircle, Barcode, MapPin, AlertTriangle, TrendingUp, Layers, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -529,10 +529,58 @@ function TransfersTab() {
               </TableBody>
             </Table>
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Badge variant="outline" className="border-green-500 text-green-700 bg-green-50">
               {t(`transfers.status_${transferDetail?.status || selectedTransfer?.status}`)}
             </Badge>
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => {
+                const fromName = transferDetail?.from_location_name || selectedTransfer?.from_location_name || "";
+                const toName   = transferDetail?.to_location_name  || selectedTransfer?.to_location_name  || "";
+                const lines    = transferDetail?.lines || [];
+                const date     = selectedTransfer?.created_at || selectedTransfer?.createdAt || "";
+                const rows = lines.map((l: any) => `
+                  <tr>
+                    <td>${l.product_name || l.productName || ""}</td>
+                    <td>${l.color || "-"}</td>
+                    <td>${l.size || "-"}</td>
+                    <td style="font-family:monospace">${l.barcode || "-"}</td>
+                    <td style="text-align:center;font-weight:bold">${l.qty}</td>
+                  </tr>`).join("");
+                const win = window.open("", "_blank", "width=900,height=700");
+                if (!win) return;
+                win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8">
+                  <title>تحويل #${selectedTransfer?.id}</title>
+                  <style>
+                    body{font-family:Arial,sans-serif;padding:20px;direction:rtl}
+                    h2{margin-bottom:4px}
+                    .meta{color:#666;margin-bottom:16px;font-size:14px}
+                    table{width:100%;border-collapse:collapse;margin-top:12px}
+                    th,td{border:1px solid #ddd;padding:8px 10px;text-align:right;font-size:13px}
+                    th{background:#f5f5f5;font-weight:bold}
+                    @media print{button{display:none}}
+                  </style></head><body>
+                  <h2>تحويل مخزون #${selectedTransfer?.id}</h2>
+                  <div class="meta">
+                    من: <strong>${fromName}</strong> &nbsp;→&nbsp; إلى: <strong>${toName}</strong>
+                    &nbsp;|&nbsp; التاريخ: ${date ? new Date(date).toLocaleDateString("ar-OM") : ""}
+                  </div>
+                  <table>
+                    <thead><tr><th>المنتج</th><th>اللون</th><th>المقاس</th><th>الباركود</th><th>الكمية</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                  </table>
+                  <br/><button onclick="window.print()">طباعة</button>
+                  </body></html>`);
+                win.document.close();
+                win.focus();
+                setTimeout(() => win.print(), 400);
+              }}
+            >
+              <Printer className="w-4 h-4" />
+              طباعة
+            </Button>
             <Button variant="outline" onClick={() => setSelectedTransfer(null)}>{t("common.close")}</Button>
           </DialogFooter>
         </DialogContent>
