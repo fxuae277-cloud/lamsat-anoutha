@@ -24,15 +24,26 @@ function locLabel(loc: Location) {
 
 function BalancesTab() {
   const { t, lang } = useI18n();
-  const [branchId, setBranchId] = useState<string>("all");
+  // filter value: "all" | "central" | "branch:{id}"
+  const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
 
-  const { data: branches = [] } = useQuery<any[]>({
-    queryKey: ["/api/branches"],
+  const { data: transferLocs = [] } = useQuery<any[]>({
+    queryKey: ["/api/transfer-locations"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const balancesUrl = branchId === "all" ? "/api/inventory-balances" : `/api/inventory-balances?branchId=${branchId}`;
+  // بناء URL الأرصدة بناءً على الفلتر
+  const balancesUrl = (() => {
+    if (filter === "all") return "/api/inventory-balances";
+    if (filter === "central") {
+      const central = (transferLocs as any[]).find(l => l.type === "central");
+      return central ? `/api/inventory-balances?locationId=${central.location_id}` : "/api/inventory-balances";
+    }
+    const branchId = filter.replace("branch:", "");
+    return `/api/inventory-balances?branchId=${branchId}`;
+  })();
+
   const { data: balances = [] } = useQuery<any[]>({
     queryKey: [balancesUrl],
   });
@@ -46,15 +57,18 @@ function BalancesTab() {
     <div className="space-y-4">
       <div className="flex flex-wrap gap-4">
         <div className="w-full md:w-64">
-          <Select value={branchId} onValueChange={setBranchId}>
+          <Select value={filter} onValueChange={setFilter}>
             <SelectTrigger data-testid="select-location-filter">
               <SelectValue placeholder={t("inv_balances.all_locations")} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("inv_balances.all_locations")}</SelectItem>
-              {(branches as any[]).map(b => (
-                <SelectItem key={b.id} value={String(b.id)}>
-                  {b.name}{b.address ? ` - ${b.address}` : ""}
+              {(transferLocs as any[]).map(loc => (
+                <SelectItem
+                  key={loc.location_id}
+                  value={loc.type === "central" ? "central" : `branch:${loc.branch_id}`}
+                >
+                  {loc.label}
                 </SelectItem>
               ))}
             </SelectContent>

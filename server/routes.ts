@@ -5170,6 +5170,48 @@ export async function registerRoutes(
   registerBackupRoutes(app);
   registerMobileRoutes(app);
 
+  // ── Migration 0022 — إصلاح branch_id للمخزن المركزي ──────────────────────
+  app.post("/api/run-migration-0022", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      // المخزن المركزي يجب أن يكون branch_id = NULL حتى لا يُعرض كفرع
+      await pool.query(`UPDATE locations SET branch_id = NULL WHERE is_central = TRUE`);
+
+      // تشخيص: إرجاع حالة المواقع بعد الإصلاح
+      const locResult = await pool.query(`
+        SELECT id, name, is_central, branch_id, is_branch_default, active
+        FROM locations ORDER BY is_central DESC, id
+      `);
+      res.json({
+        success: true,
+        message: "تم إصلاح المخزن المركزي — branch_id = NULL الآن",
+        locations: locResult.rows,
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message ?? "خطأ" });
+    }
+  });
+
+  // ── تشخيص المواقع ────────────────────────────────────────────────────────
+  app.get("/api/admin/locations-diagnostic", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      const locs = await pool.query(`
+        SELECT l.id, l.name, l.is_central, l.branch_id, l.is_branch_default, l.active,
+               b.name as branch_name
+        FROM locations l LEFT JOIN branches b ON b.id = l.branch_id
+        ORDER BY l.is_central DESC, l.id
+      `);
+      const centralInventory = await pool.query(`
+        SELECT COUNT(*) as records, SUM(ib.qty_on_hand) as total_qty
+        FROM inventory_balances ib
+        JOIN locations l ON l.id = ib.location_id
+        WHERE l.is_central = TRUE
+      `);
+      res.json({ locations: locs.rows, centralInventory: centralInventory.rows[0] });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message });
+    }
+  });
+
   // ── Migration 0021 ─────────────────────────────────────────────────────────
   app.post("/api/run-migration-0021", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
     try {
