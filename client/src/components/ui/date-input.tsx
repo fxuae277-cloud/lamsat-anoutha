@@ -1,11 +1,17 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 /**
  * DateInput — تحل محل <Input type="date"> في كل الموقع.
- * تعرض التاريخ كنص DD/MM/YYYY بأرقام إنجليزية دائماً بدلاً من
- * الـ native date picker الذي يستخدم أرقام عربية في Chrome/Edge
- * عند ضبط لغة المستند على العربية.
+ * تعرض التاريخ كنص DD/MM/YYYY بأرقام إنجليزية دائماً.
+ * التقويم المنبثق مبني بـ react-day-picker (لا native picker) —
+ * يحل نهائياً مشكلة الأرقام العربية في Chrome/Edge على الأجهزة العربية.
  *
  * القيمة المُرسَلة/المُستلمة: YYYY-MM-DD (متوافقة مع <input type="date">).
  */
@@ -18,8 +24,18 @@ interface DateInputProps
 }
 
 export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
-  ({ className, value = "", onChange, disabled, placeholder = "DD/MM/YYYY", ...props }, ref) => {
-    const hiddenRef = React.useRef<HTMLInputElement>(null);
+  (
+    {
+      className,
+      value = "",
+      onChange,
+      disabled,
+      placeholder = "DD/MM/YYYY",
+      ...props
+    },
+    ref
+  ) => {
+    const [open, setOpen] = React.useState(false);
 
     // يحوّل YYYY-MM-DD → DD/MM/YYYY
     function toDisplay(iso: string): string {
@@ -38,6 +54,21 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
       return "";
     }
 
+    // يحوّل YYYY-MM-DD → Date object
+    function toDate(iso: string): Date | undefined {
+      if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return undefined;
+      const [y, m, d] = iso.split("-").map(Number);
+      return new Date(y, m - 1, d);
+    }
+
+    // يحوّل Date → YYYY-MM-DD
+    function fromDate(date: Date): string {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, "0");
+      const d = String(date.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+
     const [displayVal, setDisplayVal] = React.useState(toDisplay(value));
 
     // مزامنة عند تغيير الـ value الخارجية
@@ -45,7 +76,21 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
       setDisplayVal(toDisplay(value));
     }, [value]);
 
-    // عند الكتابة اليدوية في حقل النص
+    // إطلاق onChange مع قيمة ISO
+    function fireChange(
+      e: React.SyntheticEvent,
+      iso: string
+    ) {
+      if (!onChange) return;
+      const syntheticEvent = {
+        ...e,
+        target: { ...(e.target as HTMLInputElement), value: iso },
+        currentTarget: { ...(e.currentTarget as HTMLInputElement), value: iso },
+      } as React.ChangeEvent<HTMLInputElement>;
+      onChange(syntheticEvent);
+    }
+
+    // عند الكتابة اليدوية
     function handleTextChange(e: React.ChangeEvent<HTMLInputElement>) {
       let raw = e.target.value.replace(/[^\d/]/g, "");
 
@@ -59,32 +104,25 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
       setDisplayVal(raw);
 
       const iso = toISO(raw);
-      if (iso && onChange) {
-        const syntheticEvent = {
-          ...e,
-          target: { ...e.target, value: iso },
-          currentTarget: { ...e.currentTarget, value: iso },
-        } as React.ChangeEvent<HTMLInputElement>;
-        onChange(syntheticEvent);
-      }
+      if (iso) fireChange(e, iso);
     }
 
-    // فتح native date picker عند الضغط على الأيقونة
-    function openPicker() {
-      if (disabled) return;
-      const input = hiddenRef.current;
-      if (input) {
-        input.value = value || "";
-        input.showPicker?.();
-      }
-    }
-
-    // عندما يختار المستخدم تاريخاً من الـ native picker
-    function handleHiddenChange(e: React.ChangeEvent<HTMLInputElement>) {
-      const iso = e.target.value;
+    // عند اختيار يوم من التقويم
+    function handleDaySelect(day: Date | undefined) {
+      if (!day) return;
+      const iso = fromDate(day);
       setDisplayVal(toDisplay(iso));
-      if (onChange) onChange(e);
+      setOpen(false);
+
+      // نطلق onChange بحدث اصطناعي
+      const fakeEvent = {
+        target: { value: iso },
+        currentTarget: { value: iso },
+      } as React.ChangeEvent<HTMLInputElement>;
+      if (onChange) onChange(fakeEvent);
     }
+
+    const selectedDate = toDate(value);
 
     return (
       <div className="relative">
@@ -107,33 +145,42 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
           {...props}
         />
 
-        {/* زر فتح الـ native picker */}
-        <button
-          type="button"
-          tabIndex={-1}
-          disabled={disabled}
-          onClick={openPicker}
-          className="absolute left-0 top-0 h-full px-2.5 flex items-center border-r border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50 rounded-l-md"
-          aria-label="اختر تاريخ"
-        >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-            <line x1="16" y1="2" x2="16" y2="6" />
-            <line x1="8" y1="2" x2="8" y2="6" />
-            <line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
-        </button>
-
-        {/* date input مخفي — فقط لفتح native picker */}
-        <input
-          ref={hiddenRef}
-          type="date"
-          lang="en"
-          tabIndex={-1}
-          aria-hidden="true"
-          className="absolute opacity-0 w-0 h-0 pointer-events-none"
-          onChange={handleHiddenChange}
-        />
+        {/* زر فتح التقويم */}
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              tabIndex={-1}
+              disabled={disabled}
+              className="absolute left-0 top-0 h-full px-2.5 flex items-center border-r border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50 rounded-l-md"
+              aria-label="اختر تاريخ"
+            >
+              <svg
+                className="w-4 h-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={handleDaySelect}
+              defaultMonth={selectedDate}
+              captionLayout="dropdown"
+              fromYear={2020}
+              toYear={2035}
+            />
+          </PopoverContent>
+        </Popover>
       </div>
     );
   }
