@@ -4804,8 +4804,12 @@ export class DatabaseStorage implements IStorage {
   async getStockTransfers() {
     const result = await pool.query(`
       SELECT st.*,
-             CASE WHEN fl.is_central THEN fl.name ELSE COALESCE(fb.name, fl.name) END as from_location_name,
-             CASE WHEN tl.is_central THEN tl.name ELSE COALESCE(tb.name, tl.name) END as to_location_name,
+             CASE WHEN fl.is_central THEN fl.name
+                  ELSE COALESCE(fb.name || ' - ' || fl.name, fl.name)
+             END as from_location_name,
+             CASE WHEN tl.is_central THEN tl.name
+                  ELSE COALESCE(tb.name || ' - ' || tl.name, tl.name)
+             END as to_location_name,
              u.name as creator_name
       FROM stock_transfers st
       JOIN locations fl ON fl.id = st.from_location_id
