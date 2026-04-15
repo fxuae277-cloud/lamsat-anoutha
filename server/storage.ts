@@ -4805,10 +4805,10 @@ export class DatabaseStorage implements IStorage {
     const result = await pool.query(`
       SELECT st.*,
              CASE WHEN fl.is_central THEN fl.name
-                  ELSE COALESCE(fb.name || ' - ' || fl.name, fl.name)
+                  ELSE fb.name || CASE WHEN fb.address IS NOT NULL AND fb.address <> '' THEN ' - ' || fb.address ELSE '' END
              END as from_location_name,
              CASE WHEN tl.is_central THEN tl.name
-                  ELSE COALESCE(tb.name || ' - ' || tl.name, tl.name)
+                  ELSE tb.name || CASE WHEN tb.address IS NOT NULL AND tb.address <> '' THEN ' - ' || tb.address ELSE '' END
              END as to_location_name,
              u.name as creator_name
       FROM stock_transfers st

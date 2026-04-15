@@ -1359,14 +1359,14 @@ export async function registerRoutes(
     const fromLocRes = await pool.query(`
       SELECT l.is_central,
              CASE WHEN l.is_central THEN l.name
-                  ELSE COALESCE(b.name || ' - ' || l.name, l.name)
+                  ELSE b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END
              END as label
       FROM locations l LEFT JOIN branches b ON b.id = l.branch_id WHERE l.id = $1
     `, [transfer.fromLocationId]);
     const toLocRes = await pool.query(`
       SELECT l.is_central,
              CASE WHEN l.is_central THEN l.name
-                  ELSE COALESCE(b.name || ' - ' || l.name, l.name)
+                  ELSE b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END
              END as label
       FROM locations l LEFT JOIN branches b ON b.id = l.branch_id WHERE l.id = $1
     `, [transfer.toLocationId]);
@@ -1489,14 +1489,14 @@ export async function registerRoutes(
       const fromLocRes = await pool.query(`
         SELECT l.is_central,
                CASE WHEN l.is_central THEN l.name
-                    ELSE COALESCE(b.name || ' - ' || l.name, l.name)
+                    ELSE b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END
                END as label
         FROM locations l LEFT JOIN branches b ON b.id = l.branch_id WHERE l.id = $1
       `, [fromLocationId]);
       const toLocRes = await pool.query(`
         SELECT l.is_central,
                CASE WHEN l.is_central THEN l.name
-                    ELSE COALESCE(b.name || ' - ' || l.name, l.name)
+                    ELSE b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END
                END as label
         FROM locations l LEFT JOIN branches b ON b.id = l.branch_id WHERE l.id = $1
       `, [toLocationId]);
