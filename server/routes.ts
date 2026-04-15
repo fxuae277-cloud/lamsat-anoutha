@@ -5283,6 +5283,141 @@ export async function registerRoutes(
     }
   });
 
+  // ── تشخيص وإصلاح فواتير الشراء المفقودة من الأرصدة ──────────────────────────
+  app.get("/api/admin/purchase-inventory-diagnostic", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      const result = await pool.query(`
+        WITH central AS (
+          SELECT id FROM locations WHERE is_central = TRUE LIMIT 1
+        ),
+        invoice_items AS (
+          SELECT
+            pi.id                  AS invoice_id,
+            pi.invoice_number,
+            pi.status,
+            pi.grand_total,
+            pi.invoice_date,
+            s.name                 AS supplier_name,
+            pit.id                 AS item_id,
+            pit.product_id,
+            p.name                 AS product_name,
+            pit.variant_id,
+            pit.qty,
+            pit.unit_cost_base
+          FROM purchase_invoices pi
+          JOIN purchase_items pit ON pit.purchase_id = pi.id
+          LEFT JOIN suppliers s   ON s.id = pi.supplier_id
+          LEFT JOIN products p    ON p.id = pit.product_id
+          WHERE pi.status IN ('approved', 'received')
+        ),
+        balance_check AS (
+          SELECT
+            ii.*,
+            COALESCE(ib.qty_on_hand, 0) AS balance_qty
+          FROM invoice_items ii
+          LEFT JOIN inventory_balances ib
+            ON ib.variant_id = ii.variant_id
+           AND ib.location_id = (SELECT id FROM central)
+        )
+        SELECT
+          invoice_id,
+          invoice_number,
+          status,
+          supplier_name,
+          invoice_date,
+          grand_total,
+          COUNT(item_id)                                      AS total_items,
+          SUM(qty)                                            AS total_qty_purchased,
+          SUM(CASE WHEN balance_qty = 0 THEN 1 ELSE 0 END)   AS items_missing_balance,
+          SUM(CASE WHEN balance_qty = 0 THEN qty ELSE 0 END)  AS qty_missing
+        FROM balance_check
+        GROUP BY invoice_id, invoice_number, status, supplier_name, invoice_date, grand_total
+        HAVING SUM(CASE WHEN balance_qty = 0 THEN 1 ELSE 0 END) > 0
+        ORDER BY invoice_date DESC
+      `);
+      res.json({ ok: true, missing: result.rows });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, message: err?.message ?? "خطأ" });
+    }
+  });
+
+  app.post("/api/admin/repair-purchase-inventory", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    const client = await pool.connect();
+    try {
+      // 1. المخزن المركزي
+      const centralRes = await client.query(`SELECT id FROM locations WHERE is_central = TRUE LIMIT 1`);
+      if (centralRes.rows.length === 0) {
+        return res.status(400).json({ ok: false, message: "لا يوجد مخزن مركزي" });
+      }
+      const centralId = centralRes.rows[0].id;
+
+      // 2. البنود المفقودة من inventory_balances
+      const missingRes = await client.query(`
+        SELECT pit.id AS item_id, pit.purchase_id, pit.product_id, pit.variant_id, pit.qty,
+               pit.unit_cost_base, pi.created_by
+        FROM purchase_invoices pi
+        JOIN purchase_items pit ON pit.purchase_id = pi.id
+        WHERE pi.status IN ('approved', 'received')
+          AND pit.variant_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM inventory_balances ib
+             WHERE ib.variant_id = pit.variant_id
+               AND ib.location_id = $1
+          )
+      `, [centralId]);
+
+      if (missingRes.rows.length === 0) {
+        return res.json({ ok: true, message: "لا توجد بنود مفقودة — الأرصدة مكتملة", fixed: 0 });
+      }
+
+      await client.query("BEGIN");
+
+      for (const row of missingRes.rows) {
+        // أدخل في inventory_balances
+        await client.query(
+          `INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
+           VALUES ($1, $2, $3, 0)
+           ON CONFLICT (location_id, variant_id)
+           DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + EXCLUDED.qty_on_hand`,
+          [centralId, row.variant_id, row.qty]
+        );
+        // أدخل في location_inventory أيضاً
+        await client.query(
+          `INSERT INTO location_inventory (location_id, product_id, qty_on_hand, updated_at)
+           VALUES ($1, $2, $3, now())
+           ON CONFLICT (location_id, product_id)
+           DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand + EXCLUDED.qty_on_hand,
+                         updated_at = now()`,
+          [centralId, row.product_id, row.qty]
+        );
+        // سجّل في inventory_ledger
+        await client.query(
+          `INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by, created_at)
+           VALUES ($1, $2, $3, 'purchase_repair', 'purchase_invoices', $4, $5, now())`,
+          [row.variant_id, centralId, row.qty, row.purchase_id, row.created_by ?? 1]
+        );
+      }
+
+      await client.query("COMMIT");
+
+      res.json({
+        ok: true,
+        message: `تم إصلاح ${missingRes.rows.length} بند مفقود وإضافتها إلى المخزن المركزي`,
+        fixed: missingRes.rows.length,
+        details: missingRes.rows.map((r: any) => ({
+          purchase_id: r.purchase_id,
+          variant_id: r.variant_id,
+          qty: r.qty,
+        })),
+      });
+    } catch (err: any) {
+      await client.query("ROLLBACK");
+      res.status(500).json({ ok: false, message: err?.message ?? "خطأ" });
+    } finally {
+      client.release();
+    }
+  });
+
   // ── Migration 0021 ─────────────────────────────────────────────────────────
   app.post("/api/run-migration-0021", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
     try {
