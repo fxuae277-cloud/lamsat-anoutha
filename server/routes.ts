@@ -5379,12 +5379,54 @@ export async function registerRoutes(
 
       for (const row of gapRes.rows) {
         const qty = parseFloat(row.total_qty);
+
+        // تحقق من وجود الـ variant — إذا غير موجود أنشئه
+        const varCheck = await client.query(
+          `SELECT id FROM product_variants WHERE id = $1`,
+          [row.variant_id]
+        );
+        let variantId = row.variant_id;
+        if (varCheck.rows.length === 0) {
+          // الـ variant محذوف أو غير موجود — ابحث عن variant بديل لنفس المنتج
+          const existingVar = await client.query(
+            `SELECT id FROM product_variants WHERE product_id = $1 AND active = true LIMIT 1`,
+            [row.product_id]
+          );
+          if (existingVar.rows.length > 0) {
+            variantId = existingVar.rows[0].id;
+            // حدّث purchase_items ليشير للـ variant الصحيح
+            await client.query(
+              `UPDATE purchase_items SET variant_id = $1 WHERE variant_id = $2`,
+              [variantId, row.variant_id]
+            );
+          } else {
+            // أنشئ variant جديد للمنتج
+            const prod = await client.query(
+              `SELECT name, barcode, price, avg_cost FROM products WHERE id = $1`,
+              [row.product_id]
+            );
+            if (prod.rows.length === 0) continue; // منتج غير موجود أصلاً
+            const p = prod.rows[0];
+            const sku = `SKU-${row.product_id}-REPAIR-${Date.now()}`;
+            const newVar = await client.query(
+              `INSERT INTO product_variants (product_id, sku, barcode, color, size, cost_default, price, active)
+               VALUES ($1, $2, $3, '', '', $4, $5, true) RETURNING id`,
+              [row.product_id, sku, p.barcode ?? null, p.avg_cost ?? 0, p.price ?? 0]
+            );
+            variantId = newVar.rows[0].id;
+            await client.query(
+              `UPDATE purchase_items SET variant_id = $1 WHERE variant_id = $2`,
+              [variantId, row.variant_id]
+            );
+          }
+        }
+
         await client.query(
           `INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
            VALUES ($1, $2, $3, 0)
            ON CONFLICT (location_id, variant_id)
            DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + EXCLUDED.qty_on_hand`,
-          [centralId, row.variant_id, qty]
+          [centralId, variantId, qty]
         );
         await client.query(
           `INSERT INTO location_inventory (location_id, product_id, qty_on_hand, updated_at)
@@ -5397,7 +5439,7 @@ export async function registerRoutes(
         await client.query(
           `INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by, created_at)
            VALUES ($1, $2, $3, 'purchase_repair', 'purchase_invoices', $4, $5, now())`,
-          [row.variant_id, centralId, qty, row.ref_purchase_id, row.created_by ?? 1]
+          [variantId, centralId, qty, row.ref_purchase_id, row.created_by ?? 1]
         );
       }
 
