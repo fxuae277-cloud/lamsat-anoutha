@@ -5212,6 +5212,77 @@ export async function registerRoutes(
     }
   });
 
+  // ── Migration 0023 — تجميع كل المخزون في المخزن المركزي ──────────────────
+  app.post("/api/run-migration-0023", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      // 1. إيجاد المخزن المركزي
+      const centralRes = await client.query(`SELECT id FROM locations WHERE is_central = TRUE LIMIT 1`);
+      if (centralRes.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ success: false, message: "لا يوجد مخزن مركزي" });
+      }
+      const centralId = centralRes.rows[0].id;
+
+      // 2. نقل inventory_balances من الفروع → المخزن المركزي
+      await client.query(`
+        INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
+        SELECT $1, ib.variant_id, SUM(ib.qty_on_hand), 0
+        FROM inventory_balances ib
+        JOIN locations l ON l.id = ib.location_id
+        WHERE l.is_central = FALSE AND ib.qty_on_hand > 0
+        GROUP BY ib.variant_id
+        ON CONFLICT (location_id, variant_id)
+        DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + EXCLUDED.qty_on_hand
+      `, [centralId]);
+
+      // 3. نقل location_inventory من الفروع → المخزن المركزي
+      await client.query(`
+        INSERT INTO location_inventory (location_id, product_id, qty_on_hand, updated_at)
+        SELECT $1, li.product_id, SUM(li.qty_on_hand), now()
+        FROM location_inventory li
+        JOIN locations l ON l.id = li.location_id
+        WHERE l.is_central = FALSE AND li.qty_on_hand > 0
+        GROUP BY li.product_id
+        ON CONFLICT (location_id, product_id)
+        DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand + EXCLUDED.qty_on_hand,
+                      updated_at = now()
+      `, [centralId]);
+
+      // 4. حذف سجلات الفروع بعد النقل
+      await client.query(`
+        DELETE FROM inventory_balances
+        WHERE location_id IN (SELECT id FROM locations WHERE is_central = FALSE)
+      `);
+      await client.query(`
+        DELETE FROM location_inventory
+        WHERE location_id IN (SELECT id FROM locations WHERE is_central = FALSE)
+      `);
+
+      await client.query("COMMIT");
+
+      // إحصاء بعد النقل
+      const afterRes = await client.query(`
+        SELECT COUNT(*) as records, COALESCE(SUM(qty_on_hand),0) as total_qty
+        FROM inventory_balances WHERE location_id = $1
+      `, [centralId]);
+
+      res.json({
+        success: true,
+        message: `تم نقل كل المخزون إلى المخزن المركزي (id=${centralId})`,
+        centralId,
+        after: afterRes.rows[0],
+      });
+    } catch (err: any) {
+      await client.query("ROLLBACK");
+      res.status(500).json({ success: false, message: err?.message ?? "خطأ" });
+    } finally {
+      client.release();
+    }
+  });
+
   // ── Migration 0021 ─────────────────────────────────────────────────────────
   app.post("/api/run-migration-0021", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
     try {
