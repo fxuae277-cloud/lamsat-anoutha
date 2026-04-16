@@ -1,9 +1,13 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   PackageSearch, Boxes, TrendingDown, AlertTriangle,
-  Search, GitBranch, ArrowUpDown,
+  Search, GitBranch, ArrowUpDown, DollarSign, TrendingUp,
+  Activity, Zap, Warehouse, BarChart2, RefreshCw,
 } from "lucide-react";
+import {
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
+} from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
@@ -44,6 +48,12 @@ function catBadgeClass(name?: string) {
   }
   return "bg-gray-100 text-gray-600 border-gray-200";
 }
+
+// ── ألوان الرسم البياني ──────────────────────────────────────────────────
+const PIE_COLORS = [
+  "#3b82f6", "#f59e0b", "#10b981", "#8b5cf6", "#ef4444", "#06b6d4",
+  "#ec4899", "#14b8a6", "#f97316", "#6366f1",
+];
 
 export default function InventoryOverview() {
   const { t } = useI18n();
@@ -94,7 +104,7 @@ export default function InventoryOverview() {
   });
 
   // ── فلترة المخزون ─────────────────────────────────────────────────────
-  const filtered = stockRaw
+  const filtered = (Array.isArray(stockRaw) ? stockRaw : [])
     .filter(row => {
       if (filterBranch !== "all" && String(row.branch_id) !== filterBranch) return false;
       if (filterType   !== "all" && row.product_type !== filterType)         return false;
@@ -119,11 +129,63 @@ export default function InventoryOverview() {
       return 0;
     });
 
-  // ── KPIs ──────────────────────────────────────────────────────────────
-  const totalRows    = stockRaw.length;
-  const lowStockRows = stockRaw.filter(r => r.qty_on_hand > 0 && r.qty_on_hand <= r.reorder_level).length;
-  const zeroRows     = stockRaw.filter(r => r.qty_on_hand === 0).length;
-  const totalValue   = stockRaw.reduce((s, r) => s + parseFloat(r.price || "0") * r.qty_on_hand, 0);
+  // ── KPIs الأساسية ─────────────────────────────────────────────────────
+  const stock = Array.isArray(stockRaw) ? stockRaw : [];
+  const totalRows    = stock.length;
+  const lowStockRows = stock.filter(r => r.qty_on_hand > 0 && r.qty_on_hand <= r.reorder_level).length;
+  const zeroRows     = stock.filter(r => r.qty_on_hand === 0).length;
+  const totalValue   = stock.reduce((s, r) => s + parseFloat(r.price || "0") * (r.qty_on_hand || 0), 0);
+  const totalQty     = stock.reduce((s, r) => s + (r.qty_on_hand || 0), 0);
+  const costValue    = stock.reduce((s, r) => s + parseFloat(r.last_purchase_price || "0") * (r.qty_on_hand || 0), 0);
+  const avgPrice     = totalQty > 0 ? totalValue / totalQty : 0;
+  const missingCostCount = stock.filter(r => !r.last_purchase_price || parseFloat(r.last_purchase_price) === 0).length;
+
+  // ── تجميع حسب الموقع/الفرع ───────────────────────────────────────────
+  const locationData = useMemo(() => {
+    const map: Record<string, { name: string; qty: number; value: number }> = {};
+    for (const row of stock) {
+      const key = row.full_location_name || row.branch_name || "غير محدد";
+      if (!map[key]) map[key] = { name: key, qty: 0, value: 0 };
+      map[key].qty   += row.qty_on_hand || 0;
+      map[key].value += parseFloat(row.price || "0") * (row.qty_on_hand || 0);
+    }
+    return Object.values(map).sort((a, b) => b.value - a.value);
+  }, [stock]);
+
+  // ── تجميع حسب المنتج (للرسم البياني) ────────────────────────────────
+  const productPieData = useMemo(() => {
+    const map: Record<string, { name: string; value: number; qty: number }> = {};
+    for (const row of stock) {
+      const key = row.product_name || "غير محدد";
+      if (!map[key]) map[key] = { name: key, value: 0, qty: 0 };
+      map[key].value += parseFloat(row.price || "0") * (row.qty_on_hand || 0);
+      map[key].qty   += row.qty_on_hand || 0;
+    }
+    return Object.values(map)
+      .filter(p => p.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 7);
+  }, [stock]);
+
+  // ── عناصر التنبيه ────────────────────────────────────────────────────
+  const alertItems = useMemo(() => {
+    const low  = stock.filter(r => r.qty_on_hand > 0 && r.qty_on_hand <= r.reorder_level)
+                      .sort((a, b) => a.qty_on_hand - b.qty_on_hand).slice(0, 4);
+    const zero = stock.filter(r => r.qty_on_hand === 0).slice(0, 2);
+    return [...zero, ...low];
+  }, [stock]);
+
+  // ── درجة صحة المخزون (0-100) ─────────────────────────────────────────
+  const healthScore = useMemo(() => {
+    if (totalRows === 0) return 0;
+    const badItems = zeroRows * 2 + lowStockRows + missingCostCount * 0.5;
+    const maxBad   = totalRows * 3.5;
+    return Math.max(0, Math.min(100, Math.round(100 * (1 - badItems / maxBad))));
+  }, [totalRows, zeroRows, lowStockRows, missingCostCount]);
+
+  const healthLabel = healthScore >= 80 ? "ممتاز" : healthScore >= 60 ? "جيد" : healthScore >= 40 ? "متوسط" : "يحتاج تحسين";
+  const healthColor = healthScore >= 80 ? "text-green-600" : healthScore >= 60 ? "text-blue-600" : healthScore >= 40 ? "text-yellow-600" : "text-red-600";
+  const healthBg    = healthScore >= 80 ? "bg-green-50 border-green-200" : healthScore >= 60 ? "bg-blue-50 border-blue-200" : healthScore >= 40 ? "bg-yellow-50 border-yellow-200" : "bg-red-50 border-red-200";
 
   // ── ترتيب الأعمدة ──────────────────────────────────────────────────
   function toggleSort(col: "name"|"qty"|"price") {
@@ -157,7 +219,7 @@ export default function InventoryOverview() {
   }
 
   // ── فلترة الحركات ──────────────────────────────────────────────────
-  const filteredMovements = movements.filter(m => {
+  const filteredMovements = (Array.isArray(movements) ? movements : []).filter(m => {
     if (movBranch !== "all" && String(m.branchId) !== movBranch) return false;
     if (movSearch) {
       const q = movSearch.toLowerCase();
@@ -166,16 +228,53 @@ export default function InventoryOverview() {
     return true;
   });
 
+  // ── مساعد الـ Tooltip للرسم البياني ─────────────────────────────────
+  function CustomTooltip({ active, payload }: any) {
+    if (!active || !payload?.length) return null;
+    const d = payload[0].payload;
+    return (
+      <div className="bg-background border rounded-lg shadow-lg p-3 text-sm" dir="rtl">
+        <p className="font-semibold mb-1">{d.name}</p>
+        <p className="text-muted-foreground">القيمة: <span className="font-bold text-primary">{fmtOMR(d.value)}</span></p>
+        <p className="text-muted-foreground">الكمية: <span className="font-bold">{d.qty} وحدة</span></p>
+        <p className="text-muted-foreground">النسبة: <span className="font-bold">{totalValue > 0 ? ((d.value / totalValue) * 100).toFixed(1) : 0}%</span></p>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto p-4 lg:p-6 pb-20" dir="rtl">
       {/* ── Header ── */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight">{t("inv_overview.title")}</h1>
-        <p className="text-muted-foreground mt-1">{t("inv_overview.subtitle")}</p>
+      <div className="mb-6 flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">{t("inv_overview.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("inv_overview.subtitle")}</p>
+        </div>
+        {totalRows > 0 && (
+          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-semibold ${healthBg} ${healthColor}`}>
+            <Activity className="w-4 h-4" />
+            صحة المخزون: {healthLabel} ({healthScore}/100)
+          </div>
+        )}
       </div>
 
-      {/* ── KPI Cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {/* ── KPI Cards (7 cards) ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 mb-6">
+
+        {/* إجمالي قيمة المخزون */}
+        <Card className="border-0 bg-gradient-to-br from-amber-50 to-yellow-100/60 xl:col-span-1">
+          <CardContent className="p-4 flex gap-3 items-center">
+            <div className="w-10 h-10 rounded-xl bg-yellow-200 flex items-center justify-center shrink-0">
+              <DollarSign className="w-5 h-5 text-yellow-700" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xl font-bold text-yellow-700 truncate">{fmtOMR(totalValue)}</p>
+              <p className="text-xs text-muted-foreground">قيمة المخزون</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* إجمالي الأصناف */}
         <Card className="border-0 bg-gradient-to-br from-primary/5 to-primary/10">
           <CardContent className="p-4 flex gap-3 items-center">
             <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
@@ -188,6 +287,20 @@ export default function InventoryOverview() {
           </CardContent>
         </Card>
 
+        {/* إجمالي الكمية */}
+        <Card className="border-0 bg-gradient-to-br from-green-50 to-green-100/60">
+          <CardContent className="p-4 flex gap-3 items-center">
+            <div className="w-10 h-10 rounded-xl bg-green-200 flex items-center justify-center shrink-0">
+              <TrendingUp className="w-5 h-5 text-green-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-green-600">{totalQty}</p>
+              <p className="text-xs text-muted-foreground">إجمالي الكمية</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* منخفض المخزون */}
         <Card className="border-0 bg-gradient-to-br from-yellow-50 to-yellow-100/60">
           <CardContent className="p-4 flex gap-3 items-center">
             <div className="w-10 h-10 rounded-xl bg-yellow-200 flex items-center justify-center shrink-0">
@@ -200,6 +313,7 @@ export default function InventoryOverview() {
           </CardContent>
         </Card>
 
+        {/* نفاد المخزون */}
         <Card className="border-0 bg-gradient-to-br from-red-50 to-red-100/60">
           <CardContent className="p-4 flex gap-3 items-center">
             <div className="w-10 h-10 rounded-xl bg-red-200 flex items-center justify-center shrink-0">
@@ -212,6 +326,7 @@ export default function InventoryOverview() {
           </CardContent>
         </Card>
 
+        {/* عدد الفروع/المواقع */}
         <Card className="border-0 bg-gradient-to-br from-blue-50 to-blue-100/60">
           <CardContent className="p-4 flex gap-3 items-center">
             <div className="w-10 h-10 rounded-xl bg-blue-200 flex items-center justify-center shrink-0">
@@ -223,16 +338,309 @@ export default function InventoryOverview() {
             </div>
           </CardContent>
         </Card>
+
+        {/* متوسط سعر البيع */}
+        <Card className="border-0 bg-gradient-to-br from-purple-50 to-purple-100/60">
+          <CardContent className="p-4 flex gap-3 items-center">
+            <div className="w-10 h-10 rounded-xl bg-purple-200 flex items-center justify-center shrink-0">
+              <BarChart2 className="w-5 h-5 text-purple-600" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xl font-bold text-purple-600 truncate">{fmtOMR(avgPrice)}</p>
+              <p className="text-xs text-muted-foreground">متوسط سعر البيع</p>
+            </div>
+          </CardContent>
+        </Card>
+
       </div>
 
-      {/* قيمة المخزون الإجمالية */}
-      {totalValue > 0 && (
-        <div className="mb-5 p-3 rounded-lg bg-primary/5 border border-primary/20 text-sm text-center">
-          <span className="text-muted-foreground">قيمة المخزون الإجمالية (بسعر البيع): </span>
-          <span className="font-bold text-primary text-base">{fmtOMR(totalValue)}</span>
+      {/* ── تنبيهات المخزون ── */}
+      {alertItems.length > 0 && (
+        <Card className="mb-5 border-yellow-200 bg-yellow-50/30">
+          <CardHeader className="pb-3 pt-4 px-5">
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-yellow-600" />
+              تنبيهات المخزون
+              <Badge variant="outline" className="border-yellow-400 text-yellow-700 bg-yellow-50 text-xs">
+                {alertItems.length}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-4">
+            <div className="flex flex-col gap-2">
+              {alertItems.map((item, idx) => {
+                const isZero = item.qty_on_hand === 0;
+                return (
+                  <div
+                    key={`${item.variant_id}-${item.location_id}-${idx}`}
+                    className={`flex items-center gap-3 p-3 rounded-lg border text-sm ${
+                      isZero
+                        ? "bg-red-50 border-red-200"
+                        : "bg-yellow-50 border-yellow-200"
+                    }`}
+                  >
+                    <span className="text-lg">{isZero ? "🔴" : "⚠️"}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-semibold">{item.product_name}</span>
+                      {(item.color || item.size) && (
+                        <span className="text-muted-foreground text-xs mr-2">
+                          {[item.color, item.size].filter(Boolean).join(" / ")}
+                        </span>
+                      )}
+                      <span className="text-muted-foreground text-xs mr-2">
+                        — {item.full_location_name || item.branch_name}
+                      </span>
+                    </div>
+                    <div className="text-left shrink-0">
+                      <span className={`font-bold ${isZero ? "text-red-600" : "text-yellow-700"}`}>
+                        {isZero ? "نفد" : `${item.qty_on_hand} وحدة`}
+                      </span>
+                      {!isZero && (
+                        <span className="text-muted-foreground text-xs block">
+                          الحد الأدنى: {item.reorder_level}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── لوحتا التوزيع ── */}
+      {stock.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+
+          {/* توزيع المخزون حسب الموقع */}
+          <Card>
+            <CardHeader className="pb-3 pt-4 px-5">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Warehouse className="w-4 h-4 text-blue-600" />
+                توزيع المخزون حسب الموقع
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-5 pb-5">
+              {locationData.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">لا توجد بيانات</p>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {locationData.map((loc, idx) => {
+                    const pctValue = totalValue > 0 ? (loc.value / totalValue) * 100 : 0;
+                    const pctQty   = totalQty  > 0 ? (loc.qty   / totalQty)   * 100 : 0;
+                    const color    = PIE_COLORS[idx % PIE_COLORS.length];
+                    return (
+                      <div key={loc.name} className="space-y-1.5">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-medium flex items-center gap-2">
+                            <span
+                              className="inline-block w-3 h-3 rounded-sm shrink-0"
+                              style={{ background: color }}
+                            />
+                            {loc.name}
+                          </span>
+                          <span className="font-bold text-primary">{fmtOMR(loc.value)}</span>
+                        </div>
+                        {/* شريط القيمة */}
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-700"
+                            style={{ width: `${pctValue}%`, background: color }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>{loc.qty} وحدة ({pctQty.toFixed(1)}% من الكمية)</span>
+                          <span>{pctValue.toFixed(1)}% من القيمة</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {/* ملخص إجمالي */}
+                  <div className="pt-3 border-t flex justify-between text-sm">
+                    <span className="text-muted-foreground">الإجمالي</span>
+                    <div className="flex gap-4">
+                      <span className="font-semibold">{totalQty} وحدة</span>
+                      <span className="font-bold text-primary">{fmtOMR(totalValue)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* توزيع القيمة حسب المنتج */}
+          <Card>
+            <CardHeader className="pb-3 pt-4 px-5">
+              <CardTitle className="text-base flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-purple-600" />
+                توزيع القيمة حسب المنتج
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-5 pb-5">
+              {productPieData.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">لا توجد بيانات</p>
+              ) : (
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <ResponsiveContainer width={170} height={170}>
+                    <PieChart>
+                      <Pie
+                        data={productPieData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={78}
+                        strokeWidth={2}
+                      >
+                        {productPieData.map((_, i) => (
+                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex flex-col gap-2 flex-1 w-full">
+                    {productPieData.map((p, i) => (
+                      <div key={p.name} className="flex items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span
+                            className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+                            style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
+                          />
+                          <span className="truncate font-medium">{p.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
+                          <span className="font-bold text-foreground">{fmtOMR(p.value)}</span>
+                          <span>({totalValue > 0 ? ((p.value / totalValue) * 100).toFixed(0) : 0}%)</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
         </div>
       )}
 
+      {/* ── تحليل هوامش الربح + ملاحظات ── */}
+      {stock.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
+
+          {/* هامش الربح الإجمالي */}
+          <Card className="border-green-200 bg-green-50/30">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp className="w-4 h-4 text-green-600" />
+                <span className="font-semibold text-sm">هامش الربح الإجمالي</span>
+              </div>
+              {costValue > 0 ? (
+                <>
+                  <p className="text-2xl font-bold text-green-600 mb-1">
+                    {(((totalValue - costValue) / costValue) * 100).toFixed(1)}%
+                  </p>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden mb-2">
+                    <div
+                      className="h-full bg-green-500 rounded-full"
+                      style={{ width: `${Math.min(100, ((totalValue - costValue) / costValue) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    <div className="flex justify-between">
+                      <span>تكلفة المخزون:</span>
+                      <span className="font-medium">{fmtOMR(costValue)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>قيمة البيع:</span>
+                      <span className="font-medium">{fmtOMR(totalValue)}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold text-green-700">
+                      <span>الربح المتوقع:</span>
+                      <span>{fmtOMR(totalValue - costValue)}</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  <p className="text-yellow-600 font-medium mb-1">⚠️ لا يمكن حساب الهامش</p>
+                  <p>أسعار الشراء غير مسجلة لـ {missingCostCount} صنف</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* أسعار الشراء المفقودة */}
+          <Card className={missingCostCount > 0 ? "border-orange-200 bg-orange-50/30" : "border-green-200 bg-green-50/30"}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <RefreshCw className="w-4 h-4 text-orange-600" />
+                <span className="font-semibold text-sm">اكتمال بيانات الأسعار</span>
+              </div>
+              <p className={`text-2xl font-bold mb-1 ${missingCostCount > 0 ? "text-orange-600" : "text-green-600"}`}>
+                {missingCostCount === 0
+                  ? "100%"
+                  : `${(((totalRows - missingCostCount) / Math.max(totalRows, 1)) * 100).toFixed(0)}%`
+                }
+              </p>
+              <div className="h-2 bg-muted rounded-full overflow-hidden mb-2">
+                <div
+                  className={`h-full rounded-full ${missingCostCount > 0 ? "bg-orange-400" : "bg-green-500"}`}
+                  style={{ width: `${((totalRows - missingCostCount) / Math.max(totalRows, 1)) * 100}%` }}
+                />
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {missingCostCount > 0 ? (
+                  <p>{missingCostCount} صنف بدون سعر شراء — يؤثر على حساب الأرباح</p>
+                ) : (
+                  <p className="text-green-700 font-medium">جميع أسعار الشراء مسجلة ✅</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ملخص سريع */}
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Zap className="w-4 h-4 text-blue-600" />
+                <span className="font-semibold text-sm">ملخص سريع</span>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">المنتجات الطبيعية</span>
+                  <Badge variant="outline" className="border-green-400 text-green-700 bg-green-50 text-xs">
+                    {totalRows - lowStockRows - zeroRows} صنف ✅
+                  </Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">مخزون منخفض</span>
+                  <Badge variant="outline" className="border-yellow-400 text-yellow-700 bg-yellow-50 text-xs">
+                    {lowStockRows} صنف ⚠️
+                  </Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">نفد المخزون</span>
+                  <Badge variant="outline" className="border-red-400 text-red-700 bg-red-50 text-xs">
+                    {zeroRows} صنف 🔴
+                  </Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">عدد المواقع</span>
+                  <Badge variant="outline" className="text-xs">
+                    {locationData.length} موقع
+                  </Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+        </div>
+      )}
+
+      {/* ── Tabs ── */}
       <Tabs defaultValue="stock" className="space-y-4">
         <TabsList className="h-10">
           <TabsTrigger value="stock" className="gap-2">
@@ -323,15 +731,16 @@ export default function InventoryOverview() {
                       </TableHead>
                       <TableHead className="text-center">{t("inv_overview.col_reorder")}</TableHead>
                       <TableHead className="text-center">
-                        <SortBtn col="price" label="السعر (ر.ع)" />
+                        <SortBtn col="price" label="سعر البيع" />
                       </TableHead>
+                      <TableHead className="text-center">آخر تكلفة</TableHead>
                       <TableHead>{t("inv_overview.col_status")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {stockLoading ? (
                       <TableRow>
-                        <TableCell colSpan={11} className="text-center py-16 text-muted-foreground">
+                        <TableCell colSpan={12} className="text-center py-16 text-muted-foreground">
                           <div className="flex flex-col items-center gap-2">
                             <Boxes className="w-8 h-8 animate-pulse opacity-40" />
                             <span>{t("common.loading")}</span>
@@ -340,7 +749,7 @@ export default function InventoryOverview() {
                       </TableRow>
                     ) : filtered.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={11} className="text-center py-16 text-muted-foreground">
+                        <TableCell colSpan={12} className="text-center py-16 text-muted-foreground">
                           <div className="flex flex-col items-center gap-2">
                             <PackageSearch className="w-10 h-10 opacity-30" />
                             <span>{t("inv_overview.no_stock")}</span>
@@ -352,6 +761,10 @@ export default function InventoryOverview() {
                         const isLow  = row.qty_on_hand > 0 && row.qty_on_hand <= row.reorder_level;
                         const isZero = row.qty_on_hand === 0;
                         const catName = row.category_name || "";
+                        const hasCost = row.last_purchase_price && parseFloat(row.last_purchase_price) > 0;
+                        const margin  = hasCost && row.price
+                          ? (((parseFloat(row.price) - parseFloat(row.last_purchase_price)) / parseFloat(row.last_purchase_price)) * 100)
+                          : null;
                         return (
                           <TableRow
                             key={`${row.variant_id}-${row.location_id}`}
@@ -419,9 +832,25 @@ export default function InventoryOverview() {
                               {row.reorder_level}
                             </TableCell>
 
-                            {/* السعر */}
+                            {/* سعر البيع */}
                             <TableCell className="text-center text-sm font-medium">
                               {row.price ? fmtOMR(row.price) : "—"}
+                            </TableCell>
+
+                            {/* آخر سعر شراء + هامش */}
+                            <TableCell className="text-center text-sm">
+                              {hasCost ? (
+                                <div>
+                                  <div className="font-medium">{fmtOMR(row.last_purchase_price)}</div>
+                                  {margin !== null && (
+                                    <div className={`text-xs font-semibold ${margin >= 30 ? "text-green-600" : margin >= 10 ? "text-yellow-600" : "text-red-500"}`}>
+                                      {margin.toFixed(0)}% ربح
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-orange-500 text-xs font-medium">⚠️ غير محدد</span>
+                              )}
                             </TableCell>
 
                             {/* الحالة */}
@@ -449,6 +878,31 @@ export default function InventoryOverview() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Footer summary */}
+          {filtered.length > 0 && (
+            <div className="flex flex-wrap gap-4 items-center justify-between px-2 py-2 text-sm text-muted-foreground">
+              <div className="flex gap-4">
+                <span>إجمالي الكمية المعروضة: <span className="font-bold text-foreground">
+                  {filtered.reduce((s, r) => s + (r.qty_on_hand || 0), 0)} وحدة
+                </span></span>
+                <span>القيمة الإجمالية: <span className="font-bold text-primary">
+                  {fmtOMR(filtered.reduce((s, r) => s + parseFloat(r.price || "0") * (r.qty_on_hand || 0), 0))}
+                </span></span>
+              </div>
+              <div className="flex gap-2">
+                <Badge variant="outline" className="border-green-400 text-green-700 bg-green-50 text-xs">
+                  ✅ {filtered.filter(r => r.qty_on_hand > r.reorder_level).length}
+                </Badge>
+                <Badge variant="outline" className="border-yellow-400 text-yellow-700 bg-yellow-50 text-xs">
+                  ⚠️ {filtered.filter(r => r.qty_on_hand > 0 && r.qty_on_hand <= r.reorder_level).length}
+                </Badge>
+                <Badge variant="destructive" className="text-xs">
+                  🔴 {filtered.filter(r => r.qty_on_hand === 0).length}
+                </Badge>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         {/* ══ Tab 2: Inventory Movements ══ */}
