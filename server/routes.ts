@@ -4997,6 +4997,7 @@ export async function registerRoutes(
     try {
       const user = await storage.getUser(id);
       if (!user) return res.status(404).json({ message: "المستخدم غير موجود" });
+      if (user.role === "owner") return res.status(400).json({ message: "لا يمكن تعطيل حساب المالك" });
       const updated = await storage.updateUser(id, { isActive: !user.isActive });
       if (!updated) return res.status(404).json({ message: "فشل التحديث" });
       const { password: _, ...safe } = updated;
@@ -5013,6 +5014,10 @@ export async function registerRoutes(
       const actor = await storage.getUser(req.session.userId!);
       if (actor?.id === id) {
         return res.status(400).json({ message: "لا يمكنك حذف حسابك الخاص" });
+      }
+      const target = await storage.getUser(id);
+      if (target?.role === "owner") {
+        return res.status(400).json({ message: "لا يمكن حذف حساب المالك" });
       }
       // إلغاء تفعيل بدلاً من الحذف الفعلي
       const updated = await storage.updateUser(id, { isActive: false });

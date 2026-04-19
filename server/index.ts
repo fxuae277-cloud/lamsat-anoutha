@@ -292,6 +292,14 @@ app.get("/api/health", (_req, res) => {
     console.error("[startup] migration 0022 failed:", err);
   }
 
+  // ضمان أن حسابات المالك دائماً نشطة (لا يمكن تعطيلها)
+  try {
+    await pool.query(`UPDATE users SET is_active = true WHERE role = 'owner'`);
+    console.log("[startup] owner accounts ensured active");
+  } catch (err) {
+    console.error("[startup] FAILED to ensure owner accounts active:", err);
+  }
+
   // خدمة مجلد uploads/attachments كملفات ثابتة (صور الفواتير الورقية)
   app.use("/uploads", express.static(path.resolve("uploads")));
 
