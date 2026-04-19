@@ -95,6 +95,12 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check — must be registered BEFORE the async startup so Railway
+// can probe it even if the DB connection is slow.
+app.get("/api/health", (_req, res) => {
+  res.json({ status: "ok", ts: new Date().toISOString() });
+});
+
 (async () => {
   // Startup diagnostics — visible in Railway logs
   console.log("[startup] NODE_ENV =", process.env.NODE_ENV);
@@ -265,4 +271,7 @@ app.use((req, res, next) => {
       logger.info(`serving on port ${port}`);
     },
   );
-})();
+})().catch(err => {
+  console.error("[startup] FATAL startup error:", err);
+  process.exit(1);
+});
