@@ -294,18 +294,18 @@ export default function BranchSummary() {
           {/* ── Totals grid ── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <StatCard
-              label="نقد الافتتاح (مجموع الورديات)"
+              label="نقد الافتتاح (بداية اليوم)"
               value={`${fmt(today?.totalOpeningCash ?? 0)} ${OMR}`}
               icon={Banknote}
               color="bg-blue-500"
               sub={`${today?.shiftsCount ?? 0} وردية — ${today?.closedShiftsCount ?? 0} مغلقة`}
             />
             <StatCard
-              label="نقد الإغلاق الفعلي"
+              label="نقد الإغلاق (آخر وردية مغلقة)"
               value={`${fmt(today?.totalClosingCash ?? 0)} ${OMR}`}
               icon={Banknote}
               color="bg-indigo-500"
-              sub={today?.closedShiftsCount ? `من ${today.closedShiftsCount} وردية مغلقة` : "لا يوجد"}
+              sub={today?.closedShiftsCount ? `آخر إغلاق في اليوم` : "لا توجد وردية مغلقة"}
             />
             <StatCard
               label="إجمالي المبيعات"

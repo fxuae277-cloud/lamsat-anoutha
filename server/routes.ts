@@ -1316,12 +1316,23 @@ export async function registerRoutes(
       }
 
       // Aggregate shifts for the date
+      // opening_cash = أول وردية في اليوم فقط (نفس المبلغ يُعاد استخدامه بين الورديات)
+      // closing_cash = آخر وردية مغلقة في اليوم
       const shiftsRes = await pool.query(`
         SELECT
           COUNT(*)::int                                                                              AS shifts_count,
           COUNT(*) FILTER (WHERE s.status = 'closed')::int                                          AS closed_shifts_count,
-          COALESCE(SUM(s.opening_cash::numeric), 0)                                                 AS total_opening_cash,
-          COALESCE(SUM(CASE WHEN s.status = 'closed' THEN s.actual_cash::numeric ELSE 0 END), 0)   AS total_closing_cash
+          COALESCE(
+            (SELECT s2.opening_cash::numeric FROM shifts s2
+             WHERE s2.started_at::date = $1 ${bFilter ? "AND s2.branch_id = $2" : ""}
+             ORDER BY s2.started_at ASC LIMIT 1), 0
+          )                                                                                         AS total_opening_cash,
+          COALESCE(
+            (SELECT s3.actual_cash::numeric FROM shifts s3
+             WHERE s3.started_at::date = $1 ${bFilter ? "AND s3.branch_id = $2" : ""}
+               AND s3.status = 'closed'
+             ORDER BY s3.started_at DESC LIMIT 1), 0
+          )                                                                                         AS total_closing_cash
         FROM shifts s
         WHERE s.started_at::date = $1 ${bFilter}
       `, bParams);
