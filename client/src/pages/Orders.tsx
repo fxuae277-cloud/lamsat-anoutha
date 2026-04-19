@@ -309,7 +309,7 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
                 className="h-8 text-xs"
               />
               {showDrop && results.length > 0 && (
-                <div className="absolute top-full right-0 left-0 z-50 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto mt-0.5">
+                <div className="absolute top-full right-0 left-0 bg-white border rounded-lg shadow-xl max-h-48 overflow-y-auto mt-0.5" style={{ zIndex: 9999 }}>
                   {results.map(p => (
                     <button key={p.id} type="button"
                       className="w-full text-right flex items-center gap-2 px-3 py-2 hover:bg-pink-50 border-b border-gray-50 last:border-0"
@@ -661,8 +661,8 @@ function OrderFormModal({ order, onClose, onSaved }: {
           {/* Products Table */}
           <div className="space-y-2">
             <label className="text-xs font-medium text-gray-600">المنتجات *</label>
-            <div className="border rounded-lg overflow-hidden">
-              <div className="bg-gray-50 border-b px-3 py-2 flex items-center gap-4 text-xs font-semibold text-muted-foreground">
+            <div className="border rounded-lg" style={{ overflow: "visible" }}>
+              <div className="bg-gray-50 border-b px-3 py-2 flex items-center gap-4 text-xs font-semibold text-muted-foreground rounded-t-lg">
                 <span className="flex-1">المنتج / اللون / المقاس</span>
                 <span className="w-20 text-center">الكمية</span>
                 <span className="w-24 text-center">السعر</span>
