@@ -44,6 +44,7 @@ import UsersManagement from "@/pages/UsersManagement";
 import RolesManagement from "@/pages/RolesManagement";
 import InventoryOverview from "@/pages/InventoryOverview";
 import SuppliersPage from "@/pages/Suppliers";
+import BarcodeLabels from "@/pages/BarcodeLabels";
 import { PayrollProvider } from "@/providers/PayrollProvider";
 import EmployeesPage from "@/components/payroll/employees/EmployeesPage";
 import FinancialMovementsPage from "@/components/payroll/financial-movements/FinancialMovementsPage";
@@ -276,6 +277,9 @@ function DesktopRouter() {
         </Route>
         <Route path="/inventory-overview">
           <RequireOwner><InventoryOverview /></RequireOwner>
+        </Route>
+        <Route path="/barcode-labels">
+          <RequireOwner><BarcodeLabels /></RequireOwner>
         </Route>
         <Route path="/payroll/employees">
           <RequireOwner><EmployeesPage /></RequireOwner>

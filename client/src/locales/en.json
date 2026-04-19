@@ -42,7 +42,8 @@
     "payrollMovements": "Financial Movements",
     "payrollSheet": "Payroll Sheet",
     "payrollSummary": "Payroll Summary",
-    "payrollPayments": "Payment Tracking"
+    "payrollPayments": "Payment Tracking",
+    "barcodeLabels": "Print Labels"
   },
   "sidebar": {
     "role_owner": "Owner",

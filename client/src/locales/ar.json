@@ -44,7 +44,8 @@
     "payrollMovements": "الحركات المالية",
     "payrollSheet": "كشف الرواتب",
     "payrollSummary": "ملخص الرواتب",
-    "payrollPayments": "متابعة الدفع"
+    "payrollPayments": "متابعة الدفع",
+    "barcodeLabels": "طباعة الملصقات"
   },
   "sidebar": {
     "role_owner": "مالك",
