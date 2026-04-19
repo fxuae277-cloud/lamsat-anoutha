@@ -227,9 +227,14 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
   }, [item.productId]);
 
   const { data: results = [] } = useQuery<ProductExt[]>({
-    queryKey: ["/api/pos/products/row", search],
-    queryFn: () => fetch(`/api/pos/products?search=${encodeURIComponent(search)}`, { credentials: "include" }).then(r => r.json()),
+    queryKey: ["/api/orders/product-search", search],
+    queryFn: async () => {
+      const r = await fetch(`/api/orders/product-search?search=${encodeURIComponent(search)}`, { credentials: "include" });
+      const data = await r.json();
+      return Array.isArray(data) ? data : [];
+    },
     enabled: search.length >= 1,
+    staleTime: 30_000,
   });
 
   const fetchVariants = async (productId: number) => {

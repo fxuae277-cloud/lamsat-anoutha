@@ -1955,6 +1955,49 @@ export async function registerRoutes(
     }
     res.json(filtered);
   });
+  /** GET /api/orders/product-search — بحث عن منتجات لإنشاء الطلبات (لا يحتاج pos.access) */
+  app.get("/api/orders/product-search", requireAuth, async (req, res) => {
+    try {
+      const search = ((req.query.search || req.query.q || "") as string).trim();
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
+
+      const isOwnerOrAdmin = user.role === "owner" || user.role === "admin";
+      const branchId = isOwnerOrAdmin ? null : (user.branchId ?? null);
+
+      const params: any[] = [`%${search}%`];
+      let branchFilter = "";
+      if (branchId) {
+        params.push(branchId);
+        branchFilter = `AND l.branch_id = $${params.length}`;
+      }
+
+      const result = await pool.query(`
+        SELECT
+          p.id,
+          p.name,
+          p.barcode,
+          p.price,
+          p.avg_cost AS "avgCost",
+          COALESCE((
+            SELECT SUM(li.qty_on_hand)
+            FROM location_inventory li
+            JOIN locations l ON l.id = li.location_id
+            WHERE li.product_id = p.id ${branchFilter}
+          ), 0)::int AS "stockQty"
+        FROM products p
+        WHERE p.active = true
+          AND (p.name ILIKE $1 OR p.barcode ILIKE $1)
+        ORDER BY p.name ASC
+        LIMIT 30
+      `, params);
+
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   /** GET /api/orders/stats — إحصائيات الطلبات مع مقارنة شهرية */
   app.get("/api/orders/stats", requireAuth, async (req, res) => {
     try {
