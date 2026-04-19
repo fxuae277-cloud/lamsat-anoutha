@@ -83,7 +83,7 @@ export async function registerRoutes(
               opening_payable_balance AS "openingPayableBalance",
               failed_login_count      AS "failedLoginCount",
               locked_until            AS "lockedUntil"
-       FROM users WHERE username = $1`,
+       FROM users WHERE LOWER(username) = LOWER($1)`,
       [username.trim()]
     );
     const user = rawResult.rows[0];
