@@ -1,4 +1,5 @@
 import { createContext, useState, useMemo, type ReactNode } from "react";
+import { useAuth } from "@/lib/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   Employee,
@@ -114,39 +115,51 @@ const FALLBACK_USER_ID = 1; // used when pages pass string names instead of IDs
 
 export function PayrollProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
+  const { data: authData } = useAuth();
+  const userRole = authData?.user?.role ?? "";
+  const canAccessPayroll = userRole === "owner" || userRole === "admin";
+
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear,  setSelectedYear]  = useState(now.getFullYear());
 
-  // ── Queries ──────────────────────────────────────────────────────────────
+  // ── Queries (only for owner/admin — others get empty arrays silently) ─────
+
+  const safeJson = async (r: Response) => {
+    const data = await r.json();
+    return Array.isArray(data) ? data : [];
+  };
 
   const { data: rawEmployees = [], isLoading: loadingEmp } = useQuery<any[]>({
     queryKey: ["payroll-employees"],
-    queryFn: () => fetch("/api/payroll/ui/employees").then((r) => r.json()),
+    queryFn: () => fetch("/api/payroll/ui/employees").then(safeJson),
     staleTime: 5 * 60 * 1000,
+    enabled: canAccessPayroll,
   });
 
   const { data: rawMovements = [], isLoading: loadingMov } = useQuery<any[]>({
     queryKey: ["payroll-movements", selectedMonth, selectedYear],
     queryFn: () =>
-      fetch(`/api/payroll/ui/movements?month=${selectedMonth}&year=${selectedYear}`).then((r) => r.json()),
+      fetch(`/api/payroll/ui/movements?month=${selectedMonth}&year=${selectedYear}`).then(safeJson),
     staleTime: 60 * 1000,
+    enabled: canAccessPayroll,
   });
 
   const { data: rawPayments = [], isLoading: loadingPay } = useQuery<any[]>({
     queryKey: ["payroll-payments", selectedMonth, selectedYear],
     queryFn: () =>
-      fetch(`/api/payroll/ui/payments?month=${selectedMonth}&year=${selectedYear}`).then((r) => r.json()),
+      fetch(`/api/payroll/ui/payments?month=${selectedMonth}&year=${selectedYear}`).then(safeJson),
     staleTime: 60 * 1000,
+    enabled: canAccessPayroll,
   });
 
   const isLoading = loadingEmp || loadingMov || loadingPay;
 
   // ── Transformed data ──────────────────────────────────────────────────────
 
-  const employees = useMemo(() => rawEmployees.map(toEmployee), [rawEmployees]);
-  const movements = useMemo(() => rawMovements.map(toMovement), [rawMovements]);
-  const payments  = useMemo(() => rawPayments.map(toPayment),   [rawPayments]);
+  const employees = useMemo(() => (Array.isArray(rawEmployees) ? rawEmployees : []).map(toEmployee), [rawEmployees]);
+  const movements = useMemo(() => (Array.isArray(rawMovements) ? rawMovements : []).map(toMovement), [rawMovements]);
+  const payments  = useMemo(() => (Array.isArray(rawPayments)  ? rawPayments  : []).map(toPayment),  [rawPayments]);
   const auditLogs: AuditLog[] = []; // kept for backwards compat; use DB reports for audit
 
   const payrollRows = useMemo(
