@@ -243,6 +243,55 @@ app.get("/api/health", (_req, res) => {
     console.error("[startup] FAILED to set branch default locations:", err);
   }
 
+  // Migration 0022 — إضافة أدوار cashier و admin (idempotent)
+  try {
+    // أضف الأدوار الناقصة
+    await pool.query(`
+      INSERT INTO roles (name, description) VALUES
+        ('admin',   'المدير — صلاحيات كاملة ما عدا إدارة المستخدمين والفروع'),
+        ('cashier', 'كاشير — نقطة البيع والفواتير والعملاء')
+      ON CONFLICT (name) DO NOTHING;
+    `);
+
+    // صلاحيات المدير (كل شيء ما عدا users.manage و branches.manage)
+    await pool.query(`
+      INSERT INTO role_permissions (role_id, permission_id)
+      SELECT r.id, p.id
+      FROM roles r CROSS JOIN permissions p
+      WHERE r.name = 'admin'
+        AND p.code NOT IN ('users.manage','branches.manage')
+      ON CONFLICT DO NOTHING;
+    `);
+
+    // صلاحيات الكاشير
+    await pool.query(`
+      INSERT INTO role_permissions (role_id, permission_id)
+      SELECT r.id, p.id
+      FROM roles r
+      JOIN permissions p ON p.code IN (
+        'pos.access','invoice.create','invoice.print','invoice.return',
+        'products.view','inventory.view',
+        'customers.view','customers.create',
+        'shift.open','shift.close','discount.apply'
+      )
+      WHERE r.name = 'cashier'
+      ON CONFLICT DO NOTHING;
+    `);
+
+    // تحديث role_id للمستخدمين الحاليين الذين دورهم admin أو cashier
+    await pool.query(`
+      UPDATE users SET role_id = (SELECT id FROM roles WHERE name = 'admin')
+      WHERE role = 'admin' AND role_id IS NULL;
+
+      UPDATE users SET role_id = (SELECT id FROM roles WHERE name = 'cashier')
+      WHERE role = 'cashier' AND role_id IS NULL;
+    `);
+
+    console.log("[startup] migration 0022: cashier + admin roles ready");
+  } catch (err) {
+    console.error("[startup] migration 0022 failed:", err);
+  }
+
   // خدمة مجلد uploads/attachments كملفات ثابتة (صور الفواتير الورقية)
   app.use("/uploads", express.static(path.resolve("uploads")));
 

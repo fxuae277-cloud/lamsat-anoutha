@@ -430,6 +430,8 @@ export default function UsersManagement() {
                       ? rolesArr.map(r => <SelectItem key={r.id} value={r.name}>{roleInfo(r.name).label} — {r.description}</SelectItem>)
                       : <>
                           <SelectItem value="owner">المالك</SelectItem>
+                          <SelectItem value="admin">المدير</SelectItem>
+                          <SelectItem value="cashier">كاشير</SelectItem>
                           <SelectItem value="sales">البيع</SelectItem>
                         </>
                     }
@@ -495,6 +497,8 @@ export default function UsersManagement() {
                       ? rolesArr.map(r => <SelectItem key={r.id} value={r.name}>{roleInfo(r.name).label}</SelectItem>)
                       : <>
                           <SelectItem value="owner">المالك</SelectItem>
+                          <SelectItem value="admin">المدير</SelectItem>
+                          <SelectItem value="cashier">كاشير</SelectItem>
                           <SelectItem value="sales">البيع</SelectItem>
                         </>
                     }
