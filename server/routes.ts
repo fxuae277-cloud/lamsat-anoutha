@@ -5057,7 +5057,15 @@ export async function registerRoutes(
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "غير مصرح" });
       const { search, categoryId } = req.query;
-      const branchId = user.branchId;
+
+      // للمالك/المدير بدون فرع محدد → يرى إجمالي المخزون من كل الفروع
+      // للموظف → يرى مخزون فرعه فقط
+      const branchId = user.branchId ?? null;
+      const branchFilter = branchId
+        ? `AND l.branch_id = $1`
+        : ``;
+
+      const params: any[] = branchId ? [branchId] : [];
 
       let query = `
         SELECT
@@ -5068,13 +5076,12 @@ export async function registerRoutes(
             SELECT SUM(li.qty_on_hand)
             FROM location_inventory li
             JOIN locations l ON l.id = li.location_id
-            WHERE li.product_id = p.id AND l.branch_id = $1
+            WHERE li.product_id = p.id ${branchFilter}
           ), 0)::int as "stockQty"
         FROM products p
         LEFT JOIN categories c ON c.id = p.category_id
         WHERE p.active = true
       `;
-      const params: any[] = [branchId];
       if (search) {
         params.push(`%${search}%`);
         query += ` AND (p.name ILIKE $${params.length} OR p.barcode ILIKE $${params.length})`;
@@ -5096,6 +5103,10 @@ export async function registerRoutes(
     try {
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "غير مصرح" });
+      const branchId = user.branchId ?? null;
+      const branchFilter  = branchId ? `AND l.branch_id = $1` : ``;
+      const branchFilter2 = branchId ? `AND s.branch_id = $1` : ``;
+      const params: any[] = branchId ? [branchId] : [];
       const result = await pool.query(`
         SELECT p.id, p.name, p.price, p.image, p.avg_cost as "avgCost", p.category_id as "categoryId",
                COUNT(si.id) as sold_count,
@@ -5103,17 +5114,17 @@ export async function registerRoutes(
                  SELECT SUM(li.qty_on_hand)
                  FROM location_inventory li
                  JOIN locations l ON l.id = li.location_id
-                 WHERE li.product_id = p.id AND l.branch_id = $1
+                 WHERE li.product_id = p.id ${branchFilter}
                ), 0)::int as "stockQty"
         FROM products p
         JOIN sale_items si ON si.product_id = p.id
-        JOIN sales s ON s.id = si.sale_id AND s.branch_id = $1
+        JOIN sales s ON s.id = si.sale_id ${branchFilter2}
         WHERE p.active = true
           AND s.created_at >= NOW() - INTERVAL '30 days'
         GROUP BY p.id, p.name, p.price, p.image, p.avg_cost, p.category_id
         ORDER BY sold_count DESC
         LIMIT 5
-      `, [user.branchId]);
+      `, params);
       res.json(result.rows);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
