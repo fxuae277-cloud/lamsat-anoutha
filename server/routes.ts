@@ -1440,6 +1440,132 @@ export async function registerRoutes(
     res.json(result.rows);
   });
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // Opening Stock
+  // ══════════════════════════════════════════════════════════════════════════
+  {
+    const {
+      initializeOpeningStock,
+      commitOpeningStock,
+      resetOpeningStock,
+      getOpeningStock,
+      listOpeningStockStatus,
+      parseCsvToItems,
+    } = await import("./services/openingStockService");
+
+    /** GET /api/opening-stock  — list all branches + status (owner/admin) */
+    app.get(
+      "/api/opening-stock",
+      requireAuth,
+      requirePermission("inventory.view"),
+      async (_req, res) => {
+        try {
+          res.json(await listOpeningStockStatus());
+        } catch (err: any) {
+          res.status(500).json({ message: err.message });
+        }
+      }
+    );
+
+    /** GET /api/opening-stock/:branchId  — get entry + items */
+    app.get(
+      "/api/opening-stock/:branchId",
+      requireAuth,
+      requirePermission("inventory.view"),
+      async (req, res) => {
+        try {
+          const branchId = Number(req.params.branchId);
+          if (!branchId) return res.status(400).json({ message: "branchId غير صالح" });
+          const data = await getOpeningStock(branchId);
+          if (!data) return res.json(null);
+          res.json(data);
+        } catch (err: any) {
+          res.status(500).json({ message: err.message });
+        }
+      }
+    );
+
+    /** POST /api/opening-stock/init  — create/overwrite draft */
+    app.post(
+      "/api/opening-stock/init",
+      requireAuth,
+      requirePermission("inventory.view"),
+      async (req, res) => {
+        try {
+          const { branchId, items, notes } = req.body as {
+            branchId: number;
+            items: { productId: number; quantity: number; unitCost: number }[];
+            notes?: string;
+          };
+          const createdBy = req.session.userId!;
+          const result = await initializeOpeningStock(branchId, items, createdBy, notes);
+          res.json({ success: true, entryId: result.entryId });
+        } catch (err: any) {
+          res.status(400).json({ message: err.message });
+        }
+      }
+    );
+
+    /** POST /api/opening-stock/commit/:entryId  — apply to inventory */
+    app.post(
+      "/api/opening-stock/commit/:entryId",
+      requireAuth,
+      requirePermission("inventory.view"),
+      async (req, res) => {
+        try {
+          const entryId = Number(req.params.entryId);
+          if (!entryId) return res.status(400).json({ message: "entryId غير صالح" });
+          await commitOpeningStock(entryId, req.session.userId!);
+          res.json({ success: true, message: "تم تثبيت المخزون الافتتاحي بنجاح" });
+        } catch (err: any) {
+          res.status(400).json({ message: err.message });
+        }
+      }
+    );
+
+    /** POST /api/opening-stock/reset/:branchId  — reverse committed entry */
+    app.post(
+      "/api/opening-stock/reset/:branchId",
+      requireAuth,
+      requirePermission("inventory.view"),
+      async (req, res) => {
+        try {
+          const branchId = Number(req.params.branchId);
+          if (!branchId) return res.status(400).json({ message: "branchId غير صالح" });
+          await resetOpeningStock(branchId, req.session.userId!);
+          res.json({ success: true, message: "تم إعادة تعيين المخزون الافتتاحي" });
+        } catch (err: any) {
+          res.status(400).json({ message: err.message });
+        }
+      }
+    );
+
+    /** POST /api/opening-stock/import-csv  — bulk import from CSV text */
+    app.post(
+      "/api/opening-stock/import-csv",
+      requireAuth,
+      requirePermission("inventory.view"),
+      async (req, res) => {
+        try {
+          const { branchId, csvText, notes } = req.body as {
+            branchId: number;
+            csvText: string;
+            notes?: string;
+          };
+          if (!branchId) return res.status(400).json({ message: "branchId مطلوب" });
+          if (!csvText) return res.status(400).json({ message: "csvText مطلوب" });
+
+          const items = await parseCsvToItems(csvText);
+          const createdBy = req.session.userId!;
+          const result = await initializeOpeningStock(branchId, items, createdBy, notes);
+          res.json({ success: true, entryId: result.entryId, itemCount: items.length });
+        } catch (err: any) {
+          res.status(400).json({ message: err.message });
+        }
+      }
+    );
+  }
+
   // ── Stock Transfers ──
   app.get("/api/transfer-locations", requireAuth, requirePermission("inventory.view"), async (_req, res) => {
     const result = await pool.query(`

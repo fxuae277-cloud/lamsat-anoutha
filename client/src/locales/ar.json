@@ -46,7 +46,8 @@
     "payrollSummary": "ملخص الرواتب",
     "payrollPayments": "متابعة الدفع",
     "barcodeLabels": "طباعة الملصقات",
-    "branchSummary": "ملخص الفرع المالي"
+    "branchSummary": "ملخص الفرع المالي",
+    "openingStock": "المخزون الافتتاحي"
   },
   "sidebar": {
     "role_owner": "مالك",

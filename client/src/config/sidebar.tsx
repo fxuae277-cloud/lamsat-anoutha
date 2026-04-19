@@ -88,6 +88,7 @@ export const OWNER_SIDEBAR: SidebarSection[] = [
     sectionKey: "sidebar.section_wh_stock",
     items: [
       { labelKey: "nav.inventoryOverview", icon: PackageSearch, path: "/inventory-overview" },
+      { labelKey: "nav.openingStock",      icon: Boxes,         path: "/opening-stock" },
       { labelKey: "nav.branchStock",       icon: Warehouse,     path: "/branch-stock" },
       { labelKey: "nav.inventoryAlerts",   icon: AlertTriangle, path: "/inventory-alerts" },
       { labelKey: "nav.stockControl",      icon: ClipboardCheck, path: "/stocktake" },

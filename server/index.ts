@@ -292,6 +292,54 @@ app.get("/api/health", (_req, res) => {
     console.error("[startup] migration 0022 failed:", err);
   }
 
+  // Migration 0023 — Opening Stock tables + Opening Equity account
+  try {
+    await pool.query(`
+      -- Entry header (one per branch per init cycle)
+      CREATE TABLE IF NOT EXISTS opening_stock_entries (
+        id           SERIAL PRIMARY KEY,
+        branch_id    INTEGER NOT NULL REFERENCES branches(id),
+        status       TEXT    NOT NULL DEFAULT 'draft',   -- draft | committed | reset
+        notes        TEXT,
+        created_by   INTEGER REFERENCES users(id),
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        committed_at TIMESTAMPTZ,
+        committed_by INTEGER REFERENCES users(id),
+        reset_at     TIMESTAMPTZ,
+        reset_by     INTEGER REFERENCES users(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_ose_branch ON opening_stock_entries(branch_id);
+
+      -- Line items
+      CREATE TABLE IF NOT EXISTS opening_stock_items (
+        id         SERIAL PRIMARY KEY,
+        entry_id   INTEGER NOT NULL REFERENCES opening_stock_entries(id) ON DELETE CASCADE,
+        product_id INTEGER NOT NULL REFERENCES products(id),
+        quantity   DECIMAL(12,3) NOT NULL DEFAULT 0,
+        unit_cost  DECIMAL(12,3) NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_osi_entry ON opening_stock_items(entry_id);
+
+      -- Audit trail
+      CREATE TABLE IF NOT EXISTS opening_stock_audit (
+        id           SERIAL PRIMARY KEY,
+        entry_id     INTEGER NOT NULL REFERENCES opening_stock_entries(id) ON DELETE CASCADE,
+        action       TEXT    NOT NULL,                   -- created_draft | committed | reset
+        performed_by INTEGER REFERENCES users(id),
+        performed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        notes        TEXT
+      );
+
+      -- Opening Balance Equity account (3100) — credit side of journal
+      INSERT INTO accounts (code, name, name_en, type, level, is_system, active)
+      VALUES ('3100', 'رأس المال الافتتاحي', 'Opening Balance Equity', 'equity', 1, true, true)
+      ON CONFLICT (code) DO NOTHING;
+    `);
+    console.log("[startup] migration 0023: opening stock tables ready");
+  } catch (err) {
+    console.error("[startup] migration 0023 failed:", err);
+  }
+
   // ضمان أن حسابات المالك دائماً نشطة (لا يمكن تعطيلها)
   try {
     await pool.query(`UPDATE users SET is_active = true WHERE role = 'owner'`);

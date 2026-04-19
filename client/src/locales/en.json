@@ -44,7 +44,8 @@
     "payrollSummary": "Payroll Summary",
     "payrollPayments": "Payment Tracking",
     "barcodeLabels": "Print Labels",
-    "branchSummary": "Branch Financial Summary"
+    "branchSummary": "Branch Financial Summary",
+    "openingStock": "Opening Stock"
   },
   "sidebar": {
     "role_owner": "Owner",
