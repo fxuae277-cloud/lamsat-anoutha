@@ -34,7 +34,6 @@ import Operations from "@/pages/Operations";
 import StockControl from "@/pages/StockControl";
 import BranchStock from "@/pages/BranchStock";
 import Customers from "@/pages/Customers";
-import Accounts from "@/pages/Accounts";
 import JournalEntries from "@/pages/JournalEntries";
 import GeneralLedger from "@/pages/GeneralLedger";
 import Categories from "@/pages/Categories";
@@ -169,9 +168,6 @@ function MobileRouter() {
         <Route path="/expenses">
           <RequireMobileOwner><MobileMore /></RequireMobileOwner>
         </Route>
-        <Route path="/accounts">
-          <RequireMobileOwner><Accounts /></RequireMobileOwner>
-        </Route>
         <Route path="/journal-entries">
           <RequireMobileOwner><JournalEntries /></RequireMobileOwner>
         </Route>
@@ -254,9 +250,6 @@ function DesktopRouter() {
         </Route>
         <Route path="/journal-entries">
           <RequireOwner><JournalEntries /></RequireOwner>
-        </Route>
-        <Route path="/accounts">
-          <RequireOwner><Accounts /></RequireOwner>
         </Route>
         <Route path="/general-ledger">
           <RequireOwner><GeneralLedger /></RequireOwner>

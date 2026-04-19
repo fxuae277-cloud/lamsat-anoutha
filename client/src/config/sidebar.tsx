@@ -29,7 +29,6 @@ import {
   Wallet,
   TrendingUp,
   CreditCard,
-  Landmark,
 } from "lucide-react";
 
 export type SidebarItem = {
@@ -98,7 +97,6 @@ export const OWNER_SIDEBAR: SidebarSection[] = [
       { labelKey: "nav.financeSummary", icon: TrendingUp,  path: "/finance-summary" },
       { labelKey: "nav.expenses",       icon: Banknote,    path: "/expenses" },
       { labelKey: "nav.finance",        icon: Calculator,  path: "/finance" },
-      { labelKey: "nav.accounts",       icon: Landmark,    path: "/accounts" },
       { labelKey: "nav.returns",        icon: RotateCcw,   path: "/returns" },
       { labelKey: "nav.reports",        icon: FileText,    path: "/reports" },
     ],
