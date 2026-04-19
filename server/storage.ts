@@ -902,11 +902,21 @@ export class DatabaseStorage implements IStorage {
       if (branchLocRes.rows.length === 0) throw new Error("لا يوجد مخزن افتراضي للفرع");
       const branchLocationId = branchLocRes.rows[0].id;
 
+      // توليد رقم الفاتورة تلقائياً إذا لم يُعطَ
+      let invoiceNumber = data.invoiceNumber?.trim() || null;
+      if (!invoiceNumber) {
+        const seqRes = await client.query(
+          `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(invoice_number, '[^0-9]', '', 'g') AS BIGINT)), 0) + 1 AS next FROM sales WHERE invoice_number ~ '^INV-'`
+        );
+        const seq = String(seqRes.rows[0]?.next || 1).padStart(5, "0");
+        invoiceNumber = `INV-${seq}`;
+      }
+
       const saleRes = await client.query(
         `INSERT INTO sales (invoice_number, branch_id, cashier_id, customer_id, subtotal, discount, discount_type, vat, total, payment_method, bank_txn_id, shift_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
         [
-          data.invoiceNumber || null, data.branchId, data.cashierId || null, data.customerId || null,
+          invoiceNumber, data.branchId, data.cashierId || null, data.customerId || null,
           data.subtotal || "0", data.discount || "0", data.discountType || "percentage",
           data.vat || "0", data.total || "0", data.paymentMethod || "cash",
           data.bankTxnId || null, data.shiftId || null,
