@@ -2689,6 +2689,109 @@ export async function registerRoutes(
     }
   });
 
+  // ── تقرير الطلبات الشهري ─────────────────────────────────────────────────
+  app.get("/api/reports/orders-monthly", requireAuth, requirePermission("reports.view"), async (req, res) => {
+    try {
+      const year     = req.query.year ? Number(req.query.year) : new Date().getFullYear();
+      const branchId = req.query.branchId ? Number(req.query.branchId) : null;
+      const bSql     = branchId ? `AND o.branch_id = ${branchId}` : "";
+
+      // 1. ملخص شهري
+      const monthly = await pool.query(`
+        SELECT
+          TO_CHAR(o.created_at AT TIME ZONE 'Asia/Muscat', 'YYYY-MM') AS month,
+          COUNT(DISTINCT o.id)              AS order_count,
+          SUM(oi.quantity)                  AS total_qty,
+          SUM(oi.total)                     AS total_revenue,
+          SUM(oi.line_cogs)                 AS total_cogs,
+          SUM(oi.total) - SUM(oi.line_cogs) AS gross_profit
+        FROM orders o
+        JOIN order_items oi ON oi.order_id = o.id
+        WHERE o.status NOT IN ('cancelled')
+          AND EXTRACT(YEAR FROM o.created_at AT TIME ZONE 'Asia/Muscat') = $1
+          ${bSql}
+        GROUP BY month
+        ORDER BY month
+      `, [year]);
+
+      // 2. أعلى 8 فئات — تفصيل شهري
+      const byCategory = await pool.query(`
+        WITH ranked AS (
+          SELECT
+            TO_CHAR(o.created_at AT TIME ZONE 'Asia/Muscat', 'YYYY-MM') AS month,
+            COALESCE(c.name, 'غير مصنف')   AS category_name,
+            SUM(oi.total)                   AS total_revenue,
+            SUM(oi.quantity)                AS total_qty
+          FROM orders o
+          JOIN order_items oi ON oi.order_id = o.id
+          JOIN products p     ON p.id = oi.product_id
+          LEFT JOIN categories c ON c.id = p.category_id
+          WHERE o.status NOT IN ('cancelled')
+            AND EXTRACT(YEAR FROM o.created_at AT TIME ZONE 'Asia/Muscat') = $1
+            ${bSql}
+          GROUP BY month, c.name
+        ),
+        top_cats AS (
+          SELECT category_name, SUM(total_revenue) AS yr_rev
+          FROM ranked GROUP BY category_name
+          ORDER BY yr_rev DESC LIMIT 8
+        )
+        SELECT r.month, r.category_name, r.total_revenue, r.total_qty
+        FROM ranked r
+        JOIN top_cats t ON t.category_name = r.category_name
+        ORDER BY r.month, r.total_revenue DESC
+      `, [year]);
+
+      // 3. أعلى 15 منتجاً — تفصيل شهري
+      const byProduct = await pool.query(`
+        WITH top_prods AS (
+          SELECT p.id, p.name AS product_name, SUM(oi.total) AS yr_rev
+          FROM orders o
+          JOIN order_items oi ON oi.order_id = o.id
+          JOIN products p     ON p.id = oi.product_id
+          WHERE o.status NOT IN ('cancelled')
+            AND EXTRACT(YEAR FROM o.created_at AT TIME ZONE 'Asia/Muscat') = $1
+            ${bSql}
+          GROUP BY p.id, p.name
+          ORDER BY yr_rev DESC LIMIT 15
+        )
+        SELECT
+          TO_CHAR(o.created_at AT TIME ZONE 'Asia/Muscat', 'YYYY-MM') AS month,
+          p.name           AS product_name,
+          SUM(oi.total)    AS total_revenue,
+          SUM(oi.quantity) AS total_qty
+        FROM orders o
+        JOIN order_items oi ON oi.order_id = o.id
+        JOIN products p     ON p.id = oi.product_id
+        JOIN top_prods tp   ON tp.id = p.id
+        WHERE o.status NOT IN ('cancelled')
+          AND EXTRACT(YEAR FROM o.created_at AT TIME ZONE 'Asia/Muscat') = $1
+          ${bSql}
+        GROUP BY month, p.name
+        ORDER BY month, total_revenue DESC
+      `, [year]);
+
+      // 4. توزيع الحالات
+      const statuses = await pool.query(`
+        SELECT status, COUNT(*) AS cnt, COALESCE(SUM(total),0) AS total
+        FROM orders
+        WHERE EXTRACT(YEAR FROM created_at AT TIME ZONE 'Asia/Muscat') = $1
+          ${bSql.replace('o.branch_id', 'branch_id')}
+        GROUP BY status
+      `, [year]);
+
+      res.json({
+        year,
+        monthly:     monthly.rows,
+        by_category: byCategory.rows,
+        by_product:  byProduct.rows,
+        statuses:    statuses.rows,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ" });
+    }
+  });
+
   app.get("/api/reports/branch-comparison-range", requireOwnerOrAdmin, async (req, res) => {
     const from = req.query.from as string;
     const to = req.query.to as string;

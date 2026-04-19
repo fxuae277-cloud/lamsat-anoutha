@@ -109,6 +109,8 @@ export default function Reports() {
   const [bsExpanded, setBsExpanded] = useState<Record<string, boolean>>({});
   const [monthlyYear, setMonthlyYear] = useState(String(new Date().getFullYear()));
   const [monthlyView, setMonthlyView] = useState<"category"|"product">("category");
+  const [ordersYear, setOrdersYear]   = useState(String(new Date().getFullYear()));
+  const [ordersView, setOrdersView]   = useState<"category"|"product">("category");
 
   const branchId = branch !== "all" ? Number(branch) : undefined;
   const branchQs = branchId ? `&branchId=${branchId}` : "";
@@ -125,6 +127,7 @@ export default function Reports() {
   const { data: _expCats }      = useQuery<any[]>({ queryKey: [`/api/reports/expenses-by-category?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
   const { data: balanceSheet }  = useQuery<any>({ queryKey: [`/api/reports/balance-sheet?asOf=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
   const { data: monthlySales }  = useQuery<any>({ queryKey: [`/api/reports/monthly-sales?year=${monthlyYear}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
+  const { data: ordersMonthly } = useQuery<any>({ queryKey: [`/api/reports/orders-monthly?year=${ordersYear}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
 
   // ── null-safe array coercion (= [] لا يحمي من null، فقط من undefined) ───
   const branches     : Branch[] = Array.isArray(_branches)     ? _branches     : [];
@@ -248,7 +251,8 @@ export default function Reports() {
             <TabsTrigger value="products" className="gap-1 whitespace-nowrap"><Package className="h-4 w-4" />المنتجات</TabsTrigger>
             <TabsTrigger value="categories" className="gap-1 whitespace-nowrap"><Layers className="h-4 w-4" />الفئات</TabsTrigger>
             <TabsTrigger value="shifts"   className="gap-1 whitespace-nowrap"><Activity className="h-4 w-4" />الورديات</TabsTrigger>
-            <TabsTrigger value="monthly"  className="gap-1 whitespace-nowrap"><CalendarDays className="h-4 w-4" />شهري</TabsTrigger>
+            <TabsTrigger value="monthly"       className="gap-1 whitespace-nowrap"><CalendarDays className="h-4 w-4" />شهري</TabsTrigger>
+            <TabsTrigger value="orders-report" className="gap-1 whitespace-nowrap"><Users className="h-4 w-4" />تقرير الطلبات</TabsTrigger>
             {isAdmin && <TabsTrigger value="branches"      className="gap-1 whitespace-nowrap"><GitBranch className="h-4 w-4" />مقارنة الفروع</TabsTrigger>}
             {isAdmin && <TabsTrigger value="cashflow"      className="gap-1 whitespace-nowrap"><Banknote className="h-4 w-4" />التدفقات النقدية</TabsTrigger>}
             {isAdmin && <TabsTrigger value="balance-sheet" className="gap-1 whitespace-nowrap"><Scale className="h-4 w-4" />الميزانية العمومية</TabsTrigger>}
@@ -757,6 +761,304 @@ export default function Reports() {
               </Table>
             </div>
           )}
+        </TabsContent>
+
+        {/* ══ تقرير الطلبات ════════════════════════════════════════════════ */}
+        <TabsContent value="orders-report" className="space-y-4">
+          {/* شريط الإعدادات */}
+          <div className="flex flex-wrap gap-3 items-center justify-between">
+            <h2 className="font-bold text-lg flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />تقرير الطلبات الشهري
+            </h2>
+            <div className="flex gap-2 items-center">
+              <select
+                value={ordersYear}
+                onChange={e => setOrdersYear(e.target.value)}
+                className="border rounded-md px-3 py-1.5 text-sm bg-background"
+              >
+                {[0, 1, 2].map(offset => {
+                  const y = String(new Date().getFullYear() - offset);
+                  return <option key={y} value={y}>{y}</option>;
+                })}
+              </select>
+              <div className="flex rounded-md border overflow-hidden text-sm">
+                <button
+                  className={`px-3 py-1.5 transition-colors ${ordersView === "category" ? "bg-primary text-white" : "hover:bg-muted"}`}
+                  onClick={() => setOrdersView("category")}
+                >حسب الفئة</button>
+                <button
+                  className={`px-3 py-1.5 transition-colors ${ordersView === "product" ? "bg-primary text-white" : "hover:bg-muted"}`}
+                  onClick={() => setOrdersView("product")}
+                >حسب المنتج</button>
+              </div>
+            </div>
+          </div>
+
+          {/* بطاقات حالات الطلبات */}
+          {(ordersMonthly?.statuses || []).length > 0 && (() => {
+            const sts = ordersMonthly.statuses as any[];
+            const find = (s: string) => sts.find(x => x.status === s);
+            const statusMap: Record<string, { label: string; cls: string }> = {
+              new:       { label: "جديد",      cls: "bg-blue-100 text-blue-800" },
+              confirmed: { label: "مؤكد",      cls: "bg-indigo-100 text-indigo-800" },
+              preparing: { label: "قيد التجهيز", cls: "bg-yellow-100 text-yellow-800" },
+              ready:     { label: "جاهز",      cls: "bg-purple-100 text-purple-800" },
+              delivered: { label: "مُسلَّم",   cls: "bg-green-100 text-green-800" },
+              cancelled: { label: "ملغي",      cls: "bg-red-100 text-red-800" },
+            };
+            return (
+              <div className="flex flex-wrap gap-2">
+                {sts.map((s: any) => {
+                  const info = statusMap[s.status] || { label: s.status, cls: "bg-gray-100 text-gray-800" };
+                  return (
+                    <div key={s.status} className={`rounded-xl px-4 py-2 text-sm font-medium flex gap-2 items-center ${info.cls}`}>
+                      <span>{info.label}</span>
+                      <span className="font-bold">{s.cnt}</span>
+                      <span className="opacity-70 text-xs">({parseFloat(s.total).toFixed(3)} ر.ع)</span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* مخطط الطلبات الشهرية */}
+          {(ordersMonthly?.monthly || []).length > 0 && (
+            <Card className="rounded-2xl">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">إجمالي الطلبات الشهرية — {ordersYear}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={(ordersMonthly?.monthly || []).map((m: any) => ({
+                    name: (() => {
+                      const MONTH_AR: Record<string, string> = {
+                        "01":"يناير","02":"فبراير","03":"مارس","04":"أبريل",
+                        "05":"مايو","06":"يونيو","07":"يوليو","08":"أغسطس",
+                        "09":"سبتمبر","10":"أكتوبر","11":"نوفمبر","12":"ديسمبر",
+                      };
+                      return MONTH_AR[m.month?.slice(5)] || m.month?.slice(5);
+                    })(),
+                    طلبات:  parseFloat(m.total_revenue || 0),
+                    ربح:    parseFloat(m.gross_profit || 0),
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fontFamily: "Cairo" }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend />
+                    <Bar dataKey="طلبات" fill={PINK}      radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="ربح"   fill="#9C27B0"   radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* جدول الملخص الشهري */}
+          {(() => {
+            const MONTH_AR: Record<string, string> = {
+              "01":"يناير","02":"فبراير","03":"مارس","04":"أبريل",
+              "05":"مايو","06":"يونيو","07":"يوليو","08":"أغسطس",
+              "09":"سبتمبر","10":"أكتوبر","11":"نوفمبر","12":"ديسمبر",
+            };
+            const rows = ordersMonthly?.monthly || [];
+            return (
+              <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead>الشهر</TableHead>
+                      <TableHead className="text-center">عدد الطلبات</TableHead>
+                      <TableHead className="text-center">الكمية</TableHead>
+                      <TableHead className="text-right">إجمالي المبيعات</TableHead>
+                      <TableHead className="text-right">التكلفة</TableHead>
+                      <TableHead className="text-right">إجمالي الربح</TableHead>
+                      <TableHead className="text-center">الهامش%</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                          لا توجد طلبات في سنة {ordersYear}
+                        </TableCell>
+                      </TableRow>
+                    ) : rows.map((m: any) => {
+                      const margin = parseFloat(m.total_revenue) > 0
+                        ? ((parseFloat(m.gross_profit) / parseFloat(m.total_revenue)) * 100).toFixed(1)
+                        : "0.0";
+                      const mm = m.month?.slice(5);
+                      return (
+                        <TableRow key={m.month} className="hover:bg-pink-50/30">
+                          <TableCell className="font-medium">{MONTH_AR[mm] || mm} {m.month?.slice(0, 4)}</TableCell>
+                          <TableCell className="text-center">{m.order_count}</TableCell>
+                          <TableCell className="text-center">{m.total_qty}</TableCell>
+                          <TableCell className="text-right text-green-600 font-medium">{fmtOMR(m.total_revenue)}</TableCell>
+                          <TableCell className="text-right text-orange-600">{fmtOMR(m.total_cogs)}</TableCell>
+                          <TableCell className="text-right text-blue-600 font-medium">{fmtOMR(m.gross_profit)}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge className={`text-xs ${parseFloat(margin) >= 30 ? "bg-green-100 text-green-800" : parseFloat(margin) >= 15 ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}>
+                              {margin}%
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            );
+          })()}
+
+          {/* تفصيل حسب الفئة */}
+          {ordersView === "category" && (() => {
+            const MONTH_AR: Record<string, string> = {
+              "01":"يناير","02":"فبراير","03":"مارس","04":"أبريل",
+              "05":"مايو","06":"يونيو","07":"يوليو","08":"أغسطس",
+              "09":"سبتمبر","10":"أكتوبر","11":"نوفمبر","12":"ديسمبر",
+            };
+            const rows = ordersMonthly?.by_category || [];
+
+            // رسم بياني: مجموع الفئات على مدار السنة
+            const catTotals: Record<string, number> = {};
+            rows.forEach((r: any) => {
+              catTotals[r.category_name] = (catTotals[r.category_name] || 0) + parseFloat(r.total_revenue || 0);
+            });
+            const pieData = Object.entries(catTotals)
+              .map(([name, value]) => ({ name, value }))
+              .sort((a, b) => b.value - a.value)
+              .slice(0, 8);
+
+            return (
+              <div className="space-y-4">
+                {pieData.length > 0 && (
+                  <Card className="rounded-2xl">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <PieIcon className="h-4 w-4 text-primary" />توزيع مبيعات الفئات — {ordersYear}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={240}>
+                        <PieChart>
+                          <Pie data={pieData} cx="50%" cy="50%" outerRadius={90} dataKey="value"
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                            {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                          </Pie>
+                          <Tooltip formatter={(v: any) => [parseFloat(v).toFixed(3) + " ر.ع", ""]} />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                )}
+                <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 border-b font-semibold text-sm bg-muted/30">
+                    مبيعات أعلى 8 فئات — شهرياً
+                  </div>
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead>الشهر</TableHead>
+                        <TableHead>الفئة</TableHead>
+                        <TableHead className="text-center">الكمية</TableHead>
+                        <TableHead className="text-right">المبيعات</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.length === 0 ? (
+                        <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">لا توجد بيانات</TableCell></TableRow>
+                      ) : rows.map((row: any, i: number) => {
+                        const mm = row.month?.slice(5);
+                        return (
+                          <TableRow key={i} className="hover:bg-pink-50/30">
+                            <TableCell className="text-sm text-muted-foreground">{MONTH_AR[mm] || mm}</TableCell>
+                            <TableCell className="font-medium">{row.category_name}</TableCell>
+                            <TableCell className="text-center">{row.total_qty}</TableCell>
+                            <TableCell className="text-right text-green-600 font-medium">{fmtOMR(row.total_revenue)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* تفصيل حسب المنتج */}
+          {ordersView === "product" && (() => {
+            const MONTH_AR: Record<string, string> = {
+              "01":"يناير","02":"فبراير","03":"مارس","04":"أبريل",
+              "05":"مايو","06":"يونيو","07":"يوليو","08":"أغسطس",
+              "09":"سبتمبر","10":"أكتوبر","11":"نوفمبر","12":"ديسمبر",
+            };
+            const rows = ordersMonthly?.by_product || [];
+
+            // أعلى 10 منتجات للرسم البياني
+            const prodTotals: Record<string, number> = {};
+            rows.forEach((r: any) => {
+              prodTotals[r.product_name] = (prodTotals[r.product_name] || 0) + parseFloat(r.total_revenue || 0);
+            });
+            const top10 = Object.entries(prodTotals)
+              .map(([name, value]) => ({ name: name.slice(0, 14), value }))
+              .sort((a, b) => b.value - a.value)
+              .slice(0, 10);
+
+            return (
+              <div className="space-y-4">
+                {top10.length > 0 && (
+                  <Card className="rounded-2xl">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">أعلى 10 منتجات — إجمالي {ordersYear}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={240}>
+                        <BarChart data={top10}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="name" tick={{ fontSize: 10, fontFamily: "Cairo" }} />
+                          <YAxis tick={{ fontSize: 11 }} />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Bar dataKey="value" name="مبيعات" fill={PINK} radius={[6, 6, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                )}
+                <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 border-b font-semibold text-sm bg-muted/30">
+                    مبيعات أعلى 15 منتجاً — شهرياً
+                  </div>
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead>الشهر</TableHead>
+                        <TableHead>المنتج</TableHead>
+                        <TableHead className="text-center">الكمية</TableHead>
+                        <TableHead className="text-right">المبيعات</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.length === 0 ? (
+                        <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">لا توجد بيانات</TableCell></TableRow>
+                      ) : rows.map((row: any, i: number) => {
+                        const mm = row.month?.slice(5);
+                        return (
+                          <TableRow key={i} className="hover:bg-pink-50/30">
+                            <TableCell className="text-sm text-muted-foreground">{MONTH_AR[mm] || mm}</TableCell>
+                            <TableCell className="font-medium">{row.product_name}</TableCell>
+                            <TableCell className="text-center">{row.total_qty}</TableCell>
+                            <TableCell className="text-right text-green-600 font-medium">{fmtOMR(row.total_revenue)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            );
+          })()}
         </TabsContent>
 
         {/* ══ مقارنة الفروع ════════════════════════════════════════════════ */}
