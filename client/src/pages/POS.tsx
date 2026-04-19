@@ -542,6 +542,150 @@ function ReturnModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ─── CloseShiftModal ─────────────────────────────────────────────────────────
+function CloseShiftModal({ shift, onClose, onClosed }: {
+  shift: Shift;
+  onClose: () => void;
+  onClosed: () => void;
+}) {
+  const { toast } = useToast();
+  const [actualCash, setActualCash] = useState("");
+  const [summary, setSummary] = useState<any>(null);
+  const [loadingSummary, setLoadingSummary] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch(`/api/reports/shift?shiftId=${shift.id}`, { credentials: "include" });
+        if (r.ok) setSummary(await r.json());
+      } catch {}
+      setLoadingSummary(false);
+    })();
+  }, [shift.id]);
+
+  const closeMutation = useMutation({
+    mutationFn: async () => {
+      if (actualCash === "") throw new Error("يجب إدخال مبلغ الكاش الفعلي");
+      const r = await fetch(`/api/shifts/${shift.id}/close`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ actualCash }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.message || "فشل إغلاق الوردية");
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: "تم إغلاق الوردية بنجاح ✅" });
+      onClosed();
+    },
+    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+  });
+
+  const totalSales = n(summary?.totalSales ?? 0);
+  const totalCash  = n(summary?.totalCashIn ?? 0);
+  const totalCard  = n(summary?.totalCardIn ?? 0);
+  const totalBank  = n(summary?.totalBankIn ?? 0);
+  const openingCash = n(shift.openingCash);
+  const expected   = n(summary?.expectedCash ?? openingCash + totalCash);
+  const actualNum  = n(actualCash);
+  const diff       = actualNum - expected;
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-md" dir="rtl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <LogOut className="w-5 h-5 text-orange-500" />
+            إغلاق الوردية
+          </DialogTitle>
+          <DialogDescription className="text-right">
+            {new Date(shift.startedAt!).toLocaleString("ar-OM")} ← بداية الوردية
+          </DialogDescription>
+        </DialogHeader>
+
+        {loadingSummary ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="w-8 h-8 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Shift Summary */}
+            <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
+              <div className="flex justify-between items-center pb-2 border-b">
+                <span className="font-bold text-base">ملخص الوردية</span>
+                <span className="text-muted-foreground text-xs">الفاتورة الإلكترونية</span>
+              </div>
+              {[
+                ["💰 النقد الافتتاحي",  omr(openingCash) + " ر.ع", "text-gray-700"],
+                ["🧾 إجمالي المبيعات", omr(totalSales)  + " ر.ع", "text-emerald-600 font-bold"],
+                ["💵 مبيعات نقداً",     omr(totalCash)   + " ر.ع", "text-gray-700"],
+                ["💳 مبيعات بطاقة",    omr(totalCard)   + " ر.ع", "text-purple-600"],
+                ["🏦 تحويل بنكي",       omr(totalBank)   + " ر.ع", "text-blue-600"],
+                ["📊 الكاش المتوقع",   omr(expected)    + " ر.ع", "text-orange-600 font-semibold"],
+              ].map(([label, val, cls]) => (
+                <div key={label as string} className="flex justify-between items-center">
+                  <span className="text-muted-foreground">{label as string}</span>
+                  <span className={cls as string}>{val as string}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Actual cash input */}
+            <div className="space-y-2">
+              <label className="text-sm font-bold flex items-center gap-1.5">
+                <Banknote className="w-4 h-4 text-green-600" />
+                عدّ الكاش الفعلي في الصندوق
+              </label>
+              <Input
+                type="number"
+                step="0.001"
+                min="0"
+                placeholder="0.000 ر.ع"
+                value={actualCash}
+                onChange={e => setActualCash(e.target.value)}
+                className="text-center text-xl h-14 font-bold border-2 focus:border-pink-400"
+                autoFocus
+                dir="ltr"
+              />
+              {actualCash !== "" && (
+                <div className={`text-center text-sm font-semibold py-2 rounded-lg ${
+                  Math.abs(diff) < 0.001
+                    ? "bg-green-50 text-green-700"
+                    : diff > 0
+                    ? "bg-blue-50 text-blue-700"
+                    : "bg-red-50 text-red-700"
+                }`}>
+                  {Math.abs(diff) < 0.001
+                    ? "✅ الصندوق متطابق"
+                    : diff > 0
+                    ? `⬆️ زيادة +${omr(diff)} ر.ع`
+                    : `⬇️ عجز −${omr(Math.abs(diff))} ر.ع`}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose}>إلغاء</Button>
+          <Button
+            className="bg-orange-500 hover:bg-orange-600 gap-1"
+            onClick={() => closeMutation.mutate()}
+            disabled={closeMutation.isPending || actualCash === ""}
+          >
+            {closeMutation.isPending
+              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> جارٍ الإغلاق...</>
+              : <><LogOut className="w-4 h-4" /> تأكيد الإغلاق</>
+            }
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main POS Component ───────────────────────────────────────────────────────
 export default function POS() {
   const { data: authData } = useAuth();
@@ -560,10 +704,11 @@ export default function POS() {
   const [discount, setDiscount]     = useState("");
   const [discType, setDiscType]     = useState<"value" | "percent">("value");
   const [completedSale, setCompletedSale] = useState<any>(null);
-  const [showHold, setShowHold]     = useState(false);
-  const [showCustomer, setShowCustomer] = useState(false);
-  const [showReturn, setShowReturn] = useState(false);
-  const [confirmClear, setConfirmClear] = useState(false);
+  const [showHold, setShowHold]           = useState(false);
+  const [showCustomer, setShowCustomer]   = useState(false);
+  const [showReturn, setShowReturn]       = useState(false);
+  const [confirmClear, setConfirmClear]   = useState(false);
+  const [showCloseShift, setShowCloseShift] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const isOwner = user?.role === "owner" || user?.role === "admin";
@@ -976,7 +1121,7 @@ export default function POS() {
               )}
             </div>
 
-            {/* يمين: إرجاع + معلق */}
+            {/* يمين: إرجاع + معلق + إغلاق الوردية */}
             <div className="flex items-center gap-1 shrink-0">
               {isOwner && (
                 <Button size="sm" variant="ghost"
@@ -992,6 +1137,11 @@ export default function POS() {
                 {heldCount > 0 && (
                   <span className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-white text-pink-600 text-[9px] font-bold flex items-center justify-center">{heldCount}</span>
                 )}
+              </Button>
+              <Button size="sm" variant="ghost"
+                className="h-7 text-xs gap-1 text-orange-200 hover:text-white hover:bg-white/20 px-2 border border-orange-300/40"
+                onClick={() => setShowCloseShift(true)}>
+                <LogOut className="w-3.5 h-3.5" /> إغلاق
               </Button>
             </div>
           </div>
@@ -1142,6 +1292,13 @@ export default function POS() {
       {showHold && <HoldListModal onClose={() => setShowHold(false)} onResume={resumeHeld} />}
       {showCustomer && <CustomerModal onClose={() => setShowCustomer(false)} onSelect={c => { setCustomer(c); setShowCustomer(false); }} />}
       {showReturn && <ReturnModal onClose={() => setShowReturn(false)} />}
+      {showCloseShift && shift && (
+        <CloseShiftModal
+          shift={shift}
+          onClose={() => setShowCloseShift(false)}
+          onClosed={() => { setShift(null); setShowCloseShift(false); clearCart(); }}
+        />
+      )}
 
       {/* Confirm Clear Cart */}
       <Dialog open={confirmClear} onOpenChange={setConfirmClear}>

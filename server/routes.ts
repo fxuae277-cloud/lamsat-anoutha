@@ -1299,8 +1299,14 @@ export async function registerRoutes(
           ? req.query.date
           : new Date().toISOString().slice(0, 10);
 
-      const branchFilter = branchId ? `AND s.branch_id = ${branchId}` : "";
-      const branchFilterSales = branchId ? `AND sa.branch_id = ${branchId}` : "";
+      const params: any[] = [dateStr];
+      const branchFilter    = branchId ? `AND s.branch_id = $${params.push(branchId)}` : "";
+      const branchFilterSales = branchId ? `AND sa.branch_id = $${params.push(branchId)}` : "";
+      // Note: params indices differ per query — use separate param arrays below
+
+      const bParams = branchId ? [dateStr, branchId] : [dateStr];
+      const bFilter = branchId ? "AND s.branch_id = $2" : "";
+      const sFilter = branchId ? "AND sa.branch_id = $2" : "";
 
       // Get branch name
       let branchName = "كل الفروع";
@@ -1309,71 +1315,110 @@ export async function registerRoutes(
         branchName = bn.rows[0]?.name ?? "الفرع";
       }
 
-      // Today's shifts summary
+      // Aggregate shifts for the date
       const shiftsRes = await pool.query(`
         SELECT
-          COUNT(*)::int                                                                            AS shifts_count,
-          COUNT(*) FILTER (WHERE s.status = 'closed')::int                                        AS closed_shifts_count,
-          COALESCE(SUM(s.opening_cash::numeric), 0)                                               AS total_opening_cash,
-          COALESCE(SUM(CASE WHEN s.status = 'closed' THEN s.actual_cash::numeric ELSE 0 END), 0) AS total_closing_cash
+          COUNT(*)::int                                                                              AS shifts_count,
+          COUNT(*) FILTER (WHERE s.status = 'closed')::int                                          AS closed_shifts_count,
+          COALESCE(SUM(s.opening_cash::numeric), 0)                                                 AS total_opening_cash,
+          COALESCE(SUM(CASE WHEN s.status = 'closed' THEN s.actual_cash::numeric ELSE 0 END), 0)   AS total_closing_cash
         FROM shifts s
-        WHERE s.started_at::date = $1 ${branchFilter}
-      `, [dateStr]);
-
+        WHERE s.started_at::date = $1 ${bFilter}
+      `, bParams);
       const shiftTotals = shiftsRes.rows[0];
 
-      // Today's sales by payment method
+      // Aggregate sales for the date (correct column: `total` not `total_amount`)
       const salesRes = await pool.query(`
         SELECT
-          COALESCE(SUM(sa.total_amount::numeric), 0)                                                                 AS total_sales,
-          COALESCE(SUM(CASE WHEN sa.payment_method = 'cash'     THEN sa.total_amount::numeric ELSE 0 END), 0)       AS total_cash,
-          COALESCE(SUM(CASE WHEN sa.payment_method = 'card'     THEN sa.total_amount::numeric ELSE 0 END), 0)       AS total_card,
-          COALESCE(SUM(CASE WHEN sa.payment_method = 'transfer' THEN sa.total_amount::numeric ELSE 0 END), 0)       AS total_transfer
+          COALESCE(SUM(sa.total::numeric), 0)                                                           AS total_sales,
+          COALESCE(SUM(CASE WHEN sa.payment_method = 'cash'         THEN sa.total::numeric ELSE 0 END), 0) AS total_cash,
+          COALESCE(SUM(CASE WHEN sa.payment_method = 'card'         THEN sa.total::numeric ELSE 0 END), 0) AS total_card,
+          COALESCE(SUM(CASE WHEN sa.payment_method IN ('transfer','bank_transfer')
+                                                                    THEN sa.total::numeric ELSE 0 END), 0) AS total_transfer,
+          COUNT(*) FILTER (WHERE sa.status != 'returned')::int                                          AS invoice_count
         FROM sales sa
         WHERE sa.created_at::date = $1
           AND sa.status != 'returned'
-          ${branchFilterSales}
-      `, [dateStr]);
-
+          ${sFilter}
+      `, bParams);
       const saleTotals = salesRes.rows[0];
 
-      // Most recent shift today (open first, then latest closed)
-      const currentShiftRes = await pool.query(`
+      // All shifts for the day (for per-shift breakdown)
+      const allShiftsRes = await pool.query(`
         SELECT
-          s.id, s.status, s.opening_cash, s.actual_cash,
-          s.started_at, s.ended_at, s.terminal_name,
-          u.full_name AS cashier_name
+          s.id,
+          s.status,
+          s.opening_cash,
+          s.actual_cash,
+          s.expected_cash,
+          s.difference,
+          s.started_at,
+          s.ended_at,
+          s.terminal_name,
+          u.name AS cashier_name,
+          -- Sales totals per shift
+          COALESCE((
+            SELECT SUM(sa2.total::numeric) FROM sales sa2
+            WHERE sa2.shift_id = s.id AND sa2.status != 'returned'
+          ), 0) AS shift_total_sales,
+          COALESCE((
+            SELECT SUM(sa2.total::numeric) FROM sales sa2
+            WHERE sa2.shift_id = s.id AND sa2.payment_method = 'cash' AND sa2.status != 'returned'
+          ), 0) AS shift_cash,
+          COALESCE((
+            SELECT SUM(sa2.total::numeric) FROM sales sa2
+            WHERE sa2.shift_id = s.id AND sa2.payment_method = 'card' AND sa2.status != 'returned'
+          ), 0) AS shift_card,
+          COALESCE((
+            SELECT SUM(sa2.total::numeric) FROM sales sa2
+            WHERE sa2.shift_id = s.id
+              AND sa2.payment_method IN ('transfer','bank_transfer')
+              AND sa2.status != 'returned'
+          ), 0) AS shift_transfer,
+          COALESCE((
+            SELECT COUNT(*) FROM sales sa2
+            WHERE sa2.shift_id = s.id AND sa2.status != 'returned'
+          ), 0) AS shift_invoice_count
         FROM shifts s
         JOIN users u ON u.id = s.cashier_id
-        WHERE s.started_at::date = $1 ${branchFilter}
+        WHERE s.started_at::date = $1 ${bFilter}
         ORDER BY
           CASE WHEN s.status = 'open' THEN 0 ELSE 1 END,
           s.started_at DESC
-        LIMIT 1
-      `, [dateStr]);
+      `, bParams);
 
-      const currentShift = currentShiftRes.rows[0] ?? null;
+      const allShifts = allShiftsRes.rows.map((s: any) => ({
+        id: s.id,
+        status: s.status,
+        openingCash: parseFloat(s.opening_cash ?? "0"),
+        actualCash: s.actual_cash != null ? parseFloat(s.actual_cash) : null,
+        expectedCash: s.expected_cash != null ? parseFloat(s.expected_cash) : null,
+        difference: s.difference != null ? parseFloat(s.difference) : null,
+        startedAt: s.started_at,
+        endedAt: s.ended_at ?? null,
+        cashierName: s.cashier_name,
+        terminalName: s.terminal_name,
+        totalSales: parseFloat(s.shift_total_sales),
+        totalCash: parseFloat(s.shift_cash),
+        totalCard: parseFloat(s.shift_card),
+        totalTransfer: parseFloat(s.shift_transfer),
+        invoiceCount: parseInt(s.shift_invoice_count),
+      }));
+
+      // Current open shift (first in list)
+      const currentShift = allShifts.find(s => s.status === "open") ?? allShifts[0] ?? null;
 
       res.json({
         date: dateStr,
         branchName,
-        currentShift: currentShift
-          ? {
-              id: currentShift.id,
-              status: currentShift.status,
-              openingCash: parseFloat(currentShift.opening_cash ?? "0"),
-              actualCash: currentShift.actual_cash != null ? parseFloat(currentShift.actual_cash) : null,
-              startedAt: currentShift.started_at,
-              endedAt: currentShift.ended_at ?? null,
-              cashierName: currentShift.cashier_name,
-              terminalName: currentShift.terminal_name,
-            }
-          : null,
+        currentShift,
+        allShifts,
         today: {
           totalSales: parseFloat(saleTotals.total_sales),
           totalCash: parseFloat(saleTotals.total_cash),
           totalCard: parseFloat(saleTotals.total_card),
           totalTransfer: parseFloat(saleTotals.total_transfer),
+          invoiceCount: parseInt(saleTotals.invoice_count),
           totalOpeningCash: parseFloat(shiftTotals.total_opening_cash),
           totalClosingCash: parseFloat(shiftTotals.total_closing_cash),
           shiftsCount: shiftTotals.shifts_count,
