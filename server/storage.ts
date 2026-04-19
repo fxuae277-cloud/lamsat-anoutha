@@ -985,12 +985,26 @@ export class DatabaseStorage implements IStorage {
           `, [variantId, branchLocationId, -item.quantity, saleId, data.cashierId || null]);
         }
 
-        await client.query(
-          `INSERT INTO location_inventory (location_id, product_id, qty_on_hand, reorder_level, updated_at)
-           VALUES ($1, $2, (0 - $3::int), 5, now())
-           ON CONFLICT (location_id, product_id) DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand - $3::int, updated_at = now()`,
-          [branchLocationId, item.productId, item.quantity]
-        );
+        // خصم location_inventory فقط للمنتجات بدون variants
+        // (المنتجات التي لها variants تُخصم من inventory_balances أعلاه)
+        if (!variantId) {
+          const liRow = await client.query(
+            `SELECT qty_on_hand FROM location_inventory WHERE location_id = $1 AND product_id = $2`,
+            [branchLocationId, item.productId]
+          );
+          const currentQty = Number(liRow.rows[0]?.qty_on_hand ?? 0);
+          if (liRow.rows.length > 0 && currentQty > 0 && currentQty < item.quantity) {
+            const prodRes = await client.query(`SELECT name FROM products WHERE id = $1`, [item.productId]);
+            throw new Error(`المخزون غير كاف للمنتج "${prodRes.rows[0]?.name || `#${item.productId}`}" — المتوفر: ${currentQty}، المطلوب: ${item.quantity}`);
+          }
+          const newQty = Math.max(0, currentQty - item.quantity);
+          await client.query(
+            `INSERT INTO location_inventory (location_id, product_id, qty_on_hand, reorder_level, updated_at)
+             VALUES ($1, $2, $3, 5, now())
+             ON CONFLICT (location_id, product_id) DO UPDATE SET qty_on_hand = $3, updated_at = now()`,
+            [branchLocationId, item.productId, newQty]
+          );
+        }
 
         const costRes = await client.query(
           `SELECT pi.unit_cost_final FROM purchase_items pi
