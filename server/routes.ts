@@ -1280,23 +1280,52 @@ export async function registerRoutes(
   app.get("/api/branch-stock/:branchId", requireAuth, requirePermission("inventory.view"), async (req, res) => {
     const branchId = Number(req.params.branchId);
     const result = await pool.query(`
-      SELECT ib.variant_id,
-             ib.qty_on_hand as current_qty,
-             pv.barcode, pv.sku, pv.color, pv.size, pv.price,
-             p.name as product_name, p.id as product_id, p.category_id,
-             (SELECT SUM(stl2.qty) FROM stock_transfer_lines stl2
-              JOIN stock_transfers st2 ON st2.id = stl2.transfer_id
-              JOIN locations fl2 ON fl2.id = st2.from_location_id
-              WHERE fl2.is_central = true AND st2.to_location_id = ib.location_id
-                AND st2.status = 'approved' AND stl2.variant_id = ib.variant_id
-             ) as transferred_qty,
-             l.name as location_name
+      -- منتجات بـ variants (inventory_balances)
+      SELECT
+        ib.variant_id,
+        ib.qty_on_hand                   AS current_qty,
+        pv.barcode, pv.sku, pv.color, pv.size, pv.price,
+        p.name                           AS product_name,
+        p.id                             AS product_id,
+        p.category_id,
+        l.name                           AS location_name,
+        (SELECT SUM(stl2.qty)
+         FROM stock_transfer_lines stl2
+         JOIN stock_transfers st2 ON st2.id = stl2.transfer_id
+         JOIN locations fl2      ON fl2.id  = st2.from_location_id
+         WHERE fl2.is_central = true
+           AND st2.to_location_id = ib.location_id
+           AND st2.status = 'approved'
+           AND stl2.variant_id = ib.variant_id
+        )                                AS transferred_qty
       FROM inventory_balances ib
-      JOIN locations l ON l.id = ib.location_id
+      JOIN locations        l  ON l.id  = ib.location_id
       JOIN product_variants pv ON pv.id = ib.variant_id
-      JOIN products p ON p.id = pv.product_id
+      JOIN products         p  ON p.id  = pv.product_id
       WHERE l.branch_id = $1 AND ib.qty_on_hand > 0
-      ORDER BY p.name, pv.color, pv.size
+
+      UNION ALL
+
+      -- منتجات بدون variants (location_inventory) التي ليس لها سجل في inventory_balances
+      SELECT
+        NULL                             AS variant_id,
+        li.qty_on_hand                   AS current_qty,
+        p.barcode, NULL AS sku, NULL AS color, NULL AS size, p.price,
+        p.name                           AS product_name,
+        p.id                             AS product_id,
+        p.category_id,
+        l.name                           AS location_name,
+        NULL                             AS transferred_qty
+      FROM location_inventory li
+      JOIN locations l ON l.id = li.location_id
+      JOIN products  p ON p.id = li.product_id
+      WHERE l.branch_id = $1
+        AND li.qty_on_hand > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM product_variants pv2 WHERE pv2.product_id = li.product_id
+        )
+
+      ORDER BY product_name, color, size
     `, [branchId]);
     res.json(result.rows);
   });
