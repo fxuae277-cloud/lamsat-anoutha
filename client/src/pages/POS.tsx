@@ -208,14 +208,14 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId }: {
     const rawPhone = (sale.customerPhone || "").replace(/\D/g, ""); // أرقام فقط
     if (!rawPhone) {
       // لا يوجد رقم عميل — api.whatsapp.com يدعم الإرسال بدون رقم
-      window.open(`https://api.whatsapp.com/send?text=${msg}`, "_blank");
+      window.open(`https://web.whatsapp.com/send?text=${msg}`, "_blank");
       return;
     }
     // تطبيع الرقم: إضافة 968 إذا لم تكن موجودة
     let phone = rawPhone;
     if (phone.startsWith("00968")) phone = phone.slice(2);       // 00968 → 968...
     else if (!phone.startsWith("968")) phone = `968${phone}`;    // 9XXXXXXXX → 9689XXXXXXXX
-    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+    window.open(`https://web.whatsapp.com/send?phone=${phone}&text=${msg}`, "_blank");
   };
 
   return (
