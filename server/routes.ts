@@ -4308,6 +4308,74 @@ export async function registerRoutes(
     }
   });
 
+  // أرصدة الحسابات — يُرجع كل حساب مع إجمالي المدين والدائن من القيود المرحّلة
+  app.get("/api/accounts/with-balances", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const { from, to } = req.query as Record<string, string>;
+      let dateFilter = "";
+      const params: any[] = [];
+      if (from) { params.push(from); dateFilter += ` AND je.date >= $${params.length}`; }
+      if (to)   { params.push(to);   dateFilter += ` AND je.date <= $${params.length}`; }
+
+      const result = await pool.query(`
+        SELECT
+          a.id, a.code, a.name, a.name_en AS "nameEn",
+          a.type, a.level, a.parent_id AS "parentId", a.is_system AS "isSystem",
+          COALESCE(SUM(CAST(jel.debit  AS numeric)), 0) AS total_debit,
+          COALESCE(SUM(CAST(jel.credit AS numeric)), 0) AS total_credit,
+          CASE
+            WHEN a.type IN ('asset','expense')
+              THEN COALESCE(SUM(CAST(jel.debit AS numeric)),0) - COALESCE(SUM(CAST(jel.credit AS numeric)),0)
+            ELSE
+              COALESCE(SUM(CAST(jel.credit AS numeric)),0) - COALESCE(SUM(CAST(jel.debit AS numeric)),0)
+          END AS balance
+        FROM accounts a
+        LEFT JOIN journal_entry_lines jel ON jel.account_id = a.id
+        LEFT JOIN journal_entries je ON je.id = jel.entry_id AND je.status = 'posted'
+          ${dateFilter.replace(/AND/g, dateFilter.trim().startsWith("AND") ? "AND" : "")}
+        GROUP BY a.id, a.code, a.name, a.name_en, a.type, a.level, a.parent_id, a.is_system
+        ORDER BY a.code
+      `, params);
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ" });
+    }
+  });
+
+  // كشف حساب — حركات حساب واحد من القيود المرحّلة
+  app.get("/api/accounts/:id/ledger", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const accountId = parseInt(req.params.id);
+      const { from, to } = req.query as Record<string, string>;
+      const params: any[] = [accountId];
+      let dateFilter = "";
+      if (from) { params.push(from); dateFilter += ` AND je.date >= $${params.length}`; }
+      if (to)   { params.push(to);   dateFilter += ` AND je.date <= $${params.length}`; }
+
+      const result = await pool.query(`
+        SELECT
+          je.id AS entry_id, je.entry_number, je.date, je.description,
+          je.source_type, je.source_id,
+          jel.debit, jel.credit, jel.description AS line_desc,
+          SUM(
+            CASE WHEN a.type IN ('asset','expense')
+              THEN CAST(jel.debit AS numeric) - CAST(jel.credit AS numeric)
+              ELSE CAST(jel.credit AS numeric) - CAST(jel.debit AS numeric)
+            END
+          ) OVER (ORDER BY je.date, je.id) AS running_balance
+        FROM journal_entry_lines jel
+        JOIN journal_entries je ON je.id = jel.entry_id AND je.status = 'posted'
+        JOIN accounts a ON a.id = jel.account_id
+        WHERE jel.account_id = $1
+          ${dateFilter}
+        ORDER BY je.date, je.id
+      `, params);
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ" });
+    }
+  });
+
   app.post("/api/accounts", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const { code, name, nameEn, type, parentId, level } = req.body;
