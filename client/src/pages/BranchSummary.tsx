@@ -52,7 +52,7 @@ interface BranchSummaryData {
   };
 }
 
-interface Branch { id: number; name: string; }
+interface Branch { id: number; name: string; address?: string | null; }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -233,7 +233,9 @@ export default function BranchSummary() {
               </SelectTrigger>
               <SelectContent>
                 {branches.map(b => (
-                  <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                  <SelectItem key={b.id} value={String(b.id)}>
+                    {b.address ? `${b.name} — ${b.address}` : b.name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
