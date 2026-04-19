@@ -45,7 +45,8 @@
     "payrollSheet": "كشف الرواتب",
     "payrollSummary": "ملخص الرواتب",
     "payrollPayments": "متابعة الدفع",
-    "barcodeLabels": "طباعة الملصقات"
+    "barcodeLabels": "طباعة الملصقات",
+    "branchSummary": "ملخص الفرع المالي"
   },
   "sidebar": {
     "role_owner": "مالك",

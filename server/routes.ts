@@ -1276,6 +1276,116 @@ export async function registerRoutes(
     res.json(await storage.getInventoryBalances(locationId, branchId));
   });
 
+  // ── Branch Financial Summary ──────────────────────────────────────
+  app.get("/api/branch-summary", requireAuth, async (req, res) => {
+    try {
+      const userRow = await pool.query(
+        "SELECT id, role, branch_id FROM users WHERE id = $1",
+        [req.session.userId]
+      );
+      if (!userRow.rows[0]) return res.status(401).json({ message: "غير مصرح" });
+      const u = userRow.rows[0];
+
+      const isOwnerOrAdmin = u.role === "owner" || u.role === "admin";
+      let branchId: number | null = null;
+      if (req.query.branchId) {
+        branchId = Number(req.query.branchId);
+      } else if (!isOwnerOrAdmin && u.branch_id) {
+        branchId = u.branch_id;
+      }
+
+      const dateStr =
+        typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
+          ? req.query.date
+          : new Date().toISOString().slice(0, 10);
+
+      const branchFilter = branchId ? `AND s.branch_id = ${branchId}` : "";
+      const branchFilterSales = branchId ? `AND sa.branch_id = ${branchId}` : "";
+
+      // Get branch name
+      let branchName = "كل الفروع";
+      if (branchId) {
+        const bn = await pool.query("SELECT name FROM branches WHERE id = $1", [branchId]);
+        branchName = bn.rows[0]?.name ?? "الفرع";
+      }
+
+      // Today's shifts summary
+      const shiftsRes = await pool.query(`
+        SELECT
+          COUNT(*)::int                                                                            AS shifts_count,
+          COUNT(*) FILTER (WHERE s.status = 'closed')::int                                        AS closed_shifts_count,
+          COALESCE(SUM(s.opening_cash::numeric), 0)                                               AS total_opening_cash,
+          COALESCE(SUM(CASE WHEN s.status = 'closed' THEN s.actual_cash::numeric ELSE 0 END), 0) AS total_closing_cash
+        FROM shifts s
+        WHERE s.started_at::date = $1 ${branchFilter}
+      `, [dateStr]);
+
+      const shiftTotals = shiftsRes.rows[0];
+
+      // Today's sales by payment method
+      const salesRes = await pool.query(`
+        SELECT
+          COALESCE(SUM(sa.total_amount::numeric), 0)                                                                 AS total_sales,
+          COALESCE(SUM(CASE WHEN sa.payment_method = 'cash'     THEN sa.total_amount::numeric ELSE 0 END), 0)       AS total_cash,
+          COALESCE(SUM(CASE WHEN sa.payment_method = 'card'     THEN sa.total_amount::numeric ELSE 0 END), 0)       AS total_card,
+          COALESCE(SUM(CASE WHEN sa.payment_method = 'transfer' THEN sa.total_amount::numeric ELSE 0 END), 0)       AS total_transfer
+        FROM sales sa
+        WHERE sa.created_at::date = $1
+          AND sa.status != 'returned'
+          ${branchFilterSales}
+      `, [dateStr]);
+
+      const saleTotals = salesRes.rows[0];
+
+      // Most recent shift today (open first, then latest closed)
+      const currentShiftRes = await pool.query(`
+        SELECT
+          s.id, s.status, s.opening_cash, s.actual_cash,
+          s.started_at, s.ended_at, s.terminal_name,
+          u.full_name AS cashier_name
+        FROM shifts s
+        JOIN users u ON u.id = s.cashier_id
+        WHERE s.started_at::date = $1 ${branchFilter}
+        ORDER BY
+          CASE WHEN s.status = 'open' THEN 0 ELSE 1 END,
+          s.started_at DESC
+        LIMIT 1
+      `, [dateStr]);
+
+      const currentShift = currentShiftRes.rows[0] ?? null;
+
+      res.json({
+        date: dateStr,
+        branchName,
+        currentShift: currentShift
+          ? {
+              id: currentShift.id,
+              status: currentShift.status,
+              openingCash: parseFloat(currentShift.opening_cash ?? "0"),
+              actualCash: currentShift.actual_cash != null ? parseFloat(currentShift.actual_cash) : null,
+              startedAt: currentShift.started_at,
+              endedAt: currentShift.ended_at ?? null,
+              cashierName: currentShift.cashier_name,
+              terminalName: currentShift.terminal_name,
+            }
+          : null,
+        today: {
+          totalSales: parseFloat(saleTotals.total_sales),
+          totalCash: parseFloat(saleTotals.total_cash),
+          totalCard: parseFloat(saleTotals.total_card),
+          totalTransfer: parseFloat(saleTotals.total_transfer),
+          totalOpeningCash: parseFloat(shiftTotals.total_opening_cash),
+          totalClosingCash: parseFloat(shiftTotals.total_closing_cash),
+          shiftsCount: shiftTotals.shifts_count,
+          closedShiftsCount: shiftTotals.closed_shifts_count,
+        },
+      });
+    } catch (err: any) {
+      console.error("[branch-summary]", err);
+      res.status(500).json({ message: "خطأ في الخادم", error: err.message });
+    }
+  });
+
   // ── Branch Stock (only items transferred from central warehouse) ──
   app.get("/api/branch-stock/:branchId", requireAuth, requirePermission("inventory.view"), async (req, res) => {
     const branchId = Number(req.params.branchId);

@@ -30,6 +30,7 @@ import {
   TrendingUp,
   CreditCard,
   Printer,
+  PieChart,
 } from "lucide-react";
 
 export type SidebarItem = {
@@ -96,6 +97,7 @@ export const OWNER_SIDEBAR: SidebarSection[] = [
   {
     sectionKey: "sidebar.section_finance",
     items: [
+      { labelKey: "nav.branchSummary",  icon: PieChart,    path: "/branch-summary" },
       { labelKey: "nav.financeSummary", icon: TrendingUp,  path: "/finance-summary" },
       { labelKey: "nav.expenses",       icon: Banknote,    path: "/expenses" },
       { labelKey: "nav.finance",        icon: Calculator,  path: "/finance" },
@@ -135,16 +137,17 @@ export const EMPLOYEE_SIDEBAR: SidebarSection[] = [
   {
     sectionKey: "sidebar.section_operations",
     items: [
-      { labelKey: "nav.pos",       icon: ShoppingCart, path: "/pos" },
-      { labelKey: "nav.orders",    icon: ClipboardList, path: "/orders" },
-      { labelKey: "nav.invoices",  icon: ReceiptText,  path: "/invoices" },
-      { labelKey: "nav.customers", icon: Users,        path: "/customers" },
-      { labelKey: "nav.branchStock", icon: Warehouse,  path: "/branch-stock" },
+      { labelKey: "nav.pos",          icon: ShoppingCart, path: "/pos" },
+      { labelKey: "nav.orders",       icon: ClipboardList, path: "/orders" },
+      { labelKey: "nav.invoices",     icon: ReceiptText,  path: "/invoices" },
+      { labelKey: "nav.customers",    icon: Users,        path: "/customers" },
+      { labelKey: "nav.branchStock",  icon: Warehouse,    path: "/branch-stock" },
+      { labelKey: "nav.branchSummary", icon: PieChart,    path: "/branch-summary" },
     ],
   },
 ];
 
-export const EMPLOYEE_ALLOWED_PATHS = ["/pos", "/orders", "/invoices", "/customers", "/branch-stock"];
+export const EMPLOYEE_ALLOWED_PATHS = ["/pos", "/orders", "/invoices", "/customers", "/branch-stock", "/branch-summary"];
 
 export function getSidebarForRole(role: string): SidebarSection[] {
   if (role === "owner" || role === "admin") return OWNER_SIDEBAR;
