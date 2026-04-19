@@ -75,13 +75,22 @@ export function requirePermission(permCode: string) {
       const { role, role_id } = userRow.rows[0];
       if (role === "owner" || role === "admin") return next();
 
-      // فحص الصلاحية عبر جدول role_permissions
-      if (role_id) {
+      // فحص الصلاحية — أولاً بـ role_id، وإذا NULL نبحث بالـ role name مباشرة
+      const effectiveRoleId = role_id ?? (await pool.query(
+        "SELECT id FROM roles WHERE name = $1", [role]
+      )).rows[0]?.id ?? null;
+
+      // إذا وُجد role بدون role_id → اربطه تلقائياً
+      if (!role_id && effectiveRoleId) {
+        await pool.query("UPDATE users SET role_id = $1 WHERE id = $2", [effectiveRoleId, req.session.userId]);
+      }
+
+      if (effectiveRoleId) {
         const perm = await pool.query(
           `SELECT 1 FROM role_permissions rp
            JOIN permissions p ON p.id = rp.permission_id
            WHERE rp.role_id = $1 AND p.code = $2`,
-          [role_id, permCode]
+          [effectiveRoleId, permCode]
         );
         if (perm.rows.length > 0) return next();
       }

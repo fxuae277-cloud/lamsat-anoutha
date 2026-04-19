@@ -580,7 +580,7 @@ export default function POS() {
       const p = new URLSearchParams();
       if (search) p.set("search", search);
       if (activeCat !== "all") p.set("categoryId", String(activeCat));
-      return fetch(`/api/pos/products?${p}`, { credentials: "include" }).then(r => r.json());
+      return fetch(`/api/pos/products?${p}`, { credentials: "include" }).then(r => r.json()).then(d => Array.isArray(d) ? d : []);
     },
     placeholderData: prev => prev,
     staleTime: 10_000,
