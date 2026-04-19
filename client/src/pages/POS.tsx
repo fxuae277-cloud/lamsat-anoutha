@@ -205,11 +205,16 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId }: {
       (n(change) > 0 ? `الباقي: ${omr(change)} ر.ع\n` : "") +
       `\nشكراً لتسوقكم معنا 💝`
     );
-    // إذا توفّر رقم العميل → فتح محادثة مباشرة، وإلا → شاشة اختيار جهة الاتصال
-    const rawPhone = (sale.customerPhone || "").replace(/\D/g, "");
-    const phone = rawPhone
-      ? (rawPhone.startsWith("968") ? rawPhone : `968${rawPhone}`)
-      : "";
+    const rawPhone = (sale.customerPhone || "").replace(/\D/g, ""); // أرقام فقط
+    if (!rawPhone) {
+      // لا يوجد رقم عميل
+      window.open(`https://wa.me/?text=${msg}`, "_blank");
+      return;
+    }
+    // تطبيع الرقم: إضافة 968 إذا لم تكن موجودة
+    let phone = rawPhone;
+    if (phone.startsWith("00968")) phone = phone.slice(2);       // 00968 → 968...
+    else if (!phone.startsWith("968")) phone = `968${phone}`;     // 9XXXXXXXX → 9689XXXXXXXX
     window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
   };
 
