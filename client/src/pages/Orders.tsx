@@ -221,21 +221,25 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
   const [priceStr, setPriceStr]       = useState(item.productId > 0 ? omr(n(item.unitPrice)) : "");
   const [variants, setVariants]       = useState<ProductVariantExt[]>([]);
   const [loadingV, setLoadingV]       = useState(false);
+  const [results, setResults]         = useState<ProductExt[]>([]);
 
   useEffect(() => {
     if (item.productId > 0) setPriceStr(omr(n(item.unitPrice)));
   }, [item.productId]);
 
-  const { data: results = [] } = useQuery<ProductExt[]>({
-    queryKey: ["/api/orders/product-search", search],
-    queryFn: async () => {
-      const r = await fetch(`/api/orders/product-search?search=${encodeURIComponent(search)}`, { credentials: "include" });
-      const data = await r.json();
-      return Array.isArray(data) ? data : [];
-    },
-    enabled: search.length >= 1,
-    staleTime: 30_000,
-  });
+  // بحث فوري عند الكتابة
+  useEffect(() => {
+    if (search.trim().length < 1) { setResults([]); return; }
+    const ctrl = new AbortController();
+    fetch(`/api/orders/product-search?search=${encodeURIComponent(search.trim())}`, {
+      credentials: "include",
+      signal: ctrl.signal,
+    })
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setResults(data); else setResults([]); })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [search]);
 
   const fetchVariants = async (productId: number) => {
     setLoadingV(true);
