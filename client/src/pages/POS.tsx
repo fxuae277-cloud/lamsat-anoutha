@@ -368,8 +368,9 @@ function CustomerModal({ onClose, onSelect }: {
   const [mode, setMode] = useState<"search" | "new">("search");
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
+  const [existsOtherBranch, setExistsOtherBranch] = useState<{ id: number; name: string; phone: string } | null>(null);
 
-  // جلب كل العملاء فوراً عند فتح المودال، ثم فلترة بالبحث
+  // جلب عملاء الفرع فقط (البيكند يفلتر حسب الدور)
   const { data: allCustomers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers/search", ""],
     queryFn: () => fetch(`/api/customers/search`, { credentials: "include" }).then(r => r.json()),
@@ -383,20 +384,55 @@ function CustomerModal({ onClose, onSelect }: {
       )
     : allCustomers;
 
+  const linkBranchMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("PATCH", `/api/customers/${id}/link-branch`, {}).then(r => r.json()),
+    onSuccess: (c) => {
+      toast({ title: "تم ربط العميل بفرعك" });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers/search"] });
+      setExistsOtherBranch(null);
+      onSelect(c);
+    },
+    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+  });
+
   const createMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/customers", { name: newName, phone: newPhone }).then(r => r.json()),
+    mutationFn: () => apiRequest("POST", "/api/customers", { name: newName, phone: newPhone }).then(async r => {
+      if (!r.ok) {
+        const body = await r.json();
+        if (body.code === "exists_other_branch") { setExistsOtherBranch(body.customer); throw new Error("exists_other_branch"); }
+        throw new Error(body.message || "خطأ");
+      }
+      return r.json();
+    }),
     onSuccess: (c) => {
       toast({ title: "تم إضافة العميل" });
       queryClient.invalidateQueries({ queryKey: ["/api/customers/search"] });
       onSelect(c);
     },
-    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => { if (e.message !== "exists_other_branch") toast({ title: "خطأ", description: e.message, variant: "destructive" }); },
   });
 
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-sm" dir="rtl">
         <DialogHeader><DialogTitle className="flex items-center gap-2"><UserIcon className="w-4 h-4" /> اختيار العميل</DialogTitle></DialogHeader>
+
+        {/* تحذير عميل موجود في فرع آخر */}
+        {existsOtherBranch && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
+            <p className="text-sm font-medium text-amber-800">⚠️ هذا العميل مسجّل في فرع آخر</p>
+            <p className="text-xs text-amber-700">{existsOtherBranch.name} — {existsOtherBranch.phone}</p>
+            <div className="flex gap-2">
+              <Button size="sm" className="flex-1 h-7 text-xs bg-amber-600 hover:bg-amber-700"
+                onClick={() => linkBranchMutation.mutate(existsOtherBranch.id)}
+                disabled={linkBranchMutation.isPending}>
+                {linkBranchMutation.isPending ? "جارٍ..." : "ربط بفرعي واستخدام"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setExistsOtherBranch(null)}>إلغاء</Button>
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-2 mb-3">
           <Button size="sm" variant={mode === "search" ? "default" : "outline"} onClick={() => setMode("search")} className="flex-1 h-8 text-xs">قائمة العملاء</Button>
           <Button size="sm" variant={mode === "new" ? "default" : "outline"} onClick={() => setMode("new")} className="flex-1 h-8 text-xs bg-pink-50">+ عميل جديد</Button>

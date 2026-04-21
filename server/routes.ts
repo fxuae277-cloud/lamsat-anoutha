@@ -2027,24 +2027,39 @@ export async function registerRoutes(
     try { res.json(await storage.getCustomerKpis()); }
     catch (err: any) { res.status(500).json({ message: err.message }); }
   });
-  app.get("/api/customers", requireAuth, requirePermission("customers.view"), async (_req, res) => {
-    res.json(await storage.getCustomers());
+  app.get("/api/customers", requireAuth, requirePermission("customers.view"), async (req, res) => {
+    const user = await storage.getUser((req as any).session.userId!);
+    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    const isPrivileged = ["owner", "admin", "manager"].includes(user.role);
+    const branchId = isPrivileged ? null : (user.branchId ?? null);
+    res.json(await storage.getCustomers(branchId));
   });
   /** GET /api/customers/search — يجب أن يكون قبل /:id */
   app.get("/api/customers/search", requireAuth, requirePermission("customers.view"), async (req, res) => {
     try {
+      const user = await storage.getUser((req as any).session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      const isPrivileged = ["owner", "admin", "manager"].includes(user.role);
+      const branchId = isPrivileged ? null : (user.branchId ?? null);
+
       const { q } = req.query;
+      const params: any[] = [];
+      let branchClause = "";
+      if (branchId) { params.push(branchId); branchClause = ` AND branch_id = $${params.length}`; }
+
       if (!q) {
         const all = await pool.query(
-          `SELECT id, name, phone, city FROM customers WHERE active = true ORDER BY name LIMIT 50`
+          `SELECT id, name, phone, city, branch_id AS "branchId" FROM customers WHERE active = true${branchClause} ORDER BY name LIMIT 50`,
+          params
         );
         return res.json(all.rows);
       }
+      params.push(`%${q}%`);
       const result = await pool.query(
-        `SELECT id, name, phone, city FROM customers
-         WHERE active = true AND (name ILIKE $1 OR phone ILIKE $1)
+        `SELECT id, name, phone, city, branch_id AS "branchId" FROM customers
+         WHERE active = true${branchClause} AND (name ILIKE $${params.length} OR phone ILIKE $${params.length})
          ORDER BY name LIMIT 20`,
-        [`%${q}%`]
+        params
       );
       res.json(result.rows);
     } catch (err: any) {
@@ -2070,13 +2085,33 @@ export async function registerRoutes(
   });
   app.post("/api/customers", requireAuth, requirePermission("customers.create"), async (req, res) => {
     try {
+      const user = await storage.getUser((req as any).session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
       const parsed = insertCustomerSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
-      if ((parsed.data as any).phone) {
-        const existing = await storage.getCustomerByPhone((parsed.data as any).phone);
-        if (existing) return res.status(409).json({ message: "phone_exists" });
+      const phone = (parsed.data as any).phone;
+      if (phone) {
+        const existing = await storage.getCustomerByPhone(phone);
+        if (existing) {
+          const isPrivileged = ["owner", "admin", "manager"].includes(user.role);
+          const requestedBranch = (parsed.data as any).branchId ?? user.branchId ?? null;
+          // إذا كان المالك/المدير → حجب مطلق (لا تكرار في المنظومة)
+          if (isPrivileged) return res.status(409).json({ message: "phone_exists" });
+          // موظف فرع: العميل موجود في فرع آخر → أرسل بيانات العميل للربط
+          if (existing.branchId && existing.branchId !== requestedBranch) {
+            return res.status(409).json({
+              code: "exists_other_branch",
+              message: `هذا العميل مسجّل مسبقاً في فرع آخر`,
+              customer: { id: existing.id, name: existing.name, phone: existing.phone, branchId: existing.branchId },
+            });
+          }
+          return res.status(409).json({ message: "phone_exists" });
+        }
       }
-      res.status(201).json(await storage.createCustomer(parsed.data));
+      // تعيين branchId تلقائياً من المستخدم إذا لم يُرسَل
+      const data: any = { ...parsed.data };
+      if (!data.branchId && user.branchId) data.branchId = user.branchId;
+      res.status(201).json(await storage.createCustomer(data));
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
   app.post("/api/customers/find-or-create", requireAuth, requirePermission("customers.create"), async (req, res) => {
@@ -2085,6 +2120,20 @@ export async function registerRoutes(
     const customer = await storage.findOrCreateCustomerByPhone(phone, name);
     res.json(customer);
   });
+  /** PATCH /api/customers/:id/link-branch — ربط عميل موجود بفرع الموظف الحالي */
+  app.patch("/api/customers/:id/link-branch", requireAuth, requirePermission("customers.edit"), async (req, res) => {
+    try {
+      const user = await storage.getUser((req as any).session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      const id = parseInt(req.params.id as string);
+      const branchId = user.branchId ?? null;
+      if (!branchId) return res.status(400).json({ message: "المستخدم غير مرتبط بفرع" });
+      const updated = await storage.updateCustomer(id, { branchId });
+      if (!updated) return res.status(404).json({ message: "العميل غير موجود" });
+      res.json(updated);
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
   app.put("/api/customers/:id", requireAuth, requirePermission("customers.edit"), async (req, res) => {
     try {
       const id = parseInt(req.params.id as string);

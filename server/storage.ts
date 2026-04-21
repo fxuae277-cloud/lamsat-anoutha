@@ -90,7 +90,7 @@ export interface IStorage {
   adjustInventory(productId: number, warehouseId: number, delta: number): Promise<Inventory | undefined>;
   getLowStockAlerts(): Promise<any[]>;
   createTransfer(data: InsertInventoryTransfer): Promise<InventoryTransfer>;
-  getCustomers(): Promise<Customer[]>;
+  getCustomers(branchId?: number | null): Promise<Customer[]>;
   getCustomer(id: number): Promise<Customer | undefined>;
   getCustomerByPhone(phone: string): Promise<Customer | undefined>;
   findOrCreateCustomerByPhone(phone: string, name?: string): Promise<Customer>;
@@ -586,7 +586,10 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getCustomers() { return db.select().from(customers).orderBy(desc(customers.lastVisit)); }
+  async getCustomers(branchId?: number | null) {
+    if (branchId) return db.select().from(customers).where(eq(customers.branchId, branchId)).orderBy(desc(customers.lastVisit));
+    return db.select().from(customers).orderBy(desc(customers.lastVisit));
+  }
   async getCustomer(id: number) {
     const [row] = await db.select().from(customers).where(eq(customers.id, id));
     return row;
