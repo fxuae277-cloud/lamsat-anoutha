@@ -228,6 +228,7 @@ export default function BranchSummary() {
   // ── Close Shift Dialog ───────────────────────────────────────────
   const [closeOpen, setCloseOpen] = useState(false);
   const [closeActualCash, setCloseActualCash] = useState("");
+  const [closeError, setCloseError] = useState<string | null>(null);
 
   const closeShiftMutation = useMutation({
     mutationFn: async (shiftId: number) => {
@@ -244,11 +245,11 @@ export default function BranchSummary() {
     },
     onSuccess: () => {
       toast({ title: "تم إغلاق الوردية بنجاح" });
-      setCloseOpen(false); setCloseActualCash("");
+      setCloseOpen(false); setCloseActualCash(""); setCloseError(null);
       queryClient.invalidateQueries({ queryKey: ["branch-summary"] });
       queryClient.invalidateQueries({ queryKey: ["shifts"] });
     },
-    onError: (e: Error) => toast({ title: "خطأ في الإغلاق", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => { setCloseError(e.message); },
   });
 
   // ── Cash Movement Dialog ─────────────────────────────────────────
@@ -382,7 +383,12 @@ export default function BranchSummary() {
             <Button
               size="sm"
               className="gap-1 bg-red-600 hover:bg-red-700"
-              onClick={() => { setCloseActualCash(""); setCloseOpen(true); }}
+              onClick={() => {
+                const suggested = today?.actualCashInDrawer;
+                setCloseActualCash(suggested != null && suggested >= 0 ? suggested.toFixed(3) : "");
+                setCloseError(null);
+                setCloseOpen(true);
+              }}
             >
               <XCircle className="h-3.5 w-3.5" />
               إغلاق الوردية
@@ -420,37 +426,49 @@ export default function BranchSummary() {
                   <span className="font-bold text-emerald-600">{fmt(openShift.totalSales)} {omr}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">المتوقع في الصندوق</span>
+                  <span className="text-muted-foreground">الكاش المحسوب في الصندوق</span>
                   <span className="font-bold text-blue-600">
-                    {openShift.expectedCash != null ? `${fmt(openShift.expectedCash)} ${omr}` : "—"}
+                    {today?.actualCashInDrawer != null
+                      ? `${fmt(today.actualCashInDrawer)} ${omr}`
+                      : "—"}
                   </span>
                 </div>
               </div>
 
+              {/* رسالة خطأ */}
+              {closeError && (
+                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+                  {closeError}
+                </div>
+              )}
+
               {/* المبلغ الفعلي */}
               <div className="space-y-1">
-                <label className="text-sm font-medium">المبلغ النقدي الفعلي في الصندوق (ر.ع)</label>
+                <label className="text-sm font-medium">
+                  المبلغ النقدي الفعلي في الصندوق (ر.ع)
+                </label>
+                <p className="text-xs text-muted-foreground">أدخل المبلغ الذي عددته فعلياً في الصندوق</p>
                 <Input
                   type="number"
                   step="0.001"
                   min="0"
                   value={closeActualCash}
-                  onChange={e => setCloseActualCash(e.target.value)}
+                  onChange={e => { setCloseActualCash(e.target.value); setCloseError(null); }}
                   placeholder="0.000"
                   autoFocus
                 />
-                {closeActualCash && openShift.expectedCash != null && (
+                {closeActualCash && today?.actualCashInDrawer != null && (
                   <p className={`text-xs font-medium mt-1 ${
-                    Math.abs(parseFloat(closeActualCash) - openShift.expectedCash) < 0.001
+                    Math.abs(parseFloat(closeActualCash) - today.actualCashInDrawer) < 0.001
                       ? "text-green-600"
-                      : parseFloat(closeActualCash) > openShift.expectedCash
+                      : parseFloat(closeActualCash) > today.actualCashInDrawer
                       ? "text-blue-600"
                       : "text-red-600"
                   }`}>
                     {(() => {
-                      const diff = parseFloat(closeActualCash) - openShift.expectedCash;
-                      if (Math.abs(diff) < 0.001) return "مطابق تماماً";
-                      return `فرق: ${diff > 0 ? "+" : ""}${fmt(diff)} ${omr}`;
+                      const diff = parseFloat(closeActualCash) - today.actualCashInDrawer;
+                      if (Math.abs(diff) < 0.001) return "مطابق للمحسوب";
+                      return `فرق عن المحسوب: ${diff > 0 ? "+" : ""}${fmt(diff)} ${omr}`;
                     })()}
                   </p>
                 )}
