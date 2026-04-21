@@ -1481,10 +1481,27 @@ export async function registerRoutes(
         totalOutflows += parseFloat(r.total);
       }
 
-      // الكاش الفعلي = نقد الافتتاح + مبيعات نقدية - إجمالي المخرجات
+      // رصيد مرحّل: actual_cash من آخر وردية مغلقة قبل تاريخ اليوم
+      let carryForward = 0;
+      try {
+        const cfParams: any[] = [dateStr];
+        const cfBFilter = branchId ? `AND branch_id = $${cfParams.push(branchId)}` : "";
+        const cfRes = await pool.query(`
+          SELECT COALESCE(actual_cash, 0)::numeric AS carry
+          FROM shifts
+          WHERE status = 'closed'
+            AND DATE(ended_at) < $1
+            ${cfBFilter}
+          ORDER BY ended_at DESC
+          LIMIT 1
+        `, cfParams);
+        if (cfRes.rows[0]) carryForward = parseFloat(cfRes.rows[0].carry);
+      } catch (_) { /* غير حرج */ }
+
+      // الكاش الفعلي = مرحّل + نقد الافتتاح + مبيعات نقدية - إجمالي المخرجات
       const openingCash = parseFloat(shiftTotals.total_opening_cash);
       const cashSales = parseFloat(saleTotals.total_cash);
-      const actualCashInDrawer = openingCash + cashSales - totalOutflows;
+      const actualCashInDrawer = carryForward + openingCash + cashSales - totalOutflows;
 
       res.json({
         date: dateStr,
@@ -1504,6 +1521,7 @@ export async function registerRoutes(
           totalOutflows,
           outflowByType: outflowMap,
           actualCashInDrawer,
+          carryForward,
         },
       });
     } catch (err: any) {

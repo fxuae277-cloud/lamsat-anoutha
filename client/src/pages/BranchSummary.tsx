@@ -57,6 +57,7 @@ interface BranchSummaryData {
     totalOutflows: number;
     outflowByType: Record<string, number>;
     actualCashInDrawer: number;
+    carryForward: number;
   };
 }
 
@@ -475,6 +476,9 @@ export default function BranchSummary() {
                       {fmt(today?.actualCashInDrawer ?? 0)} {omr}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
+                      {(today?.carryForward ?? 0) > 0 && (
+                        <>{fmt(today!.carryForward)} مرحّل{" + "}</>
+                      )}
                       {fmt(today?.totalOpeningCash ?? 0)} افتتاح
                       {" + "}{fmt(today?.totalCash ?? 0)} مبيعات نقدية
                       {" − "}{fmt(today?.totalOutflows ?? 0)} مخرجات
