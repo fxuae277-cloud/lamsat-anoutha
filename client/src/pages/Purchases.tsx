@@ -1396,7 +1396,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                       <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                       <Input
                         className="pr-9"
-                        placeholder="ابحث بالاسم أو الباركود أو SKU..."
+                        placeholder="ابحث بالاسم أو الباركود أو رقم الموديل..."
                         value={addSearch}
                         data-testid="input-add-product-name"
                         onChange={e => {

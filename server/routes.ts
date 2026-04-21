@@ -2308,7 +2308,10 @@ export async function registerRoutes(
           ), 0)::int AS "stockQty"
         FROM products p
         WHERE p.active = true
-          AND (p.name ILIKE $1 OR p.barcode ILIKE $1)
+          AND (
+            p.name ILIKE $1 OR p.barcode ILIKE $1
+            OR EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.sku ILIKE $1)
+          )
         ORDER BY p.name ASC
         LIMIT 30
       `, params);
@@ -5410,7 +5413,8 @@ export async function registerRoutes(
       `;
       if (search) {
         params.push(`%${search}%`);
-        query += ` AND (p.name ILIKE $${params.length} OR p.barcode ILIKE $${params.length})`;
+        const n = params.length;
+        query += ` AND (p.name ILIKE $${n} OR p.barcode ILIKE $${n} OR EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.sku ILIKE $${n}))`;
       }
       if (categoryId) {
         params.push(Number(categoryId));

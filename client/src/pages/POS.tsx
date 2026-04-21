@@ -1154,7 +1154,7 @@ export default function POS() {
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                 <Input
                   ref={searchRef}
-                  placeholder="بحث بالاسم أو الباركود..."
+                  placeholder="بحث بالاسم أو الباركود أو رقم الموديل..."
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="pr-10 pl-4 h-9 text-sm bg-gray-50 border-gray-200 focus:border-pink-400"

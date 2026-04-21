@@ -223,7 +223,8 @@ export default function InventoryOverview() {
     if (movBranch !== "all" && String(m.branchId) !== movBranch) return false;
     if (movSearch) {
       const q = movSearch.toLowerCase();
-      if (!(m.productName || "").toLowerCase().includes(q) && !(m.note || "").toLowerCase().includes(q)) return false;
+      const hit = [m.productName, m.barcode, m.sku, m.note].some(v => (v || "").toLowerCase().includes(q));
+      if (!hit) return false;
     }
     return true;
   });
@@ -913,7 +914,7 @@ export default function InventoryOverview() {
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   className="pr-9 h-9"
-                  placeholder="بحث بالمنتج..."
+                  placeholder="بحث بالاسم أو الباركود أو رقم الموديل..."
                   value={movSearch}
                   onChange={e => setMovSearch(e.target.value)}
                 />

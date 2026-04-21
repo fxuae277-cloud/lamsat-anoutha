@@ -49,10 +49,12 @@ function BalancesTab() {
     queryKey: [balancesUrl],
   });
 
-  const filtered = balances.filter(b => 
-    (b.product_name || b.productName || "").toLowerCase().includes(search.toLowerCase()) || 
-    (b.barcode || "").includes(search)
-  );
+  const filtered = balances.filter(b => {
+    const q = search.toLowerCase();
+    return (b.product_name || b.productName || "").toLowerCase().includes(q)
+      || (b.barcode || "").toLowerCase().includes(q)
+      || (b.sku || "").toLowerCase().includes(q);
+  });
 
   return (
     <div className="space-y-4">

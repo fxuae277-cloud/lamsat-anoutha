@@ -384,9 +384,11 @@ export class DatabaseStorage implements IStorage {
       if (filters.categoryId) conditions.push(eq(products.categoryId, filters.categoryId));
       if (filters.productType) conditions.push(eq(products.productType, filters.productType));
       if (filters.q) {
+        const qLike = `%${filters.q}%`;
         conditions.push(or(
-          ilike(products.name, `%${filters.q}%`),
-          ilike(products.barcode, `%${filters.q}%`),
+          ilike(products.name, qLike),
+          ilike(products.barcode, qLike),
+          sql`EXISTS (SELECT 1 FROM product_variants WHERE product_id = ${products.id} AND sku ILIKE ${qLike})`,
         )!);
       }
       rows = await db.select().from(products).where(and(...conditions)).orderBy(desc(products.id));
@@ -424,10 +426,12 @@ export class DatabaseStorage implements IStorage {
 
     const conditions: any[] = [];
     if (filters.q) {
+      const qLike = `%${filters.q}%`;
       conditions.push(or(
-        ilike(products.name, `%${filters.q}%`),
-        ilike(products.barcode, `%${filters.q}%`),
-        sql`${products.id}::text = ${filters.q}`
+        ilike(products.name, qLike),
+        ilike(products.barcode, qLike),
+        sql`${products.id}::text = ${filters.q}`,
+        sql`EXISTS (SELECT 1 FROM product_variants WHERE product_id = ${products.id} AND sku ILIKE ${qLike})`,
       ));
     }
     if (filters.branchId) {
