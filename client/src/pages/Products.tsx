@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
-import { Plus, Search, Package, Edit2, Trash2, Eye, MapPin, AlertCircle, Download, ArrowUpDown, ArrowUp, ArrowDown, Copy, RefreshCw, Link, Unlink, Percent } from "lucide-react";
+import { Plus, Search, Package, Edit2, Trash2, Eye, MapPin, AlertCircle, Download, ArrowUpDown, ArrowUp, ArrowDown, Copy, RefreshCw, Percent, TrendingUp, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -50,7 +50,7 @@ export default function Products() {
   const [formProduct, setFormProduct] = useState<any>(null); // null = add
   const [formData, setFormData] = useState({
     name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "",
-    description: "", costDefault: "", minQty: "5", marginInput: "20", modelNumber: "",
+    description: "", costDefault: "", minQty: "5", modelNumber: "",
   });
 
   // ── batch price update ────────────────────────────────────────────────
@@ -62,8 +62,8 @@ export default function Products() {
   // ── barcode auto-generate ─────────────────────────────────────────────
   const [barcodeLoading, setBarcodeLoading] = useState(false);
 
-  // ── price auto-calc ───────────────────────────────────────────────────
-  const [priceAutoCalc, setPriceAutoCalc] = useState(true); // true = linked to cost
+  // ── cost mode: auto = prefill from last purchase price, manual = user entry
+  const [costMode, setCostMode] = useState<"auto" | "manual">("manual");
 
   // ── detail modal ──────────────────────────────────────────────────────
   const [detailProductId, setDetailProductId] = useState<number | null>(null);
@@ -219,21 +219,11 @@ export default function Products() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.categoryId, formOpen]);
 
-  // useEffect: when cost changes and auto-calc is on → update price using marginInput
-  useEffect(() => {
-    if (!priceAutoCalc) return;
-    const cost = parseFloat(formData.costDefault);
-    const margin = parseFloat(formData.marginInput || "20");
-    if (!isNaN(cost) && cost > 0 && !isNaN(margin)) {
-      setFormData(f => ({ ...f, price: (cost * (1 + margin / 100)).toFixed(3) }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData.costDefault, formData.marginInput, priceAutoCalc]);
 
   function openAdd() {
     setFormProduct(null);
-    setPriceAutoCalc(true);
-    setFormData({ name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "", description: "", costDefault: "", minQty: "5", marginInput: "20", modelNumber: "" });
+    setCostMode("manual");
+    setFormData({ name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "", description: "", costDefault: "", minQty: "5", modelNumber: "" });
 
     setShowAddCategory(false);
     setNewCategoryName("");
@@ -242,11 +232,13 @@ export default function Products() {
 
   function openEdit(p: any) {
     setFormProduct(p);
-    setPriceAutoCalc(false);
-    // احسب نسبة الربح الحالية من السعر والتكلفة
-    const cost = parseFloat(p.costDefault || p.avgCost || "0");
-    const price = parseFloat(p.price || "0");
-    const currentMargin = cost > 0 && price > 0 ? (((price - cost) / cost) * 100).toFixed(1) : "20";
+    // إذا لم تكن هناك تكلفة مدخلة يدوياً، نستخدم آخر سعر شراء كـ "تلقائي"
+    const hasCostOverride = parseFloat(p.costDefault || "0") > 0;
+    const lastPurchase = parseFloat(p.lastPurchasePrice || "0");
+    const costToUse = hasCostOverride
+      ? p.costDefault.toString()
+      : lastPurchase > 0 ? lastPurchase.toFixed(3) : "";
+    setCostMode(hasCostOverride ? "manual" : (lastPurchase > 0 ? "auto" : "manual"));
     setFormData({
       name: p.name,
       categoryId: p.categoryId?.toString() || "",
@@ -256,9 +248,8 @@ export default function Products() {
       active: p.active ?? true,
       image: p.image || "",
       description: p.description || "",
-      costDefault: p.costDefault?.toString() || "",
+      costDefault: costToUse,
       minQty: p.minQty?.toString() || "5",
-      marginInput: currentMargin,
       modelNumber: p.modelNumber || "",
     });
 
@@ -738,83 +729,82 @@ export default function Products() {
             {/* ── التسعير ── */}
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b pb-1 pt-1">التسعير</p>
             <div className="grid grid-cols-2 gap-3">
-              {/* نسبة الربح — قابلة للتعديل */}
-              <div className="space-y-1">
-                <label className="text-sm font-medium flex items-center gap-1"><Percent className="w-3.5 h-3.5" /> نسبة الربح %</label>
-                <div className="flex gap-2 items-center">
-                  <Input
-                    type="text" inputMode="decimal"
-                    value={formData.marginInput}
-                    onChange={e => {
-                      const val = e.target.value.replace(/[^0-9.]/g, "");
-                      setFormData(f => {
-                        const cost = parseFloat(f.costDefault);
-                        const margin = parseFloat(val);
-                        const newPrice = !isNaN(cost) && cost > 0 && !isNaN(margin)
-                          ? (cost * (1 + margin / 100)).toFixed(3)
-                          : f.price;
-                        return { ...f, marginInput: val, price: newPrice };
-                      });
-                      setPriceAutoCalc(false);
-                    }}
-                    className="w-24"
-                    placeholder="20"
-                  />
-                  <span className="text-xs text-muted-foreground">← تغيير النسبة يحدّث السعر تلقائياً</span>
-                </div>
-              </div>
-              {/* سعر البيع */}
+
+              {/* التكلفة */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium">{t("products.price_omr")}</label>
-                  <button
-                    type="button"
-                    onClick={() => setPriceAutoCalc(v => !v)}
-                    className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-colors ${
-                      priceAutoCalc
-                        ? "bg-green-50 border-green-300 text-green-700 hover:bg-green-100"
-                        : "bg-muted border-border text-muted-foreground hover:bg-accent"
-                    }`}
-                    title={priceAutoCalc ? "الوضع التلقائي — اضغط للتحرير يدوياً" : "الوضع اليدوي — اضغط للربط بالتكلفة"}
-                  >
-                    {priceAutoCalc ? <Link className="w-3 h-3" /> : <Unlink className="w-3 h-3" />}
-                    {priceAutoCalc ? "تلقائي" : "يدوي"}
-                  </button>
+                  <label className="text-sm font-medium">التكلفة (ر.ع)</label>
+                  <div className="flex gap-1">
+                    <button type="button"
+                      onClick={() => {
+                        setCostMode("auto");
+                        const lp = parseFloat(formProduct?.lastPurchasePrice || editProductDetail?.lastPurchasePrice || "0");
+                        if (lp > 0) setFormData(f => ({ ...f, costDefault: lp.toFixed(3) }));
+                      }}
+                      className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${costMode === "auto" ? "bg-blue-50 border-blue-300 text-blue-700" : "bg-muted border-border text-muted-foreground hover:bg-accent"}`}
+                    >تلقائي</button>
+                    <button type="button"
+                      onClick={() => setCostMode("manual")}
+                      className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${costMode === "manual" ? "bg-amber-50 border-amber-300 text-amber-700" : "bg-muted border-border text-muted-foreground hover:bg-accent"}`}
+                    >يدوي</button>
+                  </div>
                 </div>
+                <Input
+                  type="number" step="0.001" min="0"
+                  value={formData.costDefault}
+                  onChange={e => { setCostMode("manual"); setFormData(f => ({ ...f, costDefault: e.target.value })); }}
+                  placeholder="0.000"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {costMode === "auto"
+                    ? `من آخر فاتورة شراء: ${parseFloat(formProduct?.lastPurchasePrice || editProductDetail?.lastPurchasePrice || "0").toFixed(3)} ر.ع`
+                    : "تكلفة مدخلة يدوياً"}
+                </p>
+              </div>
+
+              {/* سعر البيع */}
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{t("products.price_omr")}</label>
                 <Input
                   type="number" step="0.001"
                   value={formData.price}
-                  onChange={e => {
-                    setPriceAutoCalc(false);
-                    const price = parseFloat(e.target.value);
-                    const cost = parseFloat(formData.costDefault);
-                    const newMargin = cost > 0 && price > 0 ? (((price - cost) / cost) * 100).toFixed(1) : formData.marginInput;
-                    setFormData(f => ({ ...f, price: e.target.value, marginInput: newMargin }));
-                  }}
+                  onChange={e => setFormData(f => ({ ...f, price: e.target.value }))}
                   readOnly={!isOwnerOrAdmin}
-                  className={priceAutoCalc ? "bg-green-50/50 border-green-200" : ""}
                   data-testid="input-price"
                 />
               </div>
+
+              {/* هامش الربح — عرض فقط */}
               <div className="space-y-1">
-                <label className="text-sm font-medium">التكلفة الافتراضية (ر.ع)</label>
-                <Input type="number" step="0.001" min="0" value={formData.costDefault} onChange={e => setFormData(f => ({ ...f, costDefault: e.target.value }))} placeholder="0.000" />
-                <p className="text-xs text-muted-foreground">تُستخدم لحساب الربح</p>
+                <label className="text-sm font-medium flex items-center gap-1"><Percent className="w-3.5 h-3.5" /> هامش الربح</label>
+                {(() => {
+                  const cost = parseFloat(formData.costDefault || "0");
+                  const price = parseFloat(formData.price || "0");
+                  if (cost <= 0 || price <= 0) return <p className="text-sm text-muted-foreground h-9 flex items-center">—</p>;
+                  const margin = ((price - cost) / cost) * 100;
+                  const isPositive = margin >= 0;
+                  return (
+                    <div className={`h-9 flex items-center gap-1.5 px-3 rounded-md border text-sm font-medium ${isPositive ? "bg-green-50 border-green-200 text-green-700" : "bg-red-50 border-red-200 text-red-600"}`}>
+                      {isPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                      {margin.toFixed(1)}%
+                    </div>
+                  );
+                })()}
               </div>
+
+              {/* حد التنبيه */}
               <div className="space-y-1">
                 <label className="text-sm font-medium">حد التنبيه للمخزون</label>
                 <Input type="number" min="0" value={formData.minQty} onChange={e => setFormData(f => ({ ...f, minQty: e.target.value }))} placeholder="5" />
                 <p className="text-xs text-muted-foreground">تنبيه عند وصول المخزون لهذا الرقم</p>
               </div>
+
+              {/* معلومات إضافية عند التعديل */}
               {formProduct && (
                 <>
                   <div className="space-y-1">
                     <label className="text-sm font-medium">{t("products.avg_cost")}</label>
                     <Input value={parseFloat(editProductDetail?.avgCost || formProduct?.avgCost || "0").toFixed(3)} readOnly className="bg-muted" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium">{t("products.last_purchase_price")}</label>
-                    <Input value={parseFloat(editProductDetail?.lastPurchasePrice || formProduct?.lastPurchasePrice || "0").toFixed(3)} readOnly className="bg-muted" />
                   </div>
                   <div className="space-y-1">
                     <label className="text-sm font-medium">{t("products.last_supplier")}</label>
