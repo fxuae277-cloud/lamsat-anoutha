@@ -1276,6 +1276,49 @@ export async function registerRoutes(
     res.json(await storage.getInventoryBalances(locationId, branchId));
   });
 
+  // ── Cash Movements (تسجيل حركات الصندوق) ────────────────────────────
+  app.post("/api/cash-movements", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser((req as any).session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      const { type, amount, note, shiftId } = req.body;
+      if (!type || !amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0)
+        return res.status(400).json({ message: "النوع والمبلغ مطلوبان" });
+      const validTypes = ["owner_handover", "bank_deposit", "expense"];
+      if (!validTypes.includes(type)) return res.status(400).json({ message: "نوع غير صالح" });
+      const branchId = user.branchId ?? null;
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const result = await pool.query(
+        `INSERT INTO cash_ledger (date, branch_id, shift_id, type, amount_in, amount_out, note, created_by)
+         VALUES ($1, $2, $3, $4, 0, $5, $6, $7) RETURNING *`,
+        [dateStr, branchId, shiftId ?? null, type, parseFloat(amount).toFixed(3), note ?? null, user.id]
+      );
+      res.status(201).json(result.rows[0]);
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
+  app.get("/api/cash-movements", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser((req as any).session.userId!);
+      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      const isPrivileged = ["owner", "admin", "manager"].includes(user.role);
+      const reqBranchId = req.query.branchId ? Number(req.query.branchId) : null;
+      const branchId = isPrivileged ? reqBranchId : (user.branchId ?? null);
+      const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+      const params: any[] = [dateStr];
+      let bClause = "";
+      if (branchId) { params.push(branchId); bClause = `AND cl.branch_id = $${params.length}`; }
+      const result = await pool.query(
+        `SELECT cl.*, u.name AS created_by_name
+         FROM cash_ledger cl LEFT JOIN users u ON u.id = cl.created_by
+         WHERE cl.date = $1 ${bClause}
+         ORDER BY cl.created_at DESC`,
+        params
+      );
+      res.json(result.rows);
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
   // ── Branch Financial Summary ──────────────────────────────────────
   app.get("/api/branch-summary", requireAuth, async (req, res) => {
     try {
@@ -1419,6 +1462,30 @@ export async function registerRoutes(
       // Current open shift (first in list)
       const currentShift = allShifts.find(s => s.status === "open") ?? allShifts[0] ?? null;
 
+      // Cash outflows for the day (owner handover + bank deposit + expenses)
+      const outflowParams: any[] = [dateStr];
+      const outflowBFilter = branchId ? `AND cl.branch_id = $${outflowParams.push(branchId)}` : "";
+      const outflowRes = await pool.query(`
+        SELECT
+          type,
+          COALESCE(SUM(amount_out), 0)::numeric AS total
+        FROM cash_ledger cl
+        WHERE cl.date = $1 ${outflowBFilter}
+          AND amount_out > 0
+        GROUP BY type
+      `, outflowParams);
+      const outflowMap: Record<string, number> = {};
+      let totalOutflows = 0;
+      for (const r of outflowRes.rows) {
+        outflowMap[r.type] = parseFloat(r.total);
+        totalOutflows += parseFloat(r.total);
+      }
+
+      // الكاش الفعلي = نقد الافتتاح + مبيعات نقدية - إجمالي المخرجات
+      const openingCash = parseFloat(shiftTotals.total_opening_cash);
+      const cashSales = parseFloat(saleTotals.total_cash);
+      const actualCashInDrawer = openingCash + cashSales - totalOutflows;
+
       res.json({
         date: dateStr,
         branchName,
@@ -1426,14 +1493,17 @@ export async function registerRoutes(
         allShifts,
         today: {
           totalSales: parseFloat(saleTotals.total_sales),
-          totalCash: parseFloat(saleTotals.total_cash),
+          totalCash: cashSales,
           totalCard: parseFloat(saleTotals.total_card),
           totalTransfer: parseFloat(saleTotals.total_transfer),
           invoiceCount: parseInt(saleTotals.invoice_count),
-          totalOpeningCash: parseFloat(shiftTotals.total_opening_cash),
+          totalOpeningCash: openingCash,
           totalClosingCash: parseFloat(shiftTotals.total_closing_cash),
           shiftsCount: shiftTotals.shifts_count,
           closedShiftsCount: shiftTotals.closed_shifts_count,
+          totalOutflows,
+          outflowByType: outflowMap,
+          actualCashInDrawer,
         },
       });
     } catch (err: any) {

@@ -198,6 +198,29 @@ app.get("/api/health", (_req, res) => {
     console.error("[startup] purchase_attachments migration failed:", err);
   }
 
+  // Migration 0023 — ensure cash_ledger table exists
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cash_ledger (
+        id          SERIAL PRIMARY KEY,
+        date        DATE NOT NULL,
+        branch_id   INTEGER REFERENCES branches(id),
+        shift_id    INTEGER REFERENCES shifts(id),
+        type        TEXT NOT NULL,
+        amount_in   DECIMAL(12,3) DEFAULT 0,
+        amount_out  DECIMAL(12,3) DEFAULT 0,
+        category    TEXT,
+        note        TEXT,
+        created_by  INTEGER REFERENCES users(id),
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_cash_ledger_branch_date ON cash_ledger(branch_id, date DESC);
+    `);
+    console.log("[startup] migration 0023: cash_ledger ready");
+  } catch (err) {
+    console.error("[startup] migration 0023 failed:", err);
+  }
+
   // Migration 0022 — add model_number column to products
   try {
     await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS model_number TEXT`);
