@@ -1284,8 +1284,8 @@ export async function registerRoutes(
       const { type, amount, note, shiftId } = req.body;
       if (!type || !amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0)
         return res.status(400).json({ message: "النوع والمبلغ مطلوبان" });
-      const outflowTypes = ["owner_handover", "bank_deposit", "withdrawal"];
-      const inflowTypes  = ["owner_cash_in", "owner_transfer_in", "deposit"];
+      const outflowTypes = ["owner_handover", "bank_deposit"];
+      const inflowTypes  = ["owner_cash_in", "owner_transfer_in"];
       const allTypes = [...outflowTypes, ...inflowTypes];
       if (!allTypes.includes(type)) return res.status(400).json({ message: "نوع غير صالح" });
       const isInflow = inflowTypes.includes(type);
@@ -1471,127 +1471,72 @@ export async function registerRoutes(
       // Current open shift (first in list)
       const currentShift = allShifts.find(s => s.status === "open") ?? allShifts[0] ?? null;
 
-      // ══════════════════════════════════════════════════════════════════
-      // CASH ACCOUNTING — based on spec:
-      // CashRegister = OpeningCash + CashSales
-      //              + OwnerDeposits + ExternalDeposits
-      //              - Expenses - OwnerWithdrawals - ExternalWithdrawals - BankDeposits
-      //
-      // ExternalCash  (all-time, outside register)
-      //              = SUM(withdrawal ever) - SUM(deposit ever)
-      //
-      // OwnerBalance  (all-time net, what owner has taken out)
-      //              = SUM(owner_handover ever) - SUM(owner_cash_in + owner_transfer_in ever)
-      //
-      // TotalRealCash = CashRegister + ExternalCash
-      // ══════════════════════════════════════════════════════════════════
-
-      const branchMovFilter = branchId ? `AND branch_id = $2` : "";
-      const branchMovParams = branchId ? [dateStr, branchId] : [dateStr];
-
-      // ── حركات اليوم من cash_ledger ──────────────────────────────────
-      const todayMovRes = await pool.query(`
+      // حركات الصندوق اليدوية من dialog التسجيل فقط
+      // expense مستثنى عمداً — يُحسب من جدول expenses مباشرة لتجنب التكرار
+      const MANUAL_TYPES = ["owner_handover","bank_deposit","owner_cash_in","owner_transfer_in"];
+      const typeList = MANUAL_TYPES.map((_, i) => `$${i + 2}`).join(",");
+      const movParams: any[] = [dateStr, ...MANUAL_TYPES];
+      const movBFilter = branchId ? `AND cl.branch_id = $${movParams.push(branchId)}` : "";
+      const movRes = await pool.query(`
         SELECT
           type,
-          COALESCE(SUM(amount_out::numeric), 0) AS total_out,
-          COALESCE(SUM(amount_in::numeric),  0) AS total_in
-        FROM cash_ledger
-        WHERE date = $1
-          AND type IN ('owner_handover','bank_deposit','owner_cash_in','owner_transfer_in','deposit','withdrawal')
-          ${branchMovFilter}
+          COALESCE(SUM(amount_out), 0)::numeric AS total_out,
+          COALESCE(SUM(amount_in),  0)::numeric AS total_in
+        FROM cash_ledger cl
+        WHERE cl.date = $1
+          AND cl.type IN (${typeList})
+          ${movBFilter}
         GROUP BY type
-      `, branchMovParams);
-
-      const mvByType: Record<string, { in: number; out: number }> = {};
-      for (const r of todayMovRes.rows) {
-        mvByType[r.type] = { in: parseFloat(r.total_in), out: parseFloat(r.total_out) };
+      `, movParams);
+      const outflowMap: Record<string, number> = {};
+      const inflowMap:  Record<string, number> = {};
+      let totalOutflows = 0;
+      let totalInflows  = 0;
+      for (const r of movRes.rows) {
+        const out = parseFloat(r.total_out);
+        const inp = parseFloat(r.total_in);
+        if (out > 0) { outflowMap[r.type] = out; totalOutflows += out; }
+        if (inp > 0) { inflowMap[r.type]  = inp; totalInflows  += inp; }
       }
-      const g = (t: string) => mvByType[t] ?? { in: 0, out: 0 };
 
-      const ownerDeposits      = g("owner_cash_in").in + g("owner_transfer_in").in;
-      const ownerWithdrawals   = g("owner_handover").out;
-      const externalDeposits   = g("deposit").in;        // من خارج الصندوق (خزنة/منزل) → للصندوق
-      const externalWithdrawals = g("withdrawal").out;   // من الصندوق → خزنة/منزل
-      const bankDeposits       = g("bank_deposit").out;  // من الصندوق → بنك
-
-      // ── مصروفات نقدية اليوم من جدول expenses (مصدر واحد، لا تكرار) ──
+      // المصروفات النقدية من جدول expenses مباشرة (تجنّب التكرار مع cash_ledger)
       const expParams: any[] = [dateStr];
       const expBFilter = branchId ? `AND branch_id = $${expParams.push(branchId)}` : "";
       const expRes = await pool.query(`
-        SELECT COALESCE(SUM(amount::numeric), 0) AS total
-        FROM expenses WHERE date = $1 AND source = 'cash' ${expBFilter}
+        SELECT COALESCE(SUM(amount::numeric), 0) AS total_expense
+        FROM expenses
+        WHERE date = $1 AND source = 'cash' ${expBFilter}
       `, expParams);
-      const cashExpenses = parseFloat(expRes.rows[0]?.total ?? "0");
-
-      // ── رصيد الصندوق اليوم ──────────────────────────────────────────
-      const openingCash = parseFloat(shiftTotals.total_opening_cash);
-      const cashSales   = parseFloat(saleTotals.total_cash);
-
-      const actualCashInDrawer =
-        openingCash + cashSales
-        + ownerDeposits + externalDeposits
-        - cashExpenses - ownerWithdrawals - externalWithdrawals - bankDeposits;
-
-      // ── رصيد الوردية الحالية (تشغيلي فقط) ──────────────────────────
-      const currentOpenShift = allShifts.find(s => s.status === "open") ?? null;
-      let shiftBalance = 0;
-      if (currentOpenShift) {
-        // shift cash expenses
-        const sExpRes = await pool.query(`
-          SELECT COALESCE(SUM(amount::numeric),0) AS total
-          FROM expenses WHERE shift_id = $1 AND source = 'cash'
-        `, [currentOpenShift.id]);
-        const sExp = parseFloat(sExpRes.rows[0]?.total ?? "0");
-        // shift owner withdrawals
-        const sOwRes = await pool.query(`
-          SELECT COALESCE(SUM(amount_out::numeric),0) AS total
-          FROM cash_ledger WHERE shift_id = $1 AND type = 'owner_handover'
-        `, [currentOpenShift.id]);
-        const sOw = parseFloat(sOwRes.rows[0]?.total ?? "0");
-        shiftBalance = currentOpenShift.openingCash + currentOpenShift.totalCash - sExp - sOw;
+      const cashExpenses = parseFloat(expRes.rows[0]?.total_expense ?? "0");
+      if (cashExpenses > 0) {
+        outflowMap["expense"] = cashExpenses;
+        totalOutflows += cashExpenses;
       }
 
-      // ── الكاش الخارجي (all-time، خارج الصندوق) ──────────────────────
-      const extParams = branchId ? [branchId] : [];
-      const extFilter = branchId ? "WHERE branch_id = $1" : "";
-      const extRes = await pool.query(`
-        SELECT
-          COALESCE(SUM(CASE WHEN type='withdrawal' THEN amount_out::numeric ELSE 0 END),0) AS ext_out,
-          COALESCE(SUM(CASE WHEN type='deposit'    THEN amount_in::numeric  ELSE 0 END),0) AS ext_in
-        FROM cash_ledger ${extFilter}
-      `, extParams);
-      const externalCash =
-        parseFloat(extRes.rows[0]?.ext_out ?? "0") -
-        parseFloat(extRes.rows[0]?.ext_in  ?? "0");
+      // رصيد مرحّل: actual_cash من آخر وردية مغلقة قبل تاريخ اليوم
+      let carryForward = 0;
+      try {
+        const cfParams: any[] = [dateStr];
+        const cfBFilter = branchId ? `AND branch_id = $${cfParams.push(branchId)}` : "";
+        const cfRes = await pool.query(`
+          SELECT COALESCE(actual_cash, 0)::numeric AS carry
+          FROM shifts
+          WHERE status = 'closed'
+            AND DATE(ended_at) < $1
+            ${cfBFilter}
+          ORDER BY ended_at DESC
+          LIMIT 1
+        `, cfParams);
+        if (cfRes.rows[0]) carryForward = parseFloat(cfRes.rows[0].carry);
+      } catch (_) { /* غير حرج */ }
 
-      // ── رصيد المالك (all-time، ما أخذه صافياً) ──────────────────────
-      const owParams = branchId ? [branchId] : [];
-      const owFilter = branchId ? "WHERE branch_id = $1" : "";
-      const owRes = await pool.query(`
-        SELECT
-          COALESCE(SUM(CASE WHEN type='owner_handover'                      THEN amount_out::numeric ELSE 0 END),0) AS ow_out,
-          COALESCE(SUM(CASE WHEN type IN ('owner_cash_in','owner_transfer_in') THEN amount_in::numeric ELSE 0 END),0) AS ow_in
-        FROM cash_ledger ${owFilter}
-      `, owParams);
-      const ownerBalance =
-        parseFloat(owRes.rows[0]?.ow_out ?? "0") -
-        parseFloat(owRes.rows[0]?.ow_in  ?? "0");
-
-      const totalRealCash = actualCashInDrawer + externalCash;
-
-      // ── للعرض (outflowByType / inflowByType) ─────────────────────────
-      const outflowMap: Record<string, number> = {};
-      const inflowMap:  Record<string, number> = {};
-      let totalOutflows = cashExpenses + ownerWithdrawals + externalWithdrawals + bankDeposits;
-      let totalInflows  = ownerDeposits + externalDeposits;
-      if (cashExpenses    > 0) outflowMap["expense"]          = cashExpenses;
-      if (ownerWithdrawals > 0) outflowMap["owner_handover"]  = ownerWithdrawals;
-      if (externalWithdrawals > 0) outflowMap["withdrawal"]   = externalWithdrawals;
-      if (bankDeposits    > 0) outflowMap["bank_deposit"]     = bankDeposits;
-      if (ownerDeposits   > 0) inflowMap["owner_deposits"]    = ownerDeposits;
-      if (externalDeposits > 0) inflowMap["deposit"]          = externalDeposits;
-
-      const carryForward = 0; // deprecated — kept for API compat
+      // الكاش الفعلي:
+      // الأساس دائماً = نقد الافتتاح الذي عدّه الكاشير عند فتح الوردية
+      // carryForward معلوماتي فقط (للمقارنة)، لا يُضاف للحساب
+      const openingCash = parseFloat(shiftTotals.total_opening_cash);
+      const cashSales = parseFloat(saleTotals.total_cash);
+      const baseBalance = openingCash;
+      const actualCashInDrawer = openingCash + cashSales + totalInflows - totalOutflows;
 
       res.json({
         date: dateStr,
@@ -1599,37 +1544,22 @@ export async function registerRoutes(
         currentShift,
         allShifts,
         today: {
-          // مبيعات
           totalSales: parseFloat(saleTotals.total_sales),
           totalCash: cashSales,
           totalCard: parseFloat(saleTotals.total_card),
           totalTransfer: parseFloat(saleTotals.total_transfer),
           invoiceCount: parseInt(saleTotals.invoice_count),
-          // ورديات
           totalOpeningCash: openingCash,
+          baseBalance,
           totalClosingCash: parseFloat(shiftTotals.total_closing_cash),
           shiftsCount: shiftTotals.shifts_count,
           closedShiftsCount: shiftTotals.closed_shifts_count,
-          // ── الأرصدة الخمسة (حسب المواصفة) ──────────────────────────
-          actualCashInDrawer,   // 1. الكاش داخل الصندوق
-          shiftBalance,         // 2. رصيد الوردية التشغيلي
-          externalCash,         // 3. الكاش الخارجي (خزنة/منزل)
-          ownerBalance,         // 4. رصيد المالك (صافي ما أخذ)
-          totalRealCash,        // 5. إجمالي الكاش الحقيقي = صندوق + خارجي
-          // تفاصيل حركات اليوم
-          cashExpenses,
-          ownerWithdrawals,
-          ownerDeposits,
-          externalDeposits,
-          externalWithdrawals,
-          bankDeposits,
           totalOutflows,
           outflowByType: outflowMap,
           totalInflows,
           inflowByType: inflowMap,
-          // للتوافق مع الكود القديم
-          baseBalance: openingCash,
-          carryForward: 0,
+          actualCashInDrawer,
+          carryForward,
         },
       });
     } catch (err: any) {

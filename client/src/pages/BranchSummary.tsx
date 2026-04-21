@@ -54,25 +54,13 @@ interface BranchSummaryData {
     totalClosingCash: number;
     shiftsCount: number;
     closedShiftsCount: number;
-    // الأرصدة الخمسة
-    actualCashInDrawer: number;
-    shiftBalance: number;
-    externalCash: number;
-    ownerBalance: number;
-    totalRealCash: number;
-    // تفاصيل اليوم
-    cashExpenses: number;
-    ownerWithdrawals: number;
-    ownerDeposits: number;
-    externalDeposits: number;
-    externalWithdrawals: number;
-    bankDeposits: number;
     totalOutflows: number;
     outflowByType: Record<string, number>;
     totalInflows: number;
     inflowByType: Record<string, number>;
-    baseBalance: number;
+    actualCashInDrawer: number;
     carryForward: number;
+    baseBalance: number;
   };
 }
 
@@ -101,13 +89,6 @@ const OUTFLOW_TYPES = [
 const DIALOG_OUTFLOW_TYPES = [
   { value: "owner_handover",  label: "تسليم للمالك",   icon: HandCoins,  color: "text-blue-600",   bg: "bg-blue-50",   border: "border-blue-200",   dot: "bg-blue-500"   },
   { value: "bank_deposit",    label: "إيداع بنكي",     icon: Building2,  color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-200", dot: "bg-purple-500" },
-  { value: "withdrawal",      label: "إلى الخزنة",     icon: ArrowUpCircle, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200", dot: "bg-amber-500" },
-] as const;
-
-const DIALOG_INFLOW_TYPES = [
-  { value: "owner_cash_in",      label: "نقد من المالك",     icon: Banknote,       color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200", dot: "bg-emerald-500" },
-  { value: "owner_transfer_in",  label: "تحويل من المالك",   icon: ArrowDownCircle, color: "text-teal-600",   bg: "bg-teal-50",   border: "border-teal-200",   dot: "bg-teal-500"   },
-  { value: "deposit",            label: "من الخزنة",          icon: ArrowDownCircle, color: "text-amber-600",  bg: "bg-amber-50",  border: "border-amber-200",  dot: "bg-amber-500"  },
 ] as const;
 
 const INFLOW_TYPES = [
@@ -324,7 +305,7 @@ export default function BranchSummary() {
 
   const handleDirChange = (dir: MovDir) => {
     setMovDir(dir);
-    setMovType(dir === "out" ? DIALOG_OUTFLOW_TYPES[0].value : DIALOG_INFLOW_TYPES[0].value);
+    setMovType(dir === "out" ? DIALOG_OUTFLOW_TYPES[0].value : INFLOW_TYPES[0].value);
   };
 
   const addMovementMutation = useMutation({
@@ -396,7 +377,7 @@ export default function BranchSummary() {
   const outMovements = movements.filter(m => (m.amount_out ?? 0) > 0);
   const inMovements  = movements.filter(m => (m.amount_in  ?? 0) > 0);
 
-  const activeTypes = movDir === "out" ? DIALOG_OUTFLOW_TYPES : DIALOG_INFLOW_TYPES;
+  const activeTypes = movDir === "out" ? DIALOG_OUTFLOW_TYPES : INFLOW_TYPES;
 
   return (
     <div className="p-4 sm:p-6 space-y-5 max-w-5xl mx-auto" dir={lang === "ar" ? "rtl" : "ltr"}>
@@ -671,142 +652,122 @@ export default function BranchSummary() {
             </div>
           )}
 
-          {/* ── الأرصدة الخمسة ── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {/* ── بطاقة الصندوق الرئيسية ── */}
+          <Card className="border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-white overflow-hidden">
+            <CardContent className="pt-5 pb-5">
+              <div className="flex flex-col gap-4">
 
-            {/* 1. الكاش داخل الصندوق */}
-            <Card className="border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-white col-span-1 sm:col-span-2 lg:col-span-1">
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2.5 rounded-xl bg-emerald-500 shrink-0">
-                    <Wallet className="h-5 w-5 text-white" />
+                {/* الرقم الرئيسي */}
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-2xl bg-emerald-500 shrink-0">
+                    <Wallet className="h-7 w-7 text-white" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">الكاش داخل الصندوق</p>
-                    <p className={`text-2xl font-bold leading-none mt-0.5 ${(today?.actualCashInDrawer ?? 0) < 0 ? "text-red-600" : "text-emerald-700"}`}>
+                    <p className="text-sm text-muted-foreground font-medium">الكاش الفعلي في الصندوق</p>
+                    <p className="text-3xl font-bold text-emerald-700 leading-none mt-0.5">
                       {fmt(today?.actualCashInDrawer ?? 0)}
-                      <span className="text-sm font-medium mr-1">{omr}</span>
+                      <span className="text-lg font-medium text-emerald-600 mr-1">{omr}</span>
                     </p>
                   </div>
                 </div>
-                <div className="bg-white/80 rounded-lg border border-emerald-100 px-3 py-2 text-xs space-y-0.5">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">افتتاح</span>
-                    <span className="font-medium text-blue-700">+{fmt(today?.totalOpeningCash ?? 0)}</span>
+
+                {/* معادلة الحساب */}
+                <div className="bg-white/70 rounded-xl border border-emerald-100 px-4 py-3">
+                  <p className="text-xs text-muted-foreground mb-2 font-medium">طريقة الحساب:</p>
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                    <span className="font-semibold text-blue-700">{fmt(today?.totalOpeningCash ?? 0)}</span>
+                    <span className="text-xs text-muted-foreground">افتتاح</span>
+                    <span className="text-emerald-500 font-bold">+</span>
+                    <span className="font-semibold text-emerald-700">{fmt(today?.totalCash ?? 0)}</span>
+                    <span className="text-xs text-muted-foreground">مبيعات نقدية</span>
+                    {(today?.totalInflows ?? 0) > 0 && (
+                      <>
+                        <span className="text-emerald-500 font-bold">+</span>
+                        <span className="font-semibold text-teal-700">{fmt(today!.totalInflows)}</span>
+                        <span className="text-xs text-muted-foreground">واردات</span>
+                      </>
+                    )}
+                    {(today?.totalOutflows ?? 0) > 0 && (
+                      <>
+                        <span className="text-red-500 font-bold">−</span>
+                        <span className="font-semibold text-red-700">{fmt(today!.totalOutflows)}</span>
+                        <span className="text-xs text-muted-foreground">مخرجات</span>
+                      </>
+                    )}
+                    <span className="text-muted-foreground">=</span>
+                    <span className="font-bold text-emerald-700">{fmt(today?.actualCashInDrawer ?? 0)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">مبيعات نقدية</span>
-                    <span className="font-medium text-emerald-700">+{fmt(today?.totalCash ?? 0)}</span>
+                  {(today?.carryForward ?? 0) > 0 && (
+                    <p className="text-xs text-muted-foreground mt-2 border-t border-emerald-100 pt-2">
+                      للمعلومية: رصيد {fmt(today!.carryForward)} {omr} مرحّل من آخر وردية مغلقة
+                    </p>
+                  )}
+                </div>
+
+                {/* بطاقات التفاصيل */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {/* واردات من المالك */}
+                  <div className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2.5 flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <ArrowDownCircle className="w-3.5 h-3.5 text-teal-600" />
+                      <p className="text-xs text-teal-700 font-medium">واردات المالك</p>
+                    </div>
+                    <p className="text-base font-bold text-teal-700">+{fmt(today?.totalInflows ?? 0)} {omr}</p>
+                    {(today?.totalInflows ?? 0) > 0 && (
+                      <div className="mt-0.5 space-y-0.5">
+                        {INFLOW_TYPES.map(({ value, label }) =>
+                          (today?.inflowByType?.[value] ?? 0) > 0 ? (
+                            <p key={value} className="text-xs text-muted-foreground">{label}: {fmt(today!.inflowByType[value])}</p>
+                          ) : null
+                        )}
+                      </div>
+                    )}
                   </div>
-                  {(today?.ownerDeposits ?? 0) > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">إيداع من المالك</span>
-                      <span className="font-medium text-teal-700">+{fmt(today!.ownerDeposits)}</span>
-                    </div>
-                  )}
-                  {(today?.externalDeposits ?? 0) > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">من الخزنة</span>
-                      <span className="font-medium text-teal-700">+{fmt(today!.externalDeposits)}</span>
-                    </div>
-                  )}
-                  {(today?.cashExpenses ?? 0) > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">مصروفات</span>
-                      <span className="font-medium text-red-600">−{fmt(today!.cashExpenses)}</span>
-                    </div>
-                  )}
-                  {(today?.ownerWithdrawals ?? 0) > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">تسليم للمالك</span>
-                      <span className="font-medium text-red-600">−{fmt(today!.ownerWithdrawals)}</span>
-                    </div>
-                  )}
-                  {(today?.externalWithdrawals ?? 0) > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">إلى الخزنة</span>
-                      <span className="font-medium text-red-600">−{fmt(today!.externalWithdrawals)}</span>
-                    </div>
-                  )}
-                  {(today?.bankDeposits ?? 0) > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">إيداع بنكي</span>
-                      <span className="font-medium text-red-600">−{fmt(today!.bankDeposits)}</span>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
 
-            {/* 2. رصيد الوردية التشغيلي */}
-            <Card className="border border-blue-200 bg-blue-50/40">
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Clock className="h-4 w-4 text-blue-600 shrink-0" />
-                  <p className="text-xs text-blue-700 font-medium">رصيد الوردية الحالية</p>
-                </div>
-                <p className="text-xl font-bold text-blue-700">
-                  {fmt(today?.shiftBalance ?? today?.totalOpeningCash ?? 0)} {omr}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  افتتاح + مبيعات − مصروفات − تسليم مالك
-                </p>
-                <p className="text-xs text-muted-foreground italic mt-0.5">
-                  ≠ الكاش الإجمالي
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* 3. الكاش الخارجي (خزنة/منزل) */}
-            <Card className="border border-amber-200 bg-amber-50/40">
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Building2 className="h-4 w-4 text-amber-600 shrink-0" />
-                  <p className="text-xs text-amber-700 font-medium">الكاش الخارجي (خزنة)</p>
-                </div>
-                <p className="text-xl font-bold text-amber-700">
-                  {fmt(today?.externalCash ?? 0)} {omr}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">مال خارج الصندوق (منزل/خزنة)</p>
-              </CardContent>
-            </Card>
-
-            {/* 4. رصيد المالك */}
-            <Card className="border border-purple-200 bg-purple-50/40">
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <HandCoins className="h-4 w-4 text-purple-600 shrink-0" />
-                  <p className="text-xs text-purple-700 font-medium">رصيد المالك (صافي)</p>
-                </div>
-                <p className="text-xl font-bold text-purple-700">
-                  {fmt(today?.ownerBalance ?? 0)} {omr}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">ما أخذه المالك − ما أودعه</p>
-              </CardContent>
-            </Card>
-
-            {/* 5. إجمالي الكاش الحقيقي */}
-            <Card className="border-2 border-gray-300 bg-gray-50 sm:col-span-2 lg:col-span-2">
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5 text-gray-600 shrink-0" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">إجمالي الكاش الحقيقي</p>
-                      <p className="text-2xl font-bold text-gray-800">
-                        {fmt(today?.totalRealCash ?? today?.actualCashInDrawer ?? 0)} {omr}
-                      </p>
+                  {/* مخرجات */}
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <ArrowUpCircle className="w-3.5 h-3.5 text-red-600" />
+                      <p className="text-xs text-red-700 font-medium">المخرجات</p>
                     </div>
+                    <p className="text-base font-bold text-red-700">−{fmt(today?.totalOutflows ?? 0)} {omr}</p>
+                    {(today?.totalOutflows ?? 0) > 0 && (
+                      <div className="mt-0.5 space-y-0.5">
+                        {OUTFLOW_TYPES.map(({ value, label }) =>
+                          (today?.outflowByType?.[value] ?? 0) > 0 ? (
+                            <p key={value} className="text-xs text-muted-foreground">{label}: {fmt(today!.outflowByType[value])}</p>
+                          ) : null
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-right text-xs text-muted-foreground space-y-0.5">
-                    <p>صندوق: <span className="font-semibold text-emerald-700">{fmt(today?.actualCashInDrawer ?? 0)}</span></p>
-                    <p>خارجي: <span className="font-semibold text-amber-700">+{fmt(today?.externalCash ?? 0)}</span></p>
-                    <p className="text-gray-400">= صندوق + خزنة</p>
+
+                  {/* نقد الافتتاح */}
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <Banknote className="w-3.5 h-3.5 text-blue-600" />
+                      <p className="text-xs text-blue-700 font-medium">نقد الافتتاح</p>
+                    </div>
+                    <p className="text-base font-bold text-blue-700">
+                      {fmt(today?.totalOpeningCash ?? 0)} {omr}
+                    </p>
+                    {(today?.carryForward ?? 0) > 0 && (
+                      <p className="text-xs text-muted-foreground">مرحّل: {fmt(today!.carryForward)} {omr}</p>
+                    )}
+                  </div>
+
+                  {/* مبيعات نقدية */}
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                      <p className="text-xs text-emerald-700 font-medium">مبيعات نقدية</p>
+                    </div>
+                    <p className="text-base font-bold text-emerald-700">{fmt(today?.totalCash ?? 0)} {omr}</p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* ── إجماليات المبيعات ── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
