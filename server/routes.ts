@@ -1310,13 +1310,17 @@ export async function registerRoutes(
       const reqBranchId = req.query.branchId ? Number(req.query.branchId) : null;
       const branchId = isPrivileged ? reqBranchId : (user.branchId ?? null);
       const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
-      const params: any[] = [dateStr];
+      const MANUAL_MOV_TYPES = ["owner_handover","bank_deposit","expense","owner_cash_in","owner_transfer_in"];
+      const params: any[] = [dateStr, ...MANUAL_MOV_TYPES];
+      const typeIn = MANUAL_MOV_TYPES.map((_, i) => `$${i + 2}`).join(",");
       let bClause = "";
       if (branchId) { params.push(branchId); bClause = `AND cl.branch_id = $${params.length}`; }
       const result = await pool.query(
         `SELECT cl.*, u.name AS created_by_name
          FROM cash_ledger cl LEFT JOIN users u ON u.id = cl.created_by
-         WHERE cl.date = $1 ${bClause}
+         WHERE cl.date = $1
+           AND cl.type IN (${typeIn})
+           ${bClause}
          ORDER BY cl.created_at DESC`,
         params
       );
@@ -1467,8 +1471,10 @@ export async function registerRoutes(
       // Current open shift (first in list)
       const currentShift = allShifts.find(s => s.status === "open") ?? allShifts[0] ?? null;
 
-      // حركات الصندوق اليوم — واردات ومخرجات
-      const movParams: any[] = [dateStr];
+      // حركات الصندوق اليدوية فقط (تستثني: sale, SUPPLIER_PAYMENT وأي نوع آخر تلقائي)
+      const MANUAL_TYPES = ["owner_handover","bank_deposit","expense","owner_cash_in","owner_transfer_in"];
+      const typeList = MANUAL_TYPES.map((_, i) => `$${i + 2}`).join(",");
+      const movParams: any[] = [dateStr, ...MANUAL_TYPES];
       const movBFilter = branchId ? `AND cl.branch_id = $${movParams.push(branchId)}` : "";
       const movRes = await pool.query(`
         SELECT
@@ -1476,7 +1482,9 @@ export async function registerRoutes(
           COALESCE(SUM(amount_out), 0)::numeric AS total_out,
           COALESCE(SUM(amount_in),  0)::numeric AS total_in
         FROM cash_ledger cl
-        WHERE cl.date = $1 ${movBFilter}
+        WHERE cl.date = $1
+          AND cl.type IN (${typeList})
+          ${movBFilter}
         GROUP BY type
       `, movParams);
       const outflowMap: Record<string, number> = {};
