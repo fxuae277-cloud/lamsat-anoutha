@@ -78,10 +78,17 @@ interface Branch { id: number; name: string; address?: string | null; }
 
 // ─── Movement Definitions ─────────────────────────────────────────────────────
 
+// للعرض في بطاقة المخرجات (تشمل expense من جدول expenses)
 const OUTFLOW_TYPES = [
   { value: "owner_handover",  label: "تسليم للمالك",   icon: HandCoins,  color: "text-blue-600",   bg: "bg-blue-50",   border: "border-blue-200",   dot: "bg-blue-500"   },
   { value: "bank_deposit",    label: "إيداع بنكي",     icon: Building2,  color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-200", dot: "bg-purple-500" },
-  { value: "expense",         label: "مصروف نقدي",     icon: ShoppingBag,color: "text-red-600",    bg: "bg-red-50",    border: "border-red-200",    dot: "bg-red-500"    },
+  { value: "expense",         label: "مصروفات نقدية",  icon: ShoppingBag,color: "text-red-600",    bg: "bg-red-50",    border: "border-red-200",    dot: "bg-red-500"    },
+] as const;
+
+// للـ dialog فقط — لا نسمح بإدخال مصروف هنا (يُدخل من صفحة المصروفات)
+const DIALOG_OUTFLOW_TYPES = [
+  { value: "owner_handover",  label: "تسليم للمالك",   icon: HandCoins,  color: "text-blue-600",   bg: "bg-blue-50",   border: "border-blue-200",   dot: "bg-blue-500"   },
+  { value: "bank_deposit",    label: "إيداع بنكي",     icon: Building2,  color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-200", dot: "bg-purple-500" },
 ] as const;
 
 const INFLOW_TYPES = [
@@ -298,7 +305,7 @@ export default function BranchSummary() {
 
   const handleDirChange = (dir: MovDir) => {
     setMovDir(dir);
-    setMovType(dir === "out" ? "owner_handover" : "owner_cash_in");
+    setMovType(dir === "out" ? DIALOG_OUTFLOW_TYPES[0].value : INFLOW_TYPES[0].value);
   };
 
   const addMovementMutation = useMutation({
@@ -370,7 +377,7 @@ export default function BranchSummary() {
   const outMovements = movements.filter(m => (m.amount_out ?? 0) > 0);
   const inMovements  = movements.filter(m => (m.amount_in  ?? 0) > 0);
 
-  const activeTypes = movDir === "out" ? OUTFLOW_TYPES : INFLOW_TYPES;
+  const activeTypes = movDir === "out" ? DIALOG_OUTFLOW_TYPES : INFLOW_TYPES;
 
   return (
     <div className="p-4 sm:p-6 space-y-5 max-w-5xl mx-auto" dir={lang === "ar" ? "rtl" : "ltr"}>

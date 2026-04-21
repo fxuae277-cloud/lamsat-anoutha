@@ -1284,7 +1284,7 @@ export async function registerRoutes(
       const { type, amount, note, shiftId } = req.body;
       if (!type || !amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0)
         return res.status(400).json({ message: "النوع والمبلغ مطلوبان" });
-      const outflowTypes = ["owner_handover", "bank_deposit", "expense"];
+      const outflowTypes = ["owner_handover", "bank_deposit"];
       const inflowTypes  = ["owner_cash_in", "owner_transfer_in"];
       const allTypes = [...outflowTypes, ...inflowTypes];
       if (!allTypes.includes(type)) return res.status(400).json({ message: "نوع غير صالح" });
@@ -1310,7 +1310,7 @@ export async function registerRoutes(
       const reqBranchId = req.query.branchId ? Number(req.query.branchId) : null;
       const branchId = isPrivileged ? reqBranchId : (user.branchId ?? null);
       const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
-      const MANUAL_MOV_TYPES = ["owner_handover","bank_deposit","expense","owner_cash_in","owner_transfer_in"];
+      const MANUAL_MOV_TYPES = ["owner_handover","bank_deposit","owner_cash_in","owner_transfer_in"];
       const params: any[] = [dateStr, ...MANUAL_MOV_TYPES];
       const typeIn = MANUAL_MOV_TYPES.map((_, i) => `$${i + 2}`).join(",");
       let bClause = "";
@@ -1471,9 +1471,9 @@ export async function registerRoutes(
       // Current open shift (first in list)
       const currentShift = allShifts.find(s => s.status === "open") ?? allShifts[0] ?? null;
 
-      // حركات الصندوق اليدوية + إيداع/سحب نقدي
-      // تستثني الأنواع التلقائية: sale, SUPPLIER_PAYMENT, shift_difference
-      const MANUAL_TYPES = ["owner_handover","bank_deposit","expense","owner_cash_in","owner_transfer_in","deposit","withdrawal"];
+      // حركات الصندوق اليدوية من dialog التسجيل فقط
+      // expense مستثنى عمداً — يُحسب من جدول expenses مباشرة لتجنب التكرار
+      const MANUAL_TYPES = ["owner_handover","bank_deposit","owner_cash_in","owner_transfer_in"];
       const typeList = MANUAL_TYPES.map((_, i) => `$${i + 2}`).join(",");
       const movParams: any[] = [dateStr, ...MANUAL_TYPES];
       const movBFilter = branchId ? `AND cl.branch_id = $${movParams.push(branchId)}` : "";
@@ -1497,6 +1497,20 @@ export async function registerRoutes(
         const inp = parseFloat(r.total_in);
         if (out > 0) { outflowMap[r.type] = out; totalOutflows += out; }
         if (inp > 0) { inflowMap[r.type]  = inp; totalInflows  += inp; }
+      }
+
+      // المصروفات النقدية من جدول expenses مباشرة (تجنّب التكرار مع cash_ledger)
+      const expParams: any[] = [dateStr];
+      const expBFilter = branchId ? `AND branch_id = $${expParams.push(branchId)}` : "";
+      const expRes = await pool.query(`
+        SELECT COALESCE(SUM(amount::numeric), 0) AS total_expense
+        FROM expenses
+        WHERE date = $1 AND source = 'cash' ${expBFilter}
+      `, expParams);
+      const cashExpenses = parseFloat(expRes.rows[0]?.total_expense ?? "0");
+      if (cashExpenses > 0) {
+        outflowMap["expense"] = cashExpenses;
+        totalOutflows += cashExpenses;
       }
 
       // رصيد مرحّل: actual_cash من آخر وردية مغلقة قبل تاريخ اليوم
