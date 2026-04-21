@@ -675,8 +675,8 @@ export default function BranchSummary() {
                 <div className="bg-white/70 rounded-xl border border-emerald-100 px-4 py-3">
                   <p className="text-xs text-muted-foreground mb-2 font-medium">طريقة الحساب:</p>
                   <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                    <span className="font-semibold text-blue-700">{fmt(today?.totalOpeningCash ?? 0)}</span>
-                    <span className="text-xs text-muted-foreground">افتتاح</span>
+                    <span className="font-semibold text-blue-700">{fmt(today?.baseBalance ?? today?.totalOpeningCash ?? 0)}</span>
+                    <span className="text-xs text-muted-foreground">{(today?.carryForward ?? 0) > 0 ? "رصيد مرحّل" : "افتتاح"}</span>
                     <span className="text-emerald-500 font-bold">+</span>
                     <span className="font-semibold text-emerald-700">{fmt(today?.totalCash ?? 0)}</span>
                     <span className="text-xs text-muted-foreground">مبيعات نقدية</span>
@@ -697,9 +697,9 @@ export default function BranchSummary() {
                     <span className="text-muted-foreground">=</span>
                     <span className="font-bold text-emerald-700">{fmt(today?.actualCashInDrawer ?? 0)}</span>
                   </div>
-                  {(today?.carryForward ?? 0) > 0 && (
+                  {(today?.carryForward ?? 0) > 0 && (today?.totalOpeningCash ?? 0) !== (today?.carryForward ?? 0) && (
                     <p className="text-xs text-muted-foreground mt-2 border-t border-emerald-100 pt-2">
-                      للمعلومية: رصيد {fmt(today!.carryForward)} {omr} مرحّل من آخر وردية مغلقة
+                      الافتتاح المُدخل: {fmt(today!.totalOpeningCash)} {omr} — الأساس المستخدم: رصيد مرحّل
                     </p>
                   )}
                 </div>
@@ -742,17 +742,19 @@ export default function BranchSummary() {
                     )}
                   </div>
 
-                  {/* نقد الافتتاح */}
+                  {/* نقد الافتتاح / الرصيد المرحّل */}
                   <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 flex flex-col gap-0.5">
                     <div className="flex items-center gap-1.5">
                       <Banknote className="w-3.5 h-3.5 text-blue-600" />
-                      <p className="text-xs text-blue-700 font-medium">نقد الافتتاح</p>
+                      <p className="text-xs text-blue-700 font-medium">
+                        {(today?.carryForward ?? 0) > 0 ? "رصيد مرحّل" : "نقد الافتتاح"}
+                      </p>
                     </div>
                     <p className="text-base font-bold text-blue-700">
-                      {fmt(today?.totalOpeningCash ?? 0)} {omr}
+                      {fmt(today?.baseBalance ?? today?.totalOpeningCash ?? 0)} {omr}
                     </p>
-                    {(today?.carryForward ?? 0) > 0 && (
-                      <p className="text-xs text-muted-foreground">مرحّل: {fmt(today!.carryForward)} {omr}</p>
+                    {(today?.carryForward ?? 0) > 0 && (today?.totalOpeningCash ?? 0) !== (today?.carryForward ?? 0) && (
+                      <p className="text-xs text-muted-foreground">افتتاح مُدخل: {fmt(today!.totalOpeningCash)} {omr}</p>
                     )}
                   </div>
 

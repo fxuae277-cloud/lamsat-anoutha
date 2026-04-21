@@ -1471,8 +1471,7 @@ export async function registerRoutes(
       // Current open shift (first in list)
       const currentShift = allShifts.find(s => s.status === "open") ?? allShifts[0] ?? null;
 
-      // حركات الصندوق اليدوية من dialog التسجيل فقط
-      // expense مستثنى عمداً — يُحسب من جدول expenses مباشرة لتجنب التكرار
+      // حركات الصندوق اليدوية (dialog فقط) — لا تشمل expenses لتجنّب بيانات خاطئة
       const MANUAL_TYPES = ["owner_handover","bank_deposit","owner_cash_in","owner_transfer_in"];
       const typeList = MANUAL_TYPES.map((_, i) => `$${i + 2}`).join(",");
       const movParams: any[] = [dateStr, ...MANUAL_TYPES];
@@ -1499,20 +1498,6 @@ export async function registerRoutes(
         if (inp > 0) { inflowMap[r.type]  = inp; totalInflows  += inp; }
       }
 
-      // المصروفات النقدية من جدول expenses مباشرة (تجنّب التكرار مع cash_ledger)
-      const expParams: any[] = [dateStr];
-      const expBFilter = branchId ? `AND branch_id = $${expParams.push(branchId)}` : "";
-      const expRes = await pool.query(`
-        SELECT COALESCE(SUM(amount::numeric), 0) AS total_expense
-        FROM expenses
-        WHERE date = $1 AND source = 'cash' ${expBFilter}
-      `, expParams);
-      const cashExpenses = parseFloat(expRes.rows[0]?.total_expense ?? "0");
-      if (cashExpenses > 0) {
-        outflowMap["expense"] = cashExpenses;
-        totalOutflows += cashExpenses;
-      }
-
       // رصيد مرحّل: actual_cash من آخر وردية مغلقة قبل تاريخ اليوم
       let carryForward = 0;
       try {
@@ -1530,13 +1515,11 @@ export async function registerRoutes(
         if (cfRes.rows[0]) carryForward = parseFloat(cfRes.rows[0].carry);
       } catch (_) { /* غير حرج */ }
 
-      // الكاش الفعلي:
-      // الأساس دائماً = نقد الافتتاح الذي عدّه الكاشير عند فتح الوردية
-      // carryForward معلوماتي فقط (للمقارنة)، لا يُضاف للحساب
+      // الأساس: رصيد مرحّل إذا وُجد (هو الكاش الفعلي الموروث)، وإلا نقد الافتتاح
       const openingCash = parseFloat(shiftTotals.total_opening_cash);
-      const cashSales = parseFloat(saleTotals.total_cash);
-      const baseBalance = openingCash;
-      const actualCashInDrawer = openingCash + cashSales + totalInflows - totalOutflows;
+      const cashSales   = parseFloat(saleTotals.total_cash);
+      const baseBalance = carryForward > 0 ? carryForward : openingCash;
+      const actualCashInDrawer = baseBalance + cashSales + totalInflows - totalOutflows;
 
       res.json({
         date: dateStr,
