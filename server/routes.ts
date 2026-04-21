@@ -1517,12 +1517,12 @@ export async function registerRoutes(
       } catch (_) { /* غير حرج */ }
 
       // الكاش الفعلي:
-      // إذا وجد رصيد مرحّل → هو الأساس (فتح الوردية يعكس نفس المال، لا يُجمع مرتين)
-      // إذا لا يوجد مرحّل → نقد الافتتاح هو الأساس (أول يوم / فرع جديد)
+      // الأساس دائماً = نقد الافتتاح الذي عدّه الكاشير عند فتح الوردية
+      // carryForward معلوماتي فقط (للمقارنة)، لا يُضاف للحساب
       const openingCash = parseFloat(shiftTotals.total_opening_cash);
       const cashSales = parseFloat(saleTotals.total_cash);
-      const baseBalance = carryForward > 0 ? carryForward : openingCash;
-      const actualCashInDrawer = baseBalance + cashSales + totalInflows - totalOutflows;
+      const baseBalance = openingCash;
+      const actualCashInDrawer = openingCash + cashSales + totalInflows - totalOutflows;
 
       res.json({
         date: dateStr,
