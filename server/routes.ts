@@ -1284,14 +1284,19 @@ export async function registerRoutes(
       const { type, amount, note, shiftId } = req.body;
       if (!type || !amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0)
         return res.status(400).json({ message: "النوع والمبلغ مطلوبان" });
-      const validTypes = ["owner_handover", "bank_deposit", "expense"];
-      if (!validTypes.includes(type)) return res.status(400).json({ message: "نوع غير صالح" });
+      const outflowTypes = ["owner_handover", "bank_deposit", "expense"];
+      const inflowTypes  = ["owner_cash_in", "owner_transfer_in"];
+      const allTypes = [...outflowTypes, ...inflowTypes];
+      if (!allTypes.includes(type)) return res.status(400).json({ message: "نوع غير صالح" });
+      const isInflow = inflowTypes.includes(type);
       const branchId = user.branchId ?? null;
       const dateStr = new Date().toISOString().slice(0, 10);
+      const amtIn  = isInflow  ? parseFloat(amount).toFixed(3) : "0";
+      const amtOut = !isInflow ? parseFloat(amount).toFixed(3) : "0";
       const result = await pool.query(
         `INSERT INTO cash_ledger (date, branch_id, shift_id, type, amount_in, amount_out, note, created_by)
-         VALUES ($1, $2, $3, $4, 0, $5, $6, $7) RETURNING *`,
-        [dateStr, branchId, shiftId ?? null, type, parseFloat(amount).toFixed(3), note ?? null, user.id]
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [dateStr, branchId, shiftId ?? null, type, amtIn, amtOut, note ?? null, user.id]
       );
       res.status(201).json(result.rows[0]);
     } catch (err: any) { res.status(500).json({ message: err.message }); }
@@ -1462,23 +1467,27 @@ export async function registerRoutes(
       // Current open shift (first in list)
       const currentShift = allShifts.find(s => s.status === "open") ?? allShifts[0] ?? null;
 
-      // Cash outflows for the day (owner handover + bank deposit + expenses)
-      const outflowParams: any[] = [dateStr];
-      const outflowBFilter = branchId ? `AND cl.branch_id = $${outflowParams.push(branchId)}` : "";
-      const outflowRes = await pool.query(`
+      // حركات الصندوق اليوم — واردات ومخرجات
+      const movParams: any[] = [dateStr];
+      const movBFilter = branchId ? `AND cl.branch_id = $${movParams.push(branchId)}` : "";
+      const movRes = await pool.query(`
         SELECT
           type,
-          COALESCE(SUM(amount_out), 0)::numeric AS total
+          COALESCE(SUM(amount_out), 0)::numeric AS total_out,
+          COALESCE(SUM(amount_in),  0)::numeric AS total_in
         FROM cash_ledger cl
-        WHERE cl.date = $1 ${outflowBFilter}
-          AND amount_out > 0
+        WHERE cl.date = $1 ${movBFilter}
         GROUP BY type
-      `, outflowParams);
+      `, movParams);
       const outflowMap: Record<string, number> = {};
+      const inflowMap:  Record<string, number> = {};
       let totalOutflows = 0;
-      for (const r of outflowRes.rows) {
-        outflowMap[r.type] = parseFloat(r.total);
-        totalOutflows += parseFloat(r.total);
+      let totalInflows  = 0;
+      for (const r of movRes.rows) {
+        const out = parseFloat(r.total_out);
+        const inp = parseFloat(r.total_in);
+        if (out > 0) { outflowMap[r.type] = out; totalOutflows += out; }
+        if (inp > 0) { inflowMap[r.type]  = inp; totalInflows  += inp; }
       }
 
       // رصيد مرحّل: actual_cash من آخر وردية مغلقة قبل تاريخ اليوم
@@ -1498,10 +1507,10 @@ export async function registerRoutes(
         if (cfRes.rows[0]) carryForward = parseFloat(cfRes.rows[0].carry);
       } catch (_) { /* غير حرج */ }
 
-      // الكاش الفعلي = مرحّل + نقد الافتتاح + مبيعات نقدية - إجمالي المخرجات
+      // الكاش الفعلي = مرحّل + افتتاح + مبيعات + واردات المالك − مخرجات
       const openingCash = parseFloat(shiftTotals.total_opening_cash);
       const cashSales = parseFloat(saleTotals.total_cash);
-      const actualCashInDrawer = carryForward + openingCash + cashSales - totalOutflows;
+      const actualCashInDrawer = carryForward + openingCash + cashSales + totalInflows - totalOutflows;
 
       res.json({
         date: dateStr,
@@ -1520,6 +1529,8 @@ export async function registerRoutes(
           closedShiftsCount: shiftTotals.closed_shifts_count,
           totalOutflows,
           outflowByType: outflowMap,
+          totalInflows,
+          inflowByType: inflowMap,
           actualCashInDrawer,
           carryForward,
         },

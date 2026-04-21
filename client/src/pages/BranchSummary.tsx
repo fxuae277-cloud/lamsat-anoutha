@@ -1,6 +1,5 @@
 /**
  * BranchSummary.tsx — الملخص المالي للفرع
- * يعرض ملخص اليوم من خلال بيانات الورديات الفعلية والمبيعات وحركات الصندوق
  */
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -8,8 +7,9 @@ import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import {
   Banknote, CreditCard, ArrowDownUp, Clock, TrendingUp,
-  RefreshCw, Calendar, CheckCircle2, AlertCircle, ReceiptText,
+  RefreshCw, Calendar, CheckCircle2, AlertCircle,
   PlusCircle, HandCoins, Building2, ShoppingBag, Wallet,
+  ArrowUpCircle, ArrowDownCircle, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,6 +56,8 @@ interface BranchSummaryData {
     closedShiftsCount: number;
     totalOutflows: number;
     outflowByType: Record<string, number>;
+    totalInflows: number;
+    inflowByType: Record<string, number>;
     actualCashInDrawer: number;
     carryForward: number;
   };
@@ -64,6 +66,7 @@ interface BranchSummaryData {
 interface CashMovement {
   id: number;
   type: string;
+  amount_in: number;
   amount_out: number;
   note: string | null;
   created_at: string;
@@ -72,6 +75,23 @@ interface CashMovement {
 
 interface Branch { id: number; name: string; address?: string | null; }
 
+// ─── Movement Definitions ─────────────────────────────────────────────────────
+
+const OUTFLOW_TYPES = [
+  { value: "owner_handover",  label: "تسليم للمالك",   icon: HandCoins,  color: "text-blue-600",   bg: "bg-blue-50",   border: "border-blue-200",   dot: "bg-blue-500"   },
+  { value: "bank_deposit",    label: "إيداع بنكي",     icon: Building2,  color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-200", dot: "bg-purple-500" },
+  { value: "expense",         label: "مصروف نقدي",     icon: ShoppingBag,color: "text-red-600",    bg: "bg-red-50",    border: "border-red-200",    dot: "bg-red-500"    },
+] as const;
+
+const INFLOW_TYPES = [
+  { value: "owner_cash_in",      label: "استلم نقد من المالك",     icon: Banknote,   color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200", dot: "bg-emerald-500" },
+  { value: "owner_transfer_in",  label: "استلم تحويل من المالك",   icon: ArrowDownCircle, color: "text-teal-600", bg: "bg-teal-50", border: "border-teal-200", dot: "bg-teal-500" },
+] as const;
+
+type OutflowType = typeof OUTFLOW_TYPES[number]["value"];
+type InflowType  = typeof INFLOW_TYPES[number]["value"];
+type MovDir = "out" | "in";
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (v: number) =>
@@ -79,6 +99,16 @@ const fmt = (v: number) =>
 
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" });
+
+function allMovTypes() {
+  return [...OUTFLOW_TYPES, ...INFLOW_TYPES];
+}
+
+function getMovMeta(type: string) {
+  return allMovTypes().find(m => m.value === type);
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function StatCard({
   label, value, icon: Icon, color, sub,
@@ -101,10 +131,7 @@ function StatCard({
   );
 }
 
-// ─── Per-shift row ────────────────────────────────────────────────────────────
-
-function ShiftRow({ s }: { s: ShiftDetail }) {
-  const { t } = useI18n();
+function ShiftRow({ s, omr, t }: { s: ShiftDetail; omr: string; t: (k: string) => string }) {
   const [expanded, setExpanded] = useState(false);
   const diffColor =
     s.difference == null ? ""
@@ -112,11 +139,8 @@ function ShiftRow({ s }: { s: ShiftDetail }) {
     : s.difference > 0 ? "text-blue-600"
     : "text-red-600";
 
-  const omr = t("branch_summary.omr");
-
   return (
     <div className="border rounded-xl overflow-hidden">
-      {/* Header row */}
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -154,7 +178,6 @@ function ShiftRow({ s }: { s: ShiftDetail }) {
         </div>
       </button>
 
-      {/* Expanded details */}
       {expanded && (
         <div className="border-t bg-muted/20 px-4 py-4 grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
           {[
@@ -201,17 +224,17 @@ export default function BranchSummary() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [selectedBranchId, setSelectedBranchId] = useState<string>("");
 
-  // ── Cash Movement Dialog ─────────────────────────────────────────
+  // ── Dialog state ─────────────────────────────────────────────────
   const [movOpen, setMovOpen] = useState(false);
-  const [movType, setMovType] = useState<"owner_handover" | "bank_deposit" | "expense">("owner_handover");
+  const [movDir, setMovDir] = useState<MovDir>("out");
+  const [movType, setMovType] = useState<OutflowType | InflowType>("owner_handover");
   const [movAmount, setMovAmount] = useState("");
   const [movNote, setMovNote] = useState("");
 
-  const movTypes = [
-    { value: "owner_handover", label: "تسليم للمالك", icon: HandCoins, color: "text-blue-600" },
-    { value: "bank_deposit",   label: "إيداع بنكي",   icon: Building2,  color: "text-purple-600" },
-    { value: "expense",        label: "مصروف نقدي",   icon: ShoppingBag, color: "text-red-600" },
-  ] as const;
+  const handleDirChange = (dir: MovDir) => {
+    setMovDir(dir);
+    setMovType(dir === "out" ? "owner_handover" : "owner_cash_in");
+  };
 
   const addMovementMutation = useMutation({
     mutationFn: async () => {
@@ -239,7 +262,6 @@ export default function BranchSummary() {
     enabled: isOwnerOrAdmin,
   });
 
-  // Effective branch: owner picks from dropdown, cashier uses their own
   const effectiveBranchId = isOwnerOrAdmin
     ? (selectedBranchId || branches[0]?.id?.toString() || "")
     : user?.branchId?.toString() || "";
@@ -254,7 +276,7 @@ export default function BranchSummary() {
       return r.json();
     },
     enabled: !!effectiveBranchId || !isOwnerOrAdmin,
-    refetchInterval: 60_000, // auto-refresh every minute
+    refetchInterval: 60_000,
     staleTime: 30_000,
   });
 
@@ -280,8 +302,13 @@ export default function BranchSummary() {
 
   const omr = t("branch_summary.omr");
 
+  const outMovements = movements.filter(m => (m.amount_out ?? 0) > 0);
+  const inMovements  = movements.filter(m => (m.amount_in  ?? 0) > 0);
+
+  const activeTypes = movDir === "out" ? OUTFLOW_TYPES : INFLOW_TYPES;
+
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto" dir={lang === "ar" ? "rtl" : "ltr"}>
+    <div className="p-4 sm:p-6 space-y-5 max-w-5xl mx-auto" dir={lang === "ar" ? "rtl" : "ltr"}>
 
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -297,7 +324,6 @@ export default function BranchSummary() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Branch picker (owner/admin only) */}
           {isOwnerOrAdmin && branches.length > 1 && (
             <Select value={selectedBranchId || String(branches[0]?.id ?? "")} onValueChange={setSelectedBranchId}>
               <SelectTrigger className="w-40 h-9 text-sm">
@@ -312,7 +338,6 @@ export default function BranchSummary() {
               </SelectContent>
             </Select>
           )}
-          {/* Date picker */}
           <div className="flex items-center gap-2 border rounded-lg px-3 py-1.5 bg-white text-sm">
             <Calendar className="h-4 w-4 text-muted-foreground" />
             <input
@@ -342,13 +367,42 @@ export default function BranchSummary() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-1">
+
+            {/* اتجاه الحركة */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleDirChange("out")}
+                className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
+                  movDir === "out"
+                    ? "border-red-400 bg-red-50 text-red-700"
+                    : "border-border text-muted-foreground hover:border-red-200"
+                }`}
+              >
+                <ArrowUp className="w-4 h-4" />
+                خروج من الصندوق
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDirChange("in")}
+                className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
+                  movDir === "in"
+                    ? "border-emerald-400 bg-emerald-50 text-emerald-700"
+                    : "border-border text-muted-foreground hover:border-emerald-200"
+                }`}
+              >
+                <ArrowDown className="w-4 h-4" />
+                دخول للصندوق
+              </button>
+            </div>
+
             {/* نوع الحركة */}
-            <div className="grid grid-cols-3 gap-2">
-              {movTypes.map(({ value, label, icon: Icon, color }) => (
+            <div className={`grid gap-2 ${activeTypes.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
+              {activeTypes.map(({ value, label, icon: Icon, color }) => (
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setMovType(value)}
+                  onClick={() => setMovType(value as OutflowType | InflowType)}
                   className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-xs font-medium transition-all ${
                     movType === value ? "border-pink-400 bg-pink-50" : "border-border hover:border-pink-200"
                   }`}
@@ -358,6 +412,7 @@ export default function BranchSummary() {
                 </button>
               ))}
             </div>
+
             {/* المبلغ */}
             <div className="space-y-1">
               <label className="text-sm font-medium">المبلغ (ر.ع)</label>
@@ -369,11 +424,17 @@ export default function BranchSummary() {
                 autoFocus
               />
             </div>
+
             {/* ملاحظة */}
             <div className="space-y-1">
               <label className="text-sm font-medium">ملاحظة (اختياري)</label>
-              <Input value={movNote} onChange={e => setMovNote(e.target.value)} placeholder="مثال: تسليم وردية الصباح" />
+              <Input
+                value={movNote}
+                onChange={e => setMovNote(e.target.value)}
+                placeholder="مثال: تسليم وردية الصباح"
+              />
             </div>
+
             <Button
               className="w-full bg-pink-600 hover:bg-pink-700"
               onClick={() => addMovementMutation.mutate()}
@@ -419,22 +480,125 @@ export default function BranchSummary() {
             </div>
           )}
 
-          {/* ── Totals grid ── */}
+          {/* ── بطاقة الصندوق الرئيسية ── */}
+          <Card className="border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-white overflow-hidden">
+            <CardContent className="pt-5 pb-5">
+              <div className="flex flex-col gap-4">
+
+                {/* الرقم الرئيسي */}
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-2xl bg-emerald-500 shrink-0">
+                    <Wallet className="h-7 w-7 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground font-medium">الكاش الفعلي في الصندوق</p>
+                    <p className="text-3xl font-bold text-emerald-700 leading-none mt-0.5">
+                      {fmt(today?.actualCashInDrawer ?? 0)}
+                      <span className="text-lg font-medium text-emerald-600 mr-1">{omr}</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* معادلة الحساب */}
+                <div className="bg-white/70 rounded-xl border border-emerald-100 px-4 py-3">
+                  <p className="text-xs text-muted-foreground mb-2 font-medium">طريقة الحساب:</p>
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                    {(today?.carryForward ?? 0) > 0 && (
+                      <>
+                        <span className="font-semibold text-gray-700">{fmt(today!.carryForward)}</span>
+                        <span className="text-xs text-muted-foreground">مرحّل</span>
+                        <span className="text-emerald-500 font-bold">+</span>
+                      </>
+                    )}
+                    <span className="font-semibold text-blue-700">{fmt(today?.totalOpeningCash ?? 0)}</span>
+                    <span className="text-xs text-muted-foreground">افتتاح</span>
+                    <span className="text-emerald-500 font-bold">+</span>
+                    <span className="font-semibold text-emerald-700">{fmt(today?.totalCash ?? 0)}</span>
+                    <span className="text-xs text-muted-foreground">مبيعات نقدية</span>
+                    {(today?.totalInflows ?? 0) > 0 && (
+                      <>
+                        <span className="text-emerald-500 font-bold">+</span>
+                        <span className="font-semibold text-teal-700">{fmt(today!.totalInflows)}</span>
+                        <span className="text-xs text-muted-foreground">واردات</span>
+                      </>
+                    )}
+                    {(today?.totalOutflows ?? 0) > 0 && (
+                      <>
+                        <span className="text-red-500 font-bold">−</span>
+                        <span className="font-semibold text-red-700">{fmt(today!.totalOutflows)}</span>
+                        <span className="text-xs text-muted-foreground">مخرجات</span>
+                      </>
+                    )}
+                    <span className="text-muted-foreground">=</span>
+                    <span className="font-bold text-emerald-700">{fmt(today?.actualCashInDrawer ?? 0)}</span>
+                  </div>
+                </div>
+
+                {/* بطاقات التفاصيل */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {/* واردات من المالك */}
+                  <div className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2.5 flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <ArrowDownCircle className="w-3.5 h-3.5 text-teal-600" />
+                      <p className="text-xs text-teal-700 font-medium">واردات المالك</p>
+                    </div>
+                    <p className="text-base font-bold text-teal-700">+{fmt(today?.totalInflows ?? 0)} {omr}</p>
+                    {(today?.totalInflows ?? 0) > 0 && (
+                      <div className="mt-0.5 space-y-0.5">
+                        {INFLOW_TYPES.map(({ value, label }) =>
+                          (today?.inflowByType?.[value] ?? 0) > 0 ? (
+                            <p key={value} className="text-xs text-muted-foreground">{label}: {fmt(today!.inflowByType[value])}</p>
+                          ) : null
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* مخرجات */}
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <ArrowUpCircle className="w-3.5 h-3.5 text-red-600" />
+                      <p className="text-xs text-red-700 font-medium">المخرجات</p>
+                    </div>
+                    <p className="text-base font-bold text-red-700">−{fmt(today?.totalOutflows ?? 0)} {omr}</p>
+                    {(today?.totalOutflows ?? 0) > 0 && (
+                      <div className="mt-0.5 space-y-0.5">
+                        {OUTFLOW_TYPES.map(({ value, label }) =>
+                          (today?.outflowByType?.[value] ?? 0) > 0 ? (
+                            <p key={value} className="text-xs text-muted-foreground">{label}: {fmt(today!.outflowByType[value])}</p>
+                          ) : null
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* نقد الافتتاح */}
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <Banknote className="w-3.5 h-3.5 text-blue-600" />
+                      <p className="text-xs text-blue-700 font-medium">نقد الافتتاح</p>
+                    </div>
+                    <p className="text-base font-bold text-blue-700">{fmt(today?.totalOpeningCash ?? 0)} {omr}</p>
+                    {(today?.carryForward ?? 0) > 0 && (
+                      <p className="text-xs text-muted-foreground">مرحّل: {fmt(today!.carryForward)}</p>
+                    )}
+                  </div>
+
+                  {/* مبيعات نقدية */}
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                      <p className="text-xs text-emerald-700 font-medium">مبيعات نقدية</p>
+                    </div>
+                    <p className="text-base font-bold text-emerald-700">{fmt(today?.totalCash ?? 0)} {omr}</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── إجماليات المبيعات ── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <StatCard
-              label={t("branch_summary.opening_cash")}
-              value={`${fmt(today?.totalOpeningCash ?? 0)} ${omr}`}
-              icon={Banknote}
-              color="bg-blue-500"
-              sub={`${today?.shiftsCount ?? 0} ${t("branch_summary.shifts_count")} — ${today?.closedShiftsCount ?? 0} ${t("branch_summary.closed_shifts")}`}
-            />
-            <StatCard
-              label={t("branch_summary.closing_cash")}
-              value={`${fmt(today?.totalClosingCash ?? 0)} ${omr}`}
-              icon={Banknote}
-              color="bg-indigo-500"
-              sub={today?.closedShiftsCount ? t("branch_summary.closed_shifts") : t("branch_summary.not_closed")}
-            />
             <StatCard
               label={t("branch_summary.total_sales")}
               value={`${fmt(today?.totalSales ?? 0)} ${omr}`}
@@ -460,89 +624,89 @@ export default function BranchSummary() {
               icon={ArrowDownUp}
               color="bg-orange-500"
             />
+            <StatCard
+              label={t("branch_summary.opening_cash")}
+              value={`${fmt(today?.totalOpeningCash ?? 0)} ${omr}`}
+              icon={Banknote}
+              color="bg-blue-500"
+              sub={`${today?.shiftsCount ?? 0} ${t("branch_summary.shifts_count")} — ${today?.closedShiftsCount ?? 0} ${t("branch_summary.closed_shifts")}`}
+            />
+            <StatCard
+              label={t("branch_summary.closing_cash")}
+              value={`${fmt(today?.totalClosingCash ?? 0)} ${omr}`}
+              icon={Banknote}
+              color="bg-indigo-500"
+              sub={today?.closedShiftsCount ? t("branch_summary.closed_shifts") : t("branch_summary.not_closed")}
+            />
           </div>
 
-          {/* ── الكاش الفعلي في الصندوق ── */}
-          <Card className="border-2 border-emerald-200 bg-emerald-50/30">
-            <CardContent className="pt-5 pb-4">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="flex items-center gap-3 flex-1">
-                  <div className="p-3 rounded-xl bg-emerald-500 shrink-0">
-                    <Wallet className="h-6 w-6 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-0.5">الكاش الفعلي في الصندوق</p>
-                    <p className="text-2xl font-bold text-emerald-700">
-                      {fmt(today?.actualCashInDrawer ?? 0)} {omr}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {(today?.carryForward ?? 0) > 0 && (
-                        <>{fmt(today!.carryForward)} مرحّل{" + "}</>
-                      )}
-                      {fmt(today?.totalOpeningCash ?? 0)} افتتاح
-                      {" + "}{fmt(today?.totalCash ?? 0)} مبيعات نقدية
-                      {" − "}{fmt(today?.totalOutflows ?? 0)} مخرجات
-                    </p>
-                  </div>
-                </div>
-                {(today?.totalOutflows ?? 0) > 0 && (
-                  <div className="flex gap-3 text-sm">
-                    {today?.outflowByType?.["owner_handover"] != null && today.outflowByType["owner_handover"] > 0 && (
-                      <div className="text-center">
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 justify-center"><HandCoins className="w-3 h-3" /> تسليم مالك</p>
-                        <p className="font-semibold text-blue-600">−{fmt(today.outflowByType["owner_handover"])} {omr}</p>
-                      </div>
-                    )}
-                    {today?.outflowByType?.["bank_deposit"] != null && today.outflowByType["bank_deposit"] > 0 && (
-                      <div className="text-center">
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 justify-center"><Building2 className="w-3 h-3" /> إيداع بنكي</p>
-                        <p className="font-semibold text-purple-600">−{fmt(today.outflowByType["bank_deposit"])} {omr}</p>
-                      </div>
-                    )}
-                    {today?.outflowByType?.["expense"] != null && today.outflowByType["expense"] > 0 && (
-                      <div className="text-center">
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 justify-center"><ShoppingBag className="w-3 h-3" /> مصروفات</p>
-                        <p className="font-semibold text-red-600">−{fmt(today.outflowByType["expense"])} {omr}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* ── حركات الصندوق اليوم ── */}
+          {/* ── حركات الصندوق ── */}
           {movements.length > 0 && (
             <Card>
-              <CardHeader className="pb-3 pt-4">
+              <CardHeader className="pb-2 pt-4">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
                   <ArrowDownUp className="h-4 w-4 text-muted-foreground" />
                   حركات الصندوق ({movements.length})
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pb-4">
-                <div className="space-y-2">
-                  {movements.map(m => {
-                    const movMeta = movTypes.find(x => x.value === m.type);
-                    const Icon = movMeta?.icon ?? ArrowDownUp;
-                    return (
-                      <div key={m.id} className="flex items-center gap-3 rounded-lg border px-3 py-2 bg-muted/20">
-                        <Icon className={`w-4 h-4 shrink-0 ${movMeta?.color ?? ""}`} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium">{movMeta?.label ?? m.type}</p>
-                          {m.note && <p className="text-xs text-muted-foreground truncate">{m.note}</p>}
-                          <p className="text-xs text-muted-foreground">{m.created_by_name ?? "—"} • {new Date(m.created_at).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" })}</p>
+              <CardContent className="pb-4 space-y-4">
+
+                {/* واردات */}
+                {inMovements.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-teal-700 flex items-center gap-1.5">
+                      <ArrowDownCircle className="w-3.5 h-3.5" /> واردات ({inMovements.length})
+                    </p>
+                    {inMovements.map(m => {
+                      const meta = getMovMeta(m.type);
+                      const Icon = meta?.icon ?? ArrowDownCircle;
+                      return (
+                        <div key={m.id} className="flex items-center gap-3 rounded-lg border px-3 py-2 bg-teal-50/50">
+                          <Icon className={`w-4 h-4 shrink-0 ${meta?.color ?? "text-teal-600"}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">{meta?.label ?? m.type}</p>
+                            {m.note && <p className="text-xs text-muted-foreground truncate">{m.note}</p>}
+                            <p className="text-xs text-muted-foreground">
+                              {m.created_by_name ?? "—"} • {new Date(m.created_at).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" })}
+                            </p>
+                          </div>
+                          <p className="font-bold text-teal-600 shrink-0">+{fmt(m.amount_in)} {omr}</p>
                         </div>
-                        <p className="font-bold text-red-600 shrink-0">−{fmt(m.amount_out)} {omr}</p>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* مخرجات */}
+                {outMovements.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-red-700 flex items-center gap-1.5">
+                      <ArrowUpCircle className="w-3.5 h-3.5" /> مخرجات ({outMovements.length})
+                    </p>
+                    {outMovements.map(m => {
+                      const meta = getMovMeta(m.type);
+                      const Icon = meta?.icon ?? ArrowUpCircle;
+                      return (
+                        <div key={m.id} className="flex items-center gap-3 rounded-lg border px-3 py-2 bg-red-50/50">
+                          <Icon className={`w-4 h-4 shrink-0 ${meta?.color ?? "text-red-600"}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">{meta?.label ?? m.type}</p>
+                            {m.note && <p className="text-xs text-muted-foreground truncate">{m.note}</p>}
+                            <p className="text-xs text-muted-foreground">
+                              {m.created_by_name ?? "—"} • {new Date(m.created_at).toLocaleTimeString("ar-OM", { hour: "2-digit", minute: "2-digit" })}
+                            </p>
+                          </div>
+                          <p className="font-bold text-red-600 shrink-0">−{fmt(m.amount_out)} {omr}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
 
-          {/* ── Total summary bar ── */}
+          {/* ── شريط الملخص ── */}
           <Card>
             <CardContent className="py-4">
               <div className="flex flex-wrap gap-6 justify-around text-center">
@@ -571,14 +735,16 @@ export default function BranchSummary() {
             </CardContent>
           </Card>
 
-          {/* ── Per-shift breakdown ── */}
+          {/* ── تفاصيل الورديات ── */}
           {allShifts.length > 0 && (
             <div className="space-y-3">
               <h2 className="text-base font-semibold flex items-center gap-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
                 {t("branch_summary.shift_detail")} ({allShifts.length})
               </h2>
-              {allShifts.map(s => <ShiftRow key={s.id} s={s} />)}
+              {allShifts.map(s => (
+                <ShiftRow key={s.id} s={s} omr={omr} t={t} />
+              ))}
             </div>
           )}
         </>
