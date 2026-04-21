@@ -167,13 +167,14 @@ export default function Reports() {
 
   // ── CSV export helpers ────────────────────────────────────────────────────
   function exportSales() {
-    const headers = ["#", "رقم الفاتورة", "التاريخ", "الفرع", "طريقة الدفع", "المجموع", "ضريبة", "تكلفة", "ربح"];
+    const headers = ["#", "رقم الفاتورة", "التاريخ", "الفرع", "طريقة الدفع", "الرقم المرجعي", "المجموع", "ضريبة", "تكلفة", "ربح"];
     const rows = salesList.map((s, i) => [
-      i + 1, s.invoice_number,
-      new Date(s.created_at).toLocaleDateString("ar-OM"),
-      branchLabel(s.branch_id),
-      s.payment_method,
-      omr(s.total), omr(s.vat), omr(s.cogs_total), omr(s.gross_profit),
+      i + 1, s.invoiceNumber,
+      new Date(s.createdAt).toLocaleDateString("ar-OM"),
+      branchLabel(s.branchId),
+      s.paymentMethod,
+      s.paymentReference || "",
+      omr(s.total), omr(s.vat), omr(s.cogsTotal), omr(s.grossProfit),
     ]);
     downloadCSV(`مبيعات_${from}_${to}.csv`, [headers, ...rows]);
   }
@@ -383,6 +384,7 @@ export default function Reports() {
                   <TableHead className="text-right">التاريخ</TableHead>
                   {isAdmin && <TableHead className="text-right">الفرع</TableHead>}
                   <TableHead className="text-right">طريقة الدفع</TableHead>
+                  <TableHead className="text-right">الرقم المرجعي</TableHead>
                   <TableHead className="text-right">المجموع</TableHead>
                   <TableHead className="text-right">ضريبة</TableHead>
                   <TableHead className="text-right">تكلفة</TableHead>
@@ -391,20 +393,25 @@ export default function Reports() {
               </TableHeader>
               <TableBody>
                 {salesList.length === 0 ? (
-                  <TableRow><TableCell colSpan={9} className="text-center py-10 text-muted-foreground">لا توجد مبيعات في هذه الفترة</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={10} className="text-center py-10 text-muted-foreground">لا توجد مبيعات في هذه الفترة</TableCell></TableRow>
                 ) : salesList.map((s, i) => (
                   <TableRow key={s.id} className="hover:bg-pink-50/30">
                     <TableCell className="text-xs">{i + 1}</TableCell>
-                    <TableCell className="font-mono text-xs text-primary">{s.invoice_number}</TableCell>
-                    <TableCell className="text-xs">{new Date(s.created_at).toLocaleDateString("ar-OM")}</TableCell>
-                    {isAdmin && <TableCell className="text-xs">{branchLabel(s.branch_id)}</TableCell>}
+                    <TableCell className="font-mono text-xs text-primary">{s.invoiceNumber}</TableCell>
+                    <TableCell className="text-xs">{new Date(s.createdAt).toLocaleDateString("ar-OM")}</TableCell>
+                    {isAdmin && <TableCell className="text-xs">{branchLabel(s.branchId)}</TableCell>}
                     <TableCell>
-                      <PayMethodBadge method={s.payment_method} />
+                      <PayMethodBadge method={s.paymentMethod} />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {s.paymentReference
+                        ? <span className="font-mono text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-0.5" dir="ltr">{s.paymentReference}</span>
+                        : <span className="text-gray-300 text-xs">—</span>}
                     </TableCell>
                     <TableCell className="font-medium">{omr(s.total)}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{omr(s.vat)}</TableCell>
-                    <TableCell className="text-xs text-orange-600">{omr(s.cogs_total)}</TableCell>
-                    <TableCell className="font-medium text-green-600">{omr(s.gross_profit)}</TableCell>
+                    <TableCell className="text-xs text-orange-600">{omr(s.cogsTotal)}</TableCell>
+                    <TableCell className="font-medium text-green-600">{omr(s.grossProfit)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

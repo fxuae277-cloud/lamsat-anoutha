@@ -2973,6 +2973,7 @@ export class DatabaseStorage implements IStorage {
       vat: sales.vat,
       total: sales.total,
       paymentMethod: sales.paymentMethod,
+      paymentReference: sales.paymentReference,
       bankTxnId: sales.bankTxnId,
       cogsTotal: sales.cogsTotal,
       grossProfit: sales.grossProfit,
@@ -2998,24 +2999,14 @@ export class DatabaseStorage implements IStorage {
       vat: s.vat,
       total: s.total,
       paymentMethod: s.paymentMethod,
+      paymentReference: s.paymentReference,
       bankTxnId: s.bankTxnId,
       cogsTotal: s.cogsTotal,
       grossProfit: s.grossProfit,
       createdAt: s.createdAt,
     }));
 
-    const totalSales = rows.reduce((s, r) => s + parseFloat(String(r.total || "0")), 0);
-    const totalDiscount = rows.reduce((s, r) => s + parseFloat(String(r.discount || "0")), 0);
-    const totalVat = rows.reduce((s, r) => s + parseFloat(String(r.vat || "0")), 0);
-
-    return {
-      rows,
-      summary: {
-        count: rows.length,
-        totalSales: totalSales.toFixed(3),
-        totalDiscount: totalDiscount.toFixed(3),
-        totalVat: totalVat.toFixed(3),
-      }
+    return rows
     };
   }
 
