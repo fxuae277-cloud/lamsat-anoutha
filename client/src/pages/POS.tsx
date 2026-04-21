@@ -1272,42 +1272,49 @@ export default function POS() {
             )}
 
             {!loadingProducts && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+              <div className="divide-y">
                 {products.map(prod => {
                   const badge = stockBadge(prod.stockQty);
                   const outOfStock = prod.stockQty === 0;
                   return (
-                    <button
+                    <div
                       key={prod.id}
-                      className={`bg-white rounded-xl border text-right overflow-hidden transition-all group ${outOfStock
-                        ? "opacity-50 cursor-not-allowed"
-                        : "hover:border-pink-400 hover:shadow-md hover:-translate-y-0.5 active:scale-95 cursor-pointer"}`}
                       onClick={() => !outOfStock && addToCart(prod)}
-                      disabled={outOfStock}
+                      className={`grid grid-cols-[1fr_auto_auto] items-center px-4 py-3 gap-3 transition-colors ${
+                        outOfStock
+                          ? "opacity-40 cursor-default"
+                          : "cursor-pointer hover:bg-gray-50 active:bg-gray-100"
+                      }`}
                     >
-                      {/* Image */}
-                      <div className="relative bg-pink-50 aspect-square overflow-hidden">
-                        {prod.image
-                          ? <img src={prod.image} alt={prod.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                          : <div className="w-full h-full flex items-center justify-center text-4xl">{catIcon(prod.categoryName)}</div>
-                        }
-                        {/* Stock badge */}
-                        <span className={`absolute top-1.5 left-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${badge.cls}`}>
-                          {badge.label}
-                        </span>
-                        {/* Qty badge */}
-                        {!outOfStock && prod.stockQty < 10 && (
-                          <span className="absolute bottom-1.5 left-1.5 text-[10px] bg-black/60 text-white px-1.5 py-0.5 rounded-full">
-                            {prod.stockQty} متبقي
+                      {/* الاسم والفئة */}
+                      <div>
+                        <p className="text-sm font-medium text-gray-800 leading-tight">{prod.name}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {prod.categoryName}
+                          {" · "}
+                          <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded border ${badge.cls}`}>
+                            {badge.label} ({prod.stockQty})
                           </span>
-                        )}
+                        </p>
                       </div>
-                      {/* Info */}
-                      <div className="p-2.5">
-                        <p className="text-xs font-semibold leading-tight line-clamp-2 mb-1.5 text-gray-800 min-h-[2rem]">{prod.name}</p>
-                        <p className="text-sm font-bold text-pink-600" dir="ltr">{omr(n(prod.price))} ر.ع</p>
-                      </div>
-                    </button>
+
+                      {/* السعر */}
+                      <span className="text-sm font-medium text-pink-700 whitespace-nowrap">
+                        {omr(n(prod.price))} ر.ع
+                      </span>
+
+                      {/* زر الإضافة */}
+                      {!outOfStock ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); addToCart(prod); }}
+                          className="w-7 h-7 rounded-full bg-pink-50 border border-pink-300 text-pink-800 text-lg flex items-center justify-center hover:bg-pink-100"
+                        >
+                          +
+                        </button>
+                      ) : (
+                        <div className="w-7 h-7" />
+                      )}
+                    </div>
                   );
                 })}
               </div>
