@@ -438,7 +438,7 @@ export function registerExportRoutes(app: Express) {
         ["فواتير نقطة البيع - لمسة أنوثة"],
         ["الفترة", `من ${from} إلى ${to}`],
         [],
-        ["رقم الفاتورة", "التاريخ", "الفرع", "الكاشير", "طريقة الدفع", "المجموع الفرعي", "الخصم", "الضريبة", "الإجمالي", "التكلفة", "الربح"],
+        ["رقم الفاتورة", "التاريخ", "الفرع", "الكاشير", "طريقة الدفع", "الرقم المرجعي", "المجموع الفرعي", "الخصم", "الضريبة", "الإجمالي", "التكلفة", "الربح"],
       ];
 
       let totals = { subtotal: 0, discount: 0, vat: 0, total: 0, cogs: 0, profit: 0 };
@@ -457,6 +457,7 @@ export function registerExportRoutes(app: Express) {
           s.branchName || "",
           s.cashierName || "",
           pmLabel[s.paymentMethod] || s.paymentMethod || "",
+          s.paymentReference || "",
           omr(sub), omr(disc), omr(vat), omr(tot), omr(cogs), omr(profit),
         ]);
 

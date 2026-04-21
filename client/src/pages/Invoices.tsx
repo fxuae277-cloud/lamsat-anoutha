@@ -87,6 +87,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
       <div class="row"><span>${t("common.branch")}:</span><span>${detail.branchName || "—"}</span></div>
       <div class="row"><span>${t("invoices.table_cashier")}:</span><span>${detail.cashierName || "—"}</span></div>
       <div class="row"><span>${t("invoices.table_payment")}:</span><span>${pmText}</span></div>
+      ${detail.paymentReference ? `<div class="row"><span>الرقم المرجعي:</span><span dir="ltr">${detail.paymentReference}</span></div>` : ""}
       <div class="sep"></div>
       <table>${itemsHtml}</table>
       <div class="sep"></div>
@@ -179,6 +180,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
     <div><label>${t("common.branch")}</label><span>${detail.branchName || "—"}</span></div>
     <div><label>${t("invoices.table_cashier")}</label><span>${detail.cashierName || "—"}</span></div>
     <div><label>${t("invoices.table_payment")}</label><span>${pmText}</span></div>
+    ${detail.paymentReference ? `<div><label>الرقم المرجعي</label><span dir="ltr">${detail.paymentReference}</span></div>` : ""}
   </div>
   <table>
     <thead>
@@ -277,11 +279,16 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm text-muted-foreground">{t("invoices.table_payment")}:</span>
               <Badge className={PM_COLORS[detail.paymentMethod] || ""}>
                 {PM_LABELS[detail.paymentMethod] || detail.paymentMethod}
               </Badge>
+              {detail.paymentReference && (
+                <span className="text-xs font-mono bg-gray-100 border border-gray-200 rounded px-2 py-0.5 text-gray-700" dir="ltr">
+                  # {detail.paymentReference}
+                </span>
+              )}
             </div>
 
             <Card>
@@ -412,7 +419,8 @@ export default function Invoices() {
     ? rawSalesData.filter(s =>
         (s.invoiceNumber || `#${s.id}`).toLowerCase().includes(search.toLowerCase()) ||
         (s.customerName || "").toLowerCase().includes(search.toLowerCase()) ||
-        (s.customerPhone || "").includes(search)
+        (s.customerPhone || "").includes(search) ||
+        (s.paymentReference || "").toLowerCase().includes(search.toLowerCase())
       )
     : rawSalesData;
 
@@ -457,7 +465,7 @@ export default function Invoices() {
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <Input
-              placeholder="بحث برقم الفاتورة أو اسم العميلة أو الهاتف..."
+              placeholder="بحث برقم الفاتورة أو اسم العميلة أو الهاتف أو الرقم المرجعي..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pr-10 h-9 text-sm"
@@ -590,9 +598,14 @@ export default function Invoices() {
                       </TableCell>
                       <TableCell>{s.cashierName || "—"}</TableCell>
                       <TableCell className="text-center">
-                        <Badge className={PM_COLORS[s.paymentMethod] || ""}>
-                          {t(`payment_methods.${s.paymentMethod}`) || s.paymentMethod}
-                        </Badge>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <Badge className={PM_COLORS[s.paymentMethod] || ""}>
+                            {t(`payment_methods.${s.paymentMethod}`) || s.paymentMethod}
+                          </Badge>
+                          {s.paymentReference && (
+                            <span className="text-[10px] font-mono text-gray-500" dir="ltr"># {s.paymentReference}</span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-center font-mono font-bold">{omr(s.total)}</TableCell>
                       <TableCell className="text-center text-xs text-muted-foreground">
