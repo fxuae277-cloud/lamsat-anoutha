@@ -22,6 +22,7 @@ import { useAuth } from "@/lib/auth";
 import { fmtDate, fmtDateTime } from "@/lib/formatters";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 import { DateInput } from "@/components/ui/date-input";
+import { useI18n } from "@/lib/i18n";
 import type { Branch } from "@shared/schema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -80,26 +81,32 @@ interface Order {
 
 interface Product { id: number; name: string; price: number | string; avgCost?: number | string; stockQty?: number; }
 
-// ─── Constants ─────────────────────────────────────────────────────────────────
-const STATUS_MAP: Record<string, { label: string; color: string; icon: any }> = {
-  new:       { label: "جديد",           color: "bg-blue-100 text-blue-700 border-blue-200",      icon: Clock },
-  preparing: { label: "جاري التجهيز",   color: "bg-amber-100 text-amber-700 border-amber-200",   icon: Package },
-  ready:     { label: "جاهز للتسليم",   color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: CheckCircle },
-  delivered: { label: "تم التسليم",     color: "bg-purple-100 text-purple-700 border-purple-200", icon: Truck },
-  cancelled: { label: "ملغي",           color: "bg-red-100 text-red-700 border-red-200",          icon: XCircle },
+// ─── Constants (static keys — labels resolved via t() at render time) ──────────
+const STATUS_KEYS: Record<string, { color: string; icon: any }> = {
+  new:       { color: "bg-blue-100 text-blue-700 border-blue-200",          icon: Clock },
+  preparing: { color: "bg-amber-100 text-amber-700 border-amber-200",        icon: Package },
+  ready:     { color: "bg-emerald-100 text-emerald-700 border-emerald-200",  icon: CheckCircle },
+  delivered: { color: "bg-purple-100 text-purple-700 border-purple-200",     icon: Truck },
+  cancelled: { color: "bg-red-100 text-red-700 border-red-200",              icon: XCircle },
 };
 
-const SOURCE_MAP: Record<string, { label: string; color: string }> = {
-  whatsapp:  { label: "واتساب",   color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-  instagram: { label: "إنستغرام", color: "bg-purple-100 text-purple-700 border-purple-200" },
-  call:      { label: "اتصال",    color: "bg-blue-100 text-blue-700 border-blue-200" },
-  "walk-in": { label: "حضوري",   color: "bg-orange-100 text-orange-700 border-orange-200" },
+const SOURCE_KEYS: Record<string, { color: string }> = {
+  whatsapp:  { color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  instagram: { color: "bg-purple-100 text-purple-700 border-purple-200" },
+  call:      { color: "bg-blue-100 text-blue-700 border-blue-200" },
+  "walk-in": { color: "bg-orange-100 text-orange-700 border-orange-200" },
 };
 
-const PAY_STATUS_MAP: Record<string, { label: string; color: string }> = {
-  unpaid:  { label: "غير مدفوع", color: "bg-red-100 text-red-700" },
-  partial: { label: "جزئي",      color: "bg-amber-100 text-amber-700" },
-  paid:    { label: "مدفوع",     color: "bg-emerald-100 text-emerald-700" },
+const PAY_STATUS_COLORS: Record<string, string> = {
+  unpaid:  "bg-red-100 text-red-700",
+  partial: "bg-amber-100 text-amber-700",
+  paid:    "bg-emerald-100 text-emerald-700",
+};
+
+const PAY_METHOD_COLORS: Record<string, string> = {
+  cash:          "bg-emerald-100 text-emerald-700",
+  card:          "bg-blue-100 text-blue-700",
+  bank_transfer: "bg-purple-100 text-purple-700",
 };
 
 const n = (v: any) => parseFloat(String(v || "0")) || 0;
@@ -121,12 +128,6 @@ function avatarColor(name: string) {
   return AVATAR_COLORS[s % AVATAR_COLORS.length];
 }
 
-const PAY_METHOD_MAP: Record<string, { label: string; color: string }> = {
-  cash:          { label: "نقدي",    color: "bg-emerald-100 text-emerald-700" },
-  card:          { label: "بطاقة",   color: "bg-blue-100 text-blue-700" },
-  bank_transfer: { label: "تحويل",   color: "bg-purple-100 text-purple-700" },
-};
-
 // ─── Stats Cards ───────────────────────────────────────────────────────────────
 function pctChange(curr: number, prev: number): { pct: number; label: string; color: string } | null {
   if (prev === 0 && curr === 0) return null;
@@ -140,28 +141,28 @@ function pctChange(curr: number, prev: number): { pct: number; label: string; co
   };
 }
 
-function StatsCards({ stats }: { stats: any }) {
+function StatsCards({ stats, t }: { stats: any; t: (key: string) => string }) {
   const s = stats || {};
   const cards = [
     {
       key: "new_count", thisKey: "this_month_new", prevKey: "prev_month_new",
-      label: "جديد", color: "text-blue-600", bg: "bg-blue-50 border-blue-100", icon: Clock,
+      labelKey: "orders_page.status_new", color: "text-blue-600", bg: "bg-blue-50 border-blue-100", icon: Clock,
     },
     {
       key: "preparing_count", thisKey: "this_month_preparing", prevKey: "prev_month_preparing",
-      label: "جاري التجهيز", color: "text-amber-600", bg: "bg-amber-50 border-amber-100", icon: Package,
+      labelKey: "orders_page.status_preparing", color: "text-amber-600", bg: "bg-amber-50 border-amber-100", icon: Package,
     },
     {
       key: "ready_count", thisKey: "this_month_ready", prevKey: "prev_month_ready",
-      label: "جاهز", color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100", icon: CheckCircle,
+      labelKey: "orders_page.status_ready", color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100", icon: CheckCircle,
     },
     {
       key: "delivered_count", thisKey: "this_month_delivered", prevKey: "prev_month_delivered",
-      label: "تم التسليم", color: "text-purple-600", bg: "bg-purple-50 border-purple-100", icon: Truck,
+      labelKey: "orders_page.status_delivered", color: "text-purple-600", bg: "bg-purple-50 border-purple-100", icon: Truck,
     },
     {
       key: "cancelled_count", thisKey: "this_month_cancelled", prevKey: "prev_month_cancelled",
-      label: "ملغي", color: "text-red-600", bg: "bg-red-50 border-red-100", icon: XCircle,
+      labelKey: "orders_page.status_cancelled", color: "text-red-600", bg: "bg-red-50 border-red-100", icon: XCircle,
     },
   ];
   return (
@@ -176,21 +177,21 @@ function StatsCards({ stats }: { stats: any }) {
           <div key={c.key} className={`${c.bg} border rounded-xl p-3`}>
             <div className="flex items-center gap-2 mb-1">
               <Icon className={`w-4 h-4 ${c.color} shrink-0`} />
-              <p className="text-xs text-muted-foreground">{c.label}</p>
+              <p className="text-xs text-muted-foreground">{t(c.labelKey)}</p>
             </div>
             <p className={`text-2xl font-bold ${c.color}`}>{s[c.key] || 0}</p>
             <div className="mt-1.5 space-y-0.5">
               {change && (
                 <p className={`text-[11px] font-medium flex items-center gap-1 ${change.color}`}>
                   <span>{change.label}</span>
-                  <span className="text-muted-foreground font-normal">من الشهر الماضي</span>
+                  <span className="text-muted-foreground font-normal">{t("orders_page.stat_from_last_month")}</span>
                 </p>
               )}
               {todayNew !== null && todayNew > 0 && (
-                <p className="text-[11px] text-blue-500 font-medium">+{todayNew} اليوم</p>
+                <p className="text-[11px] text-blue-500 font-medium">+{todayNew} {t("orders_page.stat_today")}</p>
               )}
               {!change && todayNew === null && (
-                <p className="text-[11px] text-muted-foreground">هذا الشهر: {curr}</p>
+                <p className="text-[11px] text-muted-foreground">{t("orders_page.stat_this_month")} {curr}</p>
               )}
             </div>
           </div>
@@ -209,11 +210,12 @@ const stockColor = (qty?: number) => {
   return "bg-emerald-100 text-emerald-700 border-emerald-200";
 };
 
-function ProductTableRow({ item, idx, onUpdate, onRemove }: {
+function ProductTableRow({ item, idx, onUpdate, onRemove, t }: {
   item: OrderItem;
   idx: number;
   onUpdate: (idx: number, updates: Partial<OrderItem>) => void;
   onRemove: (idx: number) => void;
+  t: (key: string) => string;
 }) {
   const [search, setSearch]           = useState(item.productName || "");
   const [showDrop, setShowDrop]       = useState(false);
@@ -247,7 +249,6 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
       const res = await fetch(`/api/products/${productId}/variants-with-stock`, { credentials: "include" });
       const data: ProductVariantExt[] = await res.json();
       setVariants(data);
-      // إذا كان المنتج بدون ألوان/مقاسات أو variant واحد فقط → اختره تلقائياً
       if (data.length === 1) applyVariant(data[0]);
     } finally {
       setLoadingV(false);
@@ -274,13 +275,11 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
 
   const isPriceModified = linkedPrice !== null && Math.abs(n(priceStr.replace(/,/g, "")) - linkedPrice) > 0.0001;
 
-  // استخراج الألوان والمقاسات الفريدة
   const colors  = [...new Set(variants.map(v => v.color).filter(Boolean))] as string[];
   const hasColors = colors.length > 0;
   const sizes   = [...new Set(variants.filter(v => !item.color || v.color === item.color).map(v => v.size).filter(Boolean))] as string[];
   const hasSizes = sizes.length > 0;
 
-  // إيجاد الـ variant المحدد حالياً
   const selectedVariant = variants.find(v =>
     (!item.color || v.color === item.color) &&
     (!item.size  || v.size  === item.size)
@@ -305,7 +304,7 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
                 }}
                 onFocus={() => search.length >= 1 && setShowDrop(true)}
                 onBlur={() => setTimeout(() => setShowDrop(false), 150)}
-                placeholder="اسم المنتج أو باركود..."
+                placeholder={t("orders_page.product_search_placeholder")}
                 className="h-8 text-xs"
               />
               {showDrop && results.length > 0 && (
@@ -321,7 +320,7 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${stockColor(p.stockQty)}`}>
-                          {p.stockQty ?? 0} قطعة
+                          {p.stockQty ?? 0} {t("orders_page.variant_qty_suffix")}
                         </span>
                         <span className="text-pink-600 font-bold text-xs">{omr(n(p.price))} ر.ع</span>
                       </div>
@@ -334,7 +333,7 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
 
             {/* الكمية */}
             <div className="flex items-center gap-1 shrink-0">
-              <span className="text-xs text-muted-foreground">الكمية</span>
+              <span className="text-xs text-muted-foreground">{t("orders_page.form_qty_label")}</span>
               <Input type="number" min="1" value={item.quantity}
                 onChange={e => onUpdate(idx, { quantity: parseInt(e.target.value) || 1 })}
                 className="w-16 h-8 text-center text-xs" dir="ltr" />
@@ -342,7 +341,7 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
 
             {/* السعر */}
             <div className="flex items-center gap-1 shrink-0">
-              <span className="text-xs text-muted-foreground">السعر</span>
+              <span className="text-xs text-muted-foreground">{t("orders_page.form_price_label")}</span>
               <div className="relative">
                 <Input type="text" inputMode="decimal" dir="ltr"
                   value={priceStr}
@@ -383,7 +382,7 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
           {loadingV && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
               <div className="w-3 h-3 border-2 border-pink-400 border-t-transparent rounded-full animate-spin" />
-              جاري تحميل الخيارات...
+              {t("orders_page.loading_variants")}
             </div>
           )}
 
@@ -392,7 +391,7 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
               {/* ألوان */}
               {hasColors && (
                 <div className="space-y-1">
-                  <p className="text-[11px] font-medium text-gray-500">اللون</p>
+                  <p className="text-[11px] font-medium text-gray-500">{t("orders_page.color_label")}</p>
                   <div className="flex flex-wrap gap-1.5">
                     {colors.map(color => {
                       const colorVariants = variants.filter(v => v.color === color);
@@ -402,7 +401,6 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
                         <button key={color} type="button"
                           onClick={() => {
                             onUpdate(idx, { color, size: undefined, variantId: undefined });
-                            // إذا لا يوجد مقاسات → اختر الـ variant مباشرة
                             const cv = colorVariants.find(v => !v.size) || colorVariants[0];
                             if (cv && colorVariants.length === 1) applyVariant(cv);
                           }}
@@ -425,7 +423,7 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
               {/* مقاسات */}
               {hasSizes && (
                 <div className="space-y-1">
-                  <p className="text-[11px] font-medium text-gray-500">المقاس</p>
+                  <p className="text-[11px] font-medium text-gray-500">{t("orders_page.size_label")}</p>
                   <div className="flex flex-wrap gap-1.5">
                     {sizes.map(size => {
                       const sv = variants.find(v => v.size === size && (!item.color || v.color === item.color));
@@ -444,7 +442,7 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
                           }`}>
                           {size}
                           <span className={`block text-[9px] leading-none mt-0.5 ${isSelected ? "text-pink-200" : qty === 0 ? "text-gray-300" : "text-muted-foreground"}`}>
-                            {qty === 0 ? "نفذ" : qty}
+                            {qty === 0 ? t("orders_page.out_of_stock") : qty}
                           </span>
                         </button>
                       );
@@ -456,10 +454,10 @@ function ProductTableRow({ item, idx, onUpdate, onRemove }: {
               {/* معلومات الـ variant المحدد */}
               {selectedVariant && (
                 <div className="flex items-center gap-3 text-xs pt-1 border-t border-gray-200">
-                  {item.color && <span className="text-gray-600">اللون: <b>{item.color}</b></span>}
-                  {item.size  && <span className="text-gray-600">المقاس: <b>{item.size}</b></span>}
+                  {item.color && <span className="text-gray-600">{t("orders_page.variant_color")} <b>{item.color}</b></span>}
+                  {item.size  && <span className="text-gray-600">{t("orders_page.variant_size")} <b>{item.size}</b></span>}
                   <span className={`px-1.5 py-0.5 rounded-full border text-[10px] font-medium ${stockColor(selectedVariant.stockQty)}`}>
-                    مخزون: {selectedVariant.stockQty} قطعة
+                    {t("orders_page.variant_stock")} {selectedVariant.stockQty} {t("orders_page.variant_qty_suffix")}
                   </span>
                   {isPriceModified && linkedPrice !== null && (
                     <button type="button" className="text-emerald-600 underline"
@@ -482,6 +480,7 @@ function OrderFormModal({ order, onClose, onSaved }: {
   order?: Order | null; onClose: () => void; onSaved: () => void;
 }) {
   const { toast } = useToast();
+  const { t, lang } = useI18n();
   const isEdit = !!order;
   const { data: authData } = useAuth();
   const user = authData?.user;
@@ -504,7 +503,6 @@ function OrderFormModal({ order, onClose, onSaved }: {
 
   const { data: branches = [] } = useQuery<Branch[]>({ queryKey: ["/api/branches"], queryFn: getQueryFn({ on401: "returnNull" }) });
 
-  // اختيار الفرع الأول تلقائياً إذا لم يكن محدداً
   useEffect(() => {
     if (!branchId && branches.length > 0) {
       setBranchId(branches[0].id);
@@ -525,9 +523,9 @@ function OrderFormModal({ order, onClose, onSaved }: {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!customerName.trim()) throw new Error("اسم العميل مطلوب");
+      if (!customerName.trim()) throw new Error(t("orders_page.form_customer_name"));
       const validItems = items.filter(i => i.productId && i.productId > 0);
-      if (validItems.length === 0) throw new Error("يجب إضافة منتج واحد على الأقل");
+      if (validItems.length === 0) throw new Error(t("orders_page.form_products"));
       const body = {
         customerName, customerPhone, customerId, source, deliveryMethod, deliveryAddress,
         deliveryFee: feeVal.toFixed(3), subtotal: subtotal.toFixed(3),
@@ -545,28 +543,28 @@ function OrderFormModal({ order, onClose, onSaved }: {
       if (isEdit) return apiRequest("PUT", `/api/orders/${order!.id}`, body).then(r => r.json());
       return apiRequest("POST", "/api/orders", body).then(r => r.json());
     },
-    onSuccess: () => { toast({ title: isEdit ? "تم تعديل الطلب" : "تم إنشاء الطلب بنجاح" }); onSaved(); },
-    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onSuccess: () => { toast({ title: isEdit ? t("orders_page.toast_order_updated") : t("orders_page.toast_order_created") }); onSaved(); },
+    onError: (e: Error) => toast({ title: t("orders_page.toast_error"), description: e.message, variant: "destructive" }),
   });
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir={lang === "ar" ? "rtl" : "ltr"}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShoppingBag className="w-5 h-5 text-pink-600" />
-            {isEdit ? `تعديل الطلب ${order?.orderNumber}` : "طلب جديد"}
+            {isEdit ? `${t("orders_page.form_title_edit")} ${order?.orderNumber}` : t("orders_page.form_title_new")}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           {/* Customer */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">اسم العميل *</label>
-              <Input value={customerName} onChange={e => { setCustomerName(e.target.value); setCustomerId(null); }} placeholder="اسم العميل" className="h-9" />
+              <label className="text-xs font-medium text-gray-600">{t("orders_page.form_customer_name")}</label>
+              <Input value={customerName} onChange={e => { setCustomerName(e.target.value); setCustomerId(null); }} placeholder={t("orders_page.form_customer_placeholder")} className="h-9" />
             </div>
             <div className="space-y-1 relative">
-              <label className="text-xs font-medium text-gray-600">رقم الهاتف {customerId && <span className="text-green-600 text-[10px]">✓ مسجل</span>}</label>
+              <label className="text-xs font-medium text-gray-600">{t("orders_page.form_phone")} {customerId && <span className="text-green-600 text-[10px]">{t("orders_page.form_registered")}</span>}</label>
               <Input
                 value={customerPhone}
                 onChange={async e => {
@@ -613,29 +611,29 @@ function OrderFormModal({ order, onClose, onSaved }: {
           {/* Source & Delivery */}
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">المصدر</label>
+              <label className="text-xs font-medium text-gray-600">{t("orders_page.form_source")}</label>
               <Select value={source} onValueChange={setSource}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="walk-in">حضوري</SelectItem>
-                  <SelectItem value="whatsapp">واتساب</SelectItem>
-                  <SelectItem value="instagram">إنستغرام</SelectItem>
-                  <SelectItem value="call">اتصال</SelectItem>
+                  <SelectItem value="walk-in">{t("orders_page.source_walkin_opt")}</SelectItem>
+                  <SelectItem value="whatsapp">{t("orders_page.source_whatsapp_opt")}</SelectItem>
+                  <SelectItem value="instagram">{t("orders_page.source_instagram_opt")}</SelectItem>
+                  <SelectItem value="call">{t("orders_page.source_call_opt")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">طريقة الاستلام</label>
+              <label className="text-xs font-medium text-gray-600">{t("orders_page.form_delivery_method")}</label>
               <Select value={deliveryMethod} onValueChange={setDeliveryMethod}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pickup">استلام من المتجر</SelectItem>
-                  <SelectItem value="delivery">توصيل</SelectItem>
+                  <SelectItem value="pickup">{t("orders_page.delivery_pickup_opt")}</SelectItem>
+                  <SelectItem value="delivery">{t("orders_page.delivery_delivery_opt")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">الفرع</label>
+              <label className="text-xs font-medium text-gray-600">{t("orders_page.form_branch")}</label>
               <Select value={String(branchId)} onValueChange={v => setBranchId(Number(v))}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -648,11 +646,11 @@ function OrderFormModal({ order, onClose, onSaved }: {
           {deliveryMethod === "delivery" && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-600">عنوان التوصيل</label>
-                <Input value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} placeholder="العنوان التفصيلي" className="h-9" />
+                <label className="text-xs font-medium text-gray-600">{t("orders_page.form_delivery_address")}</label>
+                <Input value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} placeholder={t("orders_page.form_delivery_address_placeholder")} className="h-9" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-600">رسوم التوصيل (ر.ع)</label>
+                <label className="text-xs font-medium text-gray-600">{t("orders_page.form_delivery_fee")}</label>
                 <Input type="number" step="0.001" min="0" value={deliveryFee} onChange={e => setDeliveryFee(e.target.value)} dir="ltr" className="h-9" />
               </div>
             </div>
@@ -660,13 +658,13 @@ function OrderFormModal({ order, onClose, onSaved }: {
 
           {/* Products Table */}
           <div className="space-y-2">
-            <label className="text-xs font-medium text-gray-600">المنتجات *</label>
+            <label className="text-xs font-medium text-gray-600">{t("orders_page.form_products")}</label>
             <div className="border rounded-lg" style={{ overflow: "visible" }}>
               <div className="bg-gray-50 border-b px-3 py-2 flex items-center gap-4 text-xs font-semibold text-muted-foreground rounded-t-lg">
-                <span className="flex-1">المنتج / اللون / المقاس</span>
-                <span className="w-20 text-center">الكمية</span>
-                <span className="w-24 text-center">السعر</span>
-                <span className="w-20 text-center">الإجمالي</span>
+                <span className="flex-1">{t("orders_page.form_col_product")}</span>
+                <span className="w-20 text-center">{t("orders_page.form_col_qty")}</span>
+                <span className="w-24 text-center">{t("orders_page.form_col_price")}</span>
+                <span className="w-20 text-center">{t("orders_page.form_col_total")}</span>
                 <span className="w-6"></span>
               </div>
               <table className="w-full">
@@ -678,74 +676,75 @@ function OrderFormModal({ order, onClose, onSaved }: {
                       idx={idx}
                       onUpdate={updateItem}
                       onRemove={removeItem}
+                      t={t}
                     />
                   ))}
                 </tbody>
               </table>
             </div>
             <Button size="sm" variant="outline" className="h-8 text-xs gap-1 w-full border-dashed" onClick={addRow}>
-              <Plus className="w-3 h-3" /> إضافة منتج
+              <Plus className="w-3 h-3" /> {t("orders_page.form_add_product")}
             </Button>
           </div>
 
           {/* Payment */}
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">طريقة الدفع</label>
+              <label className="text-xs font-medium text-gray-600">{t("orders_page.form_payment_method")}</label>
               <Select value={paymentMethod} onValueChange={setPaymentMethod}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cash">نقدي</SelectItem>
-                  <SelectItem value="card">بطاقة</SelectItem>
-                  <SelectItem value="bank_transfer">تحويل</SelectItem>
+                  <SelectItem value="cash">{t("orders_page.pay_cash_opt")}</SelectItem>
+                  <SelectItem value="card">{t("orders_page.pay_card_opt")}</SelectItem>
+                  <SelectItem value="bank_transfer">{t("orders_page.pay_bank_opt")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">حالة الدفع</label>
+              <label className="text-xs font-medium text-gray-600">{t("orders_page.form_payment_status")}</label>
               <Select value={paymentStatus} onValueChange={setPaymentStatus}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="unpaid">غير مدفوع</SelectItem>
-                  <SelectItem value="partial">دفع جزئي</SelectItem>
-                  <SelectItem value="paid">مدفوع</SelectItem>
+                  <SelectItem value="unpaid">{t("orders_page.pay_unpaid_opt")}</SelectItem>
+                  <SelectItem value="partial">{t("orders_page.pay_partial_opt")}</SelectItem>
+                  <SelectItem value="paid">{t("orders_page.pay_paid_opt")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">خصم (ر.ع)</label>
+              <label className="text-xs font-medium text-gray-600">{t("orders_page.form_discount")}</label>
               <Input type="number" step="0.001" min="0" value={discount} onChange={e => setDiscount(e.target.value)} dir="ltr" className="h-9" />
             </div>
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-gray-600">ملاحظات</label>
-            <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="ملاحظات الطلب..." className="h-9" />
+            <label className="text-xs font-medium text-gray-600">{t("orders_page.form_notes")}</label>
+            <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder={t("orders_page.form_notes_placeholder")} className="h-9" />
           </div>
 
           {/* Summary */}
           <div className="bg-pink-50 border border-pink-100 rounded-xl p-3 space-y-1.5 text-sm">
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>المجموع الفرعي</span><span dir="ltr">{omr(subtotal)} ر.ع</span>
+              <span>{t("orders_page.form_subtotal")}</span><span dir="ltr">{omr(subtotal)} ر.ع</span>
             </div>
             <div className="flex justify-between text-xs text-emerald-600">
-              <span>الخصم</span><span dir="ltr">- {omr(discVal)} ر.ع</span>
+              <span>{t("orders_page.form_discount_label")}</span><span dir="ltr">- {omr(discVal)} ر.ع</span>
             </div>
             {feeVal > 0 && (
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>رسوم التوصيل</span><span dir="ltr">+ {omr(feeVal)} ر.ع</span>
+                <span>{t("orders_page.form_delivery_fee_label")}</span><span dir="ltr">+ {omr(feeVal)} ر.ع</span>
               </div>
             )}
             <div className="flex justify-between font-bold border-t border-pink-200 pt-1.5">
-              <span>الإجمالي</span><span className="text-pink-600 text-base" dir="ltr">{omr(total)} ر.ع</span>
+              <span>{t("orders_page.form_total")}</span><span className="text-pink-600 text-base" dir="ltr">{omr(total)} ر.ع</span>
             </div>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onClose}>إلغاء</Button>
+          <Button variant="outline" size="sm" onClick={onClose}>{t("orders_page.form_cancel")}</Button>
           <Button className="bg-pink-600 hover:bg-pink-700" size="sm"
             onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? "جارٍ الحفظ..." : isEdit ? "حفظ التعديلات" : "إنشاء الطلب"}
+            {saveMutation.isPending ? t("orders_page.form_saving") : isEdit ? t("orders_page.form_save_edit") : t("orders_page.form_save_new")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -758,33 +757,42 @@ function StatusModal({ order, onClose, onSaved }: {
   order: Order; onClose: () => void; onSaved: () => void;
 }) {
   const { toast } = useToast();
+  const { t, lang } = useI18n();
   const [status, setStatus]       = useState(order.status);
   const [showConvert, setShowConvert] = useState(false);
   const [payMethod, setPayMethod] = useState("cash");
   const [amountPaid, setAmountPaid] = useState(String(n(order.total)));
 
+  const STATUS_MAP: Record<string, { label: string; color: string; icon: any }> = {
+    new:       { label: t("orders_page.status_new"),       color: "bg-blue-100 text-blue-700 border-blue-200",          icon: Clock },
+    preparing: { label: t("orders_page.status_preparing"), color: "bg-amber-100 text-amber-700 border-amber-200",        icon: Package },
+    ready:     { label: t("orders_page.status_ready"),     color: "bg-emerald-100 text-emerald-700 border-emerald-200",  icon: CheckCircle },
+    delivered: { label: t("orders_page.status_delivered"), color: "bg-purple-100 text-purple-700 border-purple-200",     icon: Truck },
+    cancelled: { label: t("orders_page.status_cancelled"), color: "bg-red-100 text-red-700 border-red-200",              icon: XCircle },
+  };
+
   const statusMutation = useMutation({
     mutationFn: () => apiRequest("PATCH", `/api/orders/${order.id}/status`, { status }).then(r => r.json()),
     onSuccess: () => {
-      toast({ title: "تم تحديث حالة الطلب" });
+      toast({ title: t("orders_page.toast_status_updated") });
       if (status === "delivered" && !order.invoiceId) { setShowConvert(true); return; }
       onSaved();
     },
-    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("orders_page.toast_error"), description: e.message, variant: "destructive" }),
   });
 
   const convertMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/orders/${order.id}/convert-to-invoice`, {
       paymentMethod: payMethod, amountPaid: n(amountPaid).toFixed(3),
     }).then(r => r.json()),
-    onSuccess: () => { toast({ title: "تم تحويل الطلب لفاتورة بيع بنجاح" }); onSaved(); },
-    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onSuccess: () => { toast({ title: t("orders_page.toast_converted") }); onSaved(); },
+    onError: (e: Error) => toast({ title: t("orders_page.toast_error"), description: e.message, variant: "destructive" }),
   });
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-sm" dir="rtl">
-        <DialogHeader><DialogTitle>تحديث حالة الطلب {order.orderNumber}</DialogTitle></DialogHeader>
+      <DialogContent className="max-w-sm" dir={lang === "ar" ? "rtl" : "ltr"}>
+        <DialogHeader><DialogTitle>{t("orders_page.status_modal_title")} {order.orderNumber}</DialogTitle></DialogHeader>
         {!showConvert ? (
           <>
             <div className="grid gap-2">
@@ -802,33 +810,37 @@ function StatusModal({ order, onClose, onSaved }: {
               })}
             </div>
             <DialogFooter>
-              <Button variant="outline" size="sm" onClick={onClose}>إلغاء</Button>
+              <Button variant="outline" size="sm" onClick={onClose}>{t("orders_page.form_cancel")}</Button>
               <Button size="sm" className="bg-pink-600 hover:bg-pink-700"
                 onClick={() => statusMutation.mutate()} disabled={statusMutation.isPending || status === order.status}>
-                {statusMutation.isPending ? "جارٍ التحديث..." : "تحديث"}
+                {statusMutation.isPending ? t("orders_page.status_updating") : t("orders_page.status_update_btn")}
               </Button>
             </DialogFooter>
           </>
         ) : (
           <>
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
-              <p className="text-sm font-medium text-emerald-800">هل تريد تحويل الطلب لفاتورة بيع؟</p>
-              <p className="text-xs text-muted-foreground">سيتم خصم المخزون وتسجيل قيد محاسبي تلقائياً</p>
+              <p className="text-sm font-medium text-emerald-800">{t("orders_page.convert_title")}</p>
+              <p className="text-xs text-muted-foreground">{t("orders_page.convert_subtitle")}</p>
               <div className="grid grid-cols-3 gap-1.5">
-                {[["cash","نقدي"],["card","بطاقة"],["bank_transfer","تحويل"]].map(([v,l]) => (
+                {[
+                  ["cash", t("orders_page.pay_cash_opt")],
+                  ["card", t("orders_page.pay_card_opt")],
+                  ["bank_transfer", t("orders_page.pay_bank_opt")],
+                ].map(([v,l]) => (
                   <button key={v}
                     className={`py-1.5 rounded-lg border text-xs font-medium transition-colors ${payMethod===v?"bg-emerald-600 text-white border-emerald-600":"border-gray-200 hover:bg-gray-100"}`}
                     onClick={() => setPayMethod(v)}>{l}</button>
                 ))}
               </div>
-              <Input type="number" step="0.001" placeholder="المبلغ المدفوع"
+              <Input type="number" step="0.001" placeholder={t("orders_page.convert_amount_placeholder")}
                 value={amountPaid} onChange={e => setAmountPaid(e.target.value)} dir="ltr" className="h-8 text-sm" />
             </div>
             <DialogFooter>
-              <Button variant="outline" size="sm" onClick={onSaved}>لاحقاً</Button>
+              <Button variant="outline" size="sm" onClick={onSaved}>{t("orders_page.convert_later")}</Button>
               <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700"
                 onClick={() => convertMutation.mutate()} disabled={convertMutation.isPending}>
-                {convertMutation.isPending ? "جارٍ التحويل..." : "تحويل لفاتورة"}
+                {convertMutation.isPending ? t("orders_page.converting") : t("orders_page.convert_btn")}
               </Button>
             </DialogFooter>
           </>
@@ -840,16 +852,37 @@ function StatusModal({ order, onClose, onSaved }: {
 
 // ─── Detail Modal ──────────────────────────────────────────────────────────────
 function OrderDetailModal({ order, onClose }: { order: Order; onClose: () => void }) {
+  const { t, lang } = useI18n();
+
+  const STATUS_MAP: Record<string, { label: string; color: string; icon: any }> = {
+    new:       { label: t("orders_page.status_new"),       color: "bg-blue-100 text-blue-700 border-blue-200",          icon: Clock },
+    preparing: { label: t("orders_page.status_preparing"), color: "bg-amber-100 text-amber-700 border-amber-200",        icon: Package },
+    ready:     { label: t("orders_page.status_ready"),     color: "bg-emerald-100 text-emerald-700 border-emerald-200",  icon: CheckCircle },
+    delivered: { label: t("orders_page.status_delivered"), color: "bg-purple-100 text-purple-700 border-purple-200",     icon: Truck },
+    cancelled: { label: t("orders_page.status_cancelled"), color: "bg-red-100 text-red-700 border-red-200",              icon: XCircle },
+  };
+  const SOURCE_MAP: Record<string, { label: string; color: string }> = {
+    whatsapp:  { label: t("orders_page.source_whatsapp"), color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+    instagram: { label: t("orders_page.source_instagram"), color: "bg-purple-100 text-purple-700 border-purple-200" },
+    call:      { label: t("orders_page.source_call"),     color: "bg-blue-100 text-blue-700 border-blue-200" },
+    "walk-in": { label: t("orders_page.source_walkin"),   color: "bg-orange-100 text-orange-700 border-orange-200" },
+  };
+  const PAY_STATUS_MAP: Record<string, { label: string; color: string }> = {
+    unpaid:  { label: t("orders_page.pay_unpaid"),  color: "bg-red-100 text-red-700" },
+    partial: { label: t("orders_page.pay_partial"), color: "bg-amber-100 text-amber-700" },
+    paid:    { label: t("orders_page.pay_paid"),    color: "bg-emerald-100 text-emerald-700" },
+  };
+
   const st  = STATUS_MAP[order.status] || STATUS_MAP.new;
   const src = SOURCE_MAP[order.source] || SOURCE_MAP["walk-in"];
   const pay = PAY_STATUS_MAP[order.paymentStatus || "unpaid"];
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" dir="rtl">
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" dir={lang === "ar" ? "rtl" : "ltr"}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-pink-600" />
-            تفاصيل الطلب {order.orderNumber}
+            {t("orders_page.detail_title")} {order.orderNumber}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
@@ -857,21 +890,21 @@ function OrderDetailModal({ order, onClose }: { order: Order; onClose: () => voi
             <Badge variant="outline" className={`${st.color} text-xs`}>{st.label}</Badge>
             <Badge variant="outline" className={`${src.color} text-xs`}>{src.label}</Badge>
             <Badge variant="outline" className={`${pay.color} text-xs`}>{pay.label}</Badge>
-            {order.invoiceId && <Badge className="bg-purple-100 text-purple-700 text-xs">فاتورة #{order.invoiceId}</Badge>}
+            {order.invoiceId && <Badge className="bg-purple-100 text-purple-700 text-xs">{t("orders_page.badge_invoice")} #{order.invoiceId}</Badge>}
           </div>
           <div className="bg-gray-50 rounded-xl p-3 space-y-1.5">
-            <p className="text-xs text-muted-foreground font-medium">معلومات العميل</p>
+            <p className="text-xs text-muted-foreground font-medium">{t("orders_page.detail_customer_info")}</p>
             <div className="flex items-center gap-2 text-sm"><User className="w-3.5 h-3.5 text-gray-400" /><span className="font-medium">{order.customerName}</span></div>
             {order.customerPhone && <div className="flex items-center gap-2 text-sm"><Phone className="w-3.5 h-3.5 text-gray-400" /><span dir="ltr">{order.customerPhone}</span></div>}
             {order.deliveryAddress && <div className="flex items-center gap-2 text-sm"><MapPin className="w-3.5 h-3.5 text-gray-400" /><span>{order.deliveryAddress}</span></div>}
           </div>
           {order.items && order.items.length > 0 && (
             <div>
-              <p className="text-xs text-muted-foreground font-medium mb-1.5">المنتجات</p>
+              <p className="text-xs text-muted-foreground font-medium mb-1.5">{t("orders_page.detail_products")}</p>
               <div className="space-y-1.5">
                 {order.items.map((item, i) => (
                   <div key={i} className="flex justify-between items-center bg-gray-50 rounded-lg px-3 py-2 text-sm">
-                    <span>{item.productName || `منتج #${item.productId}`} × {item.quantity}</span>
+                    <span>{item.productName || `#${item.productId}`} × {item.quantity}</span>
                     <span className="text-pink-600 font-medium" dir="ltr">{omr(n(item.unitPrice) * item.quantity)} ر.ع</span>
                   </div>
                 ))}
@@ -879,18 +912,18 @@ function OrderDetailModal({ order, onClose }: { order: Order; onClose: () => voi
             </div>
           )}
           <div className="border-t pt-3 space-y-1 text-sm">
-            {n(order.discount) > 0 && <div className="flex justify-between text-emerald-600 text-xs"><span>خصم</span><span dir="ltr">- {omr(n(order.discount))} ر.ع</span></div>}
-            {n(order.deliveryFee) > 0 && <div className="flex justify-between text-xs"><span>رسوم التوصيل</span><span dir="ltr">+ {omr(n(order.deliveryFee))} ر.ع</span></div>}
-            <div className="flex justify-between font-bold"><span>الإجمالي</span><span className="text-pink-600" dir="ltr">{omr(n(order.total))} ر.ع</span></div>
+            {n(order.discount) > 0 && <div className="flex justify-between text-emerald-600 text-xs"><span>{t("orders_page.detail_discount")}</span><span dir="ltr">- {omr(n(order.discount))} ر.ع</span></div>}
+            {n(order.deliveryFee) > 0 && <div className="flex justify-between text-xs"><span>{t("orders_page.detail_delivery_fee")}</span><span dir="ltr">+ {omr(n(order.deliveryFee))} ر.ع</span></div>}
+            <div className="flex justify-between font-bold"><span>{t("orders_page.detail_total")}</span><span className="text-pink-600" dir="ltr">{omr(n(order.total))} ر.ع</span></div>
           </div>
           {order.notes && (
             <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800">
-              <p className="font-medium mb-1">ملاحظات:</p><p>{order.notes}</p>
+              <p className="font-medium mb-1">{t("orders_page.detail_notes_label")}</p><p>{order.notes}</p>
             </div>
           )}
           <p className="text-xs text-muted-foreground">{fmtDateTime(order.createdAt)}</p>
         </div>
-        <DialogFooter><Button variant="outline" size="sm" onClick={onClose}>إغلاق</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" size="sm" onClick={onClose}>{t("orders_page.detail_close")}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -899,10 +932,31 @@ function OrderDetailModal({ order, onClose }: { order: Order; onClose: () => voi
 // ─── Main Orders Page ──────────────────────────────────────────────────────────
 export default function Orders() {
   const { toast } = useToast();
+  const { t, lang } = useI18n();
   const qc = useQueryClient();
   const { data: authData } = useAuth();
   const user = authData?.user;
   const isManager = ["owner", "admin", "manager"].includes(user?.role || "");
+
+  // Build label maps using t()
+  const STATUS_MAP: Record<string, { label: string; color: string; icon: any }> = {
+    new:       { label: t("orders_page.status_new"),       color: "bg-blue-100 text-blue-700 border-blue-200",          icon: Clock },
+    preparing: { label: t("orders_page.status_preparing"), color: "bg-amber-100 text-amber-700 border-amber-200",        icon: Package },
+    ready:     { label: t("orders_page.status_ready"),     color: "bg-emerald-100 text-emerald-700 border-emerald-200",  icon: CheckCircle },
+    delivered: { label: t("orders_page.status_delivered"), color: "bg-purple-100 text-purple-700 border-purple-200",     icon: Truck },
+    cancelled: { label: t("orders_page.status_cancelled"), color: "bg-red-100 text-red-700 border-red-200",              icon: XCircle },
+  };
+  const SOURCE_MAP: Record<string, { label: string; color: string }> = {
+    whatsapp:  { label: t("orders_page.source_whatsapp"), color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+    instagram: { label: t("orders_page.source_instagram"), color: "bg-purple-100 text-purple-700 border-purple-200" },
+    call:      { label: t("orders_page.source_call"),     color: "bg-blue-100 text-blue-700 border-blue-200" },
+    "walk-in": { label: t("orders_page.source_walkin"),   color: "bg-orange-100 text-orange-700 border-orange-200" },
+  };
+  const PAY_METHOD_MAP: Record<string, { label: string; color: string }> = {
+    cash:          { label: t("orders_page.pay_cash"),          color: "bg-emerald-100 text-emerald-700" },
+    card:          { label: t("orders_page.pay_card"),          color: "bg-blue-100 text-blue-700" },
+    bank_transfer: { label: t("orders_page.pay_bank_transfer"), color: "bg-purple-100 text-purple-700" },
+  };
 
   const [search, setSearch]           = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -910,7 +964,6 @@ export default function Orders() {
   const [fromDate, setFromDate]       = useState("");
   const [toDate, setToDate]           = useState("");
 
-  // القيم المُطبَّقة فعلياً — تتغير فقط عند الضغط على "بحث"
   const [appliedSearch, setAppliedSearch]           = useState("");
   const [appliedStatus, setAppliedStatus]           = useState("all");
   const [appliedSource, setAppliedSource]           = useState("all");
@@ -946,8 +999,8 @@ export default function Orders() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/orders/${id}`).then(r => r.json()),
-    onSuccess: () => { toast({ title: "تم حذف الطلب" }); refresh(); setDeleteId(null); },
-    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onSuccess: () => { toast({ title: t("orders_page.toast_deleted") }); refresh(); setDeleteId(null); },
+    onError: (e: Error) => toast({ title: t("orders_page.toast_error"), description: e.message, variant: "destructive" }),
   });
 
   const refresh = () => { refetch(); refetchStats(); };
@@ -966,7 +1019,16 @@ export default function Orders() {
 
   const exportCSV = () => {
     const rows = [
-      ["رقم الطلب","العميل","الهاتف","الحالة","المصدر","طريقة الدفع","الإجمالي","تاريخ الطلب"],
+      [
+        t("orders_page.csv_col_order_num"),
+        t("orders_page.csv_col_customer"),
+        t("orders_page.csv_col_phone"),
+        t("orders_page.csv_col_status"),
+        t("orders_page.csv_col_source"),
+        t("orders_page.csv_col_payment"),
+        t("orders_page.csv_col_total"),
+        t("orders_page.csv_col_date"),
+      ],
       ...safeOrders.map(o => [
         o.orderNumber,
         o.customerName,
@@ -995,49 +1057,49 @@ export default function Orders() {
   const totalPages = Math.ceil(safeOrders.length / PER_PAGE);
 
   return (
-    <div className="p-4 md:p-6 space-y-4" dir="rtl">
+    <div className="p-4 md:p-6 space-y-4" dir={lang === "ar" ? "rtl" : "ltr"}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5 text-pink-600" /> الطلبات
+            <ShoppingBag className="w-5 h-5 text-pink-600" /> {t("orders_page.title")}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">إدارة طلبات العملاء</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("orders_page.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" className="gap-1.5 h-9 text-sm border-emerald-300 text-emerald-700 hover:bg-emerald-50" onClick={exportCSV}>
-            <Download className="w-4 h-4" /> تصدير CSV
+            <Download className="w-4 h-4" /> {t("orders_page.btn_export_csv")}
           </Button>
           <Button className="bg-pink-600 hover:bg-pink-700 gap-1.5" onClick={() => { setEditOrder(null); setShowForm(true); }}>
-            <Plus className="w-4 h-4" /> طلب جديد
+            <Plus className="w-4 h-4" /> {t("orders_page.btn_new_order")}
           </Button>
         </div>
       </div>
 
       {/* Stats */}
-      <StatsCards stats={stats} />
+      <StatsCards stats={stats} t={t} />
 
       {/* Filters */}
       <div className="bg-white rounded-xl border p-3 space-y-2">
         <div className="flex flex-wrap gap-2 items-center">
           <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-            <Input placeholder="بحث برقم الطلب أو رقم الهاتف..." value={search}
+            <Input placeholder={t("orders_page.search_placeholder")} value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={e => e.key === "Enter" && applyFilters()}
               className="pr-9 h-8 text-sm" />
           </div>
           <Select value={statusFilter} onValueChange={v => setStatusFilter(v)}>
-            <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="الحالة" /></SelectTrigger>
+            <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder={t("orders_page.filter_all_statuses")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">كل الحالات</SelectItem>
+              <SelectItem value="all">{t("orders_page.filter_all_statuses")}</SelectItem>
               {Object.entries(STATUS_MAP).map(([v, s]) => <SelectItem key={v} value={v}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={sourceFilter} onValueChange={v => setSourceFilter(v)}>
-            <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="المصدر" /></SelectTrigger>
+            <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder={t("orders_page.filter_all_sources")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">كل المصادر</SelectItem>
+              <SelectItem value="all">{t("orders_page.filter_all_sources")}</SelectItem>
               {Object.entries(SOURCE_MAP).map(([v, s]) => <SelectItem key={v} value={v}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -1046,18 +1108,18 @@ export default function Orders() {
           <Button size="sm"
             className={`h-8 text-xs gap-1 ${hasPendingChange ? "bg-pink-600 hover:bg-pink-700 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}
             onClick={applyFilters}>
-            <Search className="w-3 h-3" /> بحث
+            <Search className="w-3 h-3" /> {t("orders_page.btn_search")}
           </Button>
           {hasFilters && (
             <Button size="sm" variant="outline" className="h-8 text-xs gap-1 text-red-500 border-red-200 hover:bg-red-50" onClick={clearFilters}>
-              <X className="w-3 h-3" /> مسح
+              <X className="w-3 h-3" /> {t("orders_page.btn_clear")}
             </Button>
           )}
           <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={refresh}>
             <RefreshCw className="w-3.5 h-3.5" />
           </Button>
         </div>
-<p className="text-xs text-muted-foreground">{orders.length} طلب</p>
+        <p className="text-xs text-muted-foreground">{orders.length} {t("orders_page.orders_count")}</p>
       </div>
 
       {/* Table */}
@@ -1069,14 +1131,24 @@ export default function Orders() {
         ) : orders.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
             <ShoppingBag className="w-12 h-12 mx-auto mb-3 opacity-20" />
-            <p>لا توجد طلبات مطابقة</p>
+            <p>{t("orders_page.no_orders")}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/50 border-b">
-                  {["رقم الطلب","العميل","المنتجات","المبلغ","الحالة","الدفع","المصدر","تاريخ الطلب","إجراءات"].map(h => (
+                  {[
+                    t("orders_page.col_order_num"),
+                    t("orders_page.col_customer"),
+                    t("orders_page.col_products"),
+                    t("orders_page.col_amount"),
+                    t("orders_page.col_status"),
+                    t("orders_page.col_payment"),
+                    t("orders_page.col_source"),
+                    t("orders_page.col_date"),
+                    t("orders_page.col_actions"),
+                  ].map(h => (
                     <th key={h} className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -1090,11 +1162,10 @@ export default function Orders() {
                     <tr key={order.id} className="hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-3 font-mono text-xs font-medium text-pink-700">
                         {order.orderNumber}
-                        {order.invoiceId && <span className="mr-1 text-[10px] bg-purple-100 text-purple-600 px-1 rounded">فاتورة</span>}
+                        {order.invoiceId && <span className="mr-1 text-[10px] bg-purple-100 text-purple-600 px-1 rounded">{t("orders_page.badge_invoice")}</span>}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          {/* Avatar */}
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${avatarColor(order.customerName || "؟")}`}>
                             {(order.customerName || "؟").charAt(0)}
                           </div>
@@ -1102,14 +1173,14 @@ export default function Orders() {
                             <div className="flex items-center gap-1">
                               <p className="font-medium text-xs">{order.customerName}</p>
                               {order.isRegisteredCustomer && (
-                                <span className="text-[9px] bg-green-100 text-green-700 border border-green-200 rounded-full px-1.5 py-0.5 font-medium whitespace-nowrap">عميل سابق</span>
+                                <span className="text-[9px] bg-green-100 text-green-700 border border-green-200 rounded-full px-1.5 py-0.5 font-medium whitespace-nowrap">{t("orders_page.badge_prev_customer")}</span>
                               )}
                             </div>
                             {order.customerPhone && <p className="text-[10px] text-muted-foreground" dir="ltr">{order.customerPhone}</p>}
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">{(order.items?.length || 0)} منتج</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{(order.items?.length || 0)} {t("orders_page.product_count")}</td>
                       <td className="px-4 py-3 font-bold text-pink-600 text-xs" dir="ltr">{omr(n(order.total))} ر.ع</td>
                       <td className="px-4 py-3">
                         <Badge variant="outline" className={`${st.color} text-[10px] gap-1`}>
@@ -1129,24 +1200,24 @@ export default function Orders() {
                       <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(order.createdAt)}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-600" title="عرض" onClick={() => setViewOrder(order)}>
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-600" title={t("orders_page.detail_title")} onClick={() => setViewOrder(order)}>
                             <Eye className="w-3.5 h-3.5" />
                           </Button>
                           {order.status !== "cancelled" && order.status !== "delivered" && (
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-amber-50 hover:text-amber-600" title="تحديث الحالة" onClick={() => setStatusOrder(order)}>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-amber-50 hover:text-amber-600" title={t("orders_page.status_modal_title")} onClick={() => setStatusOrder(order)}>
                               <ArrowRight className="w-3.5 h-3.5" />
                             </Button>
                           )}
                           {order.status === "delivered" && !order.invoiceId && (
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-emerald-50 hover:text-emerald-600" title="تحويل لفاتورة" onClick={() => setStatusOrder(order)}>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-emerald-50 hover:text-emerald-600" title={t("orders_page.convert_btn")} onClick={() => setStatusOrder(order)}>
                               <FileText className="w-3.5 h-3.5" />
                             </Button>
                           )}
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-gray-100" title="تعديل" onClick={() => { setEditOrder(order); setShowForm(true); }}>
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-gray-100" title={t("orders_page.form_title_edit")} onClick={() => { setEditOrder(order); setShowForm(true); }}>
                             <Edit className="w-3.5 h-3.5" />
                           </Button>
                           {isManager && (
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-red-50 hover:text-red-600" title="حذف" onClick={() => setDeleteId(order.id)}>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-red-50 hover:text-red-600" title={t("orders_page.delete_title")} onClick={() => setDeleteId(order.id)}>
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           )}
@@ -1164,9 +1235,11 @@ export default function Orders() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">
-          <Button size="sm" variant="outline" disabled={page === 1} onClick={() => setPage(p => p - 1)} className="h-8 text-xs">السابق</Button>
-          <span className="text-xs text-muted-foreground">صفحة {page} من {totalPages}</span>
-          <Button size="sm" variant="outline" disabled={page === totalPages} onClick={() => setPage(p => p + 1)} className="h-8 text-xs">التالي</Button>
+          <Button size="sm" variant="outline" disabled={page === 1} onClick={() => setPage(p => p - 1)} className="h-8 text-xs">{t("orders_page.pagination_prev")}</Button>
+          <span className="text-xs text-muted-foreground">
+            {t("orders_page.pagination_info").replace("{page}", String(page)).replace("{total}", String(totalPages))}
+          </span>
+          <Button size="sm" variant="outline" disabled={page === totalPages} onClick={() => setPage(p => p + 1)} className="h-8 text-xs">{t("orders_page.pagination_next")}</Button>
         </div>
       )}
 
@@ -1183,16 +1256,16 @@ export default function Orders() {
 
       {/* Confirm Delete */}
       <Dialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
-        <DialogContent className="max-w-xs" dir="rtl">
+        <DialogContent className="max-w-xs" dir={lang === "ar" ? "rtl" : "ltr"}>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle className="w-4 h-4" /> حذف الطلب</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle className="w-4 h-4" /> {t("orders_page.delete_title")}</DialogTitle>
           </DialogHeader>
-          <DialogDescription>هل أنت متأكد من حذف هذا الطلب؟ لا يمكن التراجع.</DialogDescription>
+          <DialogDescription>{t("orders_page.delete_confirm")}</DialogDescription>
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setDeleteId(null)}>إلغاء</Button>
+            <Button variant="outline" size="sm" onClick={() => setDeleteId(null)}>{t("orders_page.delete_cancel")}</Button>
             <Button size="sm" className="bg-red-600 hover:bg-red-700"
               onClick={() => deleteId && deleteMutation.mutate(deleteId)} disabled={deleteMutation.isPending}>
-              {deleteMutation.isPending ? "جارٍ الحذف..." : "حذف"}
+              {deleteMutation.isPending ? t("orders_page.deleting") : t("orders_page.delete_btn")}
             </Button>
           </DialogFooter>
         </DialogContent>

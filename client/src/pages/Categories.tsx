@@ -13,6 +13,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import type { Category } from "@shared/schema";
 
 const EMPTY_FORM = {
@@ -23,6 +24,7 @@ type CatRow = Category & { depth: number };
 
 export default function Categories() {
   const { toast } = useToast();
+  const { t, lang } = useI18n();
   const [, setLocation] = useLocation();
   const { data: authData } = useAuth();
   const user = authData?.user;
@@ -93,11 +95,11 @@ export default function Categories() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-      toast({ title: "تمت إضافة الفئة" });
+      toast({ title: t("categories_page.toast_added") });
       setAddOpen(false);
       setForm({ ...EMPTY_FORM });
     },
-    onError: (err: Error) => toast({ title: "خطأ", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: t("categories_page.toast_error"), description: err.message, variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
@@ -112,26 +114,26 @@ export default function Categories() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-      toast({ title: "تم الحفظ" });
+      toast({ title: t("categories_page.toast_saved") });
       setEditCategory(null);
     },
-    onError: (err: Error) => toast({ title: "خطأ", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: t("categories_page.toast_error"), description: err.message, variant: "destructive" }),
   });
 
   const toggleMutation = useMutation({
     mutationFn: (id: number) => apiRequest("PATCH", `/api/categories/${id}/toggle`, {}),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/categories"] }),
-    onError: (err: Error) => toast({ title: "خطأ", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: t("categories_page.toast_error"), description: err.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/categories/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-      toast({ title: "تم الحذف" });
+      toast({ title: t("categories_page.toast_deleted") });
       setDeleteCategory(null);
     },
-    onError: (err: Error) => toast({ title: "خطأ", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: t("categories_page.toast_error"), description: err.message, variant: "destructive" }),
   });
 
   // ── form helpers ───────────────────────────────────────────────────────────
@@ -205,22 +207,22 @@ export default function Categories() {
       <div className="flex justify-between items-center flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <FolderOpen className="w-6 h-6" /> الفئات
+            <FolderOpen className="w-6 h-6" /> {t("categories_page.title")}
           </h1>
           <p className="text-muted-foreground">
-            {categories.length} فئة — {(categories as Category[]).filter(c => !(c as any).isActive).length} غير نشطة
+            {categories.length} {t("categories_page.subtitle_categories")} — {(categories as Category[]).filter(c => !(c as any).isActive).length} {t("categories_page.subtitle_inactive")}
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={expandAll} className="gap-1 text-xs">
-            <ChevronsUpDown className="w-3.5 h-3.5" /> توسيع الكل
+            <ChevronsUpDown className="w-3.5 h-3.5" /> {t("categories_page.expand_all")}
           </Button>
           <Button variant="outline" size="sm" onClick={collapseAll} className="gap-1 text-xs">
-            <ChevronRight className="w-3.5 h-3.5" /> طي الكل
+            <ChevronRight className="w-3.5 h-3.5" /> {t("categories_page.collapse_all")}
           </Button>
           {isOwnerOrAdmin && (
             <Button onClick={openAdd} className="gap-2">
-              <Plus className="w-4 h-4" /> إضافة فئة
+              <Plus className="w-4 h-4" /> {t("categories_page.add_category")}
             </Button>
           )}
         </div>
@@ -232,7 +234,7 @@ export default function Categories() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             className="pl-9"
-            placeholder="بحث باسم الفئة..."
+            placeholder={t("categories_page.search_placeholder")}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -240,18 +242,18 @@ export default function Categories() {
         <Select value={filterActive} onValueChange={v => setFilterActive(v as any)}>
           <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">كل الحالات</SelectItem>
-            <SelectItem value="true">النشطة فقط</SelectItem>
-            <SelectItem value="false">غير النشطة</SelectItem>
+            <SelectItem value="all">{t("categories_page.filter_all_statuses")}</SelectItem>
+            <SelectItem value="true">{t("categories_page.filter_active")}</SelectItem>
+            <SelectItem value="false">{t("categories_page.filter_inactive")}</SelectItem>
           </SelectContent>
         </Select>
         <Select value={filterParent} onValueChange={v => setFilterParent(v as any)}>
           <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">كل التصنيفات</SelectItem>
-            <SelectItem value="root">الرئيسية فقط</SelectItem>
+            <SelectItem value="all">{t("categories_page.filter_all_cats")}</SelectItem>
+            <SelectItem value="root">{t("categories_page.filter_root")}</SelectItem>
             {(categories as Category[]).filter(c => !c.parentId).map(c => (
-              <SelectItem key={c.id} value={c.id.toString()}>فرعية: {c.name}</SelectItem>
+              <SelectItem key={c.id} value={c.id.toString()}>{t("categories_page.filter_sub")} {c.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -262,14 +264,14 @@ export default function Categories() {
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead className="w-10">#</TableHead>
-              <TableHead className="w-12">الصورة</TableHead>
-              <TableHead>اسم الفئة</TableHead>
-              <TableHead>الوصف</TableHead>
-              <TableHead>الفئة الأب</TableHead>
-              <TableHead>المنتجات</TableHead>
-              <TableHead>الحالة</TableHead>
-              {isOwnerOrAdmin && <TableHead className="text-right">الإجراءات</TableHead>}
+              <TableHead className="w-10">{t("categories_page.col_num")}</TableHead>
+              <TableHead className="w-12">{t("categories_page.col_image")}</TableHead>
+              <TableHead>{t("categories_page.col_name")}</TableHead>
+              <TableHead>{t("categories_page.col_desc")}</TableHead>
+              <TableHead>{t("categories_page.col_parent")}</TableHead>
+              <TableHead>{t("categories_page.col_products")}</TableHead>
+              <TableHead>{t("categories_page.col_status")}</TableHead>
+              {isOwnerOrAdmin && <TableHead className="text-right">{t("categories_page.col_actions")}</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -279,7 +281,7 @@ export default function Categories() {
               </TableCell></TableRow>
             ) : rows.length === 0 ? (
               <TableRow><TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
-                لا توجد فئات {search && `بكلمة "${search}"`}
+                {t("categories_page.no_results")} {search && `${t("categories_page.no_results_search")} "${search}"`}
               </TableCell></TableRow>
             ) : rows.map((c, i) => {
               const count = productCount(c.id);
@@ -329,7 +331,7 @@ export default function Categories() {
                   <TableCell className="text-sm text-muted-foreground">
                     {c.parentId
                       ? <Badge variant="outline" className="text-xs">{getCatName(c.parentId)}</Badge>
-                      : <Badge variant="secondary" className="text-xs">رئيسية</Badge>}
+                      : <Badge variant="secondary" className="text-xs">{t("categories_page.badge_root")}</Badge>}
                   </TableCell>
 
                   {/* عدد المنتجات */}
@@ -337,10 +339,10 @@ export default function Categories() {
                     <Badge
                       variant={count === 0 ? "secondary" : "outline"}
                       className={count > 0 ? "cursor-pointer hover:bg-primary/10 gap-1" : "gap-1"}
-                      title={count > 0 ? "اضغط لعرض المنتجات" : "لا توجد منتجات"}
+                      title={count > 0 ? t("categories_page.view_products_title") : t("categories_page.no_products_title")}
                       onClick={() => count > 0 && setLocation(`/products?categoryId=${c.id}`)}
                     >
-                      <Package className="w-3 h-3" /> {count} منتج
+                      <Package className="w-3 h-3" /> {count} {t("categories_page.product_count")}
                     </Badge>
                   </TableCell>
 
@@ -354,7 +356,7 @@ export default function Categories() {
                       />
                     ) : (
                       <Badge variant={(c as any).isActive ? "default" : "secondary"}>
-                        {(c as any).isActive ? "نشطة" : "غير نشطة"}
+                        {(c as any).isActive ? t("categories_page.badge_active") : t("categories_page.badge_inactive")}
                       </Badge>
                     )}
                   </TableCell>
@@ -364,14 +366,14 @@ export default function Categories() {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         {c.depth === 0 && (
-                          <Button variant="ghost" size="icon" title="إضافة فئة فرعية" onClick={() => openAddSub(c)}>
+                          <Button variant="ghost" size="icon" title={t("categories_page.add_sub_title")} onClick={() => openAddSub(c)}>
                             <Plus className="w-4 h-4 text-primary" />
                           </Button>
                         )}
-                        <Button variant="ghost" size="icon" title="تعديل" onClick={() => openEdit(c)}>
+                        <Button variant="ghost" size="icon" title={t("categories_page.edit_title")} onClick={() => openEdit(c)}>
                           <Edit2 className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" title="حذف" onClick={() => setDeleteCategory(c)}>
+                        <Button variant="ghost" size="icon" title={t("categories_page.delete_title")} onClick={() => setDeleteCategory(c)}>
                           <Trash2 className="w-4 h-4 text-destructive" />
                         </Button>
                       </div>
@@ -388,13 +390,13 @@ export default function Categories() {
       <Dialog open={addOpen} onOpenChange={open => { if (!open) { setAddOpen(false); setForm({ ...EMPTY_FORM }); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5" /> إضافة فئة جديدة</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5" /> {t("categories_page.modal_add_title")}</DialogTitle>
           </DialogHeader>
-          <CategoryForm form={form} setForm={setForm} onImageChange={handleImageChange} parentOptions={parentOptions()} />
+          <CategoryForm form={form} setForm={setForm} onImageChange={handleImageChange} parentOptions={parentOptions()} t={t} />
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setAddOpen(false); setForm({ ...EMPTY_FORM }); }}>إلغاء</Button>
+            <Button variant="outline" onClick={() => { setAddOpen(false); setForm({ ...EMPTY_FORM }); }}>{t("categories_page.modal_cancel")}</Button>
             <Button onClick={() => createMutation.mutate(form)} disabled={!form.name.trim() || createMutation.isPending}>
-              {createMutation.isPending ? "جارٍ الحفظ..." : "حفظ"}
+              {createMutation.isPending ? t("categories_page.modal_saving") : t("categories_page.modal_save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -404,26 +406,26 @@ export default function Categories() {
       <Dialog open={!!editCategory} onOpenChange={open => { if (!open) setEditCategory(null); }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Edit2 className="w-5 h-5" /> تعديل: {editCategory?.name}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><Edit2 className="w-5 h-5" /> {t("categories_page.modal_edit_prefix")} {editCategory?.name}</DialogTitle>
           </DialogHeader>
           {editCategory && (
             <div className="flex items-center gap-3 p-3 bg-muted rounded-lg mb-2">
               <Package className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm">المنتجات: <strong>{productCount(editCategory.id)}</strong></span>
+              <span className="text-sm">{t("categories_page.modal_products_label")} <strong>{productCount(editCategory.id)}</strong></span>
               {subCount(editCategory.id) > 0 && (
-                <span className="text-sm text-muted-foreground">— فئات فرعية: <strong>{subCount(editCategory.id)}</strong></span>
+                <span className="text-sm text-muted-foreground">— {t("categories_page.modal_sub_cats_label")} <strong>{subCount(editCategory.id)}</strong></span>
               )}
             </div>
           )}
-          <CategoryForm form={form} setForm={setForm} onImageChange={handleImageChange} parentOptions={parentOptions(editCategory?.id)} />
+          <CategoryForm form={form} setForm={setForm} onImageChange={handleImageChange} parentOptions={parentOptions(editCategory?.id)} t={t} />
           <DialogFooter className="flex-row justify-between gap-2">
             <Button variant="destructive" className="gap-1" onClick={() => { setEditCategory(null); setDeleteCategory(editCategory); }}>
-              <Trash2 className="w-4 h-4" /> حذف
+              <Trash2 className="w-4 h-4" /> {t("categories_page.modal_delete")}
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setEditCategory(null)}>إلغاء</Button>
+              <Button variant="outline" onClick={() => setEditCategory(null)}>{t("categories_page.modal_cancel")}</Button>
               <Button onClick={() => editCategory && updateMutation.mutate({ id: editCategory.id, data: form })} disabled={!form.name.trim() || updateMutation.isPending}>
-                {updateMutation.isPending ? "جارٍ الحفظ..." : "حفظ"}
+                {updateMutation.isPending ? t("categories_page.modal_saving") : t("categories_page.modal_save")}
               </Button>
             </div>
           </DialogFooter>
@@ -434,23 +436,23 @@ export default function Categories() {
       <Dialog open={!!deleteCategory} onOpenChange={open => { if (!open) setDeleteCategory(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-destructive flex items-center gap-2"><Trash2 className="w-5 h-5" /> تأكيد الحذف</DialogTitle>
+            <DialogTitle className="text-destructive flex items-center gap-2"><Trash2 className="w-5 h-5" /> {t("categories_page.modal_confirm_delete")}</DialogTitle>
             <DialogDescription asChild>
               <div className="space-y-1 pt-1">
-                <p>هل أنت متأكد من حذف فئة <strong>"{deleteCategory?.name}"</strong>؟</p>
+                <p>{t("categories_page.modal_confirm_msg")} <strong>"{deleteCategory?.name}"</strong>؟</p>
                 {deleteCategory && productCount(deleteCategory.id) > 0 && (
-                  <p className="text-orange-600 font-medium">⚠️ تحتوي على {productCount(deleteCategory.id)} منتج — سيُلغى ارتباطهم بهذه الفئة.</p>
+                  <p className="text-orange-600 font-medium">⚠️ {t("categories_page.modal_confirm_products_warning").replace("{count}", String(productCount(deleteCategory.id)))}</p>
                 )}
                 {deleteCategory && subCount(deleteCategory.id) > 0 && (
-                  <p className="text-red-600 font-medium">⚠️ تحتوي على {subCount(deleteCategory.id)} فئة فرعية — ستبقى بدون فئة أب.</p>
+                  <p className="text-red-600 font-medium">⚠️ {t("categories_page.modal_confirm_sub_warning").replace("{count}", String(subCount(deleteCategory.id)))}</p>
                 )}
               </div>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteCategory(null)}>إلغاء</Button>
+            <Button variant="outline" onClick={() => setDeleteCategory(null)}>{t("categories_page.modal_cancel")}</Button>
             <Button variant="destructive" onClick={() => deleteCategory && deleteMutation.mutate(deleteCategory.id)} disabled={deleteMutation.isPending}>
-              {deleteMutation.isPending ? "جارٍ الحذف..." : "نعم، احذف"}
+              {deleteMutation.isPending ? t("categories_page.modal_deleting") : t("categories_page.modal_confirm_yes")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -461,34 +463,35 @@ export default function Categories() {
 
 // ── مكوّن الفورم المشترك ───────────────────────────────────────────────────
 function CategoryForm({
-  form, setForm, onImageChange, parentOptions,
+  form, setForm, onImageChange, parentOptions, t,
 }: {
   form: any;
   setForm: React.Dispatch<React.SetStateAction<any>>;
   onImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   parentOptions: Category[];
+  t: (key: string) => string;
 }) {
   return (
     <div className="space-y-4 py-2">
       {/* الاسم */}
       <div className="space-y-1">
-        <label className="text-sm font-medium">اسم الفئة <span className="text-destructive">*</span></label>
+        <label className="text-sm font-medium">{t("categories_page.form_name_label")} <span className="text-destructive">{t("categories_page.form_name_required")}</span></label>
         <Input
           autoFocus
           value={form.name}
           onChange={e => setForm((f: any) => ({ ...f, name: e.target.value }))}
-          placeholder="مثال: خواتم"
+          placeholder={t("categories_page.form_name_placeholder")}
           maxLength={100}
         />
       </div>
 
       {/* الوصف */}
       <div className="space-y-1">
-        <label className="text-sm font-medium">الوصف <span className="text-muted-foreground text-xs">(اختياري)</span></label>
+        <label className="text-sm font-medium">{t("categories_page.form_desc_label")} <span className="text-muted-foreground text-xs">{t("categories_page.form_desc_optional")}</span></label>
         <Textarea
           value={form.description}
           onChange={e => setForm((f: any) => ({ ...f, description: e.target.value }))}
-          placeholder="وصف مختصر للفئة..."
+          placeholder={t("categories_page.form_desc_placeholder")}
           rows={2}
           maxLength={500}
         />
@@ -496,7 +499,7 @@ function CategoryForm({
 
       {/* الصورة */}
       <div className="space-y-1">
-        <label className="text-sm font-medium">صورة الفئة <span className="text-muted-foreground text-xs">(اختياري)</span></label>
+        <label className="text-sm font-medium">{t("categories_page.form_image_label")} <span className="text-muted-foreground text-xs">{t("categories_page.form_image_optional")}</span></label>
         <div className="flex items-center gap-3">
           <div className="w-14 h-14 rounded-lg border bg-muted flex items-center justify-center overflow-hidden shrink-0">
             {form.image
@@ -506,12 +509,12 @@ function CategoryForm({
           <div className="flex flex-col gap-1.5">
             <input type="file" accept="image/*" className="hidden" id="cat-img-input" onChange={onImageChange} />
             <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById("cat-img-input")?.click()}>
-              اختر صورة
+              {t("categories_page.form_image_choose")}
             </Button>
             {form.image && (
               <Button type="button" variant="ghost" size="sm" className="text-destructive h-7"
                 onClick={() => setForm((f: any) => ({ ...f, image: "" }))}>
-                حذف
+                {t("categories_page.form_image_delete")}
               </Button>
             )}
           </div>
@@ -520,11 +523,11 @@ function CategoryForm({
 
       {/* الفئة الأب */}
       <div className="space-y-1">
-        <label className="text-sm font-medium">الفئة الأب <span className="text-muted-foreground text-xs">(فئة فرعية)</span></label>
+        <label className="text-sm font-medium">{t("categories_page.form_parent_label")} <span className="text-muted-foreground text-xs">{t("categories_page.form_parent_optional")}</span></label>
         <Select value={form.parentId || "none"} onValueChange={v => setForm((f: any) => ({ ...f, parentId: v === "none" ? "" : v }))}>
-          <SelectTrigger><SelectValue placeholder="فئة رئيسية (بدون أب)" /></SelectTrigger>
+          <SelectTrigger><SelectValue placeholder={t("categories_page.form_parent_placeholder")} /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="none">فئة رئيسية</SelectItem>
+            <SelectItem value="none">{t("categories_page.form_parent_root")}</SelectItem>
             {parentOptions.map(c => (
               <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
             ))}
@@ -535,7 +538,7 @@ function CategoryForm({
       {/* الترتيب + الحالة */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
-          <label className="text-sm font-medium">ترتيب العرض</label>
+          <label className="text-sm font-medium">{t("categories_page.form_sort_label")}</label>
           <Input
             type="number" min={0}
             value={form.sortOrder}
@@ -543,14 +546,14 @@ function CategoryForm({
           />
         </div>
         <div className="space-y-1">
-          <label className="text-sm font-medium">الحالة</label>
+          <label className="text-sm font-medium">{t("categories_page.form_status_label")}</label>
           <div className="flex items-center gap-3 h-10 border rounded-md px-3">
             <Switch
               checked={form.isActive}
               onCheckedChange={v => setForm((f: any) => ({ ...f, isActive: v }))}
             />
             <span className={`text-sm font-medium ${form.isActive ? "text-green-600" : "text-muted-foreground"}`}>
-              {form.isActive ? "نشطة" : "غير نشطة"}
+              {form.isActive ? t("categories_page.form_status_active") : t("categories_page.form_status_inactive")}
             </span>
           </div>
         </div>

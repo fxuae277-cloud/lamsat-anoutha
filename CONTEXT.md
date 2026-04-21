@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-19 (جلسة 23 — تقرير الطلبات الشهري)_
+_آخر تحديث: 2026-04-21 (جلسة 24 — ترجمة شاملة للصفحات)_
 
 ---
 
@@ -440,6 +440,32 @@ fetch('/api/run-migration-0018',{method:'POST'}).then(r=>r.json()).then(console.
   - **دليل الحسابات**: شجرة بأعمدة (مدين / دائن / رصيد) مع فلتر فترة + KPI cards بإجماليات حسب النوع + زر كشف الحساب بنقرة
   - **القيود اليومية**: قائمة كاملة مع فلتر التاريخ والحالة + زر ترحيل المسودات + dialog تفاصيل سطور القيد
 - [x] **إضافة "دليل الحسابات"** في sidebar تحت قسم المالية
+
+---
+
+---
+
+### جلسة 24 — ترجمة شاملة للصفحات (i18n)
+
+#### ar.json + en.json — مفاتيح ترجمة جديدة
+- [x] إضافة **497 سطر** من مفاتيح الترجمة (ar + en) للصفحات التالية:
+  - `branch_summary` · `opening_stock` · `roles_mgmt` · `users_mgmt`
+  - `finance_summary` · `categories_page` · `barcode_labels` · `orders_page`
+  - `dashboard` (day_names, month_names, filter_date, payment methods...)
+
+#### AppLayout.tsx — ترجمة أسماء الأيام والأشهر
+- [x] استبدال hardcoded العربية (`WEEKDAY_AR` / `MONTH_AR`) بمفاتيح `t('day_names.xxx')` و `t('month_names.xxx')`
+
+#### الصفحات المُترجمة
+- [x] `Dashboard.tsx` — مفاتيح i18n لكل العناصر
+- [x] `BranchSummary.tsx` — ترجمة كاملة
+- [x] `OpeningStock.tsx` — ترجمة كاملة
+- [x] `RolesManagement.tsx` — ترجمة كاملة
+- [x] `UsersManagement.tsx` — ترجمة كاملة
+- [x] `FinanceSummary.tsx` — ترجمة كاملة
+- [x] `Categories.tsx` — ترجمة كاملة
+- [x] `BarcodeLabels.tsx` — ترجمة كاملة
+- [x] `Orders.tsx` — ترجمة كاملة
 
 ---
 

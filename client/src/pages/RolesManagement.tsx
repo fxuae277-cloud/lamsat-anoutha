@@ -7,20 +7,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/lib/i18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Role       = { id: number; name: string; description: string; is_active: boolean; permission_count: number };
 type Permission = { id: number; code: string; name: string; category: string };
 
-// ─── Category labels ──────────────────────────────────────────────────────────
-const CAT_LABELS: Record<string, { label: string; color: string }> = {
-  sales:     { label: "المبيعات",    color: "bg-green-100 text-green-800" },
-  products:  { label: "المنتجات",   color: "bg-blue-100 text-blue-800" },
-  inventory: { label: "المخزون",    color: "bg-amber-100 text-amber-800" },
-  purchases: { label: "المشتريات",  color: "bg-orange-100 text-orange-800" },
-  finance:   { label: "المالية",    color: "bg-purple-100 text-purple-800" },
-  customers: { label: "العملاء",    color: "bg-cyan-100 text-cyan-800" },
-  admin:     { label: "الإدارة",    color: "bg-red-100 text-red-800" },
+// ─── Category colors (labels come from t()) ───────────────────────────────────
+const CAT_COLORS: Record<string, string> = {
+  sales:     "bg-green-100 text-green-800",
+  products:  "bg-blue-100 text-blue-800",
+  inventory: "bg-amber-100 text-amber-800",
+  purchases: "bg-orange-100 text-orange-800",
+  finance:   "bg-purple-100 text-purple-800",
+  customers: "bg-cyan-100 text-cyan-800",
+  admin:     "bg-red-100 text-red-800",
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -31,6 +32,7 @@ const ROLE_COLORS: Record<string, string> = {
 // ══════════════════════════════════════════════════════════════════════════════
 export default function RolesManagement() {
   const { toast } = useToast();
+  const { t, lang } = useI18n();
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [pendingPerms, setPendingPerms] = useState<Set<number>>(new Set());
   const [dirty, setDirty] = useState(false);
@@ -91,12 +93,12 @@ export default function RolesManagement() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "تم حفظ الصلاحيات" });
+      toast({ title: t("roles_mgmt.saved") });
       setDirty(false);
       queryClient.invalidateQueries({ queryKey: [`/api/roles/${selectedRole?.id}/permissions`] });
       queryClient.invalidateQueries({ queryKey: ["/api/roles"] });
     },
-    onError: (e: any) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
 
   // Group permissions by category
@@ -108,23 +110,34 @@ export default function RolesManagement() {
 
   const isOwner = selectedRole?.name === "owner";
 
+  function roleDisplayName(name: string): string {
+    if (name === "owner") return t("roles_mgmt.role_owner");
+    if (name === "sales") return t("roles_mgmt.role_sales");
+    return name;
+  }
+
+  function catLabel(cat: string): string {
+    const key = `roles_mgmt.cat_${cat}` as any;
+    return t(key) || cat;
+  }
+
   // ── render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="p-4 md:p-6 space-y-5 max-w-6xl mx-auto" dir="rtl">
+    <div className="p-4 md:p-6 space-y-5 max-w-6xl mx-auto" dir={lang === "ar" ? "rtl" : "ltr"}>
 
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-primary flex items-center gap-2">
-          <Shield className="h-6 w-6" /> إدارة الأدوار والصلاحيات
+          <Shield className="h-6 w-6" /> {t("roles_mgmt.title")}
         </h1>
-        <p className="text-sm text-muted-foreground mt-1">تحديد ما يستطيع كل دور الوصول إليه في النظام</p>
+        <p className="text-sm text-muted-foreground mt-1">{t("roles_mgmt.subtitle")}</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
 
         {/* Roles List */}
         <div className="space-y-3">
-          <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">الأدوار</h2>
+          <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">{t("roles_mgmt.heading_roles")}</h2>
           {loadingRoles ? (
             <div className="text-center py-8"><Loader2 className="h-5 w-5 animate-spin mx-auto text-primary" /></div>
           ) : rolesArr.map(r => (
@@ -142,14 +155,14 @@ export default function RolesManagement() {
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <p className="font-bold text-base">
-                        {r.name === "owner" ? "المالك" : r.name === "sales" ? "البيع" : r.name}
+                        {roleDisplayName(r.name)}
                       </p>
                       {r.name === "owner" && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
                     </div>
                     <p className="text-xs text-muted-foreground">{r.description}</p>
                   </div>
                   <Badge className="shrink-0 text-xs bg-primary/10 text-primary border-0">
-                    {r.permission_count} صلاحية
+                    {r.permission_count} {t("roles_mgmt.permission_count")}
                   </Badge>
                 </div>
               </CardContent>
@@ -158,9 +171,9 @@ export default function RolesManagement() {
 
           {/* Legend */}
           <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-xs text-amber-800 space-y-1">
-            <div className="flex items-center gap-1.5 font-medium"><Info className="h-3.5 w-3.5" /> ملاحظة</div>
-            <p>صلاحيات المالك ثابتة ولا يمكن تعديلها.</p>
-            <p>يمكن تخصيص صلاحيات دور "البيع" حسب الحاجة.</p>
+            <div className="flex items-center gap-1.5 font-medium"><Info className="h-3.5 w-3.5" /> {t("roles_mgmt.note_title")}</div>
+            <p>{t("roles_mgmt.note_owner_fixed")}</p>
+            <p>{t("roles_mgmt.note_sales_custom")}</p>
           </div>
         </div>
 
@@ -169,23 +182,23 @@ export default function RolesManagement() {
           {!selectedRole ? (
             <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-3">
               <Shield className="h-12 w-12 opacity-20" />
-              <p>اختر دوراً لعرض صلاحياته</p>
+              <p>{t("roles_mgmt.select_prompt")}</p>
             </div>
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="font-semibold">
-                  صلاحيات دور "{selectedRole.name === "owner" ? "المالك" : "البيع"}"
+                  {t("roles_mgmt.role_permissions_for")} "{roleDisplayName(selectedRole.name)}"
                 </h2>
                 {!isOwner && dirty && (
                   <Button size="sm" onClick={() => saveMut.mutate()} disabled={saveMut.isPending} className="gap-2">
                     {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    حفظ التغييرات
+                    {t("roles_mgmt.save_changes")}
                   </Button>
                 )}
                 {isOwner && (
                   <Badge className="bg-gray-100 text-gray-600 border-0 gap-1">
-                    <Lock className="h-3 w-3" /> محمي — غير قابل للتعديل
+                    <Lock className="h-3 w-3" /> {t("roles_mgmt.protected")}
                   </Badge>
                 )}
               </div>
@@ -195,14 +208,14 @@ export default function RolesManagement() {
               ) : (
                 <div className="space-y-4">
                   {Object.entries(grouped).map(([cat, perms]) => {
-                    const catInfo = CAT_LABELS[cat] || { label: cat, color: "bg-gray-100 text-gray-700" };
+                    const catColor = CAT_COLORS[cat] || "bg-gray-100 text-gray-700";
                     const catEnabled = perms.filter(p => effectivePerms.has(p.id) || (isOwner && currentPermIds.has(p.id))).length;
                     return (
                       <Card key={cat} className="rounded-2xl border-0 shadow-sm">
                         <CardHeader className="pb-2 pt-3 px-4">
                           <div className="flex items-center justify-between">
                             <CardTitle className="text-sm flex items-center gap-2">
-                              <Badge className={`text-xs ${catInfo.color} border-0`}>{catInfo.label}</Badge>
+                              <Badge className={`text-xs ${catColor} border-0`}>{catLabel(cat)}</Badge>
                             </CardTitle>
                             <span className="text-xs text-muted-foreground">
                               {isOwner ? perms.length : catEnabled}/{perms.length}
@@ -249,7 +262,7 @@ export default function RolesManagement() {
 
                   {/* Summary */}
                   <div className="flex items-center justify-between text-sm bg-muted/30 rounded-xl p-3">
-                    <span className="text-muted-foreground">إجمالي الصلاحيات المفعّلة</span>
+                    <span className="text-muted-foreground">{t("roles_mgmt.total_active")}</span>
                     <span className="font-bold text-primary">
                       {isOwner ? currentPermIds.size : (dirty ? effectivePerms.size : currentPermIds.size)} / {permsArr.length}
                     </span>
@@ -258,7 +271,7 @@ export default function RolesManagement() {
                   {!isOwner && dirty && (
                     <Button className="w-full gap-2" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
                       {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                      حفظ صلاحيات دور البيع
+                      {t("roles_mgmt.save_sales_perms")}
                     </Button>
                   )}
                 </div>

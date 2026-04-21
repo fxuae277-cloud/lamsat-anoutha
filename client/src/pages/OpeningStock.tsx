@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/lib/i18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -93,12 +94,6 @@ interface ProductHit {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const STATUS_LABEL: Record<string, string> = {
-  draft: "مسودة",
-  committed: "مثبَّت",
-  reset: "تم الإعادة",
-};
 const STATUS_COLOR: Record<string, string> = {
   draft: "bg-yellow-100 text-yellow-800 border-yellow-200",
   committed: "bg-green-100 text-green-800 border-green-200",
@@ -118,7 +113,7 @@ async function apiFetch(url: string, opts?: RequestInit) {
 
 // ─── Product search box ───────────────────────────────────────────────────────
 
-function ProductSearch({ onAdd }: { onAdd: (p: ProductHit) => void }) {
+function ProductSearch({ onAdd, placeholder }: { onAdd: (p: ProductHit) => void; placeholder: string }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<ProductHit[]>([]);
   const [loading, setLoading] = useState(false);
@@ -156,7 +151,7 @@ function ProductSearch({ onAdd }: { onAdd: (p: ProductHit) => void }) {
         <input
           value={q}
           onChange={(e) => search(e.target.value)}
-          placeholder="ابحث بالاسم أو الباركود لإضافة منتج..."
+          placeholder={placeholder}
           className="flex-1 outline-none text-sm bg-transparent"
         />
       </div>
@@ -190,7 +185,18 @@ function ProductSearch({ onAdd }: { onAdd: (p: ProductHit) => void }) {
 
 export default function OpeningStock() {
   const { toast } = useToast();
+  const { t, lang } = useI18n();
   const qc = useQueryClient();
+
+  function statusLabel(s: string | null): string {
+    if (!s) return t("opening_stock.status_none");
+    const map: Record<string, string> = {
+      draft: t("opening_stock.status_draft"),
+      committed: t("opening_stock.status_committed"),
+      reset: t("opening_stock.status_reset"),
+    };
+    return map[s] ?? s;
+  }
 
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
   const [items, setItems] = useState<ItemRow[]>([]);
@@ -239,26 +245,26 @@ export default function OpeningStock() {
         body: JSON.stringify({ branchId: selectedBranchId, items, notes }),
       }),
     onSuccess: () => {
-      toast({ title: "تم حفظ المسودة" });
+      toast({ title: t("opening_stock.draft_saved") });
       qc.invalidateQueries({ queryKey: ["opening-stock", selectedBranchId] });
       qc.invalidateQueries({ queryKey: ["opening-stock-status"] });
       refetchEntry();
     },
-    onError: (err: any) => toast({ title: "خطأ", description: err.message, variant: "destructive" }),
+    onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
 
   const commitMut = useMutation({
     mutationFn: () =>
       apiFetch(`/api/opening-stock/commit/${entry?.id}`, { method: "POST" }),
     onSuccess: () => {
-      toast({ title: "تم تثبيت المخزون الافتتاحي ✅" });
+      toast({ title: t("opening_stock.committed_success") });
       setConfirmCommit(false);
       qc.invalidateQueries({ queryKey: ["opening-stock"] });
       qc.invalidateQueries({ queryKey: ["opening-stock-status"] });
     },
     onError: (err: any) => {
       setConfirmCommit(false);
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -266,7 +272,7 @@ export default function OpeningStock() {
     mutationFn: () =>
       apiFetch(`/api/opening-stock/reset/${selectedBranchId}`, { method: "POST" }),
     onSuccess: () => {
-      toast({ title: "تم إعادة تعيين المخزون الافتتاحي" });
+      toast({ title: t("opening_stock.reset_success") });
       setConfirmReset(false);
       setItems([]);
       qc.invalidateQueries({ queryKey: ["opening-stock"] });
@@ -274,7 +280,7 @@ export default function OpeningStock() {
     },
     onError: (err: any) => {
       setConfirmReset(false);
-      toast({ title: "خطأ", description: err.message, variant: "destructive" });
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -286,7 +292,7 @@ export default function OpeningStock() {
         body: JSON.stringify({ branchId: selectedBranchId, csvText, notes }),
       }),
     onSuccess: (data) => {
-      toast({ title: `تم استيراد ${data.itemCount} منتج بنجاح` });
+      toast({ title: `${data.itemCount} ${t("opening_stock.items_count")} — ${t("opening_stock.committed_success")}` });
       setCsvDialog(false);
       setCsvText("");
       qc.invalidateQueries({ queryKey: ["opening-stock", selectedBranchId] });
@@ -294,14 +300,14 @@ export default function OpeningStock() {
       refetchEntry().then((r) => syncEntry(r.data));
     },
     onError: (err: any) =>
-      toast({ title: "خطأ في الاستيراد", description: err.message, variant: "destructive" }),
+      toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
 
   // ── Item manipulation ──────────────────────────────────────────────────────
 
   function addProduct(p: ProductHit) {
     if (items.some((i) => i.productId === p.id)) {
-      toast({ title: "المنتج موجود بالفعل في القائمة", variant: "destructive" });
+      toast({ title: t("opening_stock.duplicate_product"), variant: "destructive" });
       return;
     }
     setItems((prev) => [
@@ -369,16 +375,16 @@ export default function OpeningStock() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto" dir="rtl">
+    <div className="p-6 space-y-6 max-w-6xl mx-auto" dir={lang === "ar" ? "rtl" : "ltr"}>
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <PackagePlus className="h-6 w-6 text-primary" />
-            المخزون الافتتاحي
+            {t("opening_stock.title")}
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            تهيئة الكميات والتكاليف للفروع دون فاتورة شراء
+            {t("opening_stock.subtitle")}
           </p>
         </div>
       </div>
@@ -401,20 +407,14 @@ export default function OpeningStock() {
           >
             <div className="flex items-center justify-between mb-2">
               <span className="font-semibold">{s.branchName}</span>
-              {s.status ? (
-                <span
-                  className={`text-xs border px-2 py-0.5 rounded-full ${STATUS_COLOR[s.status]}`}
-                >
-                  {STATUS_LABEL[s.status]}
-                </span>
-              ) : (
-                <span className="text-xs border px-2 py-0.5 rounded-full bg-gray-50 text-gray-500">
-                  غير مهيأ
-                </span>
-              )}
+              <span
+                className={`text-xs border px-2 py-0.5 rounded-full ${s.status ? STATUS_COLOR[s.status] : "bg-gray-50 text-gray-500"}`}
+              >
+                {statusLabel(s.status)}
+              </span>
             </div>
             <p className="text-sm text-muted-foreground">
-              {s.itemCount} صنف — {fmt(s.totalValue)} ر.ع
+              {s.itemCount} {t("opening_stock.items_count")} — {fmt(s.totalValue)} {t("branch_summary.omr")}
             </p>
           </button>
         ))}
@@ -428,13 +428,13 @@ export default function OpeningStock() {
             <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl p-4 text-green-800">
               <CheckCircle2 className="h-5 w-5 shrink-0" />
               <div className="flex-1">
-                <p className="font-semibold">المخزون الافتتاحي مُثبَّت</p>
+                <p className="font-semibold">{t("opening_stock.committed_banner")}</p>
                 <p className="text-sm">
-                  تم التثبيت في{" "}
+                  {t("opening_stock.committed_at")}{" "}
                   {entry?.committedAt
-                    ? new Date(entry.committedAt).toLocaleString("ar-OM")
+                    ? new Date(entry.committedAt).toLocaleString(lang === "ar" ? "ar-OM" : "en-GB")
                     : "—"}{" "}
-                  بواسطة {entry?.createdByName}
+                  {t("opening_stock.committed_by")} {entry?.createdByName}
                 </p>
               </div>
               <Button
@@ -444,7 +444,7 @@ export default function OpeningStock() {
                 onClick={() => setConfirmReset(true)}
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                إعادة تعيين
+                {t("opening_stock.reset")}
               </Button>
             </div>
           )}
@@ -453,7 +453,7 @@ export default function OpeningStock() {
           {!isCommitted && (
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex-1 min-w-[240px]">
-                <ProductSearch onAdd={addProduct} />
+                <ProductSearch onAdd={addProduct} placeholder={t("opening_stock.search_placeholder")} />
               </div>
               <input
                 ref={fileInputRef}
@@ -469,7 +469,7 @@ export default function OpeningStock() {
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Upload className="h-4 w-4" />
-                استيراد CSV
+                {t("opening_stock.import_csv")}
               </Button>
               <Button
                 variant="ghost"
@@ -478,7 +478,7 @@ export default function OpeningStock() {
                 onClick={downloadTemplate}
               >
                 <Download className="h-4 w-4" />
-                تحميل النموذج
+                {t("opening_stock.download_template")}
               </Button>
             </div>
           )}
@@ -488,7 +488,7 @@ export default function OpeningStock() {
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">
-                  الأصناف ({items.length} صنف)
+                  {t("opening_stock.product")} ({items.length} {t("opening_stock.items_count")})
                 </CardTitle>
                 {branchStatus?.status === "draft" && entry && !items.length && (
                   <Button
@@ -497,7 +497,7 @@ export default function OpeningStock() {
                     className="text-xs"
                     onClick={() => syncEntry(entry)}
                   >
-                    تحميل المسودة المحفوظة
+                    {t("opening_stock.load_draft")}
                   </Button>
                 )}
               </div>
@@ -508,8 +508,8 @@ export default function OpeningStock() {
                   <Info className="h-8 w-8 opacity-30" />
                   <p className="text-sm">
                     {isCommitted
-                      ? "لا توجد أصناف لعرضها (تم التثبيت)"
-                      : "ابدأ بإضافة منتجات أو استيراد ملف CSV"}
+                      ? t("opening_stock.already_committed_empty")
+                      : t("opening_stock.empty_hint")}
                   </p>
                 </div>
               ) : (
@@ -517,11 +517,11 @@ export default function OpeningStock() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/30 text-right">
-                        <th className="px-4 py-2 font-medium">المنتج</th>
-                        <th className="px-4 py-2 font-medium">الباركود</th>
-                        <th className="px-4 py-2 font-medium w-28">الكمية</th>
-                        <th className="px-4 py-2 font-medium w-32">تكلفة الوحدة</th>
-                        <th className="px-4 py-2 font-medium w-32 text-left">الإجمالي</th>
+                        <th className="px-4 py-2 font-medium">{t("opening_stock.product")}</th>
+                        <th className="px-4 py-2 font-medium">{t("opening_stock.barcode")}</th>
+                        <th className="px-4 py-2 font-medium w-28">{t("opening_stock.quantity")}</th>
+                        <th className="px-4 py-2 font-medium w-32">{t("opening_stock.unit_cost")}</th>
+                        <th className="px-4 py-2 font-medium w-32 text-left">{t("opening_stock.subtotal")}</th>
                         {!isCommitted && <th className="w-10" />}
                       </tr>
                     </thead>
@@ -568,7 +568,7 @@ export default function OpeningStock() {
                             )}
                           </td>
                           <td className="px-4 py-2 text-left font-medium">
-                            {fmt(item.quantity * item.unitCost)} ر.ع
+                            {fmt(item.quantity * item.unitCost)} {t("branch_summary.omr")}
                           </td>
                           {!isCommitted && (
                             <td className="px-2 py-2">
@@ -587,10 +587,10 @@ export default function OpeningStock() {
                     <tfoot>
                       <tr className="border-t bg-muted/20 font-semibold">
                         <td colSpan={4} className="px-4 py-2 text-right">
-                          الإجمالي
+                          {t("opening_stock.total")}
                         </td>
                         <td className="px-4 py-2 text-left text-primary">
-                          {fmt(isCommitted ? entry!.totalValue : totalValue)} ر.ع
+                          {fmt(isCommitted ? entry!.totalValue : totalValue)} {t("branch_summary.omr")}
                         </td>
                         {!isCommitted && <td />}
                       </tr>
@@ -605,7 +605,7 @@ export default function OpeningStock() {
           {!isCommitted && (
             <div className="flex flex-col sm:flex-row gap-3">
               <Input
-                placeholder="ملاحظات (اختياري)"
+                placeholder={t("opening_stock.notes_placeholder")}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="flex-1"
@@ -617,7 +617,7 @@ export default function OpeningStock() {
                 onClick={() => saveDraft.mutate()}
               >
                 {saveDraft.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                حفظ مسودة
+                {t("opening_stock.save_draft")}
               </Button>
               <Button
                 className="gap-1 bg-green-600 hover:bg-green-700"
@@ -631,7 +631,7 @@ export default function OpeningStock() {
               >
                 {commitMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 <CheckCircle2 className="h-4 w-4" />
-                تثبيت المخزون
+                {t("opening_stock.commit")}
               </Button>
             </div>
           )}
@@ -640,16 +640,16 @@ export default function OpeningStock() {
 
       {/* ── Confirm Commit dialog ── */}
       <Dialog open={confirmCommit} onOpenChange={setConfirmCommit}>
-        <DialogContent dir="rtl">
+        <DialogContent dir={lang === "ar" ? "rtl" : "ltr"}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-yellow-500" />
-              تأكيد تثبيت المخزون الافتتاحي
+              {t("opening_stock.confirm_commit_title")}
             </DialogTitle>
             <DialogDescription>
-              سيتم إضافة <strong>{items.length} صنف</strong> بقيمة إجمالية{" "}
-              <strong>{fmt(totalValue)} ر.ع</strong> إلى مخزون الفرع وإنشاء قيد
-              محاسبي تلقائي. لا يمكن التراجع إلا عبر زر "إعادة التعيين".
+              {t("opening_stock.confirm_commit_desc")
+                .replace("{count}", String(items.length))
+                .replace("{total}", `${fmt(totalValue)} ${t("branch_summary.omr")}`)}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 flex-row-reverse">
@@ -659,10 +659,10 @@ export default function OpeningStock() {
               disabled={commitMut.isPending}
             >
               {commitMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              نعم، ثبِّت
+              {t("opening_stock.confirm_commit_btn")}
             </Button>
             <Button variant="outline" onClick={() => setConfirmCommit(false)}>
-              إلغاء
+              {t("opening_stock.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -670,15 +670,14 @@ export default function OpeningStock() {
 
       {/* ── Confirm Reset dialog ── */}
       <Dialog open={confirmReset} onOpenChange={setConfirmReset}>
-        <DialogContent dir="rtl">
+        <DialogContent dir={lang === "ar" ? "rtl" : "ltr"}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <RotateCcw className="h-5 w-5" />
-              إعادة تعيين المخزون الافتتاحي
+              {t("opening_stock.confirm_reset_title")}
             </DialogTitle>
             <DialogDescription>
-              سيتم خصم الكميات التي أُضيفت من مخزون الفرع. هذا الإجراء يسمح
-              بإعادة إدخال المخزون الافتتاحي من الصفر.
+              {t("opening_stock.confirm_reset_desc")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 flex-row-reverse">
@@ -688,10 +687,10 @@ export default function OpeningStock() {
               disabled={resetMut.isPending}
             >
               {resetMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              نعم، أعِد التعيين
+              {t("opening_stock.confirm_reset_btn")}
             </Button>
             <Button variant="outline" onClick={() => setConfirmReset(false)}>
-              إلغاء
+              {t("opening_stock.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -699,14 +698,14 @@ export default function OpeningStock() {
 
       {/* ── CSV import dialog ── */}
       <Dialog open={csvDialog} onOpenChange={setCsvDialog}>
-        <DialogContent dir="rtl" className="max-w-2xl">
+        <DialogContent dir={lang === "ar" ? "rtl" : "ltr"} className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Upload className="h-5 w-5 text-primary" />
-              معاينة استيراد CSV
+              {t("opening_stock.csv_preview_title")}
             </DialogTitle>
             <DialogDescription>
-              راجع محتوى الملف قبل الاستيراد. الأعمدة المطلوبة:{" "}
+              {t("opening_stock.csv_preview_desc")}{" "}
               <code className="bg-muted px-1 rounded">barcode</code>,{" "}
               <code className="bg-muted px-1 rounded">quantity</code>,{" "}
               <code className="bg-muted px-1 rounded">unit_cost</code>
@@ -726,10 +725,10 @@ export default function OpeningStock() {
               disabled={importCsv.isPending || !csvText.trim() || !selectedBranchId}
             >
               {importCsv.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              استيراد
+              {t("opening_stock.import_btn")}
             </Button>
             <Button variant="outline" onClick={() => { setCsvDialog(false); setCsvText(""); }}>
-              إلغاء
+              {t("opening_stock.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>

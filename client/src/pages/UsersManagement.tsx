@@ -19,6 +19,7 @@ import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { fmtDateTime } from "@/lib/formatters";
+import { useI18n } from "@/lib/i18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SafeUser = {
@@ -30,21 +31,22 @@ type Branch  = { id: number; name: string; address?: string };
 type Role    = { id: number; name: string; description: string; permission_count: number };
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
-const ROLE_MAP: Record<string, { label: string; color: string }> = {
-  owner: { label: "المالك",  color: "bg-pink-100 text-pink-800 border-pink-200" },
-  sales: { label: "البيع",   color: "bg-blue-100 text-blue-800 border-blue-200" },
-  admin: { label: "مدير",    color: "bg-purple-100 text-purple-800" },
-  cashier:{ label: "كاشير",  color: "bg-green-100 text-green-800" },
-  employee:{ label: "موظف",  color: "bg-gray-100 text-gray-700" },
+const ROLE_COLORS: Record<string, string> = {
+  owner:    "bg-pink-100 text-pink-800 border-pink-200",
+  sales:    "bg-blue-100 text-blue-800 border-blue-200",
+  admin:    "bg-purple-100 text-purple-800",
+  cashier:  "bg-green-100 text-green-800",
+  employee: "bg-gray-100 text-gray-700",
 };
 
-function validatePassword(pw: string): string[] {
+// validatePassword uses t() — defined inside the component now
+function validatePasswordRaw(pw: string): string[] {
   const errors: string[] = [];
-  if (pw.length < 8)                        errors.push("8 أحرف على الأقل");
-  if (!/[A-Z]/.test(pw))                   errors.push("حرف كبير واحد على الأقل");
-  if (!/[a-z]/.test(pw))                   errors.push("حرف صغير واحد على الأقل");
-  if (!/[0-9]/.test(pw))                   errors.push("رقم واحد على الأقل");
-  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw)) errors.push("رمز خاص واحد على الأقل");
+  if (pw.length < 8)                        errors.push("pw_req_length");
+  if (!/[A-Z]/.test(pw))                   errors.push("pw_req_upper");
+  if (!/[a-z]/.test(pw))                   errors.push("pw_req_lower");
+  if (!/[0-9]/.test(pw))                   errors.push("pw_req_digit");
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw)) errors.push("pw_req_special");
   return errors;
 }
 
@@ -62,6 +64,7 @@ const emptyForm = {
 // ══════════════════════════════════════════════════════════════════════════════
 export default function UsersManagement() {
   const { toast } = useToast();
+  const { t, lang } = useI18n();
   const { data: authData } = useAuth();
   const me = authData?.user;
 
@@ -121,8 +124,8 @@ export default function UsersManagement() {
       const res = await apiRequest("POST", "/api/users", data);
       return res.json();
     },
-    onSuccess: () => { toast({ title: "تم إضافة المستخدم" }); setAddOpen(false); setForm({ ...emptyForm }); invalidate(); },
-    onError: (e: any) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onSuccess: () => { toast({ title: t("users_mgmt.added") }); setAddOpen(false); setForm({ ...emptyForm }); invalidate(); },
+    onError: (e: any) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
 
   const updateMut = useMutation({
@@ -130,8 +133,8 @@ export default function UsersManagement() {
       const res = await apiRequest("PATCH", `/api/users/${id}`, data);
       return res.json();
     },
-    onSuccess: () => { toast({ title: "تم التعديل" }); setEditOpen(false); invalidate(); },
-    onError: (e: any) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onSuccess: () => { toast({ title: t("users_mgmt.updated") }); setEditOpen(false); invalidate(); },
+    onError: (e: any) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
 
   const resetPwMut = useMutation({
@@ -139,8 +142,8 @@ export default function UsersManagement() {
       const res = await apiRequest("PATCH", `/api/users/${id}/reset-password`, { newPassword: pw });
       return res.json();
     },
-    onSuccess: () => { toast({ title: "تم إعادة تعيين كلمة المرور" }); setResetOpen(false); setNewPw(""); invalidate(); },
-    onError: (e: any) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onSuccess: () => { toast({ title: t("users_mgmt.pw_reset") }); setResetOpen(false); setNewPw(""); invalidate(); },
+    onError: (e: any) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
 
   const toggleMut = useMutation({
@@ -148,8 +151,8 @@ export default function UsersManagement() {
       const res = await apiRequest("PATCH", `/api/users/${id}/toggle`, {});
       return res.json();
     },
-    onSuccess: (data) => { toast({ title: data.isActive ? "تم تفعيل المستخدم" : "تم إلغاء التفعيل" }); invalidate(); },
-    onError: (e: any) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onSuccess: (data) => { toast({ title: data.isActive ? t("users_mgmt.activated") : t("users_mgmt.deactivated") }); invalidate(); },
+    onError: (e: any) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
 
   const deleteMut = useMutation({
@@ -157,8 +160,8 @@ export default function UsersManagement() {
       const res = await apiRequest("DELETE", `/api/users/${id}`, undefined);
       return res.json();
     },
-    onSuccess: () => { toast({ title: "تم إلغاء تفعيل المستخدم" }); setDeleteOpen(false); invalidate(); },
-    onError: (e: any) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onSuccess: () => { toast({ title: t("users_mgmt.deactivated") }); setDeleteOpen(false); invalidate(); },
+    onError: (e: any) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
 
   // ── handlers ───────────────────────────────────────────────────────────────
@@ -178,10 +181,23 @@ export default function UsersManagement() {
     setEditOpen(true);
   }
 
+  function roleLabel(role: string): string {
+    const key = `users_mgmt.role_${role}` as any;
+    return t(key) || role;
+  }
+
+  function roleInfo(role: string) {
+    return { label: roleLabel(role), color: ROLE_COLORS[role] ?? "bg-gray-100 text-gray-700" };
+  }
+
+  function validatePassword(pw: string): string[] {
+    return validatePasswordRaw(pw).map(k => t(`users_mgmt.${k}` as any));
+  }
+
   function handleAdd() {
     const errs = validatePassword(form.password);
     if (errs.length) { setPwErrors(errs); return; }
-    if (form.password !== form.confirmPassword) { setPwErrors(["كلمات المرور غير متطابقة"]); return; }
+    if (form.password !== form.confirmPassword) { setPwErrors([t("users_mgmt.pw_mismatch")]); return; }
     setPwErrors([]);
     createMut.mutate({
       name: form.name.trim(),
@@ -213,7 +229,7 @@ export default function UsersManagement() {
   function handleReset() {
     if (!selectedUser || !newPw) return;
     const errs = validatePassword(newPw);
-    if (errs.length) { toast({ title: "كلمة المرور ضعيفة", description: errs.join(" — "), variant: "destructive" }); return; }
+    if (errs.length) { toast({ title: t("users_mgmt.pw_weak"), description: errs.join(" — "), variant: "destructive" }); return; }
     resetPwMut.mutate({ id: selectedUser.id, pw: newPw });
   }
 
@@ -225,35 +241,33 @@ export default function UsersManagement() {
 
   const getBranchName = (id: number) => {
     const b = branchArr.find(b => b.id === id);
-    return b ? branchLabel(b) : `فرع ${id}`;
+    return b ? branchLabel(b) : `${t("users_mgmt.branch_prefix")} ${id}`;
   };
-
-  const roleInfo = (role: string) => ROLE_MAP[role] ?? { label: role, color: "bg-gray-100 text-gray-700" };
 
   // ── render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="p-4 md:p-6 space-y-5 max-w-7xl mx-auto" dir="rtl">
+    <div className="p-4 md:p-6 space-y-5 max-w-7xl mx-auto" dir={lang === "ar" ? "rtl" : "ltr"}>
 
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-primary flex items-center gap-2">
-            <Users className="h-6 w-6" /> إدارة المستخدمين
+            <Users className="h-6 w-6" /> {t("users_mgmt.title")}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">إدارة حسابات المستخدمين وصلاحياتهم</p>
+          <p className="text-sm text-muted-foreground mt-1">{t("users_mgmt.subtitle")}</p>
         </div>
         <Button onClick={openAdd} className="gap-2 rounded-xl">
-          <UserPlus className="h-4 w-4" /> إضافة مستخدم
+          <UserPlus className="h-4 w-4" /> {t("users_mgmt.add_user")}
         </Button>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: "إجمالي المستخدمين", value: total,  color: "text-primary",     bg: "bg-pink-50" },
-          { label: "نشط",               value: active, color: "text-green-700",   bg: "bg-green-50" },
-          { label: "ملاك",              value: owners, color: "text-purple-700",  bg: "bg-purple-50" },
-          { label: "بيع",               value: sales,  color: "text-blue-700",    bg: "bg-blue-50" },
+          { label: t("users_mgmt.kpi_total"),  value: total,  color: "text-primary",     bg: "bg-pink-50" },
+          { label: t("users_mgmt.kpi_active"), value: active, color: "text-green-700",   bg: "bg-green-50" },
+          { label: t("users_mgmt.kpi_owners"), value: owners, color: "text-purple-700",  bg: "bg-purple-50" },
+          { label: t("users_mgmt.kpi_sales"),  value: sales,  color: "text-blue-700",    bg: "bg-blue-50" },
         ].map(k => (
           <Card key={k.label} className={`rounded-2xl ${k.bg}`}>
             <CardContent className="p-4">
@@ -269,34 +283,34 @@ export default function UsersManagement() {
         <div className="relative flex-1 min-w-48">
           <Search className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="بحث بالاسم أو اسم المستخدم..."
+            placeholder={t("users_mgmt.search_placeholder")}
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="pr-9 rounded-xl"
           />
         </div>
         <Select value={filterRole} onValueChange={setFilterRole}>
-          <SelectTrigger className="w-40 rounded-xl"><SelectValue placeholder="الدور" /></SelectTrigger>
+          <SelectTrigger className="w-40 rounded-xl"><SelectValue placeholder={t("users_mgmt.filter_role")} /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">كل الأدوار</SelectItem>
+            <SelectItem value="all">{t("users_mgmt.filter_all_roles")}</SelectItem>
             {rolesArr.map(r => (
               <SelectItem key={r.id} value={r.name}>{roleInfo(r.name).label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Select value={filterBranch} onValueChange={setFilterBranch}>
-          <SelectTrigger className="w-48 rounded-xl"><SelectValue placeholder="الفرع" /></SelectTrigger>
+          <SelectTrigger className="w-48 rounded-xl"><SelectValue placeholder={t("users_mgmt.filter_branch")} /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">كل الفروع</SelectItem>
+            <SelectItem value="all">{t("users_mgmt.filter_all_branches")}</SelectItem>
             {branchArr.map(b => <SelectItem key={b.id} value={String(b.id)}>{branchLabel(b)}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-36 rounded-xl"><SelectValue placeholder="الحالة" /></SelectTrigger>
+          <SelectTrigger className="w-36 rounded-xl"><SelectValue placeholder={t("users_mgmt.filter_status")} /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">الكل</SelectItem>
-            <SelectItem value="active">نشط</SelectItem>
-            <SelectItem value="inactive">موقوف</SelectItem>
+            <SelectItem value="all">{t("users_mgmt.filter_all")}</SelectItem>
+            <SelectItem value="active">{t("users_mgmt.filter_active")}</SelectItem>
+            <SelectItem value="inactive">{t("users_mgmt.filter_inactive")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -307,13 +321,13 @@ export default function UsersManagement() {
           <TableHeader className="bg-muted/50">
             <TableRow>
               <TableHead className="text-right w-10">#</TableHead>
-              <TableHead className="text-right">الاسم الكامل</TableHead>
-              <TableHead className="text-right">اسم المستخدم</TableHead>
-              <TableHead className="text-right">الدور</TableHead>
-              <TableHead className="text-right">الفرع</TableHead>
-              <TableHead className="text-right">الحالة</TableHead>
-              <TableHead className="text-right">آخر دخول</TableHead>
-              <TableHead className="text-right w-32">إجراءات</TableHead>
+              <TableHead className="text-right">{t("users_mgmt.col_name")}</TableHead>
+              <TableHead className="text-right">{t("users_mgmt.col_username")}</TableHead>
+              <TableHead className="text-right">{t("users_mgmt.col_role")}</TableHead>
+              <TableHead className="text-right">{t("users_mgmt.col_branch")}</TableHead>
+              <TableHead className="text-right">{t("users_mgmt.col_status")}</TableHead>
+              <TableHead className="text-right">{t("users_mgmt.col_last_login")}</TableHead>
+              <TableHead className="text-right w-32">{t("users_mgmt.col_actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -323,7 +337,7 @@ export default function UsersManagement() {
               </TableCell></TableRow>
             ) : filtered.length === 0 ? (
               <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                لا يوجد مستخدمون
+                {t("users_mgmt.no_users")}
               </TableCell></TableRow>
             ) : filtered.map((u, i) => {
               const ri = roleInfo(u.role);
@@ -341,8 +355,8 @@ export default function UsersManagement() {
                   <TableCell className="text-sm">{getBranchName(u.branchId)}</TableCell>
                   <TableCell>
                     {u.isActive
-                      ? <span className="flex items-center gap-1 text-green-700 text-sm"><CheckCircle className="h-3.5 w-3.5" /> نشط</span>
-                      : <span className="flex items-center gap-1 text-red-600 text-sm"><XCircle className="h-3.5 w-3.5" /> موقوف</span>
+                      ? <span className="flex items-center gap-1 text-green-700 text-sm"><CheckCircle className="h-3.5 w-3.5" /> {t("users_mgmt.status_active")}</span>
+                      : <span className="flex items-center gap-1 text-red-600 text-sm"><XCircle className="h-3.5 w-3.5" /> {t("users_mgmt.status_inactive")}</span>
                     }
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
@@ -375,26 +389,26 @@ export default function UsersManagement() {
 
       {/* ── Dialog: إضافة مستخدم ─────────────────────────────────────────── */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-w-lg" dir="rtl">
+        <DialogContent className="max-w-lg" dir={lang === "ar" ? "rtl" : "ltr"}>
           <DialogHeader>
             <DialogTitle className="text-primary flex items-center gap-2">
-              <UserPlus className="h-5 w-5" /> إضافة مستخدم جديد
+              <UserPlus className="h-5 w-5" /> {t("users_mgmt.add_dialog_title")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>الاسم الكامل <span className="text-red-500">*</span></Label>
-                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="محمد علي" className="mt-1" />
+                <Label>{t("users_mgmt.field_fullname")} <span className="text-red-500">*</span></Label>
+                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="mt-1" />
               </div>
               <div>
-                <Label>اسم المستخدم <span className="text-red-500">*</span></Label>
-                <Input value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder="mohammed" className="mt-1" dir="ltr" />
+                <Label>{t("users_mgmt.field_username")} <span className="text-red-500">*</span></Label>
+                <Input value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder="username" className="mt-1" dir="ltr" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>كلمة المرور <span className="text-red-500">*</span></Label>
+                <Label>{t("users_mgmt.field_password")} <span className="text-red-500">*</span></Label>
                 <div className="relative mt-1">
                   <Input type={showPass ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} className="pl-9" dir="ltr" />
                   <button type="button" className="absolute left-2 top-2.5 text-muted-foreground" onClick={() => setShowPass(p => !p)}>
@@ -403,7 +417,7 @@ export default function UsersManagement() {
                 </div>
               </div>
               <div>
-                <Label>تأكيد كلمة المرور <span className="text-red-500">*</span></Label>
+                <Label>{t("users_mgmt.field_confirm_password")} <span className="text-red-500">*</span></Label>
                 <div className="relative mt-1">
                   <Input type={showConfirm ? "text" : "password"} value={form.confirmPassword} onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))} className="pl-9" dir="ltr" />
                   <button type="button" className="absolute left-2 top-2.5 text-muted-foreground" onClick={() => setShowConfirm(p => !p)}>
@@ -418,30 +432,30 @@ export default function UsersManagement() {
               </div>
             )}
             <div className="text-xs text-muted-foreground bg-amber-50 border border-amber-100 rounded-lg p-2">
-              يجب أن تحتوي كلمة المرور على: 8 أحرف • حرف كبير • حرف صغير • رقم • رمز خاص
+              {t("users_mgmt.pw_hint")}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>الدور <span className="text-red-500">*</span></Label>
+                <Label>{t("users_mgmt.field_role")} <span className="text-red-500">*</span></Label>
                 <Select value={form.role} onValueChange={v => setForm(f => ({ ...f, role: v }))}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {rolesArr.length > 0
                       ? rolesArr.map(r => <SelectItem key={r.id} value={r.name}>{roleInfo(r.name).label} — {r.description}</SelectItem>)
                       : <>
-                          <SelectItem value="owner">المالك</SelectItem>
-                          <SelectItem value="admin">المدير</SelectItem>
-                          <SelectItem value="cashier">كاشير</SelectItem>
-                          <SelectItem value="sales">البيع</SelectItem>
+                          <SelectItem value="owner">{t("users_mgmt.role_owner")}</SelectItem>
+                          <SelectItem value="admin">{t("users_mgmt.role_admin")}</SelectItem>
+                          <SelectItem value="cashier">{t("users_mgmt.role_cashier")}</SelectItem>
+                          <SelectItem value="sales">{t("users_mgmt.role_sales")}</SelectItem>
                         </>
                     }
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>الفرع <span className="text-red-500">*</span></Label>
+                <Label>{t("users_mgmt.field_branch")} <span className="text-red-500">*</span></Label>
                 <Select value={form.branchId} onValueChange={v => setForm(f => ({ ...f, branchId: v }))}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="اختر الفرع" /></SelectTrigger>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder={t("users_mgmt.select_branch")} /></SelectTrigger>
                   <SelectContent>
                     {branchArr.map(b => <SelectItem key={b.id} value={String(b.id)}>{branchLabel(b)}</SelectItem>)}
                   </SelectContent>
@@ -450,24 +464,24 @@ export default function UsersManagement() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>رقم الهاتف</Label>
+                <Label>{t("users_mgmt.field_phone")}</Label>
                 <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+968 9999 9999" className="mt-1" dir="ltr" />
               </div>
               <div>
-                <Label>الجهاز / النافذة</Label>
+                <Label>{t("users_mgmt.field_terminal")}</Label>
                 <Input value={form.terminalName} onChange={e => setForm(f => ({ ...f, terminalName: e.target.value }))} placeholder="T1" className="mt-1" dir="ltr" />
               </div>
             </div>
             <div className="flex items-center gap-3 pt-1">
               <Switch id="add-active" checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
-              <Label htmlFor="add-active">نشط عند الإنشاء</Label>
+              <Label htmlFor="add-active">{t("users_mgmt.field_active")}</Label>
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setAddOpen(false)}>إلغاء</Button>
+            <Button variant="ghost" onClick={() => setAddOpen(false)}>{t("users_mgmt.btn_cancel")}</Button>
             <Button onClick={handleAdd} disabled={createMut.isPending} className="gap-2">
               {createMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              إضافة المستخدم
+              {t("users_mgmt.btn_add")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -475,38 +489,38 @@ export default function UsersManagement() {
 
       {/* ── Dialog: تعديل مستخدم ─────────────────────────────────────────── */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-lg" dir="rtl">
+        <DialogContent className="max-w-lg" dir={lang === "ar" ? "rtl" : "ltr"}>
           <DialogHeader>
             <DialogTitle className="text-primary flex items-center gap-2">
-              <Pencil className="h-5 w-5" /> تعديل المستخدم
+              <Pencil className="h-5 w-5" /> {t("users_mgmt.edit_dialog_title")}
             </DialogTitle>
             <DialogDescription>{selectedUser?.username}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label>الاسم الكامل</Label>
+              <Label>{t("users_mgmt.field_fullname")}</Label>
               <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="mt-1" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>الدور</Label>
+                <Label>{t("users_mgmt.field_role")}</Label>
                 <Select value={form.role} onValueChange={v => setForm(f => ({ ...f, role: v }))}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {rolesArr.length > 0
                       ? rolesArr.map(r => <SelectItem key={r.id} value={r.name}>{roleInfo(r.name).label}</SelectItem>)
                       : <>
-                          <SelectItem value="owner">المالك</SelectItem>
-                          <SelectItem value="admin">المدير</SelectItem>
-                          <SelectItem value="cashier">كاشير</SelectItem>
-                          <SelectItem value="sales">البيع</SelectItem>
+                          <SelectItem value="owner">{t("users_mgmt.role_owner")}</SelectItem>
+                          <SelectItem value="admin">{t("users_mgmt.role_admin")}</SelectItem>
+                          <SelectItem value="cashier">{t("users_mgmt.role_cashier")}</SelectItem>
+                          <SelectItem value="sales">{t("users_mgmt.role_sales")}</SelectItem>
                         </>
                     }
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>الفرع</Label>
+                <Label>{t("users_mgmt.field_branch")}</Label>
                 <Select value={form.branchId} onValueChange={v => setForm(f => ({ ...f, branchId: v }))}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -517,24 +531,24 @@ export default function UsersManagement() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>رقم الهاتف</Label>
+                <Label>{t("users_mgmt.field_phone")}</Label>
                 <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="mt-1" dir="ltr" />
               </div>
               <div>
-                <Label>الجهاز / النافذة</Label>
+                <Label>{t("users_mgmt.field_terminal")}</Label>
                 <Input value={form.terminalName} onChange={e => setForm(f => ({ ...f, terminalName: e.target.value }))} className="mt-1" dir="ltr" />
               </div>
             </div>
             <div className="flex items-center gap-3">
               <Switch id="edit-active" checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
-              <Label htmlFor="edit-active">الحساب نشط</Label>
+              <Label htmlFor="edit-active">{t("users_mgmt.field_account_active")}</Label>
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setEditOpen(false)}>إلغاء</Button>
+            <Button variant="ghost" onClick={() => setEditOpen(false)}>{t("users_mgmt.btn_cancel")}</Button>
             <Button onClick={handleEdit} disabled={updateMut.isPending} className="gap-2">
               {updateMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              حفظ التعديلات
+              {t("users_mgmt.btn_save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -542,26 +556,26 @@ export default function UsersManagement() {
 
       {/* ── Dialog: إعادة تعيين كلمة المرور ─────────────────────────────── */}
       <Dialog open={resetOpen} onOpenChange={setResetOpen}>
-        <DialogContent className="max-w-sm" dir="rtl">
+        <DialogContent className="max-w-sm" dir={lang === "ar" ? "rtl" : "ltr"}>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><KeyRound className="h-5 w-5 text-primary" /> إعادة تعيين كلمة المرور</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><KeyRound className="h-5 w-5 text-primary" /> {t("users_mgmt.reset_pw_title")}</DialogTitle>
             <DialogDescription>{selectedUser?.name}</DialogDescription>
           </DialogHeader>
           <div>
-            <Label>كلمة المرور الجديدة</Label>
+            <Label>{t("users_mgmt.field_new_password")}</Label>
             <div className="relative mt-1">
-              <Input type={showNewPw ? "text" : "password"} value={newPw} onChange={e => setNewPw(e.target.value)} className="pl-9" dir="ltr" placeholder="الحد الأدنى 8 أحرف" />
+              <Input type={showNewPw ? "text" : "password"} value={newPw} onChange={e => setNewPw(e.target.value)} className="pl-9" dir="ltr" />
               <button type="button" className="absolute left-2 top-2.5 text-muted-foreground" onClick={() => setShowNewPw(p => !p)}>
                 {showNewPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">8 أحرف • حرف كبير • رقم • رمز خاص</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("users_mgmt.pw_min_hint")}</p>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => { setResetOpen(false); setNewPw(""); }}>إلغاء</Button>
+            <Button variant="ghost" onClick={() => { setResetOpen(false); setNewPw(""); }}>{t("users_mgmt.btn_cancel")}</Button>
             <Button onClick={handleReset} disabled={resetPwMut.isPending || !newPw} className="gap-2">
               {resetPwMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              تعيين
+              {t("users_mgmt.btn_set_pw")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -569,26 +583,24 @@ export default function UsersManagement() {
 
       {/* ── AlertDialog: تأكيد الحذف ──────────────────────────────────────── */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent dir="rtl">
+        <AlertDialogContent dir={lang === "ar" ? "rtl" : "ltr"}>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-red-700">
-              <Trash2 className="h-5 w-5" /> إلغاء تفعيل المستخدم
+              <Trash2 className="h-5 w-5" /> {t("users_mgmt.delete_title")}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              هل أنت متأكد من إلغاء تفعيل <strong>{selectedUser?.name}</strong>؟
+              <strong>{selectedUser?.name}</strong>
               <br />
-              سيتم إلغاء وصوله نهائياً ولن يتمكن من تسجيل الدخول.
-              <br />
-              <span className="text-amber-600 text-xs mt-1 block">يمكنك إعادة التفعيل لاحقاً من زر التبديل.</span>
+              <span className="text-amber-600 text-xs mt-1 block">{t("users_mgmt.delete_warning")}</span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogCancel>{t("users_mgmt.btn_cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700"
               onClick={() => selectedUser && deleteMut.mutate(selectedUser.id)}
             >
-              إلغاء التفعيل
+              {t("users_mgmt.btn_deactivate")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

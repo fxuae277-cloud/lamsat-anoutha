@@ -11,6 +11,7 @@ import { DateInput } from "@/components/ui/date-input";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
+import { useI18n } from "@/lib/i18n";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 function n(v: any) { return parseFloat(String(v || "0")); }
@@ -38,25 +39,10 @@ function yearStart() {
   return new Date().getFullYear() + "-01-01";
 }
 
-const PRESETS = [
-  { key: "today",      label: "اليوم" },
-  { key: "this_month", label: "هذا الشهر" },
-  { key: "last_month", label: "الشهر الماضي" },
-  { key: "this_year",  label: "هذا العام" },
-  { key: "custom",     label: "مخصص" },
-];
-
 const PIE_COLORS = [
   "#f43f5e","#f97316","#eab308","#22c55e",
   "#3b82f6","#8b5cf6","#ec4899","#14b8a6","#6366f1","#84cc16",
 ];
-
-const CAT_NAMES: Record<string, string> = {
-  supplies: "مستلزمات", rent: "إيجار", salary: "رواتب",
-  transport: "مواصلات", maintenance: "صيانة", electricity: "كهرباء",
-  phone: "اتصالات", marketing: "تسويق", shipping: "شحن",
-  taxes: "ضرائب", other: "أخرى",
-};
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 function KpiCard({ label, value, sub, icon: Icon, colorClass, positive }: {
@@ -108,12 +94,36 @@ function PlRow({ label, value, sub, bold, color, indent }: {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function FinanceSummary() {
+  const { t, lang } = useI18n();
+
   const today      = todayISO();
   const thisMonth  = monthStart();
 
   const [preset,     setPreset]     = useState("this_month");
   const [customFrom, setCustomFrom] = useState(thisMonth);
   const [customTo,   setCustomTo]   = useState(today);
+
+  const PRESETS = [
+    { key: "today",      label: t("finance_summary.preset_today") },
+    { key: "this_month", label: t("finance_summary.preset_this_month") },
+    { key: "last_month", label: t("finance_summary.preset_last_month") },
+    { key: "this_year",  label: t("finance_summary.preset_this_year") },
+    { key: "custom",     label: t("finance_summary.preset_custom") },
+  ];
+
+  const CAT_NAMES: Record<string, string> = {
+    supplies:    t("finance_summary.cat_supplies"),
+    rent:        t("finance_summary.cat_rent"),
+    salary:      t("finance_summary.cat_salary"),
+    transport:   t("finance_summary.cat_transport"),
+    maintenance: t("finance_summary.cat_maintenance"),
+    electricity: t("finance_summary.cat_electricity"),
+    phone:       t("finance_summary.cat_phone"),
+    marketing:   t("finance_summary.cat_marketing"),
+    shipping:    t("finance_summary.cat_shipping"),
+    taxes:       t("finance_summary.cat_taxes"),
+    other:       t("finance_summary.cat_other"),
+  };
 
   // حساب نطاق التاريخ بناءً على الـ preset
   const { from, to } = useMemo(() => {
@@ -163,19 +173,19 @@ export default function FinanceSummary() {
   const netCash = n(cashRaw?.netCash);
 
   return (
-    <div dir="rtl" className="p-6 max-w-7xl mx-auto space-y-6">
+    <div dir={lang === "ar" ? "rtl" : "ltr"} className="p-6 max-w-7xl mx-auto space-y-6">
 
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">الملخص المالي</h1>
+          <h1 className="text-2xl font-bold">{t("finance_summary.title")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {from === to ? from : `${from} — ${to}`}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => refetchPl()} disabled={isLoading}>
           <RefreshCw className={`h-4 w-4 ml-1.5 ${isLoading ? "animate-spin" : ""}`} />
-          تحديث
+          {t("finance_summary.refresh")}
         </Button>
       </div>
 
@@ -198,11 +208,11 @@ export default function FinanceSummary() {
         <Card className="p-4">
           <div className="flex gap-4 items-center">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">من</span>
+              <span className="text-sm text-muted-foreground">{t("finance_summary.date_from")}</span>
               <DateInput value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="w-36" />
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">إلى</span>
+              <span className="text-sm text-muted-foreground">{t("finance_summary.date_to")}</span>
               <DateInput value={customTo} onChange={e => setCustomTo(e.target.value)} className="w-36" />
             </div>
           </div>
@@ -212,30 +222,30 @@ export default function FinanceSummary() {
       {/* ── KPI Cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
-          label="صافي الربح"
+          label={t("finance_summary.kpi_net_profit")}
           value={fmtOMR(netProfit)}
-          sub={`هامش ${netMargin}%`}
+          sub={`${t("finance_summary.kpi_margin")} ${netMargin}%`}
           icon={TrendingUp}
           colorClass={netProfit >= 0 ? "text-green-600" : "text-red-600"}
           positive={netProfit >= 0 ? true : false}
         />
         <KpiCard
-          label="إجمالي المبيعات"
+          label={t("finance_summary.kpi_total_sales")}
           value={fmtOMR(revenue)}
-          sub={`${invoiceCount} فاتورة`}
+          sub={`${invoiceCount} ${t("finance_summary.kpi_invoices")}`}
           icon={ShoppingCart}
           colorClass="text-blue-600"
           positive={null}
         />
         <KpiCard
-          label="إجمالي المصروفات"
+          label={t("finance_summary.kpi_total_expenses")}
           value={fmtOMR(totalExpenses)}
           icon={ReceiptText}
           colorClass="text-orange-600"
           positive={null}
         />
         <KpiCard
-          label="رصيد الصندوق (اليوم)"
+          label={t("finance_summary.kpi_cash_balance")}
           value={fmtOMR(netCash)}
           icon={Wallet}
           colorClass={netCash >= 0 ? "text-emerald-600" : "text-red-600"}
@@ -249,24 +259,24 @@ export default function FinanceSummary() {
         {/* P&L Breakdown */}
         <Card className="rounded-2xl shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">قائمة الدخل</CardTitle>
+            <CardTitle className="text-base">{t("finance_summary.pl_title")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-0">
-            <PlRow label="إجمالي المبيعات"  value={fmtOMR(revenue)} bold />
+            <PlRow label={t("finance_summary.pl_gross_sales")}  value={fmtOMR(revenue)} bold />
             {returns > 0 && (
-              <PlRow label="المرتجعات" value={`(${fmtOMR(returns)})`} indent color="text-red-500" />
+              <PlRow label={t("finance_summary.pl_returns")} value={`(${fmtOMR(returns)})`} indent color="text-red-500" />
             )}
             <PlRow
-              label="صافي المبيعات"
+              label={t("finance_summary.pl_net_sales")}
               value={fmtOMR(netRevenue)}
               indent
               color="text-muted-foreground"
             />
-            <PlRow label="تكلفة البضاعة (COGS)" value={`(${fmtOMR(cogs)})`} color="text-orange-600" />
+            <PlRow label={t("finance_summary.pl_cogs")} value={`(${fmtOMR(cogs)})`} color="text-orange-600" />
 
             <div className="flex justify-between items-center py-2.5 border-b bg-green-50 rounded px-2 my-1">
               <span className="text-sm font-semibold text-green-700">
-                الربح الإجمالي
+                {t("finance_summary.pl_gross_profit")}
                 <span className="text-xs text-muted-foreground mr-1.5">
                   ({pct(grossProfit, netRevenue)}%)
                 </span>
@@ -276,11 +286,11 @@ export default function FinanceSummary() {
               </span>
             </div>
 
-            <PlRow label="المصروفات الإجمالية" value={`(${fmtOMR(totalExpenses)})`} color="text-red-600" bold />
+            <PlRow label={t("finance_summary.pl_total_expenses")} value={`(${fmtOMR(totalExpenses)})`} color="text-red-600" bold />
 
             <div className={`flex justify-between items-center py-3 px-2 rounded mt-1 ${netProfit >= 0 ? "bg-primary/10" : "bg-red-50"}`}>
               <span className={`text-base font-bold ${netProfit >= 0 ? "text-primary" : "text-red-700"}`}>
-                صافي الربح
+                {t("finance_summary.pl_net_profit")}
                 <span className="text-xs font-normal text-muted-foreground mr-1.5">
                   ({netMargin}%)
                 </span>
@@ -295,12 +305,12 @@ export default function FinanceSummary() {
         {/* Expenses Donut */}
         <Card className="rounded-2xl shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">توزيع المصروفات</CardTitle>
+            <CardTitle className="text-base">{t("finance_summary.expenses_chart_title")}</CardTitle>
           </CardHeader>
           <CardContent>
             {expCats.length === 0 ? (
               <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
-                لا توجد مصروفات في هذه الفترة
+                {t("finance_summary.no_expenses")}
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={240}>
@@ -320,7 +330,7 @@ export default function FinanceSummary() {
                   </Pie>
                   <Tooltip
                     formatter={(val: any) => [fmtOMR(val), ""]}
-                    contentStyle={{ direction: "rtl", fontFamily: "inherit", fontSize: 12 }}
+                    contentStyle={{ direction: lang === "ar" ? "rtl" : "ltr", fontFamily: "inherit", fontSize: 12 }}
                   />
                   <Legend
                     formatter={(value) => <span style={{ fontSize: 11 }}>{value}</span>}
@@ -336,25 +346,25 @@ export default function FinanceSummary() {
       {/* ── Payment Methods Breakdown ── */}
       <Card className="rounded-2xl shadow-sm">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">المبيعات حسب طريقة الدفع</CardTitle>
+          <CardTitle className="text-base">{t("finance_summary.payment_methods_title")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-3 gap-4">
             {[
-              { label: "نقدي",    value: cashSales, icon: Banknote,  color: "text-green-600", bg: "bg-green-50" },
-              { label: "بطاقة",   value: cardSales, icon: CreditCard, color: "text-blue-600",  bg: "bg-blue-50"  },
-              { label: "تحويل بنكي", value: bankSales, icon: Building2, color: "text-purple-600", bg: "bg-purple-50" },
+              { labelKey: "finance_summary.pay_cash",    value: cashSales, icon: Banknote,  color: "text-green-600", bg: "bg-green-50" },
+              { labelKey: "finance_summary.pay_card",    value: cardSales, icon: CreditCard, color: "text-blue-600",  bg: "bg-blue-50"  },
+              { labelKey: "finance_summary.pay_bank",    value: bankSales, icon: Building2, color: "text-purple-600", bg: "bg-purple-50" },
             ].map(m => (
-              <div key={m.label} className={`rounded-xl p-4 ${m.bg} flex flex-col gap-2`}>
+              <div key={m.labelKey} className={`rounded-xl p-4 ${m.bg} flex flex-col gap-2`}>
                 <div className="flex items-center gap-2">
                   <m.icon className={`h-4 w-4 ${m.color}`} />
-                  <span className="text-sm text-muted-foreground">{m.label}</span>
+                  <span className="text-sm text-muted-foreground">{t(m.labelKey)}</span>
                 </div>
                 <p className={`font-bold text-lg font-mono ${m.color}`} dir="ltr">
                   {fmtOMR(m.value)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {pct(m.value, revenue)}% من الإجمالي
+                  {pct(m.value, revenue)}% {t("finance_summary.of_total")}
                 </p>
                 {/* Progress bar */}
                 <div className="h-1.5 bg-white/70 rounded-full overflow-hidden">

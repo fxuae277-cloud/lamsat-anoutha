@@ -12,6 +12,7 @@ import {
   Printer, Search, Plus, Minus, Trash2, Tag, Package, X, Eye,
 } from "lucide-react";
 import JsBarcode from "jsbarcode";
+import { useI18n } from "@/lib/i18n";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 interface LabelItem {
@@ -22,13 +23,13 @@ interface LabelItem {
   qty: number;
 }
 
-// ─── label sizes ─────────────────────────────────────────────────────────────
-const SIZES = {
-  small:  { label: "صغير (40×25 مم)",  w: 150, h: 90,  font: 9,  bh: 40 },
-  medium: { label: "متوسط (58×40 مم)", w: 220, h: 140, font: 11, bh: 60 },
-  large:  { label: "كبير (90×50 مم)",  w: 340, h: 190, font: 13, bh: 80 },
+// ─── label size keys ──────────────────────────────────────────────────────────
+const SIZE_DIMS = {
+  small:  { w: 150, h: 90,  font: 9,  bh: 40 },
+  medium: { w: 220, h: 140, font: 11, bh: 60 },
+  large:  { w: 340, h: 190, font: 13, bh: 80 },
 } as const;
-type SizeKey = keyof typeof SIZES;
+type SizeKey = keyof typeof SIZE_DIMS;
 
 // ─── single barcode SVG ───────────────────────────────────────────────────────
 function BarcodeImg({ barcode, height, width }: { barcode: string; height: number; width: number }) {
@@ -57,7 +58,7 @@ function BarcodeImg({ barcode, height, width }: { barcode: string; height: numbe
 }
 
 // ─── label preview card ───────────────────────────────────────────────────────
-function LabelCard({ item, size }: { item: LabelItem; size: typeof SIZES[SizeKey] }) {
+function LabelCard({ item, size }: { item: LabelItem; size: typeof SIZE_DIMS[SizeKey] }) {
   return (
     <div
       className="border border-gray-300 rounded bg-white flex flex-col items-center justify-between overflow-hidden shrink-0"
@@ -78,11 +79,20 @@ function LabelCard({ item, size }: { item: LabelItem; size: typeof SIZES[SizeKey
 
 // ══════════════════════════════════════════════════════════════════════════════
 export default function BarcodeLabels() {
+  const { t, lang } = useI18n();
+
   const [search, setSearch]       = useState("");
   const [items, setItems]         = useState<LabelItem[]>([]);
   const [size, setSize]           = useState<SizeKey>("medium");
   const [cols, setCols]           = useState(4);
   const [showPreview, setShowPreview] = useState(false);
+
+  // Build SIZES with translated labels (inside component so t() is available)
+  const SIZES: Record<SizeKey, typeof SIZE_DIMS[SizeKey] & { label: string }> = {
+    small:  { ...SIZE_DIMS.small,  label: t("barcode_labels.size_small") },
+    medium: { ...SIZE_DIMS.medium, label: t("barcode_labels.size_medium") },
+    large:  { ...SIZE_DIMS.large,  label: t("barcode_labels.size_large") },
+  };
 
   // ── product search ─────────────────────────────────────────────────────────
   const { data: _results } = useQuery<any[]>({
@@ -144,7 +154,7 @@ export default function BarcodeLabels() {
           <div class="label">
             <div class="lname">${item.name}</div>
             ${svgStr}
-            <div class="lprice">${parseFloat(item.price).toFixed(3)} ر.ع</div>
+            <div class="lprice">${parseFloat(item.price).toFixed(3)} ${t("barcode_labels.currency")}</div>
           </div>`;
       })
     ).join("");
@@ -152,10 +162,10 @@ export default function BarcodeLabels() {
     const win = window.open("", "_blank", "width=900,height=700");
     if (!win) return;
     win.document.write(`<!DOCTYPE html>
-<html dir="rtl" lang="ar">
+<html dir="${lang === "ar" ? "rtl" : "ltr"}" lang="${lang}">
 <head>
 <meta charset="UTF-8"/>
-<title>طباعة ملصقات الباركود</title>
+<title>${t("barcode_labels.print_win_title")}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background:#fff; }
@@ -183,12 +193,12 @@ export default function BarcodeLabels() {
 <body>
 <div class="no-print">
   <button onclick="window.print()" style="padding:8px 24px;background:#e91e63;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;margin:4px;">
-    🖨️ طباعة
+    🖨️ ${t("barcode_labels.print_btn")}
   </button>
   <button onclick="window.close()" style="padding:8px 24px;background:#666;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;margin:4px;">
-    ✕ إغلاق
+    ✕ ${t("barcode_labels.print_close")}
   </button>
-  <span style="margin-right:12px;font-size:13px;color:#555;">${totalLabels} ملصق • حجم: ${SIZES[size].label}</span>
+  <span style="margin-right:12px;font-size:13px;color:#555;">${totalLabels} ${t("barcode_labels.print_info_stickers")} ${SIZES[size].label}</span>
 </div>
 <div class="grid">${labelsHtml}</div>
 <script>setTimeout(()=>window.print(),400);</script>
@@ -203,20 +213,20 @@ export default function BarcodeLabels() {
 
   // ══════════════════════════════════════════════════════════════════════════
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-5" dir="rtl">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-5" dir={lang === "ar" ? "rtl" : "ltr"}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <h1 className="text-2xl font-bold flex items-center gap-2 text-primary">
-          <Tag className="w-6 h-6" /> طباعة ملصقات الباركود
+          <Tag className="w-6 h-6" /> {t("barcode_labels.title")}
         </h1>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setShowPreview(!showPreview)} className="gap-2">
             <Eye className="h-4 w-4" />
-            {showPreview ? "إخفاء المعاينة" : "معاينة"}
+            {showPreview ? t("barcode_labels.btn_hide_preview") : t("barcode_labels.btn_preview")}
           </Button>
           <Button onClick={handlePrint} disabled={items.length === 0} className="gap-2">
             <Printer className="h-4 w-4" />
-            طباعة {totalLabels > 0 && `(${totalLabels} ملصق)`}
+            {t("barcode_labels.btn_print")} {totalLabels > 0 && `(${totalLabels} ${t("barcode_labels.label_stickers")})`}
           </Button>
         </div>
       </div>
@@ -228,12 +238,12 @@ export default function BarcodeLabels() {
           <Card className="rounded-2xl shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Printer className="h-4 w-4 text-primary" /> إعدادات الطباعة
+                <Printer className="h-4 w-4 text-primary" /> {t("barcode_labels.print_settings_title")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">حجم الملصق</label>
+                <label className="text-xs text-muted-foreground mb-1 block">{t("barcode_labels.label_size_label")}</label>
                 <Select value={size} onValueChange={v => setSize(v as SizeKey)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -244,12 +254,12 @@ export default function BarcodeLabels() {
                 </Select>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">أعمدة في الصف</label>
+                <label className="text-xs text-muted-foreground mb-1 block">{t("barcode_labels.cols_label")}</label>
                 <Select value={String(cols)} onValueChange={v => setCols(Number(v))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {[2, 3, 4, 5, 6].map(n => (
-                      <SelectItem key={n} value={String(n)}>{n} أعمدة</SelectItem>
+                      <SelectItem key={n} value={String(n)}>{n} {t("barcode_labels.cols_suffix")}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -261,14 +271,14 @@ export default function BarcodeLabels() {
           <Card className="rounded-2xl shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Package className="h-4 w-4 text-primary" /> إضافة منتج
+                <Package className="h-4 w-4 text-primary" /> {t("barcode_labels.add_product_title")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="relative">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="ابحث باسم أو باركود..."
+                  placeholder={t("barcode_labels.search_placeholder")}
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="pr-9"
@@ -285,7 +295,7 @@ export default function BarcodeLabels() {
               {search.length >= 1 && (
                 <div className="border rounded-xl divide-y max-h-60 overflow-y-auto shadow-md bg-white z-10">
                   {results.length === 0 ? (
-                    <p className="text-center py-4 text-sm text-muted-foreground">لا توجد نتائج</p>
+                    <p className="text-center py-4 text-sm text-muted-foreground">{t("barcode_labels.no_results")}</p>
                   ) : results.map((p: any) => (
                     <button
                       key={p.id}
@@ -294,7 +304,7 @@ export default function BarcodeLabels() {
                     >
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{p.name}</p>
-                        <p className="text-xs text-muted-foreground font-mono">{p.barcode || "بدون باركود"}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{p.barcode || t("barcode_labels.no_barcode")}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-xs font-bold text-primary">
@@ -302,7 +312,7 @@ export default function BarcodeLabels() {
                         </span>
                         {p.barcode
                           ? <Plus className="h-4 w-4 text-green-600" />
-                          : <Badge className="text-[9px] bg-red-100 text-red-700">بدون باركود</Badge>
+                          : <Badge className="text-[9px] bg-red-100 text-red-700">{t("barcode_labels.no_barcode")}</Badge>
                         }
                       </div>
                     </button>
@@ -318,12 +328,12 @@ export default function BarcodeLabels() {
           <Card className="rounded-2xl shadow-sm">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Tag className="h-4 w-4 text-primary" /> المنتجات المحددة
+                <Tag className="h-4 w-4 text-primary" /> {t("barcode_labels.selected_products_title")}
               </CardTitle>
               {items.length > 0 && (
                 <Button variant="ghost" size="sm" className="text-xs text-red-500 h-7"
                   onClick={() => setItems([])}>
-                  مسح الكل
+                  {t("barcode_labels.clear_all")}
                 </Button>
               )}
             </CardHeader>
@@ -331,7 +341,7 @@ export default function BarcodeLabels() {
               {items.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <Tag className="h-10 w-10 mx-auto mb-3 opacity-20" />
-                  <p className="text-sm">ابحث عن منتج وأضفه لقائمة الطباعة</p>
+                  <p className="text-sm">{t("barcode_labels.empty_msg")}</p>
                 </div>
               ) : (
                 <div className="divide-y">
@@ -348,7 +358,7 @@ export default function BarcodeLabels() {
                         <p className="font-medium text-sm truncate">{item.name}</p>
                         <p className="text-xs text-muted-foreground font-mono">{item.barcode}</p>
                         <p className="text-xs font-bold text-primary">
-                          {parseFloat(item.price).toFixed(3)} ر.ع
+                          {parseFloat(item.price).toFixed(3)} {t("barcode_labels.currency")}
                         </p>
                       </div>
 
@@ -384,8 +394,8 @@ export default function BarcodeLabels() {
               {/* Footer */}
               {items.length > 0 && (
                 <div className="px-4 py-3 border-t bg-muted/20 flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">{items.length} منتج</span>
-                  <span className="font-bold text-primary">{totalLabels} ملصق إجمالاً</span>
+                  <span className="text-muted-foreground">{items.length} {t("barcode_labels.product_count")}</span>
+                  <span className="font-bold text-primary">{totalLabels} {t("barcode_labels.total_labels")}</span>
                 </div>
               )}
             </CardContent>
@@ -397,9 +407,9 @@ export default function BarcodeLabels() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Eye className="h-4 w-4 text-primary" />
-                  معاينة ({Math.min(previewLabels.length, 24)} ملصق)
+                  {t("barcode_labels.preview_title")} ({Math.min(previewLabels.length, 24)} {t("barcode_labels.label_stickers")})
                   {previewLabels.length > 24 && (
-                    <span className="text-xs text-muted-foreground">• تُعرض أول 24 فقط</span>
+                    <span className="text-xs text-muted-foreground">• {t("barcode_labels.preview_only_first")}</span>
                   )}
                 </CardTitle>
               </CardHeader>

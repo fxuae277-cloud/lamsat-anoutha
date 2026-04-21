@@ -9,11 +9,11 @@ import { NotificationBell } from "./NotificationBell";
 export function AppLayout({ children }: { children: ReactNode }) {
   const { t, lang, setLang } = useI18n();
 
-  const WEEKDAY_AR = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
-  const MONTH_AR = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+  const DAY_KEYS = ["sun","mon","tue","wed","thu","fri","sat"] as const;
+  const MONTH_KEYS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"] as const;
   const now = new Date();
   const headerDate = lang === "ar"
-    ? `${WEEKDAY_AR[now.getDay()]}، ${now.getDate()} ${MONTH_AR[now.getMonth()]} ${now.getFullYear()}`
+    ? `${t(`day_names.${DAY_KEYS[now.getDay()]}`)}، ${now.getDate()} ${t(`month_names.${MONTH_KEYS[now.getMonth()]}`)} ${now.getFullYear()}`
     : now.toLocaleDateString("en-US", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   return (

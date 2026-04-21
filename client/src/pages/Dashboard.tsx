@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getQueryFn, parseServerError } from "@/lib/queryClient";
 import { fmtTime } from "@/lib/formatters";
 import { DateInput } from "@/components/ui/date-input";
+import { useI18n } from "@/lib/i18n";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 function fmt(v: string | number | undefined) {
@@ -18,11 +19,7 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-const PAYMENT_AR: Record<string, string> = {
-  cash: "نقداً",
-  bank: "بطاقة/تحويل",
-  credit: "آجل",
-};
+// PAYMENT_AR replaced by t() calls in component
 
 // ─── types ───────────────────────────────────────────────────────────────────
 interface DashboardStats {
@@ -54,10 +51,21 @@ interface Branch {
 
 // ─── component ───────────────────────────────────────────────────────────────
 export default function Dashboard() {
+  const { t, lang } = useI18n();
   const [filterFrom, setFilterFrom] = useState(today());
   const [filterTo, setFilterTo] = useState(today());
   const [filterBranch, setFilterBranch] = useState("all");
   const [filterPayment, setFilterPayment] = useState("all");
+
+  function getPaymentLabel(method: string): string {
+    const map: Record<string, string> = {
+      cash: t("dashboard.payment_cash"),
+      bank: t("dashboard.payment_bank"),
+      credit: t("dashboard.payment_deferred"),
+      card: t("dashboard.payment_card"),
+    };
+    return map[method] ?? method;
+  }
 
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard"],
@@ -101,7 +109,7 @@ export default function Dashboard() {
 
   const activeBranch = shiftData?.shift
     ? branches?.find((b) => b.id === shiftData.shift!.branchId)?.name ?? "—"
-    : "لا يوجد شيفت مفتوح";
+    : "—";
 
   if (statsLoading) {
     return (
@@ -112,75 +120,75 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
-      {/* ── عنوان ── */}
+    <div className="space-y-6" dir={lang === "ar" ? "rtl" : "ltr"}>
+      {/* page title */}
       <div>
-        <h1 className="text-2xl font-bold">لوحة التحكم</h1>
-        <p className="text-muted-foreground mt-1">نظرة عامة على أداء المتجر اليوم</p>
+        <h1 className="text-2xl font-bold">{t("dashboard.page_title")}</h1>
+        <p className="text-muted-foreground mt-1">{t("dashboard.subtitle")}</p>
       </div>
 
-      {/* ── البطاقات الخمس ── */}
+      {/* stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* مبيعات اليوم */}
+        {/* sales today */}
         <Card className="border-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">مبيعات اليوم</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.sales_today")}</CardTitle>
             <div className="p-2 bg-primary/10 rounded-full text-primary">
               <Receipt className="w-4 h-4" />
             </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{fmt(stats?.todaySales)}</div>
-            <p className="text-xs text-muted-foreground mt-1">ريال عماني</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("app.currency")}</p>
           </CardContent>
         </Card>
 
-        {/* عدد الفواتير */}
+        {/* invoice count */}
         <Card className="border-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">عدد الفواتير</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.invoices_count")}</CardTitle>
             <div className="p-2 bg-blue-50 rounded-full text-blue-500">
               <ShoppingCart className="w-4 h-4" />
             </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.todayOrderCount ?? 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">فاتورة اليوم</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("dashboard.invoices_today")}</p>
           </CardContent>
         </Card>
 
-        {/* المخزون المنخفض */}
+        {/* low stock */}
         <Card className="border-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">المخزون المنخفض</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.low_stock")}</CardTitle>
             <div className="p-2 bg-red-50 rounded-full text-red-500">
               <AlertTriangle className="w-4 h-4" />
             </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">{stats?.lowStockCount ?? 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">منتج قارب على النفاذ</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("dashboard.products_running_low")}</p>
           </CardContent>
         </Card>
 
-        {/* قيمة المخزون */}
+        {/* stock value */}
         <Card className="border-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">قيمة المخزون</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.stock_value")}</CardTitle>
             <div className="p-2 bg-emerald-50 rounded-full text-emerald-600">
               <TrendingUp className="w-4 h-4" />
             </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{inventoryValue.toFixed(3)}</div>
-            <p className="text-xs text-muted-foreground mt-1">ريال عماني</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("app.currency")}</p>
           </CardContent>
         </Card>
 
-        {/* الفرع النشط */}
+        {/* active branch */}
         <Card className="border-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">الفرع النشط</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.active_branch")}</CardTitle>
             <div className="p-2 bg-emerald-50 rounded-full text-emerald-600">
               <Store className="w-4 h-4" />
             </div>
@@ -188,20 +196,20 @@ export default function Dashboard() {
           <CardContent>
             <div className="text-lg font-bold truncate">{activeBranch}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {shiftData?.shift ? "شيفت مفتوح" : "لا شيفت"}
+              {shiftData?.shift ? t("shifts.open") : t("shifts.no_shift")}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* ── الجزء السفلي: جدول المبيعات + تنبيهات المخزون ── */}
+      {/* bottom: sales table + low stock alerts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* جدول المبيعات مع فلاتر */}
+        {/* sales table with filters */}
         <Card className="col-span-1 lg:col-span-2 border-none shadow-sm">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <CardTitle className="text-base">المبيعات</CardTitle>
+              <CardTitle className="text-base">{t("dashboard.recent_invoices")}</CardTitle>
               <div className="flex items-center gap-2 flex-wrap">
                 <Filter className="w-4 h-4 text-muted-foreground" />
                 <DateInput
@@ -209,7 +217,7 @@ export default function Dashboard() {
                   onChange={e => setFilterFrom(e.target.value)}
                   className="h-8 w-36 text-xs"
                 />
-                <span className="text-xs text-muted-foreground">إلى</span>
+                <span className="text-xs text-muted-foreground">{t("app.to")}</span>
                 <DateInput
                   value={filterTo}
                   onChange={e => setFilterTo(e.target.value)}
@@ -218,26 +226,26 @@ export default function Dashboard() {
                 <Select value={filterBranch} onValueChange={setFilterBranch}>
                   <SelectTrigger className="h-8 w-32 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">كل الفروع</SelectItem>
-                    {branches?.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
+                    <SelectItem value="all">{t("dashboard.all_branches")}</SelectItem>
+                    {branches?.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}{(b as any).address ? " - " + (b as any).address : ""}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <Select value={filterPayment} onValueChange={setFilterPayment}>
                   <SelectTrigger className="h-8 w-28 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">كل الدفع</SelectItem>
-                    <SelectItem value="cash">نقداً</SelectItem>
-                    <SelectItem value="bank">بطاقة</SelectItem>
-                    <SelectItem value="credit">آجل</SelectItem>
+                    <SelectItem value="all">{t("dashboard.all_payment")}</SelectItem>
+                    <SelectItem value="cash">{t("dashboard.payment_cash")}</SelectItem>
+                    <SelectItem value="bank">{t("dashboard.payment_bank")}</SelectItem>
+                    <SelectItem value="credit">{t("dashboard.payment_deferred")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             {salesData && (
               <p className="text-xs text-muted-foreground mt-1">
-                {salesData.length} فاتورة —
-                إجمالي: <span className="font-bold text-primary">
-                  {salesData.reduce((s, r) => s + parseFloat(r.total || "0"), 0).toFixed(3)} ر.ع
+                {salesData.length} {t("dashboard.invoices_count")} —
+                {t("dashboard.total")}: <span className="font-bold text-primary">
+                  {salesData.reduce((s, r) => s + parseFloat(r.total || "0"), 0).toFixed(3)} {t("app.currency_short")}
                 </span>
               </p>
             )}
@@ -248,18 +256,18 @@ export default function Dashboard() {
                 <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
               </div>
             ) : !salesData?.length ? (
-              <p className="text-center text-muted-foreground py-10">لا توجد مبيعات في هذه الفترة</p>
+              <p className="text-center text-muted-foreground py-10">{t("dashboard.no_invoices")}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/50">
-                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">رقم الفاتورة</th>
-                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">الفرع</th>
-                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">الكاشير</th>
-                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">طريقة الدفع</th>
-                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">الإجمالي</th>
-                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">الوقت</th>
+                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t("dashboard.invoice_number")}</th>
+                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t("dashboard.branch")}</th>
+                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t("dashboard.cashier")}</th>
+                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t("dashboard.payment_method")}</th>
+                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t("dashboard.total")}</th>
+                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t("dashboard.time")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -270,10 +278,10 @@ export default function Dashboard() {
                         <td className="py-3 px-4">{sale.cashierName ?? "—"}</td>
                         <td className="py-3 px-4">
                           <Badge variant="outline" className="text-xs">
-                            {PAYMENT_AR[sale.paymentMethod] ?? sale.paymentMethod}
+                            {getPaymentLabel(sale.paymentMethod)}
                           </Badge>
                         </td>
-                        <td className="py-3 px-4 font-bold text-primary">{fmt(sale.total)} ر.ع</td>
+                        <td className="py-3 px-4 font-bold text-primary">{fmt(sale.total)} {t("app.currency_short")}</td>
                         <td className="py-3 px-4 text-muted-foreground text-xs">
                           {fmtTime(sale.createdAt)}
                         </td>
@@ -286,15 +294,15 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* تنبيهات المخزون المنخفض */}
+        {/* low stock alerts */}
         <Card className="border-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">تنبيهات المخزون</CardTitle>
+            <CardTitle className="text-base">{t("dashboard.low_stock_items")}</CardTitle>
             <Package className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             {!stats?.lowStockItems?.length ? (
-              <p className="text-center text-muted-foreground py-8 text-sm">كل المخزون بمستوى جيد ✓</p>
+              <p className="text-center text-muted-foreground py-8 text-sm">{t("dashboard.no_low_stock")}</p>
             ) : (
               <div className="space-y-3">
                 {stats.lowStockItems.map((item) => (
