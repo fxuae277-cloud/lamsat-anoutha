@@ -1471,8 +1471,9 @@ export async function registerRoutes(
       // Current open shift (first in list)
       const currentShift = allShifts.find(s => s.status === "open") ?? allShifts[0] ?? null;
 
-      // حركات الصندوق اليدوية فقط (تستثني: sale, SUPPLIER_PAYMENT وأي نوع آخر تلقائي)
-      const MANUAL_TYPES = ["owner_handover","bank_deposit","expense","owner_cash_in","owner_transfer_in"];
+      // حركات الصندوق اليدوية + إيداع/سحب نقدي
+      // تستثني الأنواع التلقائية: sale, SUPPLIER_PAYMENT, shift_difference
+      const MANUAL_TYPES = ["owner_handover","bank_deposit","expense","owner_cash_in","owner_transfer_in","deposit","withdrawal"];
       const typeList = MANUAL_TYPES.map((_, i) => `$${i + 2}`).join(",");
       const movParams: any[] = [dateStr, ...MANUAL_TYPES];
       const movBFilter = branchId ? `AND cl.branch_id = $${movParams.push(branchId)}` : "";
@@ -1515,11 +1516,13 @@ export async function registerRoutes(
         if (cfRes.rows[0]) carryForward = parseFloat(cfRes.rows[0].carry);
       } catch (_) { /* غير حرج */ }
 
-      // الكاش الفعلي = افتتاح (يشمل الباقي من الأمس) + مبيعات + واردات − مخرجات
-      // carryForward يُعرض كمعلومة توضيحية فقط وليس جزءاً من الحساب
+      // الكاش الفعلي:
+      // إذا وجد رصيد مرحّل → هو الأساس (فتح الوردية يعكس نفس المال، لا يُجمع مرتين)
+      // إذا لا يوجد مرحّل → نقد الافتتاح هو الأساس (أول يوم / فرع جديد)
       const openingCash = parseFloat(shiftTotals.total_opening_cash);
       const cashSales = parseFloat(saleTotals.total_cash);
-      const actualCashInDrawer = openingCash + cashSales + totalInflows - totalOutflows;
+      const baseBalance = carryForward > 0 ? carryForward : openingCash;
+      const actualCashInDrawer = baseBalance + cashSales + totalInflows - totalOutflows;
 
       res.json({
         date: dateStr,
@@ -1533,6 +1536,7 @@ export async function registerRoutes(
           totalTransfer: parseFloat(saleTotals.total_transfer),
           invoiceCount: parseInt(saleTotals.invoice_count),
           totalOpeningCash: openingCash,
+          baseBalance,
           totalClosingCash: parseFloat(shiftTotals.total_closing_cash),
           shiftsCount: shiftTotals.shifts_count,
           closedShiftsCount: shiftTotals.closed_shifts_count,
