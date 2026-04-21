@@ -50,7 +50,7 @@ export default function Products() {
   const [formProduct, setFormProduct] = useState<any>(null); // null = add
   const [formData, setFormData] = useState({
     name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "",
-    description: "", costDefault: "", minQty: "5", marginInput: "20",
+    description: "", costDefault: "", minQty: "5", marginInput: "20", modelNumber: "",
   });
 
   // ── batch price update ────────────────────────────────────────────────
@@ -233,7 +233,7 @@ export default function Products() {
   function openAdd() {
     setFormProduct(null);
     setPriceAutoCalc(true);
-    setFormData({ name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "", description: "", costDefault: "", minQty: "5", marginInput: "20" });
+    setFormData({ name: "", categoryId: "", price: "", barcode: "", productType: "simple", active: true, image: "", description: "", costDefault: "", minQty: "5", marginInput: "20", modelNumber: "" });
 
     setShowAddCategory(false);
     setNewCategoryName("");
@@ -259,6 +259,7 @@ export default function Products() {
       costDefault: p.costDefault?.toString() || "",
       minQty: p.minQty?.toString() || "5",
       marginInput: currentMargin,
+      modelNumber: p.modelNumber || "",
     });
 
     setShowAddCategory(false);
@@ -278,6 +279,7 @@ export default function Products() {
       description: formData.description.trim() || null,
       costDefault: formData.costDefault ? parseFloat(formData.costDefault) : null,
       minQty: formData.minQty ? parseInt(formData.minQty) : 5,
+      modelNumber: formData.modelNumber.trim() || null,
     };
     if (formProduct) {
       updateProductMutation.mutate({ id: formProduct.id, ...payload });
@@ -524,6 +526,7 @@ export default function Products() {
               </TableHead>
               <TableHead>الفئة</TableHead>
               <TableHead>{t("products.code")}</TableHead>
+              <TableHead>رقم الموديل</TableHead>
               <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("price")}>
                 {t("products.default_price")}{sortIcon("price")}
               </TableHead>
@@ -537,7 +540,7 @@ export default function Products() {
           </TableHeader>
           <TableBody>
             {filteredProducts.length === 0 ? (
-              <TableRow><TableCell colSpan={9}><div className="py-12 text-center text-muted-foreground space-y-3"><Package className="w-10 h-10 mx-auto opacity-30" /><p>{t("products.no_products")}</p></div></TableCell></TableRow>
+              <TableRow><TableCell colSpan={10}><div className="py-12 text-center text-muted-foreground space-y-3"><Package className="w-10 h-10 mx-auto opacity-30" /><p>{t("products.no_products")}</p></div></TableCell></TableRow>
             ) : filteredProducts.map((p, idx) => {
               const catName = categories.find((c: any) => c.id === p.categoryId)?.name ?? "—";
               const stock = p.totalStock ?? 0;
@@ -566,6 +569,7 @@ export default function Products() {
                     ? <span className="flex items-center gap-1">{p.barcode} <Copy className="w-3 h-3 opacity-0 group-hover:opacity-50" /></span>
                     : "—"}
                 </TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">{p.modelNumber || "—"}</TableCell>
                 <TableCell className="font-medium">{parseFloat(p.price).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} <span className="text-xs text-muted-foreground">ر.ع</span></TableCell>
                 <TableCell className="text-center">
                   {(() => {
@@ -684,7 +688,7 @@ export default function Products() {
               </div>
 
               {/* الباركود */}
-              <div className="space-y-1 col-span-2">
+              <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium">{t("products.code")}</label>
                   {!formProduct && (
@@ -716,6 +720,18 @@ export default function Products() {
                     <BarcodeScanButton onScan={code => setFormData(f => ({ ...f, barcode: code }))} />
                   )}
                 </div>
+              </div>
+
+              {/* رقم الموديل */}
+              <div className="space-y-1">
+                <label className="text-sm font-medium">رقم الموديل</label>
+                <Input
+                  value={formData.modelNumber}
+                  onChange={e => setFormData(f => ({ ...f, modelNumber: e.target.value }))}
+                  placeholder="مثال: AB-1234 (اختياري)"
+                  className="font-mono"
+                  data-testid="input-product-model"
+                />
               </div>
             </div>
 

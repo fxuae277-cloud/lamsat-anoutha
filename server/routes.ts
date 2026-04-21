@@ -2309,7 +2309,7 @@ export async function registerRoutes(
         FROM products p
         WHERE p.active = true
           AND (
-            p.name ILIKE $1 OR p.barcode ILIKE $1
+            p.name ILIKE $1 OR p.barcode ILIKE $1 OR COALESCE(p.model_number,'') ILIKE $1
             OR EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.sku ILIKE $1)
           )
         ORDER BY p.name ASC
@@ -5414,7 +5414,7 @@ export async function registerRoutes(
       if (search) {
         params.push(`%${search}%`);
         const n = params.length;
-        query += ` AND (p.name ILIKE $${n} OR p.barcode ILIKE $${n} OR EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.sku ILIKE $${n}))`;
+        query += ` AND (p.name ILIKE $${n} OR p.barcode ILIKE $${n} OR COALESCE(p.model_number,'') ILIKE $${n} OR EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.sku ILIKE $${n}))`;
       }
       if (categoryId) {
         params.push(Number(categoryId));

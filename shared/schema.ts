@@ -102,6 +102,7 @@ export const products = pgTable("products", {
   unitOfMeasure: text("unit_of_measure").notNull().default("piece"),
   minPrice: decimal("min_price", { precision: 10, scale: 3 }).default("0"),
   isComposite: boolean("is_composite").notNull().default(false),
+  modelNumber: text("model_number"),
 });
 export const insertProductSchema = createInsertSchema(products).omit({ id: true });
 export type InsertProduct = z.infer<typeof insertProductSchema>;

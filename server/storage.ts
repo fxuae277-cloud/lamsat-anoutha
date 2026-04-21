@@ -388,6 +388,7 @@ export class DatabaseStorage implements IStorage {
         conditions.push(or(
           ilike(products.name, qLike),
           ilike(products.barcode, qLike),
+          ilike(products.modelNumber, qLike),
           sql`EXISTS (SELECT 1 FROM product_variants WHERE product_id = ${products.id} AND sku ILIKE ${qLike})`,
         )!);
       }
@@ -430,6 +431,7 @@ export class DatabaseStorage implements IStorage {
       conditions.push(or(
         ilike(products.name, qLike),
         ilike(products.barcode, qLike),
+        ilike(products.modelNumber, qLike),
         sql`${products.id}::text = ${filters.q}`,
         sql`EXISTS (SELECT 1 FROM product_variants WHERE product_id = ${products.id} AND sku ILIKE ${qLike})`,
       ));

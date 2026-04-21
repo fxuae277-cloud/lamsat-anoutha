@@ -110,6 +110,7 @@ export const updateProductSchema = z.object({
   description:  z.string().max(1000).optional().nullable(),
   costDefault:  z.coerce.number().min(0).optional().nullable(),
   minQty:       z.coerce.number().int().min(0).optional().nullable(),
+  modelNumber:  z.string().max(100).optional().nullable().transform(v => v === "" ? null : v),
 });
 
 // ── Product Variants ──────────────────────────────────────────────────────────
@@ -171,6 +172,7 @@ export const createProductSchema = z.object({
   description:   z.string().max(1000).optional().nullable(),
   costDefault:   z.coerce.number().min(0).optional().nullable(),
   minQty:        z.coerce.number().int().min(0).optional().nullable(),
+  modelNumber:   z.string().max(100).optional().nullable().transform(v => v === "" ? null : v),
   variants: z.array(z.object({
     price:       z.coerce.number().min(0, "السعر لا يمكن أن يكون سالباً"),
     barcode:     z.string().max(50).optional().nullable(),

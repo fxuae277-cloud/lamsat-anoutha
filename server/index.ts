@@ -198,6 +198,14 @@ app.get("/api/health", (_req, res) => {
     console.error("[startup] purchase_attachments migration failed:", err);
   }
 
+  // Migration 0022 — add model_number column to products
+  try {
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS model_number TEXT`);
+    console.log("[startup] migration 0022: products.model_number ready");
+  } catch (err) {
+    console.error("[startup] migration 0022 failed:", err);
+  }
+
   // Migration 0021 — ensure central location exists (idempotent)
   // approvePurchaseInvoice requires a location with is_central = true
   try {
