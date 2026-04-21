@@ -148,7 +148,7 @@ function ShiftRow({ s, omr, t }: { s: ShiftDetail; omr: string; t: (k: string) =
         className="w-full flex items-center gap-3 px-4 py-3 text-right hover:bg-muted/30 transition-colors"
       >
         <div className={`w-2 h-2 rounded-full shrink-0 ${s.status === "open" ? "bg-green-500 animate-pulse" : "bg-gray-400"}`} />
-        <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+        <div className="flex-1 grid grid-cols-2 sm:grid-cols-5 gap-2 text-sm">
           <div>
             <p className="text-muted-foreground text-xs">{t("branch_summary.cashier")}</p>
             <p className="font-semibold truncate">{s.cashierName}</p>
@@ -158,6 +158,18 @@ function ShiftRow({ s, omr, t }: { s: ShiftDetail; omr: string; t: (k: string) =
             <p className="font-semibold">
               {fmtTime(s.startedAt)}
               {s.endedAt ? ` ← ${fmtTime(s.endedAt)}` : ` (${t("branch_summary.status_open")})`}
+            </p>
+          </div>
+          {/* نقد الافتتاح ← الاختتام */}
+          <div>
+            <p className="text-muted-foreground text-xs">بداية ← نهاية الصندوق</p>
+            <p className="font-semibold text-blue-700 text-xs leading-snug">
+              {fmt(s.openingCash)}
+              {s.actualCash != null
+                ? <span> ← <span className="text-emerald-700">{fmt(s.actualCash)}</span></span>
+                : <span className="text-muted-foreground"> ← مفتوح</span>
+              }
+              <span className="text-muted-foreground mr-0.5"> {omr}</span>
             </p>
           </div>
           <div>
@@ -180,32 +192,57 @@ function ShiftRow({ s, omr, t }: { s: ShiftDetail; omr: string; t: (k: string) =
       </button>
 
       {expanded && (
-        <div className="border-t bg-muted/20 px-4 py-4 grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-          {[
-            [`💰 ${t("branch_summary.opening_cash_lbl")}`, fmt(s.openingCash) + " " + omr],
-            [`💵 ${t("branch_summary.cash_sales")}`,       fmt(s.totalCash) + " " + omr],
-            [`💳 ${t("branch_summary.card_sales")}`,       fmt(s.totalCard) + " " + omr],
-            [`🏦 ${t("branch_summary.bank_sales")}`,       fmt(s.totalTransfer) + " " + omr],
-            [`📊 ${t("branch_summary.expected_cash")}`,    s.expectedCash != null ? fmt(s.expectedCash) + " " + omr : "—"],
-            [`🧾 ${t("branch_summary.actual_cash")}`,      s.actualCash != null ? fmt(s.actualCash) + " " + omr : t("branch_summary.not_closed")],
-          ].map(([label, val]) => (
-            <div key={label as string}>
-              <p className="text-muted-foreground text-xs">{label as string}</p>
-              <p className="font-semibold">{val as string}</p>
+        <div className="border-t bg-muted/20 px-4 py-4 space-y-3">
+
+          {/* حركة الصندوق النقدي */}
+          <div className="flex items-center gap-3 rounded-xl bg-white border px-4 py-3">
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground mb-0.5">بداية الصندوق</p>
+              <p className="text-base font-bold text-blue-700">{fmt(s.openingCash)}</p>
+              <p className="text-xs text-muted-foreground">{omr}</p>
             </div>
-          ))}
-          {s.difference != null && (
-            <div className="col-span-2 sm:col-span-3">
-              <p className="text-muted-foreground text-xs">{t("branch_summary.shift_diff")}</p>
-              <p className={`font-bold text-base ${diffColor}`}>
-                {Math.abs(s.difference) < 0.001
-                  ? t("branch_summary.diff_match")
-                  : s.difference > 0
-                  ? `${t("branch_summary.diff_surplus")} +${fmt(s.difference)} ${omr}`
-                  : `${t("branch_summary.diff_deficit")} −${fmt(Math.abs(s.difference))} ${omr}`}
-              </p>
+            <div className="flex-1 text-center text-muted-foreground text-lg">→</div>
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground mb-0.5">نهاية الصندوق</p>
+              {s.actualCash != null ? (
+                <>
+                  <p className="text-base font-bold text-emerald-700">{fmt(s.actualCash)}</p>
+                  <p className="text-xs text-muted-foreground">{omr}</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">{t("branch_summary.not_closed")}</p>
+              )}
             </div>
-          )}
+            {s.difference != null && (
+              <>
+                <div className="flex-1 text-center text-muted-foreground text-lg">→</div>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground mb-0.5">{t("branch_summary.shift_diff")}</p>
+                  <p className={`text-base font-bold ${diffColor}`}>
+                    {Math.abs(s.difference) < 0.001
+                      ? "✓ مطابق"
+                      : `${s.difference > 0 ? "+" : "−"}${fmt(Math.abs(s.difference))}`}
+                  </p>
+                  {Math.abs(s.difference) >= 0.001 && <p className="text-xs text-muted-foreground">{omr}</p>}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* تفاصيل المبيعات */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            {[
+              [`💵 ${t("branch_summary.cash_sales")}`,     fmt(s.totalCash) + " " + omr],
+              [`💳 ${t("branch_summary.card_sales")}`,     fmt(s.totalCard) + " " + omr],
+              [`🏦 ${t("branch_summary.bank_sales")}`,     fmt(s.totalTransfer) + " " + omr],
+              [`📊 ${t("branch_summary.expected_cash")}`,  s.expectedCash != null ? fmt(s.expectedCash) + " " + omr : "—"],
+            ].map(([label, val]) => (
+              <div key={label as string}>
+                <p className="text-muted-foreground text-xs">{label as string}</p>
+                <p className="font-semibold">{val as string}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -759,7 +796,7 @@ export default function BranchSummary() {
             />
             <StatCard
               label={t("branch_summary.opening_cash")}
-              value={`${fmt(today?.totalOpeningCash ?? 0)} ${omr}`}
+              value={`${fmt(data?.currentShift?.openingCash ?? today?.totalOpeningCash ?? 0)} ${omr}`}
               icon={Banknote}
               color="bg-blue-500"
               sub={`${today?.shiftsCount ?? 0} ${t("branch_summary.shifts_count")} — ${today?.closedShiftsCount ?? 0} ${t("branch_summary.closed_shifts")}`}
