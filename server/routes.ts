@@ -1507,10 +1507,11 @@ export async function registerRoutes(
         if (cfRes.rows[0]) carryForward = parseFloat(cfRes.rows[0].carry);
       } catch (_) { /* غير حرج */ }
 
-      // الكاش الفعلي = مرحّل + افتتاح + مبيعات + واردات المالك − مخرجات
+      // الكاش الفعلي = افتتاح (يشمل الباقي من الأمس) + مبيعات + واردات − مخرجات
+      // carryForward يُعرض كمعلومة توضيحية فقط وليس جزءاً من الحساب
       const openingCash = parseFloat(shiftTotals.total_opening_cash);
       const cashSales = parseFloat(saleTotals.total_cash);
-      const actualCashInDrawer = carryForward + openingCash + cashSales + totalInflows - totalOutflows;
+      const actualCashInDrawer = openingCash + cashSales + totalInflows - totalOutflows;
 
       res.json({
         date: dateStr,

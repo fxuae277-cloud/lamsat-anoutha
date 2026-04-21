@@ -503,13 +503,6 @@ export default function BranchSummary() {
                 <div className="bg-white/70 rounded-xl border border-emerald-100 px-4 py-3">
                   <p className="text-xs text-muted-foreground mb-2 font-medium">طريقة الحساب:</p>
                   <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                    {(today?.carryForward ?? 0) > 0 && (
-                      <>
-                        <span className="font-semibold text-gray-700">{fmt(today!.carryForward)}</span>
-                        <span className="text-xs text-muted-foreground">مرحّل</span>
-                        <span className="text-emerald-500 font-bold">+</span>
-                      </>
-                    )}
                     <span className="font-semibold text-blue-700">{fmt(today?.totalOpeningCash ?? 0)}</span>
                     <span className="text-xs text-muted-foreground">افتتاح</span>
                     <span className="text-emerald-500 font-bold">+</span>
@@ -532,6 +525,11 @@ export default function BranchSummary() {
                     <span className="text-muted-foreground">=</span>
                     <span className="font-bold text-emerald-700">{fmt(today?.actualCashInDrawer ?? 0)}</span>
                   </div>
+                  {(today?.carryForward ?? 0) > 0 && (
+                    <p className="text-xs text-muted-foreground mt-2 border-t border-emerald-100 pt-2">
+                      نقد الافتتاح يشمل {fmt(today!.carryForward)} {omr} مرحّل من الأمس
+                    </p>
+                  )}
                 </div>
 
                 {/* بطاقات التفاصيل */}
@@ -580,7 +578,7 @@ export default function BranchSummary() {
                     </div>
                     <p className="text-base font-bold text-blue-700">{fmt(today?.totalOpeningCash ?? 0)} {omr}</p>
                     {(today?.carryForward ?? 0) > 0 && (
-                      <p className="text-xs text-muted-foreground">مرحّل: {fmt(today!.carryForward)}</p>
+                      <p className="text-xs text-muted-foreground">يشمل {fmt(today!.carryForward)} من الأمس</p>
                     )}
                   </div>
 
