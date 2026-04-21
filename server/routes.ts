@@ -2370,6 +2370,21 @@ export async function registerRoutes(
     }
     res.json(detail);
   });
+  app.patch("/api/sales/:id/reference", requireAuth, async (req, res) => {
+    try {
+      const saleId = Number(req.params.id);
+      const { paymentReference } = req.body;
+      if (!saleId) return res.status(400).json({ message: "id مطلوب" });
+      await pool.query(
+        `UPDATE sales SET payment_reference = $1 WHERE id = $2`,
+        [paymentReference || null, saleId]
+      );
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.post("/api/sales", requireAuth, requirePermission("invoice.create"), async (req, res) => {
     const { items, branchId: _b, cashierId: _c, employeeId: _e, terminalName: _t, shiftId: _s, ...saleData } = req.body;
     const user = await storage.getUser(req.session.userId!);

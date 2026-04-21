@@ -1,7 +1,8 @@
 ﻿import { useState } from "react";
-import { FileSpreadsheet, Search, Eye, Printer, Download, X, Banknote, CreditCard, Building2, FileText, MessageSquare, RefreshCw } from "lucide-react";
+import { FileSpreadsheet, Search, Eye, Printer, Download, X, Banknote, CreditCard, Building2, FileText, MessageSquare, RefreshCw, Pencil, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { DateInput } from "@/components/ui/date-input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -30,6 +31,10 @@ function omr(val: string | number | null) {
 
 function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; open: boolean; onClose: () => void }) {
   const { t, lang } = useI18n();
+  const qc = useQueryClient();
+  const [editingRef, setEditingRef] = useState(false);
+  const [refInput, setRefInput] = useState("");
+
   const PM_LABELS: Record<string, string> = {
     cash: t("payment_methods.cash"),
     card: t("payment_methods.card"),
@@ -44,6 +49,23 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
       return res.json();
     },
     enabled: !!saleId && open,
+  });
+
+  const saveRef = useMutation({
+    mutationFn: async (ref: string) => {
+      const res = await fetch(`/api/sales/${saleId}/reference`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ paymentReference: ref }),
+      });
+      if (!res.ok) throw new Error("فشل الحفظ");
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/sales", saleId] });
+      qc.invalidateQueries({ queryKey: ["sales-invoices"] });
+      setEditingRef(false);
+    },
   });
 
   const locale = "en-US";
@@ -284,7 +306,48 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
               <Badge className={PM_COLORS[detail.paymentMethod] || ""}>
                 {PM_LABELS[detail.paymentMethod] || detail.paymentMethod}
               </Badge>
-              {detail.paymentReference && (
+              {(detail.paymentMethod === "card" || detail.paymentMethod === "bank_transfer") && (
+                editingRef ? (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      value={refInput}
+                      onChange={e => setRefInput(e.target.value)}
+                      className="h-7 text-xs w-40 font-mono"
+                      dir="ltr"
+                      placeholder="أدخل الرقم المرجعي"
+                      autoFocus
+                      onKeyDown={e => {
+                        if (e.key === "Enter") saveRef.mutate(refInput);
+                        if (e.key === "Escape") setEditingRef(false);
+                      }}
+                    />
+                    <Button size="icon" className="h-7 w-7 bg-emerald-600 hover:bg-emerald-700" onClick={() => saveRef.mutate(refInput)} disabled={saveRef.isPending}>
+                      <Check className="w-3.5 h-3.5 text-white" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingRef(false)}>
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    {detail.paymentReference ? (
+                      <span className="text-xs font-mono bg-gray-100 border border-gray-200 rounded px-2 py-0.5 text-gray-700" dir="ltr">
+                        # {detail.paymentReference}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground italic">لا يوجد رقم مرجعي</span>
+                    )}
+                    <button
+                      onClick={() => { setRefInput(detail.paymentReference || ""); setEditingRef(true); }}
+                      className="text-gray-400 hover:text-blue-600 transition-colors p-0.5 rounded"
+                      title="تعديل الرقم المرجعي"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )
+              )}
+              {detail.paymentMethod === "cash" && detail.paymentReference && (
                 <span className="text-xs font-mono bg-gray-100 border border-gray-200 rounded px-2 py-0.5 text-gray-700" dir="ltr">
                   # {detail.paymentReference}
                 </span>
