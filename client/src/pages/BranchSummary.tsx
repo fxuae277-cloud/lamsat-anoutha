@@ -9,7 +9,7 @@ import {
   Banknote, CreditCard, ArrowDownUp, Clock, TrendingUp,
   RefreshCw, Calendar, CheckCircle2, AlertCircle,
   PlusCircle, HandCoins, Building2, ShoppingBag, Wallet,
-  ArrowUpCircle, ArrowDownCircle, ArrowUp, ArrowDown,
+  ArrowUpCircle, ArrowDownCircle, ArrowUp, ArrowDown, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -224,7 +224,33 @@ export default function BranchSummary() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [selectedBranchId, setSelectedBranchId] = useState<string>("");
 
-  // ── Dialog state ─────────────────────────────────────────────────
+  // ── Close Shift Dialog ───────────────────────────────────────────
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [closeActualCash, setCloseActualCash] = useState("");
+
+  const closeShiftMutation = useMutation({
+    mutationFn: async (shiftId: number) => {
+      if (!closeActualCash || parseFloat(closeActualCash) < 0)
+        throw new Error("أدخل المبلغ النقدي الفعلي");
+      const res = await fetch(`/api/shifts/${shiftId}/close`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ actualCash: parseFloat(closeActualCash) }),
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "تم إغلاق الوردية بنجاح" });
+      setCloseOpen(false); setCloseActualCash("");
+      queryClient.invalidateQueries({ queryKey: ["branch-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["shifts"] });
+    },
+    onError: (e: Error) => toast({ title: "خطأ في الإغلاق", description: e.message, variant: "destructive" }),
+  });
+
+  // ── Cash Movement Dialog ─────────────────────────────────────────
   const [movOpen, setMovOpen] = useState(false);
   const [movDir, setMovDir] = useState<MovDir>("out");
   const [movType, setMovType] = useState<OutflowType | InflowType>("owner_handover");
@@ -351,12 +377,95 @@ export default function BranchSummary() {
             <RefreshCw className="h-3.5 w-3.5" />
             {t("branch_summary.refresh")}
           </Button>
+          {openShift && (
+            <Button
+              size="sm"
+              className="gap-1 bg-red-600 hover:bg-red-700"
+              onClick={() => { setCloseActualCash(""); setCloseOpen(true); }}
+            >
+              <XCircle className="h-3.5 w-3.5" />
+              إغلاق الوردية
+            </Button>
+          )}
           <Button size="sm" className="gap-1 bg-pink-600 hover:bg-pink-700" onClick={() => setMovOpen(true)}>
             <PlusCircle className="h-3.5 w-3.5" />
             تسجيل حركة نقدية
           </Button>
         </div>
       </div>
+
+      {/* ── Close Shift Dialog ── */}
+      <Dialog open={closeOpen} onOpenChange={setCloseOpen}>
+        <DialogContent className="max-w-sm" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              <XCircle className="w-4 h-4" /> إغلاق الوردية
+            </DialogTitle>
+          </DialogHeader>
+          {openShift && (
+            <div className="space-y-4 pt-1">
+              {/* معلومات الوردية */}
+              <div className="rounded-xl border bg-muted/30 px-4 py-3 space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">الكاشير</span>
+                  <span className="font-medium">{openShift.cashierName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">بدأت</span>
+                  <span className="font-medium">{fmtTime(openShift.startedAt)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">مبيعات الوردية</span>
+                  <span className="font-bold text-emerald-600">{fmt(openShift.totalSales)} {omr}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">المتوقع في الصندوق</span>
+                  <span className="font-bold text-blue-600">
+                    {openShift.expectedCash != null ? `${fmt(openShift.expectedCash)} ${omr}` : "—"}
+                  </span>
+                </div>
+              </div>
+
+              {/* المبلغ الفعلي */}
+              <div className="space-y-1">
+                <label className="text-sm font-medium">المبلغ النقدي الفعلي في الصندوق (ر.ع)</label>
+                <Input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  value={closeActualCash}
+                  onChange={e => setCloseActualCash(e.target.value)}
+                  placeholder="0.000"
+                  autoFocus
+                />
+                {closeActualCash && openShift.expectedCash != null && (
+                  <p className={`text-xs font-medium mt-1 ${
+                    Math.abs(parseFloat(closeActualCash) - openShift.expectedCash) < 0.001
+                      ? "text-green-600"
+                      : parseFloat(closeActualCash) > openShift.expectedCash
+                      ? "text-blue-600"
+                      : "text-red-600"
+                  }`}>
+                    {(() => {
+                      const diff = parseFloat(closeActualCash) - openShift.expectedCash;
+                      if (Math.abs(diff) < 0.001) return "مطابق تماماً";
+                      return `فرق: ${diff > 0 ? "+" : ""}${fmt(diff)} ${omr}`;
+                    })()}
+                  </p>
+                )}
+              </div>
+
+              <Button
+                className="w-full bg-red-600 hover:bg-red-700"
+                onClick={() => closeShiftMutation.mutate(openShift.id)}
+                disabled={!closeActualCash || parseFloat(closeActualCash) < 0 || closeShiftMutation.isPending}
+              >
+                {closeShiftMutation.isPending ? "جارٍ الإغلاق..." : "تأكيد إغلاق الوردية"}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Cash Movement Dialog ── */}
       <Dialog open={movOpen} onOpenChange={setMovOpen}>
