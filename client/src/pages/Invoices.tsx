@@ -644,6 +644,7 @@ export default function Invoices() {
                     <TableHead>العميلة</TableHead>
                     <TableHead>{t("invoices.table_cashier")}</TableHead>
                     <TableHead className="text-center">{t("invoices.table_payment")}</TableHead>
+                    <TableHead className="text-center">الرقم المرجعي</TableHead>
                     <TableHead className="text-center font-mono">{t("invoices.table_total")}</TableHead>
                     <TableHead className="text-center">{t("invoices.table_date")}</TableHead>
                     <TableHead className="w-[100px] text-center">{t("common.actions")}</TableHead>
@@ -661,14 +662,15 @@ export default function Invoices() {
                       </TableCell>
                       <TableCell>{s.cashierName || "—"}</TableCell>
                       <TableCell className="text-center">
-                        <div className="flex flex-col items-center gap-0.5">
-                          <Badge className={PM_COLORS[s.paymentMethod] || ""}>
-                            {t(`payment_methods.${s.paymentMethod}`) || s.paymentMethod}
-                          </Badge>
-                          {s.paymentReference && (
-                            <span className="text-[10px] font-mono text-gray-500" dir="ltr"># {s.paymentReference}</span>
-                          )}
-                        </div>
+                        <Badge className={PM_COLORS[s.paymentMethod] || ""}>
+                          {t(`payment_methods.${s.paymentMethod}`) || s.paymentMethod}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {s.paymentReference
+                          ? <span className="font-mono text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-0.5" dir="ltr">{s.paymentReference}</span>
+                          : <span className="text-gray-300 text-xs">—</span>
+                        }
                       </TableCell>
                       <TableCell className="text-center font-mono font-bold">{omr(s.total)}</TableCell>
                       <TableCell className="text-center text-xs text-muted-foreground">
