@@ -11,25 +11,14 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import type { Lang } from "@/lib/i18n";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import type { Branch, City } from "@shared/schema";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { Branch } from "@shared/schema";
 import {
-  UserPlus, Pencil, KeyRound, ShieldCheck, Eye, EyeOff, Lock, UserCircle,
-  Settings2, Building2, MapPin, Save, X, Loader2, AlertTriangle, Globe,
-  Banknote, Receipt, FileText, Printer, Database, Download, Percent, Hash
+  KeyRound, ShieldCheck, Eye, EyeOff, Lock, UserCircle,
+  Settings2, Save, X, Loader2, AlertTriangle, Globe,
+  Banknote, Receipt, FileText, Printer, Database, Download, Percent
 } from "lucide-react";
-
-type SafeUser = {
-  id: number;
-  username: string;
-  name: string;
-  role: string;
-  branchId: number;
-  terminalName: string;
-  isActive: boolean;
-};
 
 type SettingsData = Record<string, string>;
 
@@ -85,21 +74,6 @@ export default function Settings() {
   const { t, lang, setLang } = useI18n();
   const isOwnerOrAdmin = currentUser?.role === "owner" || currentUser?.role === "admin";
 
-  const [addBranchOpen, setAddBranchOpen] = useState(false);
-  const [newBranch, setNewBranch] = useState({ name: "", address: "" });
-
-  const [addUserOpen, setAddUserOpen] = useState(false);
-  const [newUser, setNewUser] = useState({ name: "", username: "", password: "", role: "cashier", branchId: "1", terminalName: "POS-1" });
-  const [showNewPass, setShowNewPass] = useState(false);
-
-  const [editUserOpen, setEditUserOpen] = useState(false);
-  const [editUser, setEditUser] = useState<SafeUser | null>(null);
-
-  const [resetPassOpen, setResetPassOpen] = useState(false);
-  const [resetPassUser, setResetPassUser] = useState<SafeUser | null>(null);
-  const [resetPassValue, setResetPassValue] = useState("");
-  const [showResetPass, setShowResetPass] = useState(false);
-
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [showOldPass, setShowOldPass] = useState(false);
@@ -115,12 +89,6 @@ export default function Settings() {
   const [backupLoading, setBackupLoading] = useState(false);
 
   const { data: branchesList = [] } = useQuery<Branch[]>({ queryKey: ["/api/branches"], queryFn: getQueryFn({ on401: "throw" }) });
-  const { data: usersList = [] } = useQuery<SafeUser[]>({
-    queryKey: ["/api/users"],
-    queryFn: getQueryFn({ on401: "throw" }),
-    enabled: isOwnerOrAdmin,
-  });
-  const { data: citiesList = [] } = useQuery<City[]>({ queryKey: ["/api/cities"], queryFn: getQueryFn({ on401: "throw" }) });
 
   const { data: serverSettings } = useQuery<SettingsData>({
     queryKey: ["/api/settings"],
@@ -300,76 +268,6 @@ export default function Settings() {
     }
   };
 
-  const createBranchMutation = useMutation({
-    mutationFn: async () => { await apiRequest("POST", "/api/branches", newBranch); },
-    onSuccess: () => {
-      toast({ title: t("settings.added") });
-      queryClient.invalidateQueries({ queryKey: ["/api/branches"] });
-      setAddBranchOpen(false);
-      setNewBranch({ name: "", address: "" });
-    },
-  });
-
-  const createUserMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/users", {
-        name: newUser.name,
-        username: newUser.username,
-        password: newUser.password,
-        role: newUser.role,
-        branchId: parseInt(newUser.branchId) || 1,
-        terminalName: newUser.terminalName || "T1",
-      });
-    },
-    onSuccess: () => {
-      toast({ title: t("settings.user_created") });
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      setAddUserOpen(false);
-      setNewUser({ name: "", username: "", password: "", role: "cashier", branchId: "1", terminalName: "POS-1" });
-    },
-    onError: (err: Error) => {
-      toast({ title: t("settings.error"), description: err.message, variant: "destructive" });
-    },
-  });
-
-  const updateUserMutation = useMutation({
-    mutationFn: async () => {
-      if (!editUser) return;
-      await apiRequest("PATCH", `/api/users/${editUser.id}`, {
-        name: editUser.name,
-        role: editUser.role,
-        branchId: editUser.branchId,
-        terminalName: editUser.terminalName,
-        isActive: editUser.isActive,
-      });
-    },
-    onSuccess: () => {
-      toast({ title: t("settings.user_updated") });
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      setEditUserOpen(false);
-      setEditUser(null);
-    },
-    onError: (err: Error) => {
-      toast({ title: t("settings.error"), description: err.message, variant: "destructive" });
-    },
-  });
-
-  const resetPasswordMutation = useMutation({
-    mutationFn: async () => {
-      if (!resetPassUser) return;
-      await apiRequest("PATCH", `/api/users/${resetPassUser.id}/reset-password`, { newPassword: resetPassValue });
-    },
-    onSuccess: () => {
-      toast({ title: t("settings.password_reset") });
-      setResetPassOpen(false);
-      setResetPassUser(null);
-      setResetPassValue("");
-    },
-    onError: (err: Error) => {
-      toast({ title: t("settings.error"), description: err.message, variant: "destructive" });
-    },
-  });
-
   const changePasswordMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/auth/change-password", { oldPassword, newPassword });
@@ -385,18 +283,6 @@ export default function Settings() {
       toast({ title: t("settings.error"), description: err.message, variant: "destructive" });
     },
   });
-
-  const openEditUser = (u: SafeUser) => {
-    setEditUser({ ...u });
-    setEditUserOpen(true);
-  };
-
-  const openResetPassword = (u: SafeUser) => {
-    setResetPassUser(u);
-    setResetPassValue("");
-    setShowResetPass(false);
-    setResetPassOpen(true);
-  };
 
   const roleLabel = t(ROLE_LABELS_KEYS[currentUser?.role || ""] || "sidebar.role_employee");
   const userBranch = branchesList.find(b => b.id === currentUser?.branchId);
@@ -414,23 +300,9 @@ export default function Settings() {
             <UserCircle className="w-4 h-4" />
             {t("settings.tab_account")}
           </TabsTrigger>
-          {isOwnerOrAdmin && (
-            <TabsTrigger value="users" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-users">
-              <ShieldCheck className="w-4 h-4" />
-              {t("settings.tab_users")}
-            </TabsTrigger>
-          )}
           <TabsTrigger value="general" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-general">
             <Settings2 className="w-4 h-4" />
             {t("settings.tab_general")}
-          </TabsTrigger>
-          <TabsTrigger value="pricing" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-pricing">
-            <Percent className="w-4 h-4" />
-            {t("settings.pricing_settings")}
-          </TabsTrigger>
-          <TabsTrigger value="branches" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-branches">
-            <Building2 className="w-4 h-4" />
-            {t("settings.tab_branches")}
           </TabsTrigger>
         </TabsList>
 
@@ -444,7 +316,7 @@ export default function Settings() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className={`grid gap-4 ${currentUser?.role === "owner" ? "grid-cols-2" : "grid-cols-2 md:grid-cols-4"}`}>
                 <div className="p-4 bg-muted/30 rounded-lg border text-center">
                   <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xl font-bold mx-auto mb-2">
                     {currentUser?.name?.charAt(0) || "؟"}
@@ -456,14 +328,18 @@ export default function Settings() {
                   <p className="text-xs text-muted-foreground mb-1">{t("settings.role")}</p>
                   <p className="font-bold text-sm">{roleLabel}</p>
                 </div>
-                <div className="p-4 bg-muted/30 rounded-lg border">
-                  <p className="text-xs text-muted-foreground mb-1">{t("settings.branch")}</p>
-                  <p className="font-bold text-sm">{userBranch ? (userBranch.address ? `${userBranch.name} - ${userBranch.address}` : userBranch.name) : "-"}</p>
-                </div>
-                <div className="p-4 bg-muted/30 rounded-lg border">
-                  <p className="text-xs text-muted-foreground mb-1">{t("settings.terminal")}</p>
-                  <p className="font-bold text-sm" dir="ltr">{currentUser?.terminalName || "-"}</p>
-                </div>
+                {currentUser?.role !== "owner" && (
+                  <>
+                    <div className="p-4 bg-muted/30 rounded-lg border">
+                      <p className="text-xs text-muted-foreground mb-1">{t("settings.branch")}</p>
+                      <p className="font-bold text-sm">{userBranch ? (userBranch.address ? `${userBranch.name} - ${userBranch.address}` : userBranch.name) : "-"}</p>
+                    </div>
+                    <div className="p-4 bg-muted/30 rounded-lg border">
+                      <p className="text-xs text-muted-foreground mb-1">{t("settings.terminal")}</p>
+                      <p className="font-bold text-sm" dir="ltr">{currentUser?.terminalName || "-"}</p>
+                    </div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -504,141 +380,6 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
-        {/* ─── Users Tab ─── */}
-        {isOwnerOrAdmin && (
-          <TabsContent value="users" className="space-y-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5" />
-                  {t("settings.users_permissions")}
-                </CardTitle>
-                <Dialog open={addUserOpen} onOpenChange={(open) => { setAddUserOpen(open); if (!open) setShowNewPass(false); }}>
-                  <DialogTrigger asChild>
-                    <Button size="sm" className="gap-1.5" data-testid="button-add-user">
-                      <UserPlus className="w-4 h-4" />
-                      {t("settings.add_employee")}
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>{t("settings.add_new_user")}</DialogTitle>
-                      <DialogDescription>{t("settings.add_new_user_desc")}</DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>{t("settings.full_name")}</Label>
-                          <Input value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} data-testid="input-new-user-name" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>{t("settings.username_login")}</Label>
-                          <Input value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} dir="ltr" className="text-left" data-testid="input-new-user-username" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>{t("settings.password")}</Label>
-                          <div className="relative">
-                            <Input type={showNewPass ? "text" : "password"} value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} data-testid="input-new-user-password" />
-                            <button type="button" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowNewPass(!showNewPass)}>
-                              {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>{t("settings.role_label")}</Label>
-                          <Select value={newUser.role} onValueChange={v => setNewUser({...newUser, role: v})}>
-                            <SelectTrigger data-testid="select-new-user-role"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {ROLE_OPTIONS.map(r => <SelectItem key={r.value} value={r.value}>{t(r.labelKey)}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>{t("settings.branch_label")}</Label>
-                          <Select value={newUser.branchId} onValueChange={v => setNewUser({...newUser, branchId: v})}>
-                            <SelectTrigger data-testid="select-new-user-branch"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>{t("settings.terminal_name")}</Label>
-                          <Input value={newUser.terminalName} onChange={e => setNewUser({...newUser, terminalName: e.target.value})} dir="ltr" className="text-left" data-testid="input-new-user-terminal" />
-                        </div>
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button onClick={() => createUserMutation.mutate()} disabled={createUserMutation.isPending || !newUser.name || !newUser.username || newUser.password.length < 6} data-testid="button-confirm-add-user">
-                        {createUserMutation.isPending ? t("settings.adding") : t("settings.add_user_btn")}
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-lg border overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="text-right p-3 font-medium">{t("settings.user_header")}</th>
-                        <th className="text-right p-3 font-medium">{t("settings.role_header")}</th>
-                        <th className="text-right p-3 font-medium">{t("settings.branch_header")}</th>
-                        <th className="text-right p-3 font-medium">{t("settings.terminal_header")}</th>
-                        <th className="text-center p-3 font-medium">{t("settings.status_header")}</th>
-                        <th className="text-center p-3 font-medium">{t("settings.actions_header")}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {usersList.map(u => {
-                        const branch = branchesList.find(b => b.id === u.branchId);
-                        return (
-                          <tr key={u.id} className={u.isActive ? "" : "bg-red-50/30 opacity-60"} data-testid={`row-user-${u.id}`}>
-                            <td className="p-3">
-                              <div className="flex items-center gap-2.5">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${u.isActive ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}>
-                                  {u.name.charAt(0)}
-                                </div>
-                                <div>
-                                  <p className="font-bold text-sm">{u.name}</p>
-                                  <p className="text-xs text-muted-foreground">@{u.username}</p>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="p-3">
-                              <span className="text-xs px-2 py-1 rounded bg-primary/10 text-primary font-medium">
-                                {t(ROLE_LABELS_KEYS[u.role] || "sidebar.role_employee")}
-                              </span>
-                            </td>
-                            <td className="p-3 text-sm">{branch ? (branch.address ? `${branch.name} - ${branch.address}` : branch.name) : "-"}</td>
-                            <td className="p-3 text-sm" dir="ltr">{u.terminalName}</td>
-                            <td className="p-3 text-center">
-                              <span className={`inline-block w-2.5 h-2.5 rounded-full ${u.isActive ? "bg-green-500" : "bg-red-400"}`} title={u.isActive ? t("settings.active") : t("settings.disabled")} />
-                            </td>
-                            <td className="p-3">
-                              <div className="flex items-center justify-center gap-1">
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditUser(u)} title={t("common.edit")} data-testid={`button-edit-user-${u.id}`}>
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openResetPassword(u)} title={t("settings.reset_password")} data-testid={`button-reset-pass-${u.id}`}>
-                                  <KeyRound className="w-3.5 h-3.5" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
 
         {/* ─── General Settings Tab ─── */}
         <TabsContent value="general" className="space-y-6">
@@ -989,110 +730,6 @@ export default function Settings() {
 
         </TabsContent>
 
-        {/* ─── Pricing Tab ─── */}
-        <TabsContent value="pricing" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Percent className="w-5 h-5" />
-                {t("settings.pricing_settings")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="max-w-md space-y-4">
-                <div className="space-y-2">
-                  <Label>{t("settings.default_profit_margin")} (%)</Label>
-                  <Input
-                    type="number"
-                    value={currentSettings.default_profit_margin}
-                    onChange={(e) => updateSetting("default_profit_margin", e.target.value)}
-                    data-testid="input-default-profit-margin"
-                    min="0"
-                    step="1"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    {t("settings.default_profit_margin_desc")}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ─── Branches Tab ─── */}
-        <TabsContent value="branches" className="space-y-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Building2 className="w-5 h-5" />
-                {t("settings.active_branches")}
-              </CardTitle>
-              {isOwnerOrAdmin && (
-                <Dialog open={addBranchOpen} onOpenChange={setAddBranchOpen}>
-                  <DialogTrigger asChild>
-                    <Button size="sm" data-testid="button-add-branch">{t("settings.add_branch")}</Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>{t("settings.add_new_branch")}</DialogTitle>
-                      <DialogDescription>{t("settings.add_new_branch_desc")}</DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label>{t("settings.branch_name")}</Label>
-                        <Input value={newBranch.name} onChange={e => setNewBranch({...newBranch, name: e.target.value})} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>{t("settings.address")}</Label>
-                        <Input value={newBranch.address} onChange={e => setNewBranch({...newBranch, address: e.target.value})} />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button onClick={() => createBranchMutation.mutate()} disabled={createBranchMutation.isPending || !newBranch.name}>{t("settings.save")}</Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              )}
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {branchesList.map(branch => (
-                  <div key={branch.id} className="flex items-center justify-between p-3 bg-muted/30 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Building2 className="w-5 h-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-bold">{branch.name} {branch.isMain && <span className="text-xs text-primary font-normal mr-1">({t("settings.main_branch")})</span>}</p>
-                        <p className="text-sm text-muted-foreground">{branch.address || "-"}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <MapPin className="w-5 h-5" />
-                {t("settings.cities_branches")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {citiesList.map(city => {
-                  const branch = branchesList.find(b => b.id === city.branchId);
-                  return (
-                    <div key={city.id} className="flex items-center justify-between p-3 bg-muted/30 border rounded-lg text-sm">
-                      <span className="font-medium">{city.name}</span>
-                      <span className="text-muted-foreground text-xs">{branch ? (branch.address ? `${branch.name} - ${branch.address}` : branch.name) : "-"}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
 
       {/* Sticky Save Bar */}
@@ -1136,82 +773,6 @@ export default function Settings() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Edit User Dialog */}
-      <Dialog open={editUserOpen} onOpenChange={setEditUserOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("settings.edit_user")}: {editUser?.name}</DialogTitle>
-            <DialogDescription>{t("settings.edit_user_data")} @{editUser?.username}</DialogDescription>
-          </DialogHeader>
-          {editUser && (
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>{t("settings.full_name")}</Label>
-                <Input value={editUser.name} onChange={e => setEditUser({...editUser, name: e.target.value})} data-testid="input-edit-user-name" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t("settings.role_label")}</Label>
-                  <Select value={editUser.role} onValueChange={v => setEditUser({...editUser, role: v})}>
-                    <SelectTrigger data-testid="select-edit-user-role"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {ROLE_OPTIONS.map(r => <SelectItem key={r.value} value={r.value}>{t(r.labelKey)}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>{t("settings.branch_label")}</Label>
-                  <Select value={editUser.branchId.toString()} onValueChange={v => setEditUser({...editUser, branchId: parseInt(v)})}>
-                    <SelectTrigger data-testid="select-edit-user-branch"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>{t("settings.terminal_name")}</Label>
-                <Input value={editUser.terminalName} onChange={e => setEditUser({...editUser, terminalName: e.target.value})} dir="ltr" className="text-left" data-testid="input-edit-user-terminal" />
-              </div>
-              <div className="flex items-center justify-between p-3 border rounded-lg">
-                <Label>{t("settings.account_active")}</Label>
-                <Switch checked={editUser.isActive} onCheckedChange={v => setEditUser({...editUser, isActive: v})} data-testid="switch-edit-user-active" />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button onClick={() => updateUserMutation.mutate()} disabled={updateUserMutation.isPending} data-testid="button-confirm-edit-user">
-              {updateUserMutation.isPending ? t("settings.saving") : t("settings.save_changes")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Reset Password Dialog */}
-      <Dialog open={resetPassOpen} onOpenChange={setResetPassOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("settings.reset_password")}</DialogTitle>
-            <DialogDescription>{t("settings.reset_password_desc")} @{resetPassUser?.username}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>{t("settings.new_password")}</Label>
-              <div className="relative">
-                <Input type={showResetPass ? "text" : "password"} value={resetPassValue} onChange={e => setResetPassValue(e.target.value)} placeholder={t("settings.min_6_chars")} data-testid="input-reset-password" />
-                <button type="button" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowResetPass(!showResetPass)}>
-                  {showResetPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => resetPasswordMutation.mutate()} disabled={resetPasswordMutation.isPending || resetPassValue.length < 6} data-testid="button-confirm-reset-password">
-              {resetPasswordMutation.isPending ? t("settings.resetting") : t("settings.reset_btn")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
