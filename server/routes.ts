@@ -1563,7 +1563,16 @@ export async function registerRoutes(
         p.name                           AS product_name,
         p.id                             AS product_id,
         p.category_id,
+        cat.name                         AS category_name,
         l.name                           AS location_name,
+        (SELECT MAX(st2.approved_at)
+         FROM stock_transfer_lines stl2
+         JOIN stock_transfers st2 ON st2.id = stl2.transfer_id
+         JOIN locations fl2      ON fl2.id  = st2.from_location_id
+         WHERE st2.to_location_id = ib.location_id
+           AND st2.status = 'approved'
+           AND stl2.variant_id = ib.variant_id
+        )                                AS last_transfer_date,
         (SELECT SUM(stl2.qty)
          FROM stock_transfer_lines stl2
          JOIN stock_transfers st2 ON st2.id = stl2.transfer_id
@@ -1577,6 +1586,7 @@ export async function registerRoutes(
       JOIN locations        l  ON l.id  = ib.location_id
       JOIN product_variants pv ON pv.id = ib.variant_id
       JOIN products         p  ON p.id  = pv.product_id
+      LEFT JOIN categories cat ON cat.id = p.category_id
       WHERE l.branch_id = $1 AND ib.qty_on_hand > 0
 
       UNION ALL
@@ -1589,11 +1599,14 @@ export async function registerRoutes(
         p.name                           AS product_name,
         p.id                             AS product_id,
         p.category_id,
+        cat.name                         AS category_name,
         l.name                           AS location_name,
+        NULL                             AS last_transfer_date,
         NULL                             AS transferred_qty
       FROM location_inventory li
       JOIN locations l ON l.id = li.location_id
       JOIN products  p ON p.id = li.product_id
+      LEFT JOIN categories cat ON cat.id = p.category_id
       WHERE l.branch_id = $1
         AND li.qty_on_hand > 0
         AND NOT EXISTS (
@@ -1603,6 +1616,54 @@ export async function registerRoutes(
       ORDER BY product_name, color, size
     `, [branchId]);
     res.json(result.rows);
+  });
+
+  // ── Branch Transfers History ──
+  app.get("/api/branch-stock/:branchId/transfers", requireAuth, requirePermission("inventory.view"), async (req, res) => {
+    try {
+      const branchId = Number(req.params.branchId);
+      const result = await pool.query(`
+        SELECT
+          st.id,
+          LPAD(st.id::text, 5, '0')          AS transfer_number,
+          st.status,
+          st.notes,
+          st.created_at,
+          st.approved_at,
+          fl.name                             AS from_location_name,
+          tl.name                             AS to_location_name,
+          u.name                              AS created_by_name,
+          COUNT(stl.id)::int                  AS lines_count,
+          COALESCE(SUM(stl.qty), 0)::int      AS total_qty,
+          json_agg(
+            json_build_object(
+              'line_id',       stl.id,
+              'variant_id',    stl.variant_id,
+              'qty',           stl.qty,
+              'product_name',  p.name,
+              'color',         pv.color,
+              'size',          pv.size,
+              'barcode',       pv.barcode,
+              'category_name', cat.name
+            ) ORDER BY p.name, pv.color, pv.size
+          ) AS lines
+        FROM stock_transfers st
+        JOIN locations fl          ON fl.id = st.from_location_id
+        JOIN locations tl          ON tl.id = st.to_location_id
+        LEFT JOIN users u          ON u.id  = st.created_by
+        JOIN stock_transfer_lines stl ON stl.transfer_id = st.id
+        JOIN product_variants pv   ON pv.id = stl.variant_id
+        JOIN products p            ON p.id  = pv.product_id
+        LEFT JOIN categories cat   ON cat.id = p.category_id
+        WHERE tl.branch_id = $1
+          AND st.status = 'approved'
+        GROUP BY st.id, fl.name, tl.name, u.name
+        ORDER BY COALESCE(st.approved_at, st.created_at) DESC
+      `, [branchId]);
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   // ══════════════════════════════════════════════════════════════════════════
