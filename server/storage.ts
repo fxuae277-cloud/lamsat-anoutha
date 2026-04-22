@@ -226,7 +226,7 @@ export interface IStorage {
   deleteVariant(id: number): Promise<void>;
 
   // Inventory Balances
-  getInventoryBalances(locationId?: number): Promise<any[]>;
+  getInventoryBalances(locationId?: number, branchId?: number): Promise<any[]>;
   getBalanceByVariantLocation(variantId: number, locationId: number): Promise<InventoryBalance | undefined>;
   upsertBalance(locationId: number, variantId: number, qtyChange: number): Promise<InventoryBalance>;
 
@@ -2213,10 +2213,17 @@ export class DatabaseStorage implements IStorage {
       }
       const centralLocationId: number = centralRes.rows[0].id;
 
-      // ── 2. Backward-compat guard: skip if inventory already posted ────
+      // ── 2. Backward-compat guard: skip only if central warehouse already
+      //        has ledger entries for this invoice (prevents double-posting
+      //        when receive is called twice). Old approve-time entries that
+      //        were posted to branch locations do NOT block us here.
       const alreadyRes = await client.query(
-        `SELECT 1 FROM inventory_ledger
-         WHERE ref_table = 'purchase_invoices' AND ref_id = $1 LIMIT 1`,
+        `SELECT 1 FROM inventory_ledger il
+         JOIN locations l ON l.id = il.location_id
+         WHERE il.ref_table = 'purchase_invoices'
+           AND il.ref_id = $1
+           AND l.is_central = true
+         LIMIT 1`,
         [id]
       );
       const alreadyAdded = alreadyRes.rows.length > 0;
@@ -4795,33 +4802,78 @@ export class DatabaseStorage implements IStorage {
 
   // ── Inventory Balances ──
   async getInventoryBalances(locationId?: number, branchId?: number) {
-    let query = `
-      SELECT ib.*, pv.barcode, pv.sku, pv.color, pv.size, pv.price,
+    // Build dynamic WHERE clauses; param indices are shared across the UNION
+    const params: any[] = [];
+
+    // ── Part 1: products WITH variants (inventory_balances) ──────────────────
+    let part1 = `
+      SELECT ib.id, ib.location_id, ib.variant_id, ib.qty_on_hand, ib.qty_reserved,
+             pv.barcode, pv.sku, pv.color, pv.size, pv.price,
              pv.last_purchase_price, pv.last_receipt_date,
              p.name as product_name, p.product_type, p.category_id, c.name as category_name,
              l.name as location_name, l.type as location_type,
-             b.id as branch_id, (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
+             b.id as branch_id,
+             (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
              CASE WHEN l.is_central THEN l.name ELSE COALESCE(b.name || ' - ', '') || l.name END as full_location_name,
-             COALESCE(li.reorder_level, 5) as reorder_level
+             COALESCE(li2.reorder_level, 5) as reorder_level
       FROM inventory_balances ib
       JOIN product_variants pv ON pv.id = ib.variant_id
       JOIN products p ON p.id = pv.product_id
       LEFT JOIN categories c ON c.id = p.category_id
       JOIN locations l ON l.id = ib.location_id
       LEFT JOIN branches b ON b.id = l.branch_id
-      LEFT JOIN location_inventory li ON li.location_id = ib.location_id AND li.product_id = pv.product_id
+      LEFT JOIN location_inventory li2 ON li2.location_id = ib.location_id AND li2.product_id = pv.product_id
       WHERE 1=1
     `;
-    const params: any[] = [];
     if (locationId) {
       params.push(locationId);
-      query += ` AND ib.location_id = $${params.length}`;
+      part1 += ` AND ib.location_id = $${params.length}`;
     }
     if (branchId) {
       params.push(branchId);
-      query += ` AND b.id = $${params.length}`;
+      part1 += ` AND b.id = $${params.length}`;
     }
-    query += ` ORDER BY p.name, pv.color, pv.size`;
+
+    // ── Part 2: simple products WITHOUT variants (location_inventory only) ───
+    // Exclude products that already appear in Part 1 (have inventory_balances entries)
+    let part2 = `
+      SELECT NULL::int as id, li.location_id, NULL::int as variant_id,
+             li.qty_on_hand, 0 as qty_reserved,
+             p.barcode, NULL as sku, NULL as color, NULL as size, p.price,
+             p.last_purchase_price, NULL::timestamp as last_receipt_date,
+             p.name as product_name, p.product_type, p.category_id, c.name as category_name,
+             l.name as location_name, l.type as location_type,
+             b.id as branch_id,
+             (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
+             CASE WHEN l.is_central THEN l.name ELSE COALESCE(b.name || ' - ', '') || l.name END as full_location_name,
+             COALESCE(li.reorder_level, 5) as reorder_level
+      FROM location_inventory li
+      JOIN products p ON p.id = li.product_id
+      JOIN locations l ON l.id = li.location_id
+      LEFT JOIN categories c ON c.id = p.category_id
+      LEFT JOIN branches b ON b.id = l.branch_id
+      WHERE li.qty_on_hand > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM inventory_balances ib2
+          JOIN product_variants pv2 ON pv2.id = ib2.variant_id
+          WHERE pv2.product_id = p.id AND ib2.location_id = li.location_id
+        )
+    `;
+    if (locationId) {
+      params.push(locationId);
+      part2 += ` AND li.location_id = $${params.length}`;
+    }
+    if (branchId) {
+      params.push(branchId);
+      part2 += ` AND b.id = $${params.length}`;
+    }
+
+    const query = `
+      (${part1})
+      UNION ALL
+      (${part2})
+      ORDER BY product_name, color, size
+    `;
     const result = await pool.query(query, params);
     return result.rows;
   }

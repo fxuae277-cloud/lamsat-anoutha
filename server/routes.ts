@@ -1828,6 +1828,7 @@ export async function registerRoutes(
     }
 
     const result = await pool.query(`
+      -- Part 1: products WITH variants (inventory_balances)
       SELECT ib.variant_id, SUM(ib.qty_on_hand) as qty_on_hand,
              pv.barcode, pv.sku, pv.color, pv.size, pv.price,
              p.name as product_name, p.id as product_id
@@ -1837,7 +1838,25 @@ export async function registerRoutes(
       WHERE ib.location_id = ANY($1) AND ib.qty_on_hand > 0
       GROUP BY ib.variant_id, pv.barcode, pv.sku, pv.color, pv.size, pv.price, p.name, p.id
       HAVING SUM(ib.qty_on_hand) > 0
-      ORDER BY p.name, pv.color, pv.size
+
+      UNION ALL
+
+      -- Part 2: simple products WITHOUT variants (location_inventory only)
+      -- Only include those that have a default variant (required for stock_transfer_lines)
+      SELECT pv2.id as variant_id, li.qty_on_hand,
+             p.barcode, pv2.sku, pv2.color, pv2.size, p.price,
+             p.name as product_name, p.id as product_id
+      FROM location_inventory li
+      JOIN products p ON p.id = li.product_id
+      JOIN product_variants pv2 ON pv2.product_id = p.id AND pv2.is_default = true
+      WHERE li.location_id = ANY($1) AND li.qty_on_hand > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM inventory_balances ib2
+          JOIN product_variants pv3 ON pv3.id = ib2.variant_id
+          WHERE pv3.product_id = p.id AND ib2.location_id = ANY($1)
+        )
+
+      ORDER BY product_name, color, size
     `, [locationIds]);
     res.json(result.rows);
   });
