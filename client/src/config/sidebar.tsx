@@ -54,7 +54,6 @@ export const OWNER_SIDEBAR: SidebarSection[] = [
   {
     sectionKey: "sidebar.section_operations",
     items: [
-      { labelKey: "nav.pos",       icon: ShoppingCart, path: "/pos" },
       { labelKey: "nav.orders",    icon: ClipboardList, path: "/orders" },
       { labelKey: "nav.invoices",  icon: ReceiptText,  path: "/invoices" },
       { labelKey: "nav.customers", icon: Users,        path: "/customers" },
