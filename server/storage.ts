@@ -565,18 +565,17 @@ export class DatabaseStorage implements IStorage {
   }
   async getLowStockAlerts() {
     return db.select({
-      inventoryId: inventory.id,
-      productId: inventory.productId,
-      productName: products.name,
-      warehouseId: inventory.warehouseId,
-      warehouseName: warehouses.name,
-      quantity: inventory.quantity,
-      minQuantity: inventory.minQuantity,
+      productId: products.id,
+      name: products.name,
+      totalQty: sql<number>`COALESCE(SUM(${locationInventory.qtyOnHand}), 0)::int`,
+      reorderLevel: products.minQty,
     })
-    .from(inventory)
-    .innerJoin(products, eq(inventory.productId, products.id))
-    .innerJoin(warehouses, eq(inventory.warehouseId, warehouses.id))
-    .where(sql`${inventory.quantity} <= ${inventory.minQuantity}`);
+    .from(products)
+    .leftJoin(locationInventory, eq(locationInventory.productId, products.id))
+    .where(sql`${products.minQty} IS NOT NULL AND ${products.minQty} > 0 AND ${products.active} = true`)
+    .groupBy(products.id, products.name, products.minQty)
+    .having(sql`COALESCE(SUM(${locationInventory.qtyOnHand}), 0) <= ${products.minQty}`)
+    .orderBy(sql`COALESCE(SUM(${locationInventory.qtyOnHand}), 0) ASC`);
   }
 
   async createTransfer(data: InsertInventoryTransfer) {
@@ -2127,23 +2126,11 @@ export class DatabaseStorage implements IStorage {
       parseFloat(invoice.otherCost || "0");
     const grandTotal = subtotalItems + totalExtraCost;
 
-    // ── القاعدة الثابتة: جميع فواتير الشراء تذهب للمخزن المركزي ONLY ──
-    // لا يُسمح بالتسجيل في أي فرع مباشرةً — التوزيع يتم لاحقاً عبر التحويلات
-    const [centralLoc] = await db.select({ id: locations.id })
-      .from(locations)
-      .where(eq(locations.isCentral, true))
-      .orderBy(locations.id)
-      .limit(1);
-    if (!centralLoc) throw new Error("لا يوجد مخزن مركزي — يرجى إنشاؤه أولاً");
-    const centralLocationId = centralLoc.id;
-
-    const marginRow = await pool.query(`SELECT value FROM settings WHERE key = 'default_profit_margin'`);
-    const profitMargin = parseFloat(marginRow.rows[0]?.value || "50") / 100;
-
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
 
+      // ── توزيع التكاليف الإضافية على كل صنف وحفظ unit_cost_final ──────────
       for (const item of items) {
         const lineSubVal = parseFloat(item.lineSubtotal);
         let allocatedExtra: number;
@@ -2158,109 +2145,21 @@ export class DatabaseStorage implements IStorage {
         }
 
         await client.query(
-          `UPDATE purchase_items
-           SET allocated_extra_cost = $1, unit_cost_final = $2
-           WHERE id = $3`,
+          `UPDATE purchase_items SET allocated_extra_cost = $1, unit_cost_final = $2 WHERE id = $3`,
           [allocatedExtra.toFixed(3), unitCostFinal.toFixed(3), item.id]
-        );
-
-        const prodRes = await client.query(
-          `SELECT stock_qty, avg_cost FROM products WHERE id = $1`,
-          [item.productId]
-        );
-        if (prodRes.rows.length > 0) {
-          const oldQty = prodRes.rows[0].stock_qty || 0;
-          const oldAvgCost = parseFloat(prodRes.rows[0].avg_cost || "0");
-          const newQty = oldQty + item.qty;
-          const newAvgCost = newQty > 0
-            ? ((oldAvgCost * oldQty) + (unitCostFinal * item.qty)) / newQty
-            : unitCostFinal;
-
-          const suggestedPrice = unitCostFinal * (1 + profitMargin);
-          await client.query(
-            `UPDATE products SET stock_qty = $1, avg_cost = $2, last_purchase_price = $3, price = $4 WHERE id = $5`,
-            [newQty, newAvgCost.toFixed(3), unitCostFinal.toFixed(3), suggestedPrice.toFixed(3), item.productId]
-          );
-        }
-
-        await client.query(
-          `INSERT INTO location_inventory (location_id, product_id, qty_on_hand, updated_at)
-           VALUES ($1, $2, $3, now())
-           ON CONFLICT (location_id, product_id)
-           DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand + EXCLUDED.qty_on_hand,
-                         updated_at = now()`,
-          [centralLocationId, item.productId, item.qty]
-        );
-
-        await client.query(
-          `INSERT INTO inventory_transactions
-           (date, branch_id, from_location_id, to_location_id,
-            product_id, type, qty,
-            ref_table, ref_id,
-            note, created_by, created_at)
-           VALUES
-           (now(), NULL, NULL, $1,
-            $2, 'PURCHASE', $3,
-            'purchase_invoices', $4,
-            'اعتماد فاتورة شراء', $5, now())`,
-          [centralLocationId, item.productId, item.qty, id, invoice.createdBy]
-        );
-
-        let variantId = item.variantId;
-        if (!variantId) {
-          const existingVar = await client.query(
-            `SELECT id FROM product_variants WHERE product_id = $1 LIMIT 1`,
-            [item.productId]
-          );
-          if (existingVar.rows.length > 0) {
-            variantId = existingVar.rows[0].id;
-          } else {
-            const prodName = await client.query(`SELECT name, barcode FROM products WHERE id = $1`, [item.productId]);
-            const pName = prodName.rows[0]?.name || `Product-${item.productId}`;
-            const sku = `SKU-${item.productId}-${Date.now()}`;
-            const newVar = await client.query(
-              `INSERT INTO product_variants (product_id, sku, barcode, color, size, cost_default, price, active)
-               VALUES ($1, $2, $3, '', '', $4, $4, true) RETURNING id`,
-              [item.productId, sku, prodName.rows[0]?.barcode || null, unitCostFinal.toFixed(3)]
-            );
-            variantId = newVar.rows[0].id;
-          }
-          await client.query(
-            `UPDATE purchase_items SET variant_id = $1 WHERE id = $2`,
-            [variantId, item.id]
-          );
-        }
-
-        const suggestedVariantPrice = unitCostFinal * (1 + profitMargin);
-        await client.query(
-          `UPDATE product_variants 
-           SET last_purchase_price = $1, last_receipt_date = now(), cost_default = $1, price = $2
-           WHERE id = $3`,
-          [unitCostFinal.toFixed(3), suggestedVariantPrice.toFixed(3), variantId]
-        );
-
-        await client.query(
-          `INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
-           VALUES ($1, $2, $3, 0)
-           ON CONFLICT (location_id, variant_id)
-           DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + EXCLUDED.qty_on_hand`,
-          [centralLocationId, variantId, item.qty]
-        );
-        await client.query(
-          `INSERT INTO inventory_ledger (variant_id, location_id, qty_change, reason, ref_table, ref_id, created_by, created_at)
-           VALUES ($1, $2, $3, 'purchase_posted', 'purchase_invoices', $4, $5, now())`,
-          [variantId, centralLocationId, item.qty, id, invoice.createdBy]
         );
       }
 
+      // ── تحديث رصيد المورد ─────────────────────────────────────────────────
       await client.query(
-        `UPDATE suppliers 
-         SET total_purchases = COALESCE(total_purchases, 0) + $1, 
-             balance = COALESCE(balance, 0) + $1 
+        `UPDATE suppliers
+         SET total_purchases = COALESCE(total_purchases, 0) + $1,
+             balance         = COALESCE(balance, 0) + $1
          WHERE id = $2`,
         [grandTotal.toFixed(3), invoice.supplierId]
       );
 
+      // ── تغيير حالة الفاتورة ───────────────────────────────────────────────
       const result = await client.query(
         `UPDATE purchase_invoices
          SET subtotal = $1, total_extra_cost = $2, grand_total = $3, status = 'approved'
@@ -2274,7 +2173,6 @@ export class DatabaseStorage implements IStorage {
       }
 
       await client.query("COMMIT");
-
       const [updated] = await db.select().from(purchaseInvoices).where(eq(purchaseInvoices.id, id));
       return updated;
     } catch (err) {
