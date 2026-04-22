@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-21 (جلسة 25 — إصلاح حساب الصندوق + إعادة تصميم POS)_
+_آخر تحديث: 2026-04-22 (جلسة 26 — الرقم المرجعي للمدفوعات + صفحة مؤشرات الأداء)_
 
 ---
 
@@ -491,6 +491,43 @@ fetch('/api/run-migration-0018',{method:'POST'}).then(r=>r.json()).then(console.
 - [x] استبدال الكروت بشبكة (cards grid) بقائمة نصية (text list)
 - [x] كل صف: اسم المنتج + فئة + شارة مخزون (نافد/منخفض/متوفر مع العدد) + السعر + زر +
 - [x] المنتجات النافدة تظهر شفافة وغير قابلة للنقر
+
+---
+
+### جلسة 26 — الرقم المرجعي للمدفوعات + مؤشرات أداء الفرع + إصلاح حساب الصندوق
+
+#### إصلاح حساب الصندوق (carryForward)
+- [x] **Bug**: الصندوق كان يظهر -88.471 بسبب استعلام `expenses` يجلب بيانات خاطئة (~90 ر.ع)
+- [x] **Fix** في `server/routes.ts`: حُذف استعلام جدول `expenses` من حساب الصندوق نهائياً
+- [x] استعادة `baseBalance = carryForward > 0 ? carryForward : openingCash` — الرصيد المرحّل هو الأساس الصحيح
+- [x] `MANUAL_TYPES = ["owner_handover","bank_deposit","owner_cash_in","owner_transfer_in"]` بدون expense
+
+#### الرقم المرجعي للمدفوعات (paymentReference)
+- [x] **`storage.ts`**: أُضيف `paymentReference` في `getSalesFiltered` و `getSaleWithDetails` و `getSalesListReport`
+- [x] **`Invoices.tsx`**: عمود مستقل "الرقم المرجعي" في جدول الفواتير (أزرق واضح للبطاقة/التحويل)
+- [x] **`Invoices.tsx`**: تعديل الرقم المرجعي من modal التفاصيل (زر قلم ✏️ + حفظ/إلغاء)
+- [x] **`Invoices.tsx`**: يظهر في الطباعة الحرارية 80mm وA4 إذا كان موجوداً
+- [x] **`Invoices.tsx`**: البحث يشمل الرقم المرجعي
+- [x] **`server/routes.ts`**: `PATCH /api/sales/:id/reference` لتعديل الرقم من الواجهة
+- [x] **`exports.ts`**: عمود "الرقم المرجعي" في تصدير Excel بين طريقة الدفع والمجموع
+
+#### إصلاح سجل المبيعات في Reports.tsx
+- [x] **Bug مزدوج**: `getSalesListReport` كانت تعيد `{ rows, summary }` بدل مصفوفة → الجدول كان فارغاً دائماً
+- [x] **Bug**: أسماء الحقول كانت snake_case في الواجهة لكن الـ storage يعيد camelCase → خلايا فارغة
+- [x] **Fix**: `getSalesListReport` تعيد الآن مصفوفة مباشرة + `paymentReference` مضاف
+- [x] **Fix**: `Reports.tsx` يستخدم `s.invoiceNumber` / `s.paymentMethod` / `s.createdAt` (camelCase صحيح)
+- [x] عمود "الرقم المرجعي" في سجل المبيعات + تصدير CSV
+
+#### BranchPerformance.tsx — صفحة مؤشرات أداء الفرع (جديدة)
+- [x] صفحة جديدة `client/src/pages/BranchPerformance.tsx` على route `/branch-performance`
+- [x] **متاحة للموظفين** — أُضيفت في `EMPLOYEE_ALLOWED_PATHS` و `EMPLOYEE_SIDEBAR`
+- [x] **فلتر الفترة**: اليوم / هذا الأسبوع / هذا الشهر / مخصص (DateInput)
+- [x] **6 بطاقات KPI**: إجمالي المبيعات · نقدي · بطاقة · تحويل · عدد الفواتير · متوسط الفاتورة
+- [x] **مخطط عمودي مكدّس يومي** (recharts BarChart): أخضر نقدي / أزرق بطاقة / بنفسجي تحويل
+- [x] **مخطط دائري** (recharts PieChart): توزيع طرق الدفع بنسب مئوية + ملخص أرقام
+- [x] **جدول آخر 30 فاتورة**: رقم الفاتورة · طريقة الدفع · الرقم المرجعي · الإجمالي · التاريخ · الوقت
+- [x] مفاتيح i18n: `nav.branchPerformance` في `ar.json` + `en.json`
+- [x] الأيقونة: `BarChart2` من lucide-react في sidebar
 
 ---
 
