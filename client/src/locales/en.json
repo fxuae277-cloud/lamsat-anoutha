@@ -46,7 +46,9 @@
     "barcodeLabels": "Print Labels",
     "branchSummary": "Branch Financial Summary",
     "branchPerformance": "Branch Performance",
-    "openingStock": "Opening Stock"
+    "openingStock": "Opening Stock",
+    "usersManagement": "Users Management",
+    "rolesManagement": "Roles Management"
   },
   "sidebar": {
     "role_owner": "Owner",
@@ -136,6 +138,9 @@
     "add_new_branch": "Add New Branch",
     "add_new_branch_desc": "Enter the new branch details",
     "branch_name": "Branch Name",
+    "branch_address": "Branch Address",
+    "branch_phone": "Branch Phone",
+    "branches_desc": "Manage branches and locations",
     "address": "Address",
     "save": "Save",
     "main_branch": "Main",
@@ -346,6 +351,7 @@
     "subtitle": "Overview of Lamsat Onotha branch performance today.",
     "today_sales": "Today's Sales",
     "month_sales": "This Month Sales",
+    "total_products": "Total Products",
     "total_vat": "Total Tax (5%)",
     "order_count": "Order Count",
     "stock_alerts": "Stock Alerts",
