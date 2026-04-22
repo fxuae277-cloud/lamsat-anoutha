@@ -2213,22 +2213,18 @@ export class DatabaseStorage implements IStorage {
       }
       const centralLocationId: number = centralRes.rows[0].id;
 
-      // ── 2. Backward-compat guard: skip only if central warehouse already
-      //        has ledger entries for this invoice (prevents double-posting
-      //        when receive is called twice). Old approve-time entries that
-      //        were posted to branch locations do NOT block us here.
+      // ── 2. Guard: skip if already processed (prevents duplicate on retry)
+      //    Use inventory_transactions as the check — works for both simple
+      //    products and variant products.
       const alreadyRes = await client.query(
-        `SELECT 1 FROM inventory_ledger il
-         JOIN locations l ON l.id = il.location_id
-         WHERE il.ref_table = 'purchase_invoices'
-           AND il.ref_id = $1
-           AND l.is_central = true
+        `SELECT 1 FROM inventory_transactions
+         WHERE ref_table = 'purchase_invoices' AND ref_id = $1
+           AND to_location_id = $2
          LIMIT 1`,
-        [id]
+        [id, centralLocationId]
       );
-      const alreadyAdded = alreadyRes.rows.length > 0;
 
-      if (!alreadyAdded) {
+      if (alreadyRes.rows.length === 0) {
         const todayStr = new Date().toISOString().slice(0, 10);
 
         for (const item of items) {
@@ -2238,47 +2234,36 @@ export class DatabaseStorage implements IStorage {
               ? parseFloat(item.unitCostFinal!)
               : parseFloat(item.unitCostBase);
 
-          // ── Resolve variant_id (find existing or create default) ──────
-          let variantId: number;
           if (item.variantId) {
-            variantId = item.variantId;
-          } else {
-            const varRes = await client.query(
-              `SELECT id FROM product_variants
-               WHERE product_id = $1
-               ORDER BY is_default DESC, id ASC
-               LIMIT 1`,
-              [item.productId]
-            );
-            if (varRes.rows.length > 0) {
-              variantId = varRes.rows[0].id;
-            } else {
-              // Create a minimal default variant
-              const prodRes = await client.query(
-                `SELECT price FROM products WHERE id = $1`,
-                [item.productId]
-              );
-              const prodPrice = prodRes.rows[0]?.price || "0";
-              const newVarRes = await client.query(
-                `INSERT INTO product_variants
-                   (product_id, price, cost_default, is_default, last_purchase_price, last_receipt_date)
-                 VALUES ($1, $2, $3, true, $3, now())
-                 RETURNING id`,
-                [item.productId, prodPrice, unitCostFinal.toFixed(3)]
-              );
-              variantId = newVarRes.rows[0].id;
-            }
+            // ── Product WITH a real variant (color/size/sku tracked) ───
+            // Source of truth: inventory_balances (variant-level granularity)
+
+            await client.query(`
+              INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
+              VALUES ($1, $2, $3, 0)
+              ON CONFLICT (location_id, variant_id)
+              DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + $3
+            `, [centralLocationId, item.variantId, qty]);
+
+            await client.query(`
+              INSERT INTO inventory_ledger
+                (variant_id, location_id, qty_change, reason, ref_table, ref_id)
+              VALUES ($1, $2, $3, 'purchase_in', 'purchase_invoices', $4)
+            `, [item.variantId, centralLocationId, qty, id]);
+
+            await client.query(`
+              UPDATE product_variants
+              SET last_purchase_price = $1, last_receipt_date = now()
+              WHERE id = $2
+            `, [unitCostFinal.toFixed(3), item.variantId]);
+
           }
+          // ── Simple products (no variantId): source of truth is
+          //    location_inventory. Do NOT create default variants —
+          //    that would split qty across two tables and corrupt the
+          //    balance display which reads location_inventory for these.
 
-          // ── Upsert inventory_balances (variant + location) ────────────
-          await client.query(`
-            INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
-            VALUES ($1, $2, $3, 0)
-            ON CONFLICT (location_id, variant_id)
-            DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + $3
-          `, [centralLocationId, variantId, qty]);
-
-          // ── Upsert location_inventory (product + location, compat) ────
+          // ── Both types: update location_inventory ─────────────────────
           await client.query(`
             INSERT INTO location_inventory
               (location_id, product_id, qty_on_hand, reorder_level, updated_at)
@@ -2303,21 +2288,7 @@ export class DatabaseStorage implements IStorage {
             WHERE id = $3
           `, [qty, unitCostFinal.toFixed(3), item.productId]);
 
-          // ── Update variant last_purchase_price + last_receipt_date ────
-          await client.query(`
-            UPDATE product_variants
-            SET last_purchase_price = $1, last_receipt_date = now()
-            WHERE id = $2
-          `, [unitCostFinal.toFixed(3), variantId]);
-
-          // ── Insert inventory_ledger entry ─────────────────────────────
-          await client.query(`
-            INSERT INTO inventory_ledger
-              (variant_id, location_id, qty_change, reason, ref_table, ref_id)
-            VALUES ($1, $2, $3, 'purchase_in', 'purchase_invoices', $4)
-          `, [variantId, centralLocationId, qty, id]);
-
-          // ── Insert inventory_transactions entry ───────────────────────
+          // ── Audit: inventory_transactions (always, both product types) ─
           await client.query(`
             INSERT INTO inventory_transactions
               (date, branch_id, from_location_id, to_location_id, product_id,
@@ -4802,10 +4773,16 @@ export class DatabaseStorage implements IStorage {
 
   // ── Inventory Balances ──
   async getInventoryBalances(locationId?: number, branchId?: number) {
-    // Build dynamic WHERE clauses; param indices are shared across the UNION
+    // Two-part UNION:
+    //   Part 1 — products with REAL variants (color/size/sku set)
+    //            → source of truth: inventory_balances
+    //   Part 2 — simple products (no real variants, i.e. color/size/sku all null)
+    //            → source of truth: location_inventory
+    //            This correctly includes ALL received invoices regardless of when
+    //            they were received (old or new code path).
     const params: any[] = [];
 
-    // ── Part 1: products WITH variants (inventory_balances) ──────────────────
+    // ── Part 1: REAL variant products ────────────────────────────────────────
     let part1 = `
       SELECT ib.id, ib.location_id, ib.variant_id, ib.qty_on_hand, ib.qty_reserved,
              pv.barcode, pv.sku, pv.color, pv.size, pv.price,
@@ -4818,12 +4795,13 @@ export class DatabaseStorage implements IStorage {
              COALESCE(li2.reorder_level, 5) as reorder_level
       FROM inventory_balances ib
       JOIN product_variants pv ON pv.id = ib.variant_id
+        AND (pv.color IS NOT NULL OR pv.size IS NOT NULL OR pv.sku IS NOT NULL)
       JOIN products p ON p.id = pv.product_id
       LEFT JOIN categories c ON c.id = p.category_id
       JOIN locations l ON l.id = ib.location_id
       LEFT JOIN branches b ON b.id = l.branch_id
       LEFT JOIN location_inventory li2 ON li2.location_id = ib.location_id AND li2.product_id = pv.product_id
-      WHERE 1=1
+      WHERE ib.qty_on_hand > 0
     `;
     if (locationId) {
       params.push(locationId);
@@ -4834,12 +4812,13 @@ export class DatabaseStorage implements IStorage {
       part1 += ` AND b.id = $${params.length}`;
     }
 
-    // ── Part 2: simple products WITHOUT variants (location_inventory only) ───
-    // Exclude products that already appear in Part 1 (have inventory_balances entries)
+    // ── Part 2: simple products (no real variant with color/size/sku) ─────────
+    // Always reads from location_inventory, which accumulates qty from ALL
+    // purchase invoices (old code + new code) without any split.
     let part2 = `
       SELECT NULL::int as id, li.location_id, NULL::int as variant_id,
              li.qty_on_hand, 0 as qty_reserved,
-             p.barcode, NULL as sku, NULL as color, NULL as size, p.price,
+             p.barcode, NULL::text as sku, NULL::text as color, NULL::text as size, p.price,
              p.last_purchase_price, NULL::timestamp as last_receipt_date,
              p.name as product_name, p.product_type, p.category_id, c.name as category_name,
              l.name as location_name, l.type as location_type,
@@ -4854,9 +4833,9 @@ export class DatabaseStorage implements IStorage {
       LEFT JOIN branches b ON b.id = l.branch_id
       WHERE li.qty_on_hand > 0
         AND NOT EXISTS (
-          SELECT 1 FROM inventory_balances ib2
-          JOIN product_variants pv2 ON pv2.id = ib2.variant_id
-          WHERE pv2.product_id = p.id AND ib2.location_id = li.location_id
+          SELECT 1 FROM product_variants pv2
+          WHERE pv2.product_id = p.id
+            AND (pv2.color IS NOT NULL OR pv2.size IS NOT NULL OR pv2.sku IS NOT NULL)
         )
     `;
     if (locationId) {

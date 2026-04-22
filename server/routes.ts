@@ -1828,12 +1828,13 @@ export async function registerRoutes(
     }
 
     const result = await pool.query(`
-      -- Part 1: products WITH variants (inventory_balances)
+      -- Part 1: REAL variant products (color/size/sku) — source: inventory_balances
       SELECT ib.variant_id, SUM(ib.qty_on_hand) as qty_on_hand,
              pv.barcode, pv.sku, pv.color, pv.size, pv.price,
              p.name as product_name, p.id as product_id
       FROM inventory_balances ib
       JOIN product_variants pv ON pv.id = ib.variant_id
+        AND (pv.color IS NOT NULL OR pv.size IS NOT NULL OR pv.sku IS NOT NULL)
       JOIN products p ON p.id = pv.product_id
       WHERE ib.location_id = ANY($1) AND ib.qty_on_hand > 0
       GROUP BY ib.variant_id, pv.barcode, pv.sku, pv.color, pv.size, pv.price, p.name, p.id
@@ -1841,19 +1842,21 @@ export async function registerRoutes(
 
       UNION ALL
 
-      -- Part 2: simple products WITHOUT variants (location_inventory only)
-      -- Only include those that have a default variant (required for stock_transfer_lines)
+      -- Part 2: simple products (no real variant) — source: location_inventory
+      -- qty_on_hand here is the TOTAL from ALL invoices (old + new code paths).
+      -- For transfer lines a variant_id is required; pick first available variant
+      -- (may be an auto-created default from earlier code) — or NULL if none exists.
       SELECT pv2.id as variant_id, li.qty_on_hand,
              p.barcode, pv2.sku, pv2.color, pv2.size, p.price,
              p.name as product_name, p.id as product_id
       FROM location_inventory li
       JOIN products p ON p.id = li.product_id
-      JOIN product_variants pv2 ON pv2.product_id = p.id AND pv2.is_default = true
+      LEFT JOIN product_variants pv2 ON pv2.product_id = p.id AND pv2.is_default = true
       WHERE li.location_id = ANY($1) AND li.qty_on_hand > 0
         AND NOT EXISTS (
-          SELECT 1 FROM inventory_balances ib2
-          JOIN product_variants pv3 ON pv3.id = ib2.variant_id
-          WHERE pv3.product_id = p.id AND ib2.location_id = ANY($1)
+          SELECT 1 FROM product_variants pv3
+          WHERE pv3.product_id = p.id
+            AND (pv3.color IS NOT NULL OR pv3.size IS NOT NULL OR pv3.sku IS NOT NULL)
         )
 
       ORDER BY product_name, color, size
