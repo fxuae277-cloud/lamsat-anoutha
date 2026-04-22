@@ -5638,12 +5638,22 @@ export async function registerRoutes(
           p.id, p.name, p.barcode, p.price, p.avg_cost as "avgCost",
           p.image, p.active, p.category_id as "categoryId",
           c.name as "categoryName",
-          COALESCE((
-            SELECT SUM(li.qty_on_hand)
-            FROM location_inventory li
-            JOIN locations l ON l.id = li.location_id
-            WHERE li.product_id = p.id ${branchFilter}
-          ), 0)::int as "stockQty"
+          CASE
+            WHEN EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id)
+            THEN COALESCE((
+              SELECT SUM(ib.qty_on_hand)
+              FROM inventory_balances ib
+              JOIN product_variants pv ON pv.id = ib.variant_id
+              JOIN locations l ON l.id = ib.location_id
+              WHERE pv.product_id = p.id ${branchFilter}
+            ), 0)
+            ELSE COALESCE((
+              SELECT SUM(li.qty_on_hand)
+              FROM location_inventory li
+              JOIN locations l ON l.id = li.location_id
+              WHERE li.product_id = p.id ${branchFilter}
+            ), 0)
+          END::int as "stockQty"
         FROM products p
         LEFT JOIN categories c ON c.id = p.category_id
         WHERE p.active = true
@@ -5677,12 +5687,22 @@ export async function registerRoutes(
       const result = await pool.query(`
         SELECT p.id, p.name, p.price, p.image, p.avg_cost as "avgCost", p.category_id as "categoryId",
                COUNT(si.id) as sold_count,
-               COALESCE((
-                 SELECT SUM(li.qty_on_hand)
-                 FROM location_inventory li
-                 JOIN locations l ON l.id = li.location_id
-                 WHERE li.product_id = p.id ${branchFilter}
-               ), 0)::int as "stockQty"
+               CASE
+                 WHEN EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id)
+                 THEN COALESCE((
+                   SELECT SUM(ib.qty_on_hand)
+                   FROM inventory_balances ib
+                   JOIN product_variants pv ON pv.id = ib.variant_id
+                   JOIN locations l ON l.id = ib.location_id
+                   WHERE pv.product_id = p.id ${branchFilter}
+                 ), 0)
+                 ELSE COALESCE((
+                   SELECT SUM(li.qty_on_hand)
+                   FROM location_inventory li
+                   JOIN locations l ON l.id = li.location_id
+                   WHERE li.product_id = p.id ${branchFilter}
+                 ), 0)
+               END::int as "stockQty"
         FROM products p
         JOIN sale_items si ON si.product_id = p.id
         JOIN sales s ON s.id = si.sale_id ${branchFilter2}
