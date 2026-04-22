@@ -95,12 +95,17 @@ export default function BarcodeLabels() {
   };
 
   // ── product search ─────────────────────────────────────────────────────────
-  const { data: _results } = useQuery<any[]>({
-    queryKey: [`/api/products/search?q=${encodeURIComponent(search)}&limit=10`],
+  const { data: _results } = useQuery<any>({
+    queryKey: [`/api/products/search?q=${encodeURIComponent(search)}&limit=15`],
     queryFn: getQueryFn({ on401: "returnNull" }),
     enabled: search.length >= 1,
   });
-  const results: any[] = Array.isArray(_results) ? _results : [];
+  // API returns { products: [...], total: N }
+  const results: any[] = Array.isArray(_results)
+    ? _results
+    : Array.isArray(_results?.products)
+      ? _results.products
+      : [];
 
   const addProduct = useCallback((p: any) => {
     if (!p.barcode) return;
@@ -278,7 +283,9 @@ export default function BarcodeLabels() {
               <div className="relative">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder={t("barcode_labels.search_placeholder")}
+                  placeholder={lang === "ar"
+                    ? "ابحث بالاسم أو الموديل أو الباركود…"
+                    : "Search by name, model or barcode…"}
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="pr-9"
@@ -291,32 +298,60 @@ export default function BarcodeLabels() {
                 )}
               </div>
 
+              {/* hint */}
+              {!search && (
+                <p className="text-[11px] text-muted-foreground px-1">
+                  {lang === "ar"
+                    ? "يمكن البحث بالاسم أو رقم الموديل أو الباركود"
+                    : "Search by product name, model number, or barcode"}
+                </p>
+              )}
+
               {/* نتائج البحث */}
               {search.length >= 1 && (
-                <div className="border rounded-xl divide-y max-h-60 overflow-y-auto shadow-md bg-white z-10">
+                <div className="border rounded-xl divide-y max-h-72 overflow-y-auto shadow-md bg-white z-10">
                   {results.length === 0 ? (
                     <p className="text-center py-4 text-sm text-muted-foreground">{t("barcode_labels.no_results")}</p>
-                  ) : results.map((p: any) => (
-                    <button
-                      key={p.id}
-                      className="w-full text-right px-3 py-2.5 hover:bg-pink-50 flex items-center justify-between gap-2 transition-colors"
-                      onClick={() => addProduct(p)}
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{p.name}</p>
-                        <p className="text-xs text-muted-foreground font-mono">{p.barcode || t("barcode_labels.no_barcode")}</p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs font-bold text-primary">
-                          {parseFloat(p.price || p.priceDefault || 0).toFixed(3)}
-                        </span>
-                        {p.barcode
-                          ? <Plus className="h-4 w-4 text-green-600" />
-                          : <Badge className="text-[9px] bg-red-100 text-red-700">{t("barcode_labels.no_barcode")}</Badge>
-                        }
-                      </div>
-                    </button>
-                  ))}
+                  ) : results.map((p: any) => {
+                    const q = search.toLowerCase();
+                    const matchesBarcode = p.barcode?.toLowerCase().includes(q);
+                    const matchesModel  = p.modelNumber?.toLowerCase().includes(q);
+                    return (
+                      <button
+                        key={p.id}
+                        className="w-full text-right px-3 py-2.5 hover:bg-pink-50 flex items-center justify-between gap-2 transition-colors"
+                        onClick={() => addProduct(p)}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{p.name}</p>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            {p.barcode && (
+                              <span className={`text-[11px] font-mono ${matchesBarcode ? "text-pink-600 font-bold" : "text-muted-foreground"}`}>
+                                {p.barcode}
+                              </span>
+                            )}
+                            {p.modelNumber && (
+                              <span className={`text-[11px] font-mono ${matchesModel ? "text-blue-600 font-bold" : "text-muted-foreground"}`}>
+                                {lang === "ar" ? "موديل: " : "Model: "}{p.modelNumber}
+                              </span>
+                            )}
+                            {!p.barcode && (
+                              <span className="text-[11px] text-red-500">{t("barcode_labels.no_barcode")}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs font-bold text-primary">
+                            {parseFloat(p.price || p.priceDefault || 0).toFixed(3)}
+                          </span>
+                          {p.barcode
+                            ? <Plus className="h-4 w-4 text-green-600" />
+                            : <Badge className="text-[9px] bg-red-100 text-red-700">{t("barcode_labels.no_barcode")}</Badge>
+                          }
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
