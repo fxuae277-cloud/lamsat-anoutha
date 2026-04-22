@@ -924,13 +924,13 @@ export class DatabaseStorage implements IStorage {
       }
 
       const saleRes = await client.query(
-        `INSERT INTO sales (invoice_number, branch_id, cashier_id, customer_id, subtotal, discount, discount_type, vat, total, payment_method, bank_txn_id, shift_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+        `INSERT INTO sales (invoice_number, branch_id, cashier_id, customer_id, subtotal, discount, discount_type, vat, total, payment_method, payment_reference, bank_txn_id, shift_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
         [
           invoiceNumber, data.branchId, data.cashierId || null, data.customerId || null,
           data.subtotal || "0", data.discount || "0", data.discountType || "percentage",
           data.vat || "0", data.total || "0", data.paymentMethod || "cash",
-          data.bankTxnId || null, data.shiftId || null,
+          data.paymentReference || null, data.bankTxnId || null, data.shiftId || null,
         ]
       );
       const sale = saleRes.rows[0];
@@ -3006,8 +3006,7 @@ export class DatabaseStorage implements IStorage {
       createdAt: s.createdAt,
     }));
 
-    return rows
-    };
+    return rows;
   }
 
   async getCategoriesReport(from: string, to: string, branchId?: number) {
