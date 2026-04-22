@@ -1555,63 +1555,66 @@ export async function registerRoutes(
   app.get("/api/branch-stock/:branchId", requireAuth, requirePermission("inventory.view"), async (req, res) => {
     const branchId = Number(req.params.branchId);
     const result = await pool.query(`
-      -- منتجات بـ variants (inventory_balances)
+      -- منتجات بـ variants: مجموع الكميات عبر كل مواقع الفرع (GROUP BY variant)
       SELECT
-        ib.variant_id,
-        ib.qty_on_hand                   AS current_qty,
+        pv.id                             AS variant_id,
+        SUM(ib.qty_on_hand)::int          AS current_qty,
         pv.barcode, pv.sku, pv.color, pv.size, pv.price,
-        p.name                           AS product_name,
-        p.id                             AS product_id,
+        p.name                            AS product_name,
+        p.id                              AS product_id,
         p.category_id,
-        cat.name                         AS category_name,
-        l.name                           AS location_name,
+        cat.name                          AS category_name,
         (SELECT MAX(st2.approved_at)
          FROM stock_transfer_lines stl2
          JOIN stock_transfers st2 ON st2.id = stl2.transfer_id
-         JOIN locations fl2      ON fl2.id  = st2.from_location_id
-         WHERE st2.to_location_id = ib.location_id
+         JOIN locations tl2       ON tl2.id = st2.to_location_id
+         WHERE tl2.branch_id = $1
            AND st2.status = 'approved'
-           AND stl2.variant_id = ib.variant_id
-        )                                AS last_transfer_date,
-        (SELECT SUM(stl2.qty)
+           AND stl2.variant_id = pv.id
+        )                                 AS last_transfer_date,
+        (SELECT COALESCE(SUM(stl2.qty),0)
          FROM stock_transfer_lines stl2
          JOIN stock_transfers st2 ON st2.id = stl2.transfer_id
-         JOIN locations fl2      ON fl2.id  = st2.from_location_id
+         JOIN locations fl2       ON fl2.id = st2.from_location_id
+         JOIN locations tl2       ON tl2.id = st2.to_location_id
          WHERE fl2.is_central = true
-           AND st2.to_location_id = ib.location_id
+           AND tl2.branch_id = $1
            AND st2.status = 'approved'
-           AND stl2.variant_id = ib.variant_id
-        )                                AS transferred_qty
+           AND stl2.variant_id = pv.id
+        )                                 AS transferred_qty
       FROM inventory_balances ib
-      JOIN locations        l  ON l.id  = ib.location_id
-      JOIN product_variants pv ON pv.id = ib.variant_id
-      JOIN products         p  ON p.id  = pv.product_id
-      LEFT JOIN categories cat ON cat.id = p.category_id
-      WHERE l.branch_id = $1 AND ib.qty_on_hand > 0
+      JOIN locations        l   ON l.id  = ib.location_id
+      JOIN product_variants pv  ON pv.id = ib.variant_id
+      JOIN products         p   ON p.id  = pv.product_id
+      LEFT JOIN categories cat  ON cat.id = p.category_id
+      WHERE l.branch_id = $1
+      GROUP BY pv.id, pv.barcode, pv.sku, pv.color, pv.size, pv.price,
+               p.name, p.id, p.category_id, cat.name
+      HAVING SUM(ib.qty_on_hand) > 0
 
       UNION ALL
 
-      -- منتجات بدون variants (location_inventory) التي ليس لها سجل في inventory_balances
+      -- منتجات بدون variants: مجموع الكميات عبر كل مواقع الفرع
       SELECT
-        NULL                             AS variant_id,
-        li.qty_on_hand                   AS current_qty,
+        NULL                              AS variant_id,
+        SUM(li.qty_on_hand)::int          AS current_qty,
         p.barcode, NULL AS sku, NULL AS color, NULL AS size, p.price,
-        p.name                           AS product_name,
-        p.id                             AS product_id,
+        p.name                            AS product_name,
+        p.id                              AS product_id,
         p.category_id,
-        cat.name                         AS category_name,
-        l.name                           AS location_name,
-        NULL                             AS last_transfer_date,
-        NULL                             AS transferred_qty
+        cat.name                          AS category_name,
+        NULL                              AS last_transfer_date,
+        NULL                              AS transferred_qty
       FROM location_inventory li
       JOIN locations l ON l.id = li.location_id
       JOIN products  p ON p.id = li.product_id
       LEFT JOIN categories cat ON cat.id = p.category_id
       WHERE l.branch_id = $1
-        AND li.qty_on_hand > 0
         AND NOT EXISTS (
           SELECT 1 FROM product_variants pv2 WHERE pv2.product_id = li.product_id
         )
+      GROUP BY p.id, p.name, p.barcode, p.price, p.category_id, cat.name
+      HAVING SUM(li.qty_on_hand) > 0
 
       ORDER BY product_name, color, size
     `, [branchId]);
