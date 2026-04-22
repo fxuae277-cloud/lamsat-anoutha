@@ -2204,6 +2204,133 @@ export class DatabaseStorage implements IStorage {
     try {
       await client.query("BEGIN");
 
+      // ── 1. Find central warehouse location ────────────────────────────
+      const centralRes = await client.query(
+        `SELECT id FROM locations WHERE is_central = true LIMIT 1`
+      );
+      if (centralRes.rows.length === 0) {
+        throw new Error("لم يتم العثور على المستودع المركزي — يرجى إنشاؤه أولاً من صفحة المواقع");
+      }
+      const centralLocationId: number = centralRes.rows[0].id;
+
+      // ── 2. Backward-compat guard: skip if inventory already posted ────
+      const alreadyRes = await client.query(
+        `SELECT 1 FROM inventory_ledger
+         WHERE ref_table = 'purchase_invoices' AND ref_id = $1 LIMIT 1`,
+        [id]
+      );
+      const alreadyAdded = alreadyRes.rows.length > 0;
+
+      if (!alreadyAdded) {
+        const todayStr = new Date().toISOString().slice(0, 10);
+
+        for (const item of items) {
+          const qty = item.qty;
+          const unitCostFinal =
+            parseFloat(item.unitCostFinal || "0") > 0
+              ? parseFloat(item.unitCostFinal!)
+              : parseFloat(item.unitCostBase);
+
+          // ── Resolve variant_id (find existing or create default) ──────
+          let variantId: number;
+          if (item.variantId) {
+            variantId = item.variantId;
+          } else {
+            const varRes = await client.query(
+              `SELECT id FROM product_variants
+               WHERE product_id = $1
+               ORDER BY is_default DESC, id ASC
+               LIMIT 1`,
+              [item.productId]
+            );
+            if (varRes.rows.length > 0) {
+              variantId = varRes.rows[0].id;
+            } else {
+              // Create a minimal default variant
+              const prodRes = await client.query(
+                `SELECT price FROM products WHERE id = $1`,
+                [item.productId]
+              );
+              const prodPrice = prodRes.rows[0]?.price || "0";
+              const newVarRes = await client.query(
+                `INSERT INTO product_variants
+                   (product_id, price, cost_default, is_default, last_purchase_price, last_receipt_date)
+                 VALUES ($1, $2, $3, true, $3, now())
+                 RETURNING id`,
+                [item.productId, prodPrice, unitCostFinal.toFixed(3)]
+              );
+              variantId = newVarRes.rows[0].id;
+            }
+          }
+
+          // ── Upsert inventory_balances (variant + location) ────────────
+          await client.query(`
+            INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
+            VALUES ($1, $2, $3, 0)
+            ON CONFLICT (location_id, variant_id)
+            DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + $3
+          `, [centralLocationId, variantId, qty]);
+
+          // ── Upsert location_inventory (product + location, compat) ────
+          await client.query(`
+            INSERT INTO location_inventory
+              (location_id, product_id, qty_on_hand, reorder_level, updated_at)
+            VALUES ($1, $2, $3, 5, now())
+            ON CONFLICT (location_id, product_id)
+            DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand + $3, updated_at = now()
+          `, [centralLocationId, item.productId, qty]);
+
+          // ── Update product stock_qty + avg_cost (weighted average) ────
+          await client.query(`
+            UPDATE products
+            SET stock_qty = COALESCE(stock_qty, 0) + $1,
+                avg_cost  = CASE
+                  WHEN (COALESCE(stock_qty, 0) + $1) > 0
+                  THEN (
+                    (COALESCE(avg_cost, '0')::numeric * COALESCE(stock_qty, 0))
+                    + ($2::numeric * $1)
+                  ) / (COALESCE(stock_qty, 0) + $1)
+                  ELSE $2::numeric
+                END,
+                last_purchase_price = $2
+            WHERE id = $3
+          `, [qty, unitCostFinal.toFixed(3), item.productId]);
+
+          // ── Update variant last_purchase_price + last_receipt_date ────
+          await client.query(`
+            UPDATE product_variants
+            SET last_purchase_price = $1, last_receipt_date = now()
+            WHERE id = $2
+          `, [unitCostFinal.toFixed(3), variantId]);
+
+          // ── Insert inventory_ledger entry ─────────────────────────────
+          await client.query(`
+            INSERT INTO inventory_ledger
+              (variant_id, location_id, qty_change, reason, ref_table, ref_id)
+            VALUES ($1, $2, $3, 'purchase_in', 'purchase_invoices', $4)
+          `, [variantId, centralLocationId, qty, id]);
+
+          // ── Insert inventory_transactions entry ───────────────────────
+          await client.query(`
+            INSERT INTO inventory_transactions
+              (date, branch_id, from_location_id, to_location_id, product_id,
+               type, qty, ref_table, ref_id, note, created_by, created_at)
+            VALUES ($1, $2, NULL, $3, $4, 'PURCHASE', $5,
+                    'purchase_invoices', $6, $7, $8, now())
+          `, [
+            todayStr,
+            invoice.branchId || null,
+            centralLocationId,
+            item.productId,
+            qty,
+            id,
+            `استلام فاتورة مشتريات #${invoice.invoiceNumber}`,
+            invoice.createdBy || null,
+          ]);
+        }
+      }
+
+      // ── 3. Mark invoice as received ───────────────────────────────────
       const result = await client.query(
         `UPDATE purchase_invoices
          SET status = 'received', total_amount = $1, grand_total = $2, received_at = now()
