@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-22 (جلسة 26 — الرقم المرجعي للمدفوعات + صفحة مؤشرات الأداء)_
+_آخر تحديث: 2026-04-22 (جلسة 27 — إصلاح مخزن الفرع + POS stockQty + الرقم المرجعي)_
 
 ---
 
@@ -528,6 +528,46 @@ fetch('/api/run-migration-0018',{method:'POST'}).then(r=>r.json()).then(console.
 - [x] **جدول آخر 30 فاتورة**: رقم الفاتورة · طريقة الدفع · الرقم المرجعي · الإجمالي · التاريخ · الوقت
 - [x] مفاتيح i18n: `nav.branchPerformance` في `ar.json` + `en.json`
 - [x] الأيقونة: `BarChart2` من lucide-react في sidebar
+
+---
+
+---
+
+### جلسة 27 — إصلاحات مخزن الفرع + POS
+
+#### إصلاح الرقم المرجعي في createSale
+- [x] **Bug**: `storage.ts` → `createSale` INSERT كان لا يتضمن `payment_reference` → يُحفظ NULL دائماً
+- [x] **Fix**: أُضيف `payment_reference` ($11) في INSERT + `data.paymentReference || null` في القيم
+- [x] الرقم المرجعي يظهر الآن في `Invoices.tsx` و `BranchPerformance.tsx` للفواتير الجديدة
+
+#### BranchStock.tsx — إعادة تصميم كاملة (تبويبان)
+- [x] **تبويب 1 — المخزون الحالي**:
+  - 4 بطاقات KPI: عدد الأصناف · إجمالي الكميات · إجمالي المنتجات · عدد الفئات
+  - عمود جديد "الفئة" في الجدول
+  - كميات ملونة: أخضر (طبيعي) / أصفر (≤5) / أحمر (0)
+  - سطر إجماليات أسفل الجدول
+- [x] **تبويب 2 — سجل التحويلات**:
+  - 3 بطاقات KPI: عدد التحويلات · إجمالي القطع المستلمة · تاريخ آخر تحويل
+  - صفوف قابلة للتوسيع: رقم TRF-XXXXX · التاريخ · المصدر · الكمية · عدد الأصناف
+  - تفاصيل: المنتج / الفئة / اللون / المقاس / الباركود / الكمية
+
+#### إصلاح دقة كميات مخزن الفرع
+- [x] **Bug**: نفس الـ variant تظهر أكثر من مرة إذا كان الفرع يملك أكثر من موقع
+- [x] **Fix**: `GROUP BY variant_id + SUM(qty_on_hand)` عبر كل مواقع الفرع → كمية واحدة صحيحة
+- [x] `last_transfer_date` و `transferred_qty` يستعلمان الآن بـ `branch_id` بدل `location_id`
+
+#### endpoint جديد: `GET /api/branch-stock/:branchId/transfers`
+- [x] يُرجع كل التحويلات الواردة للفرع (status = 'approved') مع تفاصيل كاملة:
+  - رقم التحويل (TRF-XXXXX) · التاريخ · من أين · إجمالي الكمية · عدد الأصناف
+  - `lines`: مصفوفة JSON بكل صنف (اسم المنتج / الفئة / اللون / المقاس / الباركود / الكمية)
+- [x] `category_name` أُضيف لاستعلام المخزون الحالي أيضاً
+
+#### إصلاح POS — مصدر الكميات للمنتجات ذات variants
+- [x] **Bug**: `GET /api/pos/products` و `GET /api/pos/top` كانا يجلبان `stockQty` من `location_inventory` فقط
+- [x] **نتيجة الخطأ**: POS يعرض 16 قطعة بينما البيع يرفض بـ "المخزون 0" (التحقق من `inventory_balances`)
+- [x] **Fix**: استخدام `CASE WHEN EXISTS variants THEN inventory_balances ELSE location_inventory END`
+  - منتجات بـ variants → `inventory_balances` (صحيح ← نفس مصدر فحص البيع)
+  - منتجات بدون variants → `location_inventory` (كما كان)
 
 ---
 
