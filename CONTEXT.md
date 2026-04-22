@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-22 (جلسة 27 — إصلاح مخزن الفرع + POS stockQty + الرقم المرجعي)_
+_آخر تحديث: 2026-04-22 (جلسة 28 — إصلاح TypeScript build + صفحة مؤشرات الأداء)_
 
 ---
 
@@ -568,6 +568,25 @@ fetch('/api/run-migration-0018',{method:'POST'}).then(r=>r.json()).then(console.
 - [x] **Fix**: استخدام `CASE WHEN EXISTS variants THEN inventory_balances ELSE location_inventory END`
   - منتجات بـ variants → `inventory_balances` (صحيح ← نفس مصدر فحص البيع)
   - منتجات بدون variants → `location_inventory` (كما كان)
+
+---
+
+### جلسة 28 — إصلاح TypeScript Build + صفحة مؤشرات الأداء
+
+#### إصلاح TypeScript errors كانت تمنع Railway من البناء
+- [x] **storage.ts**: إصلاح `return rows` (قوس زائد `};`) في `getSalesListReport` → خطأ syntax منع كل الـ build
+- [x] **en.json**: إضافة مفاتيح ناقصة كانت تسبب type mismatch مع ar.json:
+  - `nav.usersManagement` + `nav.rolesManagement`
+  - `settings.branch_address` + `settings.branch_phone` + `settings.branches_desc`
+  - `dashboard.total_products`
+
+#### BranchPerformance.tsx — صفحة مؤشرات أداء الفرع (جلسة 26-28)
+- [x] صفحة جديدة `client/src/pages/BranchPerformance.tsx` على route `/branch-performance`
+- [x] متاحة للموظفين — `EMPLOYEE_ALLOWED_PATHS` + `EMPLOYEE_SIDEBAR`
+- [x] فلتر الفترة: اليوم / هذا الأسبوع / هذا الشهر / مخصص
+- [x] 6 بطاقات KPI: إجمالي · نقدي · بطاقة · تحويل · عدد الفواتير · متوسط الفاتورة
+- [x] مخطط عمودي مكدَّس يومي (نقدي/بطاقة/تحويل) + مخطط دائري للتوزيع
+- [x] جدول آخر 30 فاتورة مع الرقم المرجعي + التاريخ والوقت
 
 ---
 
