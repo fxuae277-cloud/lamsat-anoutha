@@ -7,9 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateInput } from "@/components/ui/date-input";
 import { useQuery } from "@tanstack/react-query";
 import { fmtDate, fmtTime } from "@/lib/formatters";
+import { parseServerError } from "@/lib/queryClient";
+import { GitBranch } from "lucide-react";
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function startOfWeekStr() {
@@ -63,6 +66,7 @@ export default function BranchPerformance() {
   const [period, setPeriod] = useState<Period>("month");
   const [customFrom, setCustomFrom] = useState(startOfMonthStr());
   const [customTo, setCustomTo] = useState(todayStr());
+  const [selectedBranch, setSelectedBranch] = useState<string>("all");
 
   const from =
     period === "today"  ? todayStr() :
@@ -73,15 +77,37 @@ export default function BranchPerformance() {
   const to =
     period === "custom" ? customTo : todayStr();
 
-  const { data: sales = [], isLoading } = useQuery<any[]>({
-    queryKey: ["branch-perf-sales", from, to],
+  const { data: branches = [] } = useQuery<any[]>({
+    queryKey: ["/api/branches"],
     queryFn: async () => {
-      const res = await fetch(`/api/sales?from=${from}&to=${to}`, { credentials: "include" });
+      const res = await fetch("/api/branches", { credentials: "include" });
+      if (!res.ok) throw new Error(await parseServerError(res));
+      return res.json();
+    },
+    staleTime: 300_000,
+  });
+
+  const salesUrl = useMemo(() => {
+    let url = `/api/sales?from=${from}&to=${to}`;
+    if (selectedBranch !== "all") url += `&branchId=${selectedBranch}`;
+    return url;
+  }, [from, to, selectedBranch]);
+
+  const { data: sales = [], isLoading } = useQuery<any[]>({
+    queryKey: ["branch-perf-sales", from, to, selectedBranch],
+    queryFn: async () => {
+      const res = await fetch(salesUrl, { credentials: "include" });
       if (!res.ok) return [];
       return res.json();
     },
     staleTime: 60_000,
   });
+
+  const selectedBranchName = useMemo(() => {
+    if (selectedBranch === "all") return null;
+    const b = branches.find((b: any) => String(b.id) === selectedBranch);
+    return b ? b.name + (b.address ? ` — ${b.address}` : "") : null;
+  }, [selectedBranch, branches]);
 
   const kpis = useMemo(() => {
     const cash     = sales.filter(x => x.paymentMethod === "cash").reduce((s, x) => s + parseFloat(x.total || "0"), 0);
@@ -152,17 +178,56 @@ export default function BranchPerformance() {
         </div>
       </div>
 
-      {/* Custom date range */}
-      {period === "custom" && (
-        <div className="flex items-center gap-3 flex-wrap p-3 bg-muted/30 rounded-lg border">
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-gray-600">من</label>
-            <DateInput value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="w-36 h-8 text-xs" />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-gray-600">إلى</label>
-            <DateInput value={customTo} onChange={e => setCustomTo(e.target.value)} className="w-36 h-8 text-xs" />
-          </div>
+      {/* Filters row: branch + custom date */}
+      <div className="flex items-center gap-3 flex-wrap p-3 bg-muted/30 rounded-lg border">
+        {/* Branch selector */}
+        <div className="flex items-center gap-2">
+          <GitBranch className="w-4 h-4 text-muted-foreground shrink-0" />
+          <label className="text-xs font-medium text-gray-600 whitespace-nowrap">الفرع</label>
+          <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+            <SelectTrigger className="h-8 text-xs w-52">
+              <SelectValue placeholder="اختر الفرع..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">الكل — جميع الفروع</SelectItem>
+              {branches.map((b: any) => (
+                <SelectItem key={b.id} value={String(b.id)}>
+                  {b.name}{b.address ? ` — ${b.address}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Custom date range */}
+        {period === "custom" && (
+          <>
+            <div className="w-px h-5 bg-border" />
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-gray-600">من</label>
+              <DateInput value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="w-36 h-8 text-xs" />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-gray-600">إلى</label>
+              <DateInput value={customTo} onChange={e => setCustomTo(e.target.value)} className="w-36 h-8 text-xs" />
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Custom date when period != custom — removed from old location */}
+      {period !== "custom" && (
+        <></>
+      )}
+
+      {/* Active branch badge */}
+      {selectedBranchName && (
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-pink-700 border-pink-300 bg-pink-50 text-xs gap-1 py-1 px-2.5">
+            <GitBranch className="w-3 h-3" />
+            {selectedBranchName}
+          </Badge>
+          <span className="text-xs text-muted-foreground">البيانات مفلترة لهذا الفرع فقط</span>
         </div>
       )}
 
@@ -270,6 +335,7 @@ export default function BranchPerformance() {
                       <TableRow>
                         <TableHead>#</TableHead>
                         <TableHead>رقم الفاتورة</TableHead>
+                        {selectedBranch === "all" && <TableHead>الفرع</TableHead>}
                         <TableHead>طريقة الدفع</TableHead>
                         <TableHead>الرقم المرجعي</TableHead>
                         <TableHead className="text-center">الإجمالي</TableHead>
@@ -284,6 +350,9 @@ export default function BranchPerformance() {
                           <TableCell className="font-mono font-bold text-primary text-sm">
                             {s.invoiceNumber || `#${s.id}`}
                           </TableCell>
+                          {selectedBranch === "all" && (
+                            <TableCell className="text-xs text-muted-foreground">{s.branchName || "—"}</TableCell>
+                          )}
                           <TableCell>
                             <Badge className={`text-xs ${PM_COLORS[s.paymentMethod] || ""}`}>
                               {PM_LABELS[s.paymentMethod] || s.paymentMethod}

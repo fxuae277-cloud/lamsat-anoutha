@@ -2421,6 +2421,8 @@ export async function registerRoutes(
     if (req.query.invoiceNumber) filters.invoiceNumber = req.query.invoiceNumber as string;
     if (scope.mode === "branch") {
       filters.branchId = scope.branchId;
+    } else if (req.query.branchId) {
+      filters.branchId = Number(req.query.branchId);
     }
     res.json(await storage.getSalesFiltered(filters));
   });
