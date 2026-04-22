@@ -47,6 +47,7 @@
     "payrollPayments": "متابعة الدفع",
     "barcodeLabels": "طباعة الملصقات",
     "branchSummary": "ملخص الفرع المالي",
+    "branchPerformance": "مؤشرات الأداء",
     "openingStock": "المخزون الافتتاحي"
   },
   "sidebar": {

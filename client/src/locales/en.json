@@ -45,6 +45,7 @@
     "payrollPayments": "Payment Tracking",
     "barcodeLabels": "Print Labels",
     "branchSummary": "Branch Financial Summary",
+    "branchPerformance": "Branch Performance",
     "openingStock": "Opening Stock"
   },
   "sidebar": {
