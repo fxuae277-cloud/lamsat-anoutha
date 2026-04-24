@@ -141,11 +141,17 @@ export default function Reports() {
     return b ? branchCityLabel(b) : `فرع ${id}`;
   };
 
+  // ── payments helpers — API returns { methods: [...], transactions: [...], grandTotal } ──
+  const pmtMethod = (key: string) =>
+    parseFloat((payments?.methods || []).find((m: any) => m.method === key)?.total || "0");
+  const pmtMethodCount = (key: string) =>
+    (payments?.methods || []).find((m: any) => m.method === key)?.count || 0;
+
   // ── payments pie data ─────────────────────────────────────────────────────
   const paymentPieData = payments ? [
-    { name: "نقدي",        value: parseFloat(payments.cash || 0)   },
-    { name: "بطاقة",       value: parseFloat(payments.card || 0)   },
-    { name: "تحويل بنكي",  value: parseFloat(payments.bank || 0)   },
+    { name: "نقدي",        value: pmtMethod("cash")          },
+    { name: "بطاقة",       value: pmtMethod("card")          },
+    { name: "تحويل بنكي",  value: pmtMethod("bank_transfer") },
   ].filter(d => d.value > 0) : [];
 
   // ── expenses pie data ─────────────────────────────────────────────────────
@@ -293,11 +299,15 @@ export default function Reports() {
         <TabsContent value="payments" className="space-y-4">
           {payments ? (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <KpiCard title="مبيعات نقدية"   value={fmtOMR(payments.cash)}          icon={Banknote}   color="text-green-600" />
-                <KpiCard title="مبيعات بطاقة"   value={fmtOMR(payments.card)}          icon={CreditCard} color="text-purple-600" />
-                <KpiCard title="تحويل بنكي"      value={fmtOMR(payments.bank_transfer)} icon={Building2}  color="text-indigo-600" />
+              {/* KPI cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <KpiCard title="مبيعات نقدية"    value={fmtOMR(pmtMethod("cash"))}          icon={Banknote}   color="text-green-600"  sub={`${pmtMethodCount("cash")} فاتورة`} />
+                <KpiCard title="مبيعات بطاقة"    value={fmtOMR(pmtMethod("card"))}          icon={CreditCard} color="text-purple-600" sub={`${pmtMethodCount("card")} فاتورة`} />
+                <KpiCard title="تحويل بنكي"       value={fmtOMR(pmtMethod("bank_transfer"))} icon={Building2}  color="text-indigo-600" sub={`${pmtMethodCount("bank_transfer")} فاتورة`} />
+                <KpiCard title="الإجمالي"         value={fmtOMR(payments.grandTotal)}        icon={DollarSign} color="text-primary" />
               </div>
+
+              {/* Pie chart */}
               <Card className="rounded-2xl">
                 <CardHeader className="pb-2"><CardTitle className="text-sm">توزيع طرق الدفع</CardTitle></CardHeader>
                 <CardContent>
@@ -315,6 +325,45 @@ export default function Reports() {
                   ) : <EmptyState icon={PieIcon} label="لا توجد بيانات" />}
                 </CardContent>
               </Card>
+
+              {/* Transactions table */}
+              {(payments.transactions || []).length > 0 && (
+                <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 border-b font-semibold text-sm bg-muted/30">
+                    آخر {payments.transactions.length} عملية دفع
+                  </div>
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead className="text-right">رقم الفاتورة</TableHead>
+                        <TableHead className="text-right">الفرع</TableHead>
+                        <TableHead className="text-right">طريقة الدفع</TableHead>
+                        <TableHead className="text-right">الرقم المرجعي</TableHead>
+                        <TableHead className="text-right">المبلغ</TableHead>
+                        <TableHead className="text-right">الكاشير</TableHead>
+                        <TableHead className="text-right">التاريخ</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {payments.transactions.map((tx: any) => (
+                        <TableRow key={tx.id} className="hover:bg-pink-50/30">
+                          <TableCell className="font-mono text-xs text-primary">{tx.invoiceNumber}</TableCell>
+                          <TableCell className="text-xs">{tx.branchName}</TableCell>
+                          <TableCell>
+                            <Badge className={`text-xs ${tx.method === "cash" ? "bg-green-100 text-green-800" : tx.method === "card" ? "bg-purple-100 text-purple-800" : "bg-indigo-100 text-indigo-800"}`}>
+                              {tx.method === "cash" ? "نقدي" : tx.method === "card" ? "بطاقة" : "تحويل"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs font-mono">{tx.bankTxnId || "—"}</TableCell>
+                          <TableCell className="font-medium text-green-600">{omr(tx.total)}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{tx.cashierName || "—"}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{tx.createdAt ? new Date(tx.createdAt).toLocaleDateString("ar-OM") : "—"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </div>
           ) : <EmptyState icon={CreditCard} label="اختر نطاق تاريخ لعرض تقرير المدفوعات" />}
         </TabsContent>
