@@ -111,6 +111,8 @@ export default function InventoryOverview() {
       if (filterStatus === "low"  && row.qty_on_hand > row.reorder_level)    return false;
       if (filterStatus === "ok"   && row.qty_on_hand <= row.reorder_level)   return false;
       if (filterStatus === "zero" && row.qty_on_hand !== 0)                  return false;
+      if (filterLocType === "warehouse" && row.branch_id)                    return false;
+      if (filterLocType === "branch"    && !row.branch_id)                   return false;
       if (stockSearch) {
         const q = stockSearch.toLowerCase();
         const hits = [row.product_name, row.barcode, row.sku, row.category_name]
@@ -140,17 +142,36 @@ export default function InventoryOverview() {
   const avgPrice     = totalQty > 0 ? totalValue / totalQty : 0;
   const missingCostCount = stock.filter(r => !r.last_purchase_price || parseFloat(r.last_purchase_price) === 0).length;
 
-  // ── تجميع حسب الموقع/الفرع ───────────────────────────────────────────
+  // ── فلتر نوع الموقع ──────────────────────────────────────────────────
+  const [filterLocType, setFilterLocType] = useState<"all" | "branch" | "warehouse">("all");
+
+  // ── تجميع حسب الموقع/الفرع مع نوع الموقع ────────────────────────────
   const locationData = useMemo(() => {
-    const map: Record<string, { name: string; qty: number; value: number }> = {};
+    const map: Record<string, {
+      name: string; qty: number; value: number;
+      isCentral: boolean; branchId: number | null; branchName: string;
+    }> = {};
     for (const row of stock) {
       const key = row.full_location_name || row.branch_name || "غير محدد";
-      if (!map[key]) map[key] = { name: key, qty: 0, value: 0 };
+      if (!map[key]) map[key] = {
+        name:       key,
+        qty:        0,
+        value:      0,
+        isCentral:  !row.branch_id,
+        branchId:   row.branch_id ?? null,
+        branchName: row.branch_name || key,
+      };
       map[key].qty   += row.qty_on_hand || 0;
       map[key].value += parseFloat(row.price || "0") * (row.qty_on_hand || 0);
     }
     return Object.values(map).sort((a, b) => b.value - a.value);
   }, [stock]);
+
+  const filteredLocationData = useMemo(() => {
+    if (filterLocType === "all") return locationData;
+    if (filterLocType === "warehouse") return locationData.filter(l => l.isCentral);
+    return locationData.filter(l => !l.isCentral);
+  }, [locationData, filterLocType]);
 
   // ── تجميع حسب المنتج (للرسم البياني) ────────────────────────────────
   const productPieData = useMemo(() => {
@@ -416,32 +437,68 @@ export default function InventoryOverview() {
 
           {/* توزيع المخزون حسب الموقع */}
           <Card>
-            <CardHeader className="pb-3 pt-4 px-5">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Warehouse className="w-4 h-4 text-blue-600" />
-                توزيع المخزون حسب الموقع
-              </CardTitle>
+            <CardHeader className="pb-2 pt-4 px-5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Warehouse className="w-4 h-4 text-blue-600" />
+                  توزيع المخزون حسب الموقع
+                </CardTitle>
+                {/* فلاتر سريعة */}
+                <div className="flex gap-1">
+                  {(["all", "branch", "warehouse"] as const).map(type => {
+                    const labels = { all: "الكل", branch: "الفروع", warehouse: "المستودع" };
+                    const active = filterLocType === type;
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => setFilterLocType(type)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
+                          active
+                            ? type === "branch"
+                              ? "bg-blue-600 text-white border-blue-600"
+                              : type === "warehouse"
+                              ? "bg-gray-600 text-white border-gray-600"
+                              : "bg-primary text-white border-primary"
+                            : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+                        }`}
+                      >
+                        {labels[type]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="px-5 pb-5">
-              {locationData.length === 0 ? (
+              {filteredLocationData.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">لا توجد بيانات</p>
               ) : (
                 <div className="flex flex-col gap-4">
-                  {locationData.map((loc, idx) => {
+                  {filteredLocationData.map((loc, idx) => {
                     const pctValue = totalValue > 0 ? (loc.value / totalValue) * 100 : 0;
                     const pctQty   = totalQty  > 0 ? (loc.qty   / totalQty)   * 100 : 0;
                     const color    = PIE_COLORS[idx % PIE_COLORS.length];
                     return (
                       <div key={loc.name} className="space-y-1.5">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="font-medium flex items-center gap-2">
+                        <div className="flex items-center justify-between text-sm gap-2">
+                          <span className="font-medium flex items-center gap-2 min-w-0">
                             <span
                               className="inline-block w-3 h-3 rounded-sm shrink-0"
                               style={{ background: color }}
                             />
-                            {loc.name}
+                            <span className="truncate">{loc.name}</span>
+                            {/* شارة النوع */}
+                            {loc.isCentral ? (
+                              <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                                مستودع
+                              </span>
+                            ) : (
+                              <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                                فرع
+                              </span>
+                            )}
                           </span>
-                          <span className="font-bold text-primary">{fmtOMR(loc.value)}</span>
+                          <span className="font-bold text-primary shrink-0">{fmtOMR(loc.value)}</span>
                         </div>
                         {/* شريط القيمة */}
                         <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -459,7 +516,13 @@ export default function InventoryOverview() {
                   })}
                   {/* ملخص إجمالي */}
                   <div className="pt-3 border-t flex justify-between text-sm">
-                    <span className="text-muted-foreground">الإجمالي</span>
+                    <div className="flex items-center gap-3 text-muted-foreground">
+                      <span>الإجمالي</span>
+                      <span className="text-xs">
+                        {locationData.filter(l => !l.isCentral).length} فرع
+                        {locationData.some(l => l.isCentral) && " · مستودع مركزي"}
+                      </span>
+                    </div>
                     <div className="flex gap-4">
                       <span className="font-semibold">{totalQty} وحدة</span>
                       <span className="font-bold text-primary">{fmtOMR(totalValue)}</span>
@@ -679,6 +742,15 @@ export default function InventoryOverview() {
                 ))}
               </SelectContent>
             </Select>
+            {/* فلتر نوع الموقع */}
+            <Select value={filterLocType} onValueChange={v => setFilterLocType(v as any)}>
+              <SelectTrigger className="w-36 h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل المواقع</SelectItem>
+                <SelectItem value="branch">الفروع فقط</SelectItem>
+                <SelectItem value="warehouse">المستودع فقط</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={filterType} onValueChange={setFilterType}>
               <SelectTrigger className="w-36 h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -697,10 +769,10 @@ export default function InventoryOverview() {
                 <SelectItem value="zero">🔴 نفاد</SelectItem>
               </SelectContent>
             </Select>
-            {(filterBranch !== "all" || filterType !== "all" || filterStatus !== "all" || stockSearch) && (
+            {(filterBranch !== "all" || filterType !== "all" || filterStatus !== "all" || filterLocType !== "all" || stockSearch) && (
               <button
                 className="text-xs text-muted-foreground hover:text-destructive underline"
-                onClick={() => { setFilterBranch("all"); setFilterType("all"); setFilterStatus("all"); setStockSearch(""); }}
+                onClick={() => { setFilterBranch("all"); setFilterType("all"); setFilterStatus("all"); setFilterLocType("all"); setStockSearch(""); }}
               >
                 مسح الفلاتر
               </button>
@@ -819,7 +891,22 @@ export default function InventoryOverview() {
                             <TableCell className="text-sm text-muted-foreground">{row.size || "—"}</TableCell>
 
                             {/* الفرع/الموقع */}
-                            <TableCell className="text-sm">{row.full_location_name || row.branch_name || "—"}</TableCell>
+                            <TableCell className="text-sm">
+                              <div className="flex items-center gap-1.5">
+                                <span className="truncate max-w-[140px]" title={row.full_location_name || row.branch_name || "—"}>
+                                  {row.full_location_name || row.branch_name || "—"}
+                                </span>
+                                {!row.branch_id ? (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200 shrink-0">
+                                    مستودع
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+                                    فرع
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
 
                             {/* الكمية */}
                             <TableCell className="text-center">
