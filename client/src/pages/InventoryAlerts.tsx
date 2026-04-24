@@ -15,18 +15,6 @@ export default function InventoryAlerts() {
   const { t } = useI18n();
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
 
-  const { data: settings = {} } = useQuery<Record<string, string>>({
-    queryKey: ["/api/settings"],
-    queryFn: async () => {
-      const res = await fetch("/api/settings", { credentials: "include" });
-      if (!res.ok) return {};
-      const rows: { key: string; value: string }[] = await res.json();
-      return Object.fromEntries(rows.map((r) => [r.key, r.value]));
-    },
-  });
-
-  const storeName: string = settings["store_name"] ?? "";
-
   const { data: branches = [] } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
     queryFn: async () => {
@@ -36,10 +24,6 @@ export default function InventoryAlerts() {
     },
   });
 
-  const branchLabel = (name: string) => {
-    if (!storeName || name.includes(storeName)) return name;
-    return `${storeName} - ${name}`;
-  };
 
   const branchId = selectedBranch !== "all" ? Number(selectedBranch) : undefined;
   const queryParam = branchId ? `?branchId=${branchId}` : "";
@@ -75,7 +59,7 @@ export default function InventoryAlerts() {
           <SelectContent>
             <SelectItem value="all">جميع الفروع</SelectItem>
             {branches.map((b) => (
-              <SelectItem key={b.id} value={String(b.id)}>{branchLabel(b.name)}</SelectItem>
+              <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
