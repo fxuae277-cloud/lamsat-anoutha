@@ -9,7 +9,15 @@ import { useQuery } from "@tanstack/react-query";
 import { useI18n } from "@/lib/i18n";
 import { useState } from "react";
 
-interface Branch { id: number; name: string; }
+interface Branch { id: number; name: string; address?: string | null; }
+
+function branchDisplayName(b: Branch): string {
+  if (!b.address) return b.name;
+  // Extract city: "ولاية لوى، الشارع العام" → "لوى"
+  const city = b.address.split("،")[0].replace("ولاية", "").trim();
+  if (!city || b.name.includes(city)) return b.name;
+  return `${b.name} - ${city}`;
+}
 
 export default function InventoryAlerts() {
   const { t } = useI18n();
@@ -59,7 +67,7 @@ export default function InventoryAlerts() {
           <SelectContent>
             <SelectItem value="all">جميع الفروع</SelectItem>
             {branches.map((b) => (
-              <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+              <SelectItem key={b.id} value={String(b.id)}>{branchDisplayName(b)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
