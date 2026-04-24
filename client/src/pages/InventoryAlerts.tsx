@@ -1,7 +1,6 @@
 import { parseServerError } from "@/lib/queryClient";
-import { AlertTriangle, Package, ShieldAlert, Store, Warehouse } from "lucide-react";
+import { AlertTriangle, Package, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -10,25 +9,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useI18n } from "@/lib/i18n";
 import { useState } from "react";
 
-interface Branch {
-  id: number;
-  name: string;
-  isCentral?: boolean;
-  isMain?: boolean;
-}
-
-const BRANCH_COLORS: Record<number, string> = {};
-const BADGE_PALETTE = [
-  "bg-blue-100 text-blue-700 border-blue-300",
-  "bg-purple-100 text-purple-700 border-purple-300",
-  "bg-green-100 text-green-700 border-green-300",
-  "bg-orange-100 text-orange-700 border-orange-300",
-];
+interface Branch { id: number; name: string; }
 
 export default function InventoryAlerts() {
   const { t } = useI18n();
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
-  const [typeFilter, setTypeFilter] = useState<"all" | "branch" | "warehouse">("all");
 
   const { data: branches = [] } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
@@ -39,26 +24,11 @@ export default function InventoryAlerts() {
     },
   });
 
-  // Assign stable colors to branches
-  branches.forEach((b, i) => {
-    if (!(b.id in BRANCH_COLORS)) BRANCH_COLORS[b.id] = BADGE_PALETTE[i % BADGE_PALETTE.length];
-  });
-
-  // Derive effective branchId from both filters
-  const effectiveBranchId = (() => {
-    if (typeFilter === "warehouse") {
-      // find central/warehouse branch — branch with no normal locations (heuristic: name contains مستودع/مخزن/central)
-      // We'll pass "warehouse" as a special case handled below — actually just filter client-side
-      return undefined;
-    }
-    if (selectedBranch !== "all") return Number(selectedBranch);
-    return undefined;
-  })();
-
-  const queryParam = effectiveBranchId ? `?branchId=${effectiveBranchId}` : "";
+  const branchId = selectedBranch !== "all" ? Number(selectedBranch) : undefined;
+  const queryParam = branchId ? `?branchId=${branchId}` : "";
 
   const { data: items = [], isLoading } = useQuery<any[]>({
-    queryKey: ["/api/inventory/low-stock", effectiveBranchId],
+    queryKey: ["/api/inventory/low-stock", branchId],
     queryFn: async () => {
       const res = await fetch(`/api/inventory/low-stock${queryParam}`, { credentials: "include" });
       if (!res.ok) throw new Error(await parseServerError(res));
@@ -69,21 +39,6 @@ export default function InventoryAlerts() {
   const outOfStock = items.filter((i) => i.totalQty <= 0);
   const lowStock   = items.filter((i) => i.totalQty > 0);
 
-  const selectedBranchObj = branches.find((b) => String(b.id) === selectedBranch);
-  const showingLabel = selectedBranch === "all"
-    ? "جميع الفروع"
-    : selectedBranchObj?.name ?? "";
-
-  const handleBranchChange = (val: string) => {
-    setSelectedBranch(val);
-    setTypeFilter("all");
-  };
-
-  const handleTypeFilter = (t: "all" | "branch" | "warehouse") => {
-    setTypeFilter(t);
-    setSelectedBranch("all");
-  };
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -91,55 +46,22 @@ export default function InventoryAlerts() {
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <AlertTriangle className="w-6 h-6 text-yellow-500" /> {t("nav.inventoryAlerts")}
         </h1>
-        <p className="text-muted-foreground">{t("dashboard.low_stock_title")}</p>
+        <p className="text-muted-foreground">مراقبة مستويات المخزون وتنبيهات النفاد</p>
       </div>
 
-      {/* Filter Row */}
-      <div className="flex flex-wrap items-center gap-3">
-        {/* Branch dropdown */}
-        <Select value={selectedBranch} onValueChange={handleBranchChange}>
+      {/* Branch filter */}
+      <div>
+        <Select value={selectedBranch} onValueChange={setSelectedBranch}>
           <SelectTrigger className="w-56">
             <SelectValue placeholder="اختر الفرع" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">جميع الفروع</SelectItem>
             {branches.map((b) => (
-              <SelectItem key={b.id} value={String(b.id)}>
-                {b.name}
-              </SelectItem>
+              <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-
-        {/* Quick toggle buttons */}
-        <div className="flex items-center gap-1 border rounded-md p-1">
-          <Button
-            size="sm" variant={typeFilter === "all" ? "default" : "ghost"}
-            onClick={() => handleTypeFilter("all")}
-          >
-            الكل
-          </Button>
-          <Button
-            size="sm" variant={typeFilter === "branch" ? "default" : "ghost"}
-            className="gap-1"
-            onClick={() => handleTypeFilter("branch")}
-          >
-            <Store className="w-3 h-3" /> الفروع
-          </Button>
-          <Button
-            size="sm" variant={typeFilter === "warehouse" ? "default" : "ghost"}
-            className="gap-1"
-            onClick={() => handleTypeFilter("warehouse")}
-          >
-            <Warehouse className="w-3 h-3" /> المستودع
-          </Button>
-        </div>
-
-        {/* Showing label */}
-        <span className="text-sm text-muted-foreground">
-          عرض تنبيهات:{" "}
-          <span className="font-medium text-foreground">{showingLabel}</span>
-        </span>
       </div>
 
       {/* KPI cards */}
