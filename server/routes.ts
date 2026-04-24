@@ -2064,8 +2064,9 @@ export async function registerRoutes(
       : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId ?? undefined);
     res.json(await storage.getBranchInventory(branchId));
   });
-  app.get("/api/inventory/low-stock", requireAuth, async (_req, res) => {
-    res.json(await storage.getLowStockAlerts());
+  app.get("/api/inventory/low-stock", requireAuth, async (req, res) => {
+    const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+    res.json(await storage.getLowStockAlerts(branchId));
   });
   app.get("/api/inventory/transactions", requireAuth, requirePermission("inventory.view"), async (req, res) => {
     const user = await storage.getUser(req.session.userId!);

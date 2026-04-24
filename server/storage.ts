@@ -88,7 +88,7 @@ export interface IStorage {
   getInventoryByProduct(productId: number): Promise<Inventory[]>;
   upsertInventory(productId: number, warehouseId: number, quantity: number): Promise<Inventory>;
   adjustInventory(productId: number, warehouseId: number, delta: number): Promise<Inventory | undefined>;
-  getLowStockAlerts(): Promise<any[]>;
+  getLowStockAlerts(branchId?: number): Promise<any[]>;
   createTransfer(data: InsertInventoryTransfer): Promise<InventoryTransfer>;
   getCustomers(branchId?: number | null): Promise<Customer[]>;
   getCustomer(id: number): Promise<Customer | undefined>;
@@ -563,8 +563,8 @@ export class DatabaseStorage implements IStorage {
     const [row] = await db.update(inventory).set({ quantity: newQty }).where(eq(inventory.id, existing[0].id)).returning();
     return row;
   }
-  async getLowStockAlerts() {
-    return db.select({
+  async getLowStockAlerts(branchId?: number) {
+    const q = db.select({
       productId: products.id,
       name: products.name,
       totalQty: sql<number>`COALESCE(SUM(${locationInventory.qtyOnHand}), 0)::int`,
@@ -572,7 +572,15 @@ export class DatabaseStorage implements IStorage {
     })
     .from(products)
     .leftJoin(locationInventory, eq(locationInventory.productId, products.id))
-    .where(sql`${products.minQty} IS NOT NULL AND ${products.minQty} > 0 AND ${products.active} = true`)
+    .leftJoin(locations, eq(locations.id, locationInventory.locationId));
+
+    const baseCondition = sql`${products.minQty} IS NOT NULL AND ${products.minQty} > 0 AND ${products.active} = true`;
+    const condition = branchId
+      ? sql`${baseCondition} AND (${locationInventory.locationId} IS NULL OR ${locations.branchId} = ${branchId})`
+      : baseCondition;
+
+    return q
+    .where(condition)
     .groupBy(products.id, products.name, products.minQty)
     .having(sql`COALESCE(SUM(${locationInventory.qtyOnHand}), 0) <= ${products.minQty}`)
     .orderBy(sql`COALESCE(SUM(${locationInventory.qtyOnHand}), 0) ASC`);
