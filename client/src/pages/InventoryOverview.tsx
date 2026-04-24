@@ -59,12 +59,13 @@ export default function InventoryOverview() {
   const { t } = useI18n();
 
   // Stock tab state
-  const [stockSearch,  setStockSearch]  = useState("");
-  const [filterBranch, setFilterBranch] = useState("all");
-  const [filterType,   setFilterType]   = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [sortCol,      setSortCol]      = useState<"name"|"qty"|"price">("name");
-  const [sortDir,      setSortDir]      = useState<"asc"|"desc">("asc");
+  const [stockSearch,    setStockSearch]    = useState("");
+  const [filterBranch,   setFilterBranch]   = useState("all");
+  const [filterType,     setFilterType]     = useState("all");
+  const [filterStatus,   setFilterStatus]   = useState("all");
+  const [filterLocType,  setFilterLocType]  = useState<"all" | "branch" | "warehouse">("all");
+  const [sortCol,        setSortCol]        = useState<"name"|"qty"|"price">("name");
+  const [sortDir,        setSortDir]        = useState<"asc"|"desc">("asc");
 
   // Movements tab state
   const [movType,   setMovType]   = useState("all");
@@ -141,9 +142,6 @@ export default function InventoryOverview() {
   const costValue    = stock.reduce((s, r) => s + parseFloat(r.last_purchase_price || "0") * (r.qty_on_hand || 0), 0);
   const avgPrice     = totalQty > 0 ? totalValue / totalQty : 0;
   const missingCostCount = stock.filter(r => !r.last_purchase_price || parseFloat(r.last_purchase_price) === 0).length;
-
-  // ── فلتر نوع الموقع ──────────────────────────────────────────────────
-  const [filterLocType, setFilterLocType] = useState<"all" | "branch" | "warehouse">("all");
 
   // ── تجميع حسب الموقع/الفرع مع نوع الموقع ────────────────────────────
   const locationData = useMemo(() => {
