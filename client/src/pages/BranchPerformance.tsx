@@ -6,13 +6,14 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateInput } from "@/components/ui/date-input";
 import { useQuery } from "@tanstack/react-query";
 import { fmtDate, fmtTime } from "@/lib/formatters";
 import { parseServerError } from "@/lib/queryClient";
-import { GitBranch } from "lucide-react";
+import { GitBranch, Search, X } from "lucide-react";
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function startOfWeekStr() {
@@ -68,6 +69,11 @@ export default function BranchPerformance() {
   const [customTo, setCustomTo] = useState(todayStr());
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
 
+  // Search & filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterPayment, setFilterPayment] = useState("all");
+  const [filterEmployee, setFilterEmployee] = useState("all");
+
   const from =
     period === "today"  ? todayStr() :
     period === "week"   ? startOfWeekStr() :
@@ -109,6 +115,16 @@ export default function BranchPerformance() {
     return b ? b.name + (b.address ? ` — ${b.address}` : "") : null;
   }, [selectedBranch, branches]);
 
+  // Unique employees derived from loaded sales data
+  const uniqueEmployees = useMemo(() => {
+    const names = new Set<string>();
+    for (const s of sales) {
+      if (s.cashierName) names.add(s.cashierName);
+    }
+    return Array.from(names).sort();
+  }, [sales]);
+
+  // KPIs computed from the full sales list (unfiltered by search)
   const kpis = useMemo(() => {
     const cash     = sales.filter(x => x.paymentMethod === "cash").reduce((s, x) => s + parseFloat(x.total || "0"), 0);
     const card     = sales.filter(x => x.paymentMethod === "card").reduce((s, x) => s + parseFloat(x.total || "0"), 0);
@@ -146,6 +162,36 @@ export default function BranchPerformance() {
     { name: "بطاقة",   value: kpis.card },
     { name: "تحويل",   value: kpis.transfer },
   ].filter(x => x.value > 0), [kpis]);
+
+  // Filtered sales for the invoices table
+  const filteredSales = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return [...sales].reverse().filter(s => {
+      // Text search
+      if (q) {
+        const haystack = [
+          s.invoiceNumber || "",
+          s.customerName  || "",
+          s.customerPhone || "",
+          s.paymentReference || "",
+        ].join(" ").toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      // Payment method filter
+      if (filterPayment !== "all" && s.paymentMethod !== filterPayment) return false;
+      // Employee filter
+      if (filterEmployee !== "all" && s.cashierName !== filterEmployee) return false;
+      return true;
+    });
+  }, [sales, searchQuery, filterPayment, filterEmployee]);
+
+  const hasActiveFilters = searchQuery.trim() !== "" || filterPayment !== "all" || filterEmployee !== "all";
+
+  function clearFilters() {
+    setSearchQuery("");
+    setFilterPayment("all");
+    setFilterEmployee("all");
+  }
 
   const PERIOD_BTNS: { key: Period; label: string }[] = [
     { key: "today",  label: "اليوم" },
@@ -214,11 +260,6 @@ export default function BranchPerformance() {
           </>
         )}
       </div>
-
-      {/* Custom date when period != custom — removed from old location */}
-      {period !== "custom" && (
-        <></>
-      )}
 
       {/* Active branch badge */}
       {selectedBranchName && (
@@ -317,25 +358,87 @@ export default function BranchPerformance() {
             </Card>
           </div>
 
-          {/* Recent Invoices */}
+          {/* Invoices section */}
           <Card>
-            <CardHeader className="pb-1 pt-4 px-4">
+            <CardHeader className="pb-2 pt-4 px-4">
               <CardTitle className="text-sm font-semibold flex items-center justify-between">
-                <span>آخر الفواتير</span>
-                <span className="text-xs font-normal text-muted-foreground">{sales.length} فاتورة</span>
+                <span>الفواتير</span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  {hasActiveFilters
+                    ? `${filteredSales.length} من ${sales.length} فاتورة`
+                    : `${sales.length} فاتورة`}
+                </span>
               </CardTitle>
+
+              {/* Search & filter bar */}
+              <div className="flex flex-wrap gap-2 mt-3">
+                {/* Text search */}
+                <div className="relative flex-1 min-w-48">
+                  <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="بحث: رقم فاتورة، عميل، جوال، مرجع..."
+                    className="h-8 text-xs pr-8 pl-3"
+                  />
+                </div>
+
+                {/* Payment method filter */}
+                <Select value={filterPayment} onValueChange={setFilterPayment}>
+                  <SelectTrigger className="h-8 text-xs w-36">
+                    <SelectValue placeholder="طريقة الدفع" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل طرق الدفع</SelectItem>
+                    <SelectItem value="cash">نقدي</SelectItem>
+                    <SelectItem value="card">بطاقة</SelectItem>
+                    <SelectItem value="bank_transfer">تحويل بنكي</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Employee filter */}
+                <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+                  <SelectTrigger className="h-8 text-xs w-40">
+                    <SelectValue placeholder="الموظف" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل الموظفين</SelectItem>
+                    {uniqueEmployees.map(name => (
+                      <SelectItem key={name} value={name}>{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Clear filters button */}
+                {hasActiveFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                    onClick={clearFilters}
+                  >
+                    <X className="w-3 h-3" />
+                    مسح الفلاتر
+                  </Button>
+                )}
+              </div>
             </CardHeader>
+
             <CardContent className="p-0">
-              {sales.length === 0 ? (
-                <div className="py-10 text-center text-muted-foreground text-sm">لا توجد فواتير في هذه الفترة</div>
+              {filteredSales.length === 0 ? (
+                <div className="py-10 text-center text-muted-foreground text-sm">
+                  {hasActiveFilters ? "لا توجد فواتير تطابق البحث" : "لا توجد فواتير في هذه الفترة"}
+                </div>
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader className="bg-muted/40">
                       <TableRow>
-                        <TableHead>#</TableHead>
+                        <TableHead className="w-10">#</TableHead>
                         <TableHead>رقم الفاتورة</TableHead>
                         {selectedBranch === "all" && <TableHead>الفرع</TableHead>}
+                        <TableHead>العميل</TableHead>
+                        <TableHead>الكاشير</TableHead>
                         <TableHead>طريقة الدفع</TableHead>
                         <TableHead>الرقم المرجعي</TableHead>
                         <TableHead className="text-center">الإجمالي</TableHead>
@@ -344,7 +447,7 @@ export default function BranchPerformance() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {[...sales].reverse().slice(0, 30).map((s: any, i: number) => (
+                      {filteredSales.map((s: any, i: number) => (
                         <TableRow key={s.id} className="hover:bg-muted/20">
                           <TableCell className="text-xs text-muted-foreground">{i + 1}</TableCell>
                           <TableCell className="font-mono font-bold text-primary text-sm">
@@ -353,6 +456,17 @@ export default function BranchPerformance() {
                           {selectedBranch === "all" && (
                             <TableCell className="text-xs text-muted-foreground">{s.branchName || "—"}</TableCell>
                           )}
+                          <TableCell className="text-xs">
+                            {s.customerName
+                              ? <span className="font-medium">{s.customerName}</span>
+                              : <span className="text-gray-300">—</span>}
+                            {s.customerPhone && (
+                              <span className="block text-muted-foreground font-mono" dir="ltr">{s.customerPhone}</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {s.cashierName || "—"}
+                          </TableCell>
                           <TableCell>
                             <Badge className={`text-xs ${PM_COLORS[s.paymentMethod] || ""}`}>
                               {PM_LABELS[s.paymentMethod] || s.paymentMethod}
