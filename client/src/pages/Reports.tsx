@@ -1,9 +1,9 @@
 import { useState } from "react";
 import {
   BarChart3, TrendingUp, TrendingDown, DollarSign, CreditCard, Building2,
-  Download, FileText, Package, Users, Layers, PieChart as PieIcon,
-  ArrowUpRight, ArrowDownRight, Minus, RefreshCw, Calendar, GitBranch,
-  Banknote, Receipt, Activity, ChevronDown, ChevronUp, Scale, CalendarDays,
+  Download, Package, Users, PieChart as PieIcon,
+  ArrowUpRight, ArrowDownRight, Minus, Calendar, GitBranch,
+  Banknote, ChevronDown, ChevronUp, Scale,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -107,8 +107,6 @@ export default function Reports() {
   const [to,   setTo]             = useState(todayStr());
   const [branch, setBranch]       = useState("all");
   const [bsExpanded, setBsExpanded] = useState<Record<string, boolean>>({});
-  const [monthlyYear, setMonthlyYear] = useState(String(new Date().getFullYear()));
-  const [monthlyView, setMonthlyView] = useState<"category"|"product">("category");
   const [ordersYear, setOrdersYear]   = useState(String(new Date().getFullYear()));
   const [ordersView, setOrdersView]   = useState<"category"|"product">("category");
 
@@ -118,29 +116,29 @@ export default function Reports() {
   const { data: _branches }     = useQuery<Branch[]>({ queryKey: ["/api/branches"], queryFn: getQueryFn({ on401: "returnNull" }) });
   const { data: income }        = useQuery<any>({ queryKey: [`/api/reports/income-statement?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
   const { data: branchComp }    = useQuery<any>({ queryKey: [`/api/reports/branch-comparison-range?from=${from}&to=${to}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
-  const { data: _salesList }    = useQuery<any[]>({ queryKey: [`/api/reports/sales-list?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
   const { data: payments }      = useQuery<any>({ queryKey: [`/api/reports/payments-report?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
-  const { data: _shiftsRpt }    = useQuery<any[]>({ queryKey: [`/api/reports/shifts-report?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
   const { data: _productsRpt }  = useQuery<any[]>({ queryKey: [`/api/reports/products-report?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
-  const { data: _categoriesRpt }= useQuery<any[]>({ queryKey: [`/api/reports/categories-report?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
   const { data: cashFlow }      = useQuery<any>({ queryKey: [`/api/reports/cash-flow?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
   const { data: _expCats }      = useQuery<any[]>({ queryKey: [`/api/reports/expenses-by-category?from=${from}&to=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
   const { data: balanceSheet }  = useQuery<any>({ queryKey: [`/api/reports/balance-sheet?asOf=${to}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }), enabled: isAdmin });
-  const { data: monthlySales }  = useQuery<any>({ queryKey: [`/api/reports/monthly-sales?year=${monthlyYear}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
   const { data: ordersMonthly } = useQuery<any>({ queryKey: [`/api/reports/orders-monthly?year=${ordersYear}${branchQs}`], queryFn: getQueryFn({ on401: "returnNull" }) });
 
-  // ── null-safe array coercion (= [] لا يحمي من null، فقط من undefined) ───
+  // ── null-safe array coercion ───────────────────────────────────────────────
   const branches     : Branch[] = Array.isArray(_branches)     ? _branches     : [];
-  const salesList    : any[]    = Array.isArray(_salesList)    ? _salesList    : [];
-  const shiftsRpt    : any[]    = Array.isArray(_shiftsRpt)    ? _shiftsRpt    : [];
   const productsRpt  : any[]    = Array.isArray(_productsRpt)  ? _productsRpt  : [];
-  const categoriesRpt: any[]    = Array.isArray(_categoriesRpt)? _categoriesRpt: [];
   const expCats      : any[]    = Array.isArray(_expCats)      ? _expCats      : [];
 
-  // ── branch display ────────────────────────────────────────────────────────
+  // ── branch city label helper ──────────────────────────────────────────────
+  const branchCityLabel = (b: Branch) => {
+    if (!b.address) return b.name;
+    const city = b.address.split("،")[0].replace("ولاية", "").trim();
+    if (!city || b.name.includes(city)) return b.name;
+    return `${b.name} - ${city}`;
+  };
+
   const branchLabel = (id: number) => {
     const b = branches.find(b => b.id === id);
-    return b ? (b.address ? `${b.name} - ${b.address}` : b.name) : `فرع ${id}`;
+    return b ? branchCityLabel(b) : `فرع ${id}`;
   };
 
   // ── payments pie data ─────────────────────────────────────────────────────
@@ -166,18 +164,6 @@ export default function Reports() {
   }));
 
   // ── CSV export helpers ────────────────────────────────────────────────────
-  function exportSales() {
-    const headers = ["#", "رقم الفاتورة", "التاريخ", "الفرع", "طريقة الدفع", "الرقم المرجعي", "المجموع", "ضريبة", "تكلفة", "ربح"];
-    const rows = salesList.map((s, i) => [
-      i + 1, s.invoiceNumber,
-      new Date(s.createdAt).toLocaleDateString("ar-OM"),
-      branchLabel(s.branchId),
-      s.paymentMethod,
-      s.paymentReference || "",
-      omr(s.total), omr(s.vat), omr(s.cogsTotal), omr(s.grossProfit),
-    ]);
-    downloadCSV(`مبيعات_${from}_${to}.csv`, [headers, ...rows]);
-  }
   function exportBranchComp() {
     if (!branchComp?.branches) return;
     const headers = ["الفرع", "المبيعات", "التكلفة", "إجمالي الربح", "المصروفات", "صافي الربح", "الهامش%"];
@@ -186,20 +172,6 @@ export default function Reports() {
       omr(b.grossProfit), omr(b.totalExpenses), omr(b.netProfit), b.margin + "%",
     ]);
     downloadCSV(`مقارنة_الفروع_${from}_${to}.csv`, [headers, ...rows]);
-  }
-  function exportIncome() {
-    if (!income) return;
-    downloadCSV(`قائمة_الدخل_${from}_${to}.csv`, [
-      ["البند", "القيمة (ر.ع)"],
-      ["إجمالي المبيعات", omr(income.revenue?.total)],
-      ["المرتجعات", `(${omr(income.revenue?.returns)})`],
-      ["صافي المبيعات", omr(income.revenue?.netRevenue)],
-      ["تكلفة البضاعة المباعة", `(${omr(income.cogs?.total)})`],
-      ["إجمالي الربح التجاري", omr(income.grossProfit)],
-      ["المصروفات التشغيلية", `(${omr(income.expenses?.total)})`],
-      ["صافي الربح", omr(income.netProfit)],
-      ["هامش الربح", income.netMargin + "%"],
-    ]);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -220,7 +192,12 @@ export default function Reports() {
             <SelectItem value="all">كل الفروع</SelectItem>
             {branches.map(b => (
               <SelectItem key={b.id} value={String(b.id)}>
-                {b.name}{b.address ? ` - ${b.address}` : ""}
+                {(() => {
+                  if (!b.address) return b.name;
+                  const city = b.address.split("،")[0].replace("ولاية", "").trim();
+                  if (!city || b.name.includes(city)) return b.name;
+                  return `${b.name} - ${city}`;
+                })()}
               </SelectItem>
             ))}
           </SelectContent>
@@ -245,14 +222,9 @@ export default function Reports() {
       <Tabs defaultValue="overview" className="w-full" dir="rtl">
         <div className="overflow-x-auto">
           <TabsList className="flex w-max min-w-full md:w-full justify-start md:justify-center gap-1 mb-2">
-            <TabsTrigger value="overview" className="gap-1 whitespace-nowrap"><TrendingUp className="h-4 w-4" />نظرة عامة</TabsTrigger>
-            <TabsTrigger value="income"   className="gap-1 whitespace-nowrap"><FileText className="h-4 w-4" />قائمة الدخل</TabsTrigger>
-            <TabsTrigger value="sales"    className="gap-1 whitespace-nowrap"><Receipt className="h-4 w-4" />المبيعات</TabsTrigger>
-            <TabsTrigger value="payments" className="gap-1 whitespace-nowrap"><CreditCard className="h-4 w-4" />المدفوعات</TabsTrigger>
-            <TabsTrigger value="products" className="gap-1 whitespace-nowrap"><Package className="h-4 w-4" />المنتجات</TabsTrigger>
-            <TabsTrigger value="categories" className="gap-1 whitespace-nowrap"><Layers className="h-4 w-4" />الفئات</TabsTrigger>
-            <TabsTrigger value="shifts"   className="gap-1 whitespace-nowrap"><Activity className="h-4 w-4" />الورديات</TabsTrigger>
-            <TabsTrigger value="monthly"       className="gap-1 whitespace-nowrap"><CalendarDays className="h-4 w-4" />شهري</TabsTrigger>
+            <TabsTrigger value="overview"      className="gap-1 whitespace-nowrap"><TrendingUp className="h-4 w-4" />نظرة عامة</TabsTrigger>
+            <TabsTrigger value="payments"      className="gap-1 whitespace-nowrap"><CreditCard className="h-4 w-4" />المدفوعات</TabsTrigger>
+            <TabsTrigger value="products"      className="gap-1 whitespace-nowrap"><Package className="h-4 w-4" />المنتجات</TabsTrigger>
             <TabsTrigger value="orders-report" className="gap-1 whitespace-nowrap"><Users className="h-4 w-4" />تقرير الطلبات</TabsTrigger>
             {isAdmin && <TabsTrigger value="branches"      className="gap-1 whitespace-nowrap"><GitBranch className="h-4 w-4" />مقارنة الفروع</TabsTrigger>}
             {isAdmin && <TabsTrigger value="cashflow"      className="gap-1 whitespace-nowrap"><Banknote className="h-4 w-4" />التدفقات النقدية</TabsTrigger>}
@@ -268,7 +240,7 @@ export default function Reports() {
                 <KpiCard title="إجمالي المبيعات"        value={fmtOMR(income.revenue?.total)}    icon={TrendingUp}   color="text-green-600" />
                 <KpiCard title="تكلفة البضاعة المباعة"  value={fmtOMR(income.cogs?.total)}       icon={Package}      color="text-orange-600" />
                 <KpiCard title="إجمالي الربح التجاري"   value={fmtOMR(income.grossProfit)}       icon={DollarSign}   color="text-blue-600"   sub={`هامش ${income.grossMargin}%`} />
-                <KpiCard title="صافي الربح"             value={fmtOMR(income.netProfit)}         icon={Activity}     color="text-primary"    sub={`هامش ${income.netMargin}%`} trend={parseFloat(income.netProfit) >= 0 ? "up" : "down"} />
+                <KpiCard title="صافي الربح"             value={fmtOMR(income.netProfit)}         icon={TrendingUp}   color="text-primary"    sub={`هامش ${income.netMargin}%`} trend={parseFloat(income.netProfit) >= 0 ? "up" : "down"} />
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <KpiCard title="مبيعات نقدية"    value={fmtOMR(income.revenue?.cashSales)} icon={Banknote}    color="text-green-700" />
@@ -314,115 +286,6 @@ export default function Reports() {
                 </Card>
               </div>
             </>
-          )}
-        </TabsContent>
-
-        {/* ══ قائمة الدخل ══════════════════════════════════════════════════ */}
-        <TabsContent value="income" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="font-bold text-lg flex items-center gap-2"><FileText className="h-5 w-5 text-primary" />قائمة الدخل</h2>
-            <Button size="sm" variant="outline" onClick={exportIncome}>
-              <Download className="h-4 w-4 ml-1" /> تصدير CSV
-            </Button>
-          </div>
-
-          {income ? (
-            <div className="bg-white rounded-2xl shadow-sm border border-pink-50 overflow-hidden">
-              {/* ─ الإيرادات ─ */}
-              <div className="bg-green-50 px-5 py-3 border-b font-bold text-green-800">الإيرادات</div>
-              <div className="divide-y">
-                <IncomeRow label="إجمالي المبيعات"   value={income.revenue?.total}     indent={1} />
-                <IncomeRow label="المرتجعات"           value={`(${omr(income.revenue?.returns)})`} indent={1} valueClass="text-red-600" />
-                <IncomeRow label="صافي المبيعات"       value={income.revenue?.netRevenue} indent={0} bold />
-              </div>
-              {/* ─ تكلفة البضاعة ─ */}
-              <div className="bg-orange-50 px-5 py-3 border-b font-bold text-orange-800 border-t mt-2">تكلفة البضاعة المباعة</div>
-              <div className="divide-y">
-                <IncomeRow label="تكلفة المبيعات" value={`(${omr(income.cogs?.total)})`} indent={1} valueClass="text-orange-700" />
-              </div>
-              {/* ─ إجمالي الربح ─ */}
-              <div className="bg-blue-50 px-5 py-3 border-b font-bold text-blue-800 border-t mt-2 flex justify-between items-center">
-                <span>إجمالي الربح التجاري</span>
-                <span className="text-blue-700 font-bold text-lg">{fmtOMR(income.grossProfit)}</span>
-              </div>
-              {/* ─ المصروفات التشغيلية ─ */}
-              <div className="bg-red-50 px-5 py-3 border-b font-bold text-red-800 border-t mt-2">المصروفات التشغيلية</div>
-              <div className="divide-y">
-                {(income.expenses?.byCategory || []).map((c: any) => (
-                  <IncomeRow key={c.category} label={CAT_LABELS[c.category] || c.category} value={`(${omr(c.total)})`} indent={1} valueClass="text-red-600" />
-                ))}
-                <IncomeRow label="إجمالي المصروفات" value={`(${omr(income.expenses?.total)})`} indent={0} bold valueClass="text-red-700" />
-              </div>
-              {/* ─ صافي الربح ─ */}
-              <div className={`px-5 py-4 border-t-2 border-primary/30 flex justify-between items-center mt-2 ${parseFloat(income.netProfit) >= 0 ? "bg-green-100" : "bg-red-100"}`}>
-                <span className="font-extrabold text-lg">صافي الربح</span>
-                <div className="text-right">
-                  <p className={`font-extrabold text-2xl ${parseFloat(income.netProfit) >= 0 ? "text-green-700" : "text-red-700"}`}>
-                    {fmtOMR(income.netProfit)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">هامش الربح: {income.netMargin}%</p>
-                </div>
-              </div>
-            </div>
-          ) : <EmptyState icon={FileText} label="اختر نطاق تاريخ لعرض قائمة الدخل" />}
-        </TabsContent>
-
-        {/* ══ المبيعات ══════════════════════════════════════════════════════ */}
-        <TabsContent value="sales" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="font-bold text-lg flex items-center gap-2"><Receipt className="h-5 w-5 text-primary" />سجل المبيعات</h2>
-            <Button size="sm" variant="outline" onClick={exportSales}>
-              <Download className="h-4 w-4 ml-1" /> تصدير CSV
-            </Button>
-          </div>
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <Table>
-              <TableHeader className="bg-muted/50">
-                <TableRow>
-                  <TableHead className="text-right">#</TableHead>
-                  <TableHead className="text-right">رقم الفاتورة</TableHead>
-                  <TableHead className="text-right">التاريخ</TableHead>
-                  {isAdmin && <TableHead className="text-right">الفرع</TableHead>}
-                  <TableHead className="text-right">طريقة الدفع</TableHead>
-                  <TableHead className="text-right">الرقم المرجعي</TableHead>
-                  <TableHead className="text-right">المجموع</TableHead>
-                  <TableHead className="text-right">ضريبة</TableHead>
-                  <TableHead className="text-right">تكلفة</TableHead>
-                  <TableHead className="text-right">ربح</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {salesList.length === 0 ? (
-                  <TableRow><TableCell colSpan={10} className="text-center py-10 text-muted-foreground">لا توجد مبيعات في هذه الفترة</TableCell></TableRow>
-                ) : salesList.map((s, i) => (
-                  <TableRow key={s.id} className="hover:bg-pink-50/30">
-                    <TableCell className="text-xs">{i + 1}</TableCell>
-                    <TableCell className="font-mono text-xs text-primary">{s.invoiceNumber}</TableCell>
-                    <TableCell className="text-xs">{new Date(s.createdAt).toLocaleDateString("ar-OM")}</TableCell>
-                    {isAdmin && <TableCell className="text-xs">{branchLabel(s.branchId)}</TableCell>}
-                    <TableCell>
-                      <PayMethodBadge method={s.paymentMethod} />
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {s.paymentReference
-                        ? <span className="font-mono text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-0.5" dir="ltr">{s.paymentReference}</span>
-                        : <span className="text-gray-300 text-xs">—</span>}
-                    </TableCell>
-                    <TableCell className="font-medium">{omr(s.total)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{omr(s.vat)}</TableCell>
-                    <TableCell className="text-xs text-orange-600">{omr(s.cogsTotal)}</TableCell>
-                    <TableCell className="font-medium text-green-600">{omr(s.grossProfit)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          {salesList.length > 0 && (
-            <div className="grid grid-cols-3 gap-3">
-              <SummaryBox label="إجمالي المبيعات" value={salesList.reduce((s, r) => s + parseFloat(r.total || 0), 0).toFixed(3)} color="text-green-600" />
-              <SummaryBox label="إجمالي التكلفة" value={salesList.reduce((s, r) => s + parseFloat(r.cogs_total || 0), 0).toFixed(3)} color="text-orange-600" />
-              <SummaryBox label="إجمالي الربح"   value={salesList.reduce((s, r) => s + parseFloat(r.gross_profit || 0), 0).toFixed(3)} color="text-primary" />
-            </div>
           )}
         </TabsContent>
 
@@ -513,260 +376,6 @@ export default function Reports() {
                 </ResponsiveContainer>
               </CardContent>
             </Card>
-          )}
-        </TabsContent>
-
-        {/* ══ الفئات ════════════════════════════════════════════════════════ */}
-        <TabsContent value="categories" className="space-y-4">
-          <h2 className="font-bold text-lg flex items-center gap-2"><Layers className="h-5 w-5 text-primary" />مبيعات الفئات</h2>
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <Table>
-              <TableHeader className="bg-muted/50">
-                <TableRow>
-                  <TableHead className="text-right">#</TableHead>
-                  <TableHead className="text-right">الفئة</TableHead>
-                  <TableHead className="text-right">الكمية</TableHead>
-                  <TableHead className="text-right">المبيعات</TableHead>
-                  <TableHead className="text-right">التكلفة</TableHead>
-                  <TableHead className="text-right">الربح</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {categoriesRpt.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-10 text-muted-foreground">لا توجد بيانات</TableCell></TableRow>
-                ) : categoriesRpt.map((c, i) => (
-                  <TableRow key={i} className="hover:bg-pink-50/30">
-                    <TableCell className="text-xs">{i + 1}</TableCell>
-                    <TableCell className="font-medium">{c.category_name || "—"}</TableCell>
-                    <TableCell>{c.total_qty}</TableCell>
-                    <TableCell className="text-green-600 font-medium">{omr(c.total_revenue)}</TableCell>
-                    <TableCell className="text-orange-600">{omr(c.total_cogs)}</TableCell>
-                    <TableCell className="text-blue-600 font-medium">{omr(c.gross_profit)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </TabsContent>
-
-        {/* ══ الورديات ════════════════════════════════════════════════════ */}
-        <TabsContent value="shifts" className="space-y-4">
-          <h2 className="font-bold text-lg flex items-center gap-2"><Activity className="h-5 w-5 text-primary" />تقرير الورديات</h2>
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <Table>
-              <TableHeader className="bg-muted/50">
-                <TableRow>
-                  <TableHead className="text-right">#</TableHead>
-                  <TableHead className="text-right">التاريخ</TableHead>
-                  {isAdmin && <TableHead className="text-right">الفرع</TableHead>}
-                  <TableHead className="text-right">الكاشير</TableHead>
-                  <TableHead className="text-right">الجهاز</TableHead>
-                  <TableHead className="text-right">المبيعات</TableHead>
-                  <TableHead className="text-right">الافتتاح</TableHead>
-                  <TableHead className="text-right">المتوقع</TableHead>
-                  <TableHead className="text-right">الفعلي</TableHead>
-                  <TableHead className="text-right">الفرق</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {shiftsRpt.length === 0 ? (
-                  <TableRow><TableCell colSpan={10} className="text-center py-10 text-muted-foreground">لا توجد ورديات مغلقة في هذه الفترة</TableCell></TableRow>
-                ) : shiftsRpt.map((s, i) => {
-                  const diff = parseFloat(s.difference || 0);
-                  return (
-                    <TableRow key={s.id} className="hover:bg-pink-50/30">
-                      <TableCell className="text-xs">{i + 1}</TableCell>
-                      <TableCell className="text-xs">{s.started_at ? new Date(s.started_at).toLocaleDateString("ar-OM") : "—"}</TableCell>
-                      {isAdmin && <TableCell className="text-xs">{branchLabel(s.branch_id)}</TableCell>}
-                      <TableCell className="font-medium">{s.cashier_name || s.cashierName || "—"}</TableCell>
-                      <TableCell className="text-xs">{s.terminal_name || s.terminalName}</TableCell>
-                      <TableCell className="text-green-600 font-medium">{omr(s.total_cash ?? s.totalCash)}</TableCell>
-                      <TableCell>{omr(s.opening_cash ?? s.openingCash)}</TableCell>
-                      <TableCell>{omr(s.expected_cash ?? s.expectedCash)}</TableCell>
-                      <TableCell className="font-medium">{omr(s.actual_cash ?? s.actualCash)}</TableCell>
-                      <TableCell>
-                        <Badge className={`text-xs ${Math.abs(diff) < 0.002 ? "bg-green-100 text-green-800" : diff > 0 ? "bg-blue-100 text-blue-800" : "bg-red-100 text-red-800"}`}>
-                          {diff > 0 ? `+${omr(diff)}` : omr(diff)}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </TabsContent>
-
-        {/* ══ التقرير الشهري ══════════════════════════════════════════════════ */}
-        <TabsContent value="monthly" className="space-y-4">
-          <div className="flex flex-wrap gap-3 items-center justify-between">
-            <h2 className="font-bold text-lg flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" />التقرير الشهري</h2>
-            <div className="flex gap-2 items-center">
-              <select
-                value={monthlyYear}
-                onChange={e => setMonthlyYear(e.target.value)}
-                className="border rounded-md px-3 py-1.5 text-sm bg-background"
-              >
-                {[0,1,2].map(offset => {
-                  const y = String(new Date().getFullYear() - offset);
-                  return <option key={y} value={y}>{y}</option>;
-                })}
-              </select>
-              <div className="flex rounded-md border overflow-hidden text-sm">
-                <button
-                  className={`px-3 py-1.5 transition-colors ${monthlyView === "category" ? "bg-primary text-white" : "hover:bg-muted"}`}
-                  onClick={() => setMonthlyView("category")}
-                >حسب الفئة</button>
-                <button
-                  className={`px-3 py-1.5 transition-colors ${monthlyView === "product" ? "bg-primary text-white" : "hover:bg-muted"}`}
-                  onClick={() => setMonthlyView("product")}
-                >حسب المنتج</button>
-              </div>
-            </div>
-          </div>
-
-          {/* مخطط المبيعات الشهرية */}
-          {(monthlySales?.monthly || []).length > 0 && (
-            <Card className="rounded-2xl">
-              <CardHeader className="pb-2"><CardTitle className="text-sm">إجمالي المبيعات الشهرية — {monthlyYear}</CardTitle></CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={(monthlySales?.monthly || []).map((m: any) => ({
-                    name: m.month?.slice(5),
-                    مبيعات: parseFloat(m.total_revenue || 0),
-                    ربح: parseFloat(m.gross_profit || 0),
-                  }))}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend />
-                    <Bar dataKey="مبيعات" fill={PINK} radius={[4,4,0,0]} />
-                    <Bar dataKey="ربح" fill="#9C27B0" radius={[4,4,0,0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* جدول الملخص الشهري */}
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <Table>
-              <TableHeader className="bg-muted/50">
-                <TableRow>
-                  <TableHead>الشهر</TableHead>
-                  <TableHead className="text-center">عدد الفواتير</TableHead>
-                  <TableHead className="text-center">الكمية</TableHead>
-                  <TableHead className="text-right">المبيعات</TableHead>
-                  <TableHead className="text-right">التكلفة</TableHead>
-                  <TableHead className="text-right">إجمالي الربح</TableHead>
-                  <TableHead className="text-center">الهامش%</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(monthlySales?.monthly || []).length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-10 text-muted-foreground">لا توجد بيانات للسنة المحددة</TableCell></TableRow>
-                ) : (monthlySales?.monthly || []).map((m: any) => {
-                  const margin = parseFloat(m.total_revenue) > 0
-                    ? ((parseFloat(m.gross_profit) / parseFloat(m.total_revenue)) * 100).toFixed(1)
-                    : "0.0";
-                  const MONTH_AR: Record<string, string> = {
-                    "01":"يناير","02":"فبراير","03":"مارس","04":"أبريل",
-                    "05":"مايو","06":"يونيو","07":"يوليو","08":"أغسطس",
-                    "09":"سبتمبر","10":"أكتوبر","11":"نوفمبر","12":"ديسمبر",
-                  };
-                  const mm = m.month?.slice(5);
-                  return (
-                    <TableRow key={m.month} className="hover:bg-pink-50/30">
-                      <TableCell className="font-medium">{MONTH_AR[mm] || mm} {m.month?.slice(0,4)}</TableCell>
-                      <TableCell className="text-center">{m.invoice_count}</TableCell>
-                      <TableCell className="text-center">{m.total_qty}</TableCell>
-                      <TableCell className="text-right text-green-600 font-medium">{fmtOMR(m.total_revenue)}</TableCell>
-                      <TableCell className="text-right text-orange-600">{fmtOMR(m.total_cogs)}</TableCell>
-                      <TableCell className="text-right text-blue-600 font-medium">{fmtOMR(m.gross_profit)}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge className={`text-xs ${parseFloat(margin) >= 30 ? "bg-green-100 text-green-800" : parseFloat(margin) >= 15 ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}>
-                          {margin}%
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* تفصيل حسب الفئة أو المنتج */}
-          {monthlyView === "category" && (
-            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b font-semibold text-sm bg-muted/30">مبيعات أعلى 8 فئات — شهرياً</div>
-              <Table>
-                <TableHeader className="bg-muted/50">
-                  <TableRow>
-                    <TableHead>الشهر</TableHead>
-                    <TableHead>الفئة</TableHead>
-                    <TableHead className="text-center">الكمية</TableHead>
-                    <TableHead className="text-right">المبيعات</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(monthlySales?.by_category || []).length === 0 ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">لا توجد بيانات</TableCell></TableRow>
-                  ) : (monthlySales?.by_category || []).map((row: any, i: number) => {
-                    const MONTH_AR: Record<string, string> = {
-                      "01":"يناير","02":"فبراير","03":"مارس","04":"أبريل",
-                      "05":"مايو","06":"يونيو","07":"يوليو","08":"أغسطس",
-                      "09":"سبتمبر","10":"أكتوبر","11":"نوفمبر","12":"ديسمبر",
-                    };
-                    const mm = row.month?.slice(5);
-                    return (
-                      <TableRow key={i} className="hover:bg-pink-50/30">
-                        <TableCell className="text-sm text-muted-foreground">{MONTH_AR[mm] || mm}</TableCell>
-                        <TableCell className="font-medium">{row.category_name}</TableCell>
-                        <TableCell className="text-center">{row.total_qty}</TableCell>
-                        <TableCell className="text-right text-green-600 font-medium">{fmtOMR(row.total_revenue)}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-
-          {monthlyView === "product" && (
-            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b font-semibold text-sm bg-muted/30">مبيعات أعلى 15 منتجاً — شهرياً</div>
-              <Table>
-                <TableHeader className="bg-muted/50">
-                  <TableRow>
-                    <TableHead>الشهر</TableHead>
-                    <TableHead>المنتج</TableHead>
-                    <TableHead className="text-center">الكمية</TableHead>
-                    <TableHead className="text-right">المبيعات</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(monthlySales?.by_product || []).length === 0 ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">لا توجد بيانات</TableCell></TableRow>
-                  ) : (monthlySales?.by_product || []).map((row: any, i: number) => {
-                    const MONTH_AR: Record<string, string> = {
-                      "01":"يناير","02":"فبراير","03":"مارس","04":"أبريل",
-                      "05":"مايو","06":"يونيو","07":"يوليو","08":"أغسطس",
-                      "09":"سبتمبر","10":"أكتوبر","11":"نوفمبر","12":"ديسمبر",
-                    };
-                    const mm = row.month?.slice(5);
-                    return (
-                      <TableRow key={i} className="hover:bg-pink-50/30">
-                        <TableCell className="text-sm text-muted-foreground">{MONTH_AR[mm] || mm}</TableCell>
-                        <TableCell className="font-medium">{row.product_name}</TableCell>
-                        <TableCell className="text-center">{row.total_qty}</TableCell>
-                        <TableCell className="text-right text-green-600 font-medium">{fmtOMR(row.total_revenue)}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
           )}
         </TabsContent>
 
@@ -1380,19 +989,6 @@ export default function Reports() {
 }
 
 // ─── helper sub-components ────────────────────────────────────────────────────
-function IncomeRow({ label, value, indent = 0, bold = false, valueClass = "" }:
-  { label: string; value: any; indent?: number; bold?: boolean; valueClass?: string }) {
-  return (
-    <div className={`flex justify-between items-center px-5 py-2.5 ${bold ? "font-semibold bg-muted/20" : ""}`}
-         style={{ paddingRight: `${20 + indent * 16}px` }}>
-      <span className="text-sm">{label}</span>
-      <span className={`text-sm font-mono ${valueClass || (bold ? "font-bold" : "")}`}>
-        {typeof value === "number" ? value.toFixed(3) : value || "0.000"} ر.ع
-      </span>
-    </div>
-  );
-}
-
 function BranchRow({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div className="flex justify-between">
@@ -1432,15 +1028,6 @@ function BsRow({ code, name, balance, level = 1, valueClass = "" }:
   );
 }
 
-function SummaryBox({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div className="bg-muted/30 rounded-xl p-3 text-center">
-      <p className="text-xs text-muted-foreground mb-1">{label}</p>
-      <p className={`font-bold text-lg ${color}`}>{value} ر.ع</p>
-    </div>
-  );
-}
-
 function EmptyState({ icon: Icon, label }: { icon: any; label: string }) {
   return (
     <div className="text-center py-16 text-muted-foreground">
@@ -1448,14 +1035,4 @@ function EmptyState({ icon: Icon, label }: { icon: any; label: string }) {
       <p className="text-sm">{label}</p>
     </div>
   );
-}
-
-function PayMethodBadge({ method }: { method: string }) {
-  const map: Record<string, { label: string; cls: string }> = {
-    cash:          { label: "نقدي",         cls: "bg-green-100 text-green-800" },
-    card:          { label: "بطاقة",         cls: "bg-purple-100 text-purple-800" },
-    bank_transfer: { label: "تحويل بنكي",    cls: "bg-indigo-100 text-indigo-800" },
-  };
-  const m = map[method] || { label: method, cls: "bg-gray-100 text-gray-800" };
-  return <Badge className={`text-xs ${m.cls}`}>{m.label}</Badge>;
 }
