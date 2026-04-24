@@ -21,17 +21,21 @@ interface LabelItem {
   barcode: string;
   price: string;
   qty: number;
+  model?: string;
+  color?: string;
+  size?: string;
 }
 
 // ─── label size keys ──────────────────────────────────────────────────────────
+// 58mm × 40mm thermal label @ 96dpi ≈ 219px × 151px
 const SIZE_DIMS = {
-  small:  { w: 150, h: 90,  font: 9,  bh: 40 },
-  medium: { w: 220, h: 140, font: 11, bh: 60 },
-  large:  { w: 340, h: 190, font: 13, bh: 80 },
+  small:  { w: 164, h: 113, font: 7,  bh: 32, mm_w: 43, mm_h: 30 },
+  medium: { w: 219, h: 151, font: 8,  bh: 40, mm_w: 58, mm_h: 40 },
+  large:  { w: 302, h: 208, font: 10, bh: 55, mm_w: 80, mm_h: 55 },
 } as const;
 type SizeKey = keyof typeof SIZE_DIMS;
 
-// ─── single barcode SVG ───────────────────────────────────────────────────────
+// ─── single barcode SVG (bars only, no built-in number) ──────────────────────
 function BarcodeImg({ barcode, height, width }: { barcode: string; height: number; width: number }) {
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -39,17 +43,15 @@ function BarcodeImg({ barcode, height, width }: { barcode: string; height: numbe
     if (!svgRef.current || !barcode) return;
     try {
       JsBarcode(svgRef.current, barcode, {
-        format:      "CODE128",
-        width:       1.2,
+        format:       "CODE128",
+        width:        1.2,
         height,
-        displayValue: true,
-        fontSize:    9,
-        margin:      2,
-        lineColor:   "#000",
-        background:  "#fff",
+        displayValue: false,
+        margin:       2,
+        lineColor:    "#000",
+        background:   "#fff",
       });
     } catch {
-      // invalid barcode — render placeholder
       if (svgRef.current) svgRef.current.innerHTML = "";
     }
   }, [barcode, height, width]);
@@ -57,21 +59,58 @@ function BarcodeImg({ barcode, height, width }: { barcode: string; height: numbe
   return <svg ref={svgRef} style={{ width: "100%", maxWidth: width }} />;
 }
 
-// ─── label preview card ───────────────────────────────────────────────────────
+// ─── label preview card — 58×40mm thermal style ───────────────────────────────
 function LabelCard({ item, size }: { item: LabelItem; size: typeof SIZE_DIMS[SizeKey] }) {
+  const f = size.font;
+  const price = parseFloat(item.price).toFixed(3);
+
   return (
     <div
-      className="border border-gray-300 rounded bg-white flex flex-col items-center justify-between overflow-hidden shrink-0"
-      style={{ width: size.w, height: size.h, padding: 4 }}
+      className="bg-white overflow-hidden shrink-0 flex flex-col items-center"
+      style={{ width: size.w, height: size.h, padding: "3px 4px", fontFamily: "'Segoe UI', Arial, sans-serif", color: "#000" }}
     >
-      <p className="text-center leading-tight font-semibold truncate w-full" style={{ fontSize: size.font }}>
-        {item.name}
+      {/* Logo */}
+      <img
+        src="/logo.png"
+        alt="logo"
+        style={{ height: size.h * 0.18, objectFit: "contain", filter: "grayscale(100%) brightness(0)", marginBottom: 1 }}
+      />
+
+      {/* Brand name */}
+      <p style={{ fontSize: f + 1, fontWeight: 800, letterSpacing: "0.12em", lineHeight: 1.1, textAlign: "center" }}>
+        LAMST ANOTHA
       </p>
-      <div className="w-full flex justify-center">
-        <BarcodeImg barcode={item.barcode} height={size.bh} width={size.w - 8} />
+
+      {/* Tagline */}
+      <p style={{ fontSize: f - 1, fontWeight: 300, letterSpacing: "0.08em", lineHeight: 1.1, textAlign: "center", marginBottom: 2 }}>
+        TOUCH OF FEMININITY
+      </p>
+
+      {/* Divider */}
+      <div style={{ width: "85%", height: 0.5, background: "#000", marginBottom: 2 }} />
+
+      {/* Product info */}
+      <div style={{ fontSize: f, fontWeight: 500, textAlign: "center", lineHeight: 1.45 }}>
+        {item.model && <p>Shoe Model: {item.model}</p>}
+        {item.color && <p>Color: {item.color}</p>}
+        {item.size  && <p>Size: {item.size}</p>}
+        {!item.model && !item.color && !item.size && (
+          <p style={{ maxWidth: size.w - 8 }} className="truncate">{item.name}</p>
+        )}
       </div>
-      <p className="font-bold" style={{ fontSize: size.font + 1 }}>
-        {parseFloat(item.price).toFixed(3)} ر.ع
+
+      {/* Barcode */}
+      <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", marginTop: 2 }}>
+        <BarcodeImg barcode={item.barcode} height={size.bh} width={size.w - 8} />
+        <p style={{ fontSize: f - 1, letterSpacing: "0.05em", marginTop: -1 }}>{item.barcode}</p>
+      </div>
+
+      {/* Divider */}
+      <div style={{ width: "85%", height: 0.5, background: "#000", margin: "2px 0" }} />
+
+      {/* Price */}
+      <p style={{ fontSize: f + 4, fontWeight: 800, letterSpacing: "0.04em", lineHeight: 1 }}>
+        {price} <span style={{ fontSize: f + 1 }}>R.O</span>
       </p>
     </div>
   );
@@ -118,6 +157,9 @@ export default function BarcodeLabels() {
         barcode:   p.barcode,
         price:     p.price ?? p.priceDefault ?? "0",
         qty:       1,
+        model:     p.modelNumber || p.sku || "",
+        color:     p.color || "",
+        size:      p.size || "",
       }];
     });
     setSearch("");
@@ -138,28 +180,42 @@ export default function BarcodeLabels() {
   // ── print ──────────────────────────────────────────────────────────────────
   const handlePrint = () => {
     const sz = SIZES[size];
+    const logoUrl = `${window.location.origin}/logo.png`;
 
-    // Build label HTML for each item × qty
     const labelsHtml = items.flatMap(item =>
       Array(item.qty).fill(null).map(() => {
-        // Generate barcode SVG as string
         const div = document.createElement("div");
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         div.appendChild(svg);
         try {
           JsBarcode(svg, item.barcode, {
-            format: "CODE128", width: 1.5, height: sz.bh,
-            displayValue: true, fontSize: 9, margin: 2,
+            format: "CODE128", width: 1.4, height: sz.bh,
+            displayValue: false, margin: 2,
             lineColor: "#000", background: "#fff",
           });
         } catch { /* skip */ }
         const svgStr = svg.outerHTML;
+        const price  = parseFloat(item.price).toFixed(3);
+
+        const productInfo = (item.model || item.color || item.size)
+          ? `${item.model ? `<p>Shoe Model: ${item.model}</p>` : ""}
+             ${item.color ? `<p>Color: ${item.color}</p>` : ""}
+             ${item.size  ? `<p>Size: ${item.size}</p>`  : ""}`
+          : `<p>${item.name}</p>`;
 
         return `
           <div class="label">
-            <div class="lname">${item.name}</div>
-            ${svgStr}
-            <div class="lprice">${parseFloat(item.price).toFixed(3)} ${t("barcode_labels.currency")}</div>
+            <img src="${logoUrl}" class="logo" alt="logo" />
+            <p class="brand">LAMST ANOTHA</p>
+            <p class="tagline">TOUCH OF FEMININITY</p>
+            <div class="divider"></div>
+            <div class="info">${productInfo}</div>
+            <div class="barcode-wrap">
+              ${svgStr}
+              <p class="barcode-num">${item.barcode}</p>
+            </div>
+            <div class="divider"></div>
+            <p class="price">${price} <span class="ro">R.O</span></p>
           </div>`;
       })
     ).join("");
@@ -167,28 +223,38 @@ export default function BarcodeLabels() {
     const win = window.open("", "_blank", "width=900,height=700");
     if (!win) return;
     win.document.write(`<!DOCTYPE html>
-<html dir="${lang === "ar" ? "rtl" : "ltr"}" lang="${lang}">
+<html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <title>${t("barcode_labels.print_win_title")}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; background:#fff; }
-  .grid { display:flex; flex-wrap:wrap; gap:4mm; padding:6mm; justify-content:flex-start; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background:#fff; color:#000; }
+  .grid { display:flex; flex-wrap:wrap; gap:3mm; padding:5mm; justify-content:flex-start; }
   .label {
-    width: ${sz.w * 0.265}mm;
-    height: ${sz.h * 0.265}mm;
-    border: 0.5px solid #ccc;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: space-between;
-    padding: 1mm; overflow: hidden;
+    width: ${sz.mm_w}mm;
+    height: ${sz.mm_h}mm;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.2mm 1.5mm;
+    overflow: hidden;
     page-break-inside: avoid;
   }
-  .lname { font-size: ${sz.font}px; font-weight:600; text-align:center; width:100%; word-break:break-word; line-height:1.2; }
-  .lprice { font-size: ${sz.font + 2}px; font-weight:700; }
-  .label svg { width:100%; max-height:${sz.bh * 0.265}mm; }
+  .logo { height: ${sz.mm_h * 0.18}mm; object-fit:contain; filter: grayscale(100%) brightness(0); }
+  .brand { font-size: ${sz.font + 1}pt; font-weight: 800; letter-spacing: 0.12em; text-align:center; line-height:1.1; }
+  .tagline { font-size: ${sz.font - 1}pt; font-weight: 300; letter-spacing: 0.08em; text-align:center; line-height:1.1; }
+  .divider { width:85%; height:0.3pt; background:#000; }
+  .info { font-size: ${sz.font}pt; font-weight:500; text-align:center; line-height:1.5; }
+  .barcode-wrap { display:flex; flex-direction:column; align-items:center; width:100%; }
+  .barcode-wrap svg { width:100%; max-height:${sz.mm_h * 0.32}mm; }
+  .barcode-num { font-size: ${sz.font - 1}pt; letter-spacing:0.04em; margin-top:-0.5mm; }
+  .price { font-size: ${sz.font + 5}pt; font-weight:800; letter-spacing:0.03em; line-height:1; }
+  .ro { font-size: ${sz.font + 2}pt; font-weight:600; }
   @media print {
-    @page { margin: 5mm; size: A4; }
+    @page { margin: 4mm; size: A4; }
     body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   }
   .no-print { text-align:center; padding:10px; background:#f5f5f5; }
@@ -197,16 +263,16 @@ export default function BarcodeLabels() {
 </head>
 <body>
 <div class="no-print">
-  <button onclick="window.print()" style="padding:8px 24px;background:#e91e63;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;margin:4px;">
+  <button onclick="window.print()" style="padding:8px 24px;background:#222;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;margin:4px;">
     🖨️ ${t("barcode_labels.print_btn")}
   </button>
   <button onclick="window.close()" style="padding:8px 24px;background:#666;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;margin:4px;">
     ✕ ${t("barcode_labels.print_close")}
   </button>
-  <span style="margin-right:12px;font-size:13px;color:#555;">${totalLabels} ${t("barcode_labels.print_info_stickers")} ${SIZES[size].label}</span>
+  <span style="margin-right:12px;font-size:13px;color:#555;">${totalLabels} ${t("barcode_labels.print_info_stickers")} — ${sz.mm_w}×${sz.mm_h}mm</span>
 </div>
 <div class="grid">${labelsHtml}</div>
-<script>setTimeout(()=>window.print(),400);</script>
+<script>setTimeout(()=>window.print(),500);</script>
 </body></html>`);
     win.document.close();
   };
