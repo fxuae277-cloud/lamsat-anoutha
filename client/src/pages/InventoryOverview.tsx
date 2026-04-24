@@ -50,6 +50,36 @@ function catBadgeClass(name?: string) {
 }
 
 // ── ألوان الرسم البياني ──────────────────────────────────────────────────
+// ── مكوّن صورة المنتج مع fallback "No Image" ─────────────────────────────
+function ProductImage({ src, alt }: { src?: string | null; alt?: string }) {
+  const [failed, setFailed] = useState(false);
+
+  if (!src || failed) {
+    return (
+      <div
+        className="w-12 h-12 rounded-lg bg-gray-100 border border-gray-200 flex flex-col items-center justify-center gap-0.5 shrink-0"
+        title="No image available"
+      >
+        <svg className="w-5 h-5 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round"
+            d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 19.5h16.5A1.5 1.5 0 0021.75 18V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z"
+          />
+        </svg>
+        <span className="text-[9px] text-gray-400 font-medium leading-none">No Image</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt ?? ""}
+      className="w-12 h-12 rounded-lg object-cover border border-gray-200 shrink-0"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 const PIE_COLORS = [
   "#3b82f6", "#f59e0b", "#10b981", "#8b5cf6", "#ef4444", "#06b6d4",
   "#ec4899", "#14b8a6", "#f97316", "#6366f1",
@@ -810,19 +840,9 @@ export default function InventoryOverview() {
                               {idx + 1}
                             </TableCell>
 
-                            {/* صورة / أيقونة */}
+                            {/* صورة / placeholder */}
                             <TableCell>
-                              {row.image ? (
-                                <img
-                                  src={row.image}
-                                  alt={row.product_name}
-                                  className="w-12 h-12 rounded-lg object-cover border"
-                                />
-                              ) : (
-                                <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center text-2xl border">
-                                  {catIcon(catName)}
-                                </div>
-                              )}
+                              <ProductImage src={row.image} alt={row.product_name} />
                             </TableCell>
 
                             {/* اسم المنتج */}
