@@ -150,7 +150,7 @@ export default function InventoryOverview() {
       isCentral: boolean; branchId: number | null; branchName: string;
     }> = {};
     for (const row of stock) {
-      const key = row.full_location_name || row.branch_name || "غير محدد";
+      const key = row.branch_name || row.full_location_name || "غير محدد";
       if (!map[key]) map[key] = {
         name:       key,
         qty:        0,
@@ -435,37 +435,11 @@ export default function InventoryOverview() {
 
           {/* توزيع المخزون حسب الموقع */}
           <Card>
-            <CardHeader className="pb-2 pt-4 px-5">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Warehouse className="w-4 h-4 text-blue-600" />
-                  توزيع المخزون حسب الموقع
-                </CardTitle>
-                {/* فلاتر سريعة */}
-                <div className="flex gap-1">
-                  {(["all", "branch", "warehouse"] as const).map(type => {
-                    const labels = { all: "الكل", branch: "الفروع", warehouse: "المستودع" };
-                    const active = filterLocType === type;
-                    return (
-                      <button
-                        key={type}
-                        onClick={() => setFilterLocType(type)}
-                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
-                          active
-                            ? type === "branch"
-                              ? "bg-blue-600 text-white border-blue-600"
-                              : type === "warehouse"
-                              ? "bg-gray-600 text-white border-gray-600"
-                              : "bg-primary text-white border-primary"
-                            : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
-                        }`}
-                      >
-                        {labels[type]}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+            <CardHeader className="pb-3 pt-4 px-5">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Warehouse className="w-4 h-4 text-blue-600" />
+                توزيع المخزون حسب الموقع
+              </CardTitle>
             </CardHeader>
             <CardContent className="px-5 pb-5">
               {filteredLocationData.length === 0 ? (
@@ -485,16 +459,6 @@ export default function InventoryOverview() {
                               style={{ background: color }}
                             />
                             <span className="truncate">{loc.name}</span>
-                            {/* شارة النوع */}
-                            {loc.isCentral ? (
-                              <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
-                                مستودع
-                              </span>
-                            ) : (
-                              <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                                فرع
-                              </span>
-                            )}
                           </span>
                           <span className="font-bold text-primary shrink-0">{fmtOMR(loc.value)}</span>
                         </div>
@@ -890,20 +854,9 @@ export default function InventoryOverview() {
 
                             {/* الفرع/الموقع */}
                             <TableCell className="text-sm">
-                              <div className="flex items-center gap-1.5">
-                                <span className="truncate max-w-[140px]" title={row.full_location_name || row.branch_name || "—"}>
-                                  {row.full_location_name || row.branch_name || "—"}
-                                </span>
-                                {!row.branch_id ? (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200 shrink-0">
-                                    مستودع
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
-                                    فرع
-                                  </span>
-                                )}
-                              </div>
+                              <span className="truncate max-w-[140px] block" title={row.branch_name || row.full_location_name || "—"}>
+                                {row.branch_name || row.full_location_name || "—"}
+                              </span>
                             </TableCell>
 
                             {/* الكمية */}
