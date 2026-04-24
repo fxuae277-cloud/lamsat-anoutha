@@ -15,8 +15,9 @@ import { createAutoJournal } from "../autoJournal";
 
 export interface OpeningStockItem {
   productId: number;
-  quantity: number;   // units (positive)
-  unitCost: number;   // cost per unit in branch currency
+  variantId?: number | null;  // null = simple product (no variant)
+  quantity: number;           // units (positive)
+  unitCost: number;           // cost per unit in branch currency
 }
 
 export interface OpeningStockEntry {
@@ -38,8 +39,11 @@ export interface OpeningStockItemRow {
   id: number;
   entryId: number;
   productId: number;
+  variantId: number | null;
   productName: string;
   barcode: string | null;
+  color: string | null;
+  size: string | null;
   quantity: number;
   unitCost: number;
   totalCost: number;
@@ -62,13 +66,14 @@ function validateItems(items: OpeningStockItem[]): void {
       throw new Error(`تكلفة الوحدة يجب أن تكون صفراً أو أكثر للمنتج ${item.productId}`);
     }
   }
-  // Duplicate product check
-  const seen = new Set<number>();
+  // Duplicate check per (product + variant) combination
+  const seen = new Set<string>();
   for (const item of items) {
-    if (seen.has(item.productId)) {
-      throw new Error(`المنتج ${item.productId} مكرر — ادمج الكميات في سطر واحد`);
+    const key = `${item.productId}:${item.variantId ?? "null"}`;
+    if (seen.has(key)) {
+      throw new Error(`المنتج ${item.productId} (variant: ${item.variantId ?? "none"}) مكرر — ادمج الكميات في سطر واحد`);
     }
-    seen.add(item.productId);
+    seen.add(key);
   }
 }
 
@@ -163,9 +168,9 @@ export async function initializeOpeningStock(
     for (const item of items) {
       await client.query(
         `INSERT INTO opening_stock_items
-           (entry_id, product_id, quantity, unit_cost)
-         VALUES ($1, $2, $3, $4)`,
-        [entryId, item.productId, item.quantity, item.unitCost]
+           (entry_id, product_id, variant_id, quantity, unit_cost)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [entryId, item.productId, item.variantId ?? null, item.quantity, item.unitCost]
       );
     }
 
@@ -216,8 +221,7 @@ export async function commitOpeningStock(
 
     // ── Load items ───────────────────────────────────────────────────────────
     const itemsRes = await client.query(
-      `SELECT osi.*, p.name AS product_name, p.avg_cost, p.stock_qty,
-              p.barcode
+      `SELECT osi.*, p.name AS product_name, p.avg_cost, p.stock_qty, p.barcode
        FROM opening_stock_items osi
        JOIN products p ON p.id = osi.product_id
        WHERE osi.entry_id = $1`,
@@ -229,54 +233,46 @@ export async function commitOpeningStock(
     let totalValue = 0;
 
     for (const item of itemsRes.rows) {
-      const qty = parseFloat(item.quantity);
-      const cost = parseFloat(item.unit_cost);
-      const lineCost = qty * cost;
-      totalValue += lineCost;
+      const qty     = parseFloat(item.quantity);
+      const cost    = parseFloat(item.unit_cost);
+      totalValue   += qty * cost;
+      const variantId: number | null = item.variant_id ?? null;
 
-      // ── Check if product has variants ─────────────────────────────────────
-      const variantCheck = await client.query(
-        `SELECT id FROM product_variants WHERE product_id = $1 LIMIT 1`,
-        [item.product_id]
-      );
-      const hasVariants = variantCheck.rows.length > 0;
-
-      if (!hasVariants) {
-        // UPSERT into location_inventory
-        const existing = await client.query(
-          `SELECT qty_on_hand FROM location_inventory
-           WHERE location_id = $1 AND product_id = $2`,
-          [locationId, item.product_id]
+      if (variantId) {
+        // ── Variant product → inventory_balances ──────────────────────────
+        await client.query(
+          `INSERT INTO inventory_balances (location_id, variant_id, qty_on_hand, qty_reserved)
+           VALUES ($1, $2, $3, 0)
+           ON CONFLICT (location_id, variant_id)
+           DO UPDATE SET qty_on_hand = inventory_balances.qty_on_hand + $3`,
+          [locationId, variantId, qty]
         );
-        const currentQty = parseFloat(existing.rows[0]?.qty_on_hand ?? "0");
-        const newQty = currentQty + qty;
-
+        // Update variant last_purchase_price
+        await client.query(
+          `UPDATE product_variants SET last_purchase_price = $1 WHERE id = $2`,
+          [cost.toFixed(3), variantId]
+        );
+      } else {
+        // ── Simple product → location_inventory ──────────────────────────
         await client.query(
           `INSERT INTO location_inventory (location_id, product_id, qty_on_hand, reorder_level, updated_at)
            VALUES ($1, $2, $3, 5, NOW())
            ON CONFLICT (location_id, product_id)
-           DO UPDATE SET qty_on_hand = $3, updated_at = NOW()`,
-          [locationId, item.product_id, newQty]
+           DO UPDATE SET qty_on_hand = location_inventory.qty_on_hand + $3, updated_at = NOW()`,
+          [locationId, item.product_id, qty]
         );
-
         // Update product: weighted average cost + stock_qty
-        const currentAvgCost = parseFloat(item.avg_cost ?? "0");
-        const currentStockQty = parseFloat(item.stock_qty ?? "0");
-        const newStock = currentStockQty + qty;
-        const newAvgCost =
-          newStock > 0
-            ? (currentStockQty * currentAvgCost + qty * cost) / newStock
-            : cost;
-
+        const currentAvgCost  = parseFloat(item.avg_cost   ?? "0");
+        const currentStockQty = parseFloat(item.stock_qty   ?? "0");
+        const newStock    = currentStockQty + qty;
+        const newAvgCost  = newStock > 0
+          ? (currentStockQty * currentAvgCost + qty * cost) / newStock
+          : cost;
         await client.query(
-          `UPDATE products
-           SET avg_cost = $1, stock_qty = $2, cost_default = $3
-           WHERE id = $4`,
+          `UPDATE products SET avg_cost=$1, stock_qty=$2, cost_default=$3 WHERE id=$4`,
           [newAvgCost.toFixed(3), Math.round(newStock), cost.toFixed(3), item.product_id]
         );
       }
-      // Note: products with variants require per-variant opening stock
-      // (variant_id column can be added to opening_stock_items in a future iteration)
     }
 
     // ── Mark entry as committed ──────────────────────────────────────────────
@@ -366,29 +362,31 @@ export async function resetOpeningStock(
     const locationId = await getBranchDefaultLocationId(client, branchId);
 
     for (const item of itemsRes.rows) {
-      const qty = parseFloat(item.quantity);
+      const qty: number       = parseFloat(item.quantity);
+      const variantId: number | null = item.variant_id ?? null;
 
-      const variantCheck = await client.query(
-        `SELECT id FROM product_variants WHERE product_id = $1 LIMIT 1`,
-        [item.product_id]
-      );
-      if (variantCheck.rows.length > 0) continue; // skip variant products
-
-      // Reduce location_inventory
-      await client.query(
-        `UPDATE location_inventory
-         SET qty_on_hand = GREATEST(0, qty_on_hand - $1), updated_at = NOW()
-         WHERE location_id = $2 AND product_id = $3`,
-        [qty, locationId, item.product_id]
-      );
-
-      // Reduce product stock_qty
-      const currentStock = parseFloat(item.stock_qty ?? "0");
-      const newStock = Math.max(0, currentStock - qty);
-      await client.query(
-        `UPDATE products SET stock_qty = $1 WHERE id = $2`,
-        [Math.round(newStock), item.product_id]
-      );
+      if (variantId) {
+        // Reverse inventory_balances for variant
+        await client.query(
+          `UPDATE inventory_balances
+           SET qty_on_hand = GREATEST(0, qty_on_hand - $1)
+           WHERE location_id = $2 AND variant_id = $3`,
+          [qty, locationId, variantId]
+        );
+      } else {
+        // Reduce location_inventory for simple product
+        await client.query(
+          `UPDATE location_inventory
+           SET qty_on_hand = GREATEST(0, qty_on_hand - $1), updated_at = NOW()
+           WHERE location_id = $2 AND product_id = $3`,
+          [qty, locationId, item.product_id]
+        );
+        const currentStock = parseFloat(item.stock_qty ?? "0");
+        await client.query(
+          `UPDATE products SET stock_qty = $1 WHERE id = $2`,
+          [Math.round(Math.max(0, currentStock - qty)), item.product_id]
+        );
+      }
     }
 
     // Mark as reset
@@ -436,23 +434,30 @@ export async function getOpeningStock(branchId: number): Promise<OpeningStockEnt
   const e = entryRes.rows[0];
 
   const itemsRes = await pool.query(
-    `SELECT osi.*, p.name AS product_name, p.barcode
+    `SELECT osi.*,
+            p.name AS product_name,
+            COALESCE(pv.barcode, p.barcode) AS barcode,
+            pv.color, pv.size
      FROM opening_stock_items osi
      JOIN products p ON p.id = osi.product_id
+     LEFT JOIN product_variants pv ON pv.id = osi.variant_id
      WHERE osi.entry_id = $1
-     ORDER BY p.name`,
+     ORDER BY p.name, pv.color, pv.size`,
     [e.id]
   );
 
   const items: OpeningStockItemRow[] = itemsRes.rows.map((r: any) => ({
-    id: r.id,
-    entryId: r.entry_id,
-    productId: r.product_id,
+    id:          r.id,
+    entryId:     r.entry_id,
+    productId:   r.product_id,
+    variantId:   r.variant_id ?? null,
     productName: r.product_name,
-    barcode: r.barcode,
-    quantity: parseFloat(r.quantity),
-    unitCost: parseFloat(r.unit_cost),
-    totalCost: parseFloat(r.quantity) * parseFloat(r.unit_cost),
+    barcode:     r.barcode ?? null,
+    color:       r.color   ?? null,
+    size:        r.size    ?? null,
+    quantity:    parseFloat(r.quantity),
+    unitCost:    parseFloat(r.unit_cost),
+    totalCost:   parseFloat(r.quantity) * parseFloat(r.unit_cost),
   }));
 
   const totalValue = items.reduce((s, i) => s + i.totalCost, 0);

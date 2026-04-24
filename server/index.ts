@@ -371,6 +371,18 @@ app.get("/api/health", (_req, res) => {
     console.error("[startup] migration 0023 failed:", err);
   }
 
+  // Migration 0024 — add variant_id to opening_stock_items
+  try {
+    await pool.query(`
+      ALTER TABLE opening_stock_items
+        ADD COLUMN IF NOT EXISTS variant_id INTEGER REFERENCES product_variants(id);
+      CREATE INDEX IF NOT EXISTS idx_osi_variant ON opening_stock_items(variant_id);
+    `);
+    console.log("[startup] migration 0024: opening_stock_items.variant_id ready");
+  } catch (err) {
+    console.error("[startup] migration 0024 failed:", err);
+  }
+
   // ضمان أن حسابات المالك دائماً نشطة (لا يمكن تعطيلها)
   try {
     await pool.query(`UPDATE users SET is_active = true WHERE role = 'owner'`);
