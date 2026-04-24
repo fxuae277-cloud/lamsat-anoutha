@@ -4223,11 +4223,26 @@ export async function registerRoutes(
 
   app.post("/api/stocktakes", requireAuth, requirePermission("inventory.count"), async (req, res) => {
     try {
-      const { branchId, locationId, note } = req.body;
-      if (!branchId || !locationId) return res.status(400).json({ message: "الفرع والموقع مطلوبان" });
+      const { branchId, note } = req.body;
+      if (!branchId) return res.status(400).json({ message: "الفرع مطلوب" });
+
+      // Auto-resolve branch default location
+      let locRes = await pool.query(
+        `SELECT id FROM locations WHERE branch_id = $1 AND is_branch_default = true AND active = true ORDER BY id LIMIT 1`,
+        [branchId]
+      );
+      if (locRes.rows.length === 0) {
+        locRes = await pool.query(
+          `SELECT id FROM locations WHERE branch_id = $1 AND active = true ORDER BY id LIMIT 1`,
+          [branchId]
+        );
+      }
+      if (locRes.rows.length === 0) return res.status(400).json({ message: "لا يوجد موقع نشط للفرع المحدد" });
+      const locationId = locRes.rows[0].id;
+
       const st = await storage.createStocktake({
         branchId: Number(branchId),
-        locationId: Number(locationId),
+        locationId,
         status: "draft",
         note: note || null,
         createdBy: req.session.userId!,
@@ -4282,10 +4297,25 @@ export async function registerRoutes(
 
   app.post("/api/inventory-adjustments", requireAuth, requirePermission("inventory.count"), async (req, res) => {
     try {
-      const { branchId, locationId, productId, qtyChange, reason } = req.body;
-      if (!branchId || !locationId || !productId || qtyChange === undefined || !reason) {
-        return res.status(400).json({ message: "جميع الحقول مطلوبة" });
+      const { branchId, productId, qtyChange, reason } = req.body;
+      if (!branchId || !productId || qtyChange === undefined || !reason) {
+        return res.status(400).json({ message: "الفرع والمنتج والكمية والسبب مطلوبة" });
       }
+
+      // Auto-resolve branch default location
+      let locRes = await pool.query(
+        `SELECT id FROM locations WHERE branch_id = $1 AND is_branch_default = true AND active = true ORDER BY id LIMIT 1`,
+        [branchId]
+      );
+      if (locRes.rows.length === 0) {
+        locRes = await pool.query(
+          `SELECT id FROM locations WHERE branch_id = $1 AND active = true ORDER BY id LIMIT 1`,
+          [branchId]
+        );
+      }
+      if (locRes.rows.length === 0) return res.status(400).json({ message: "لا يوجد موقع نشط للفرع المحدد" });
+      const locationId = locRes.rows[0].id;
+
       const invRow = await pool.query(
         `SELECT qty_on_hand FROM location_inventory WHERE location_id = $1 AND product_id = $2`,
         [locationId, productId]
@@ -4303,7 +4333,7 @@ export async function registerRoutes(
 
       const adj = await storage.createInventoryAdjustment({
         branchId: Number(branchId),
-        locationId: Number(locationId),
+        locationId,
         productId: Number(productId),
         type: Number(qtyChange) > 0 ? "increase" : "decrease",
         qtyBefore,

@@ -1,5 +1,5 @@
-﻿import { useState } from "react";
-import { Plus, ClipboardCheck, Search, Package, ArrowUpDown, CheckCircle2, Eye, AlertTriangle, TrendingUp, TrendingDown, Minus, BarChart3, Building2, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { Plus, ClipboardCheck, Search, Package, ArrowUpDown, CheckCircle2, Eye, AlertTriangle, TrendingUp, TrendingDown, BarChart3, RefreshCw } from "lucide-react";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
 import { fmtDate } from "@/lib/formatters";
 import { Button } from "@/components/ui/button";
@@ -20,16 +20,19 @@ function fmt(v: string | number | null | undefined) {
   return parseFloat(String(v || "0")).toFixed(0);
 }
 
+function branchLabel(b: { name: string; address?: string | null }) {
+  if (!b.address) return b.name;
+  const city = b.address.split("،")[0].replace("ولاية", "").trim();
+  if (!city || b.name.includes(city)) return b.name;
+  return `${b.name} - ${city}`;
+}
+
 export default function StockControl() {
   const { toast } = useToast();
   const { t } = useI18n();
 
   const { data: branchesList = [] } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
-    queryFn: getQueryFn({ on401: "throw" }),
-  });
-  const { data: locationsList = [] } = useQuery<any[]>({
-    queryKey: ["/api/locations"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
@@ -57,11 +60,11 @@ export default function StockControl() {
         </TabsList>
 
         <TabsContent value="stocktakes">
-          <StocktakesTab branchesList={branchesList} locationsList={locationsList} />
+          <StocktakesTab branchesList={branchesList} />
         </TabsContent>
 
         <TabsContent value="adjustments">
-          <AdjustmentsTab branchesList={branchesList} locationsList={locationsList} />
+          <AdjustmentsTab branchesList={branchesList} />
         </TabsContent>
 
         <TabsContent value="report">
@@ -72,14 +75,13 @@ export default function StockControl() {
   );
 }
 
-function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; locationsList: any[] }) {
+function StocktakesTab({ branchesList }: { branchesList: any[] }) {
   const { toast } = useToast();
   const { t, lang } = useI18n();
   const [createOpen, setCreateOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedSt, setSelectedSt] = useState<any>(null);
   const [newBranch, setNewBranch] = useState("");
-  const [newLocation, setNewLocation] = useState("");
   const [newNote, setNewNote] = useState("");
   const [itemSearch, setItemSearch] = useState("");
 
@@ -94,21 +96,17 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
     enabled: !!selectedSt,
   });
 
-  const branchLocations = locationsList.filter((l: any) =>
-    newBranch ? l.branchId === Number(newBranch) || l.isCentral : true
-  );
-
   const createMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/stocktakes", {
-        branchId: Number(newBranch), locationId: Number(newLocation), note: newNote,
+        branchId: Number(newBranch), note: newNote,
       });
     },
     onSuccess: () => {
       toast({ title: t("stock_control.stocktake_created_success") });
       queryClient.invalidateQueries({ queryKey: ["/api/stocktakes"] });
       setCreateOpen(false);
-      setNewBranch(""); setNewLocation(""); setNewNote("");
+      setNewBranch(""); setNewNote("");
     },
     onError: (err: Error) => {
       toast({ title: t("common.error"), description: err.message, variant: "destructive" });
@@ -166,22 +164,13 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("stock_control.branch_label")}</label>
-                <Select value={newBranch} onValueChange={v => { setNewBranch(v); setNewLocation(""); }}>
-                  <SelectTrigger data-testid="select-st-branch"><SelectValue placeholder={t("stock_control.select_branch_placeholder")} /></SelectTrigger>
+                <Select value={newBranch} onValueChange={setNewBranch}>
+                  <SelectTrigger data-testid="select-st-branch">
+                    <SelectValue placeholder={t("stock_control.select_branch_placeholder")} />
+                  </SelectTrigger>
                   <SelectContent>
                     {branchesList.map(b => (
-                      <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t("stock_control.location_label")}</label>
-                <Select value={newLocation} onValueChange={setNewLocation}>
-                  <SelectTrigger data-testid="select-st-location"><SelectValue placeholder={t("stock_control.select_location_placeholder")} /></SelectTrigger>
-                  <SelectContent>
-                    {branchLocations.map((l: any) => (
-                      <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>
+                      <SelectItem key={b.id} value={String(b.id)}>{branchLabel(b)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -192,7 +181,11 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !newBranch || !newLocation} data-testid="button-save-stocktake">
+              <Button
+                onClick={() => createMutation.mutate()}
+                disabled={createMutation.isPending || !newBranch}
+                data-testid="button-save-stocktake"
+              >
                 {createMutation.isPending ? t("stock_control.creating_stocktake") : t("stock_control.start_stocktake_btn")}
               </Button>
             </DialogFooter>
@@ -206,7 +199,6 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
             <TableRow>
               <TableHead>{t("stock_control.table_id")}</TableHead>
               <TableHead>{t("stock_control.table_branch")}</TableHead>
-              <TableHead>{t("stock_control.table_location")}</TableHead>
               <TableHead>{t("stock_control.table_status")}</TableHead>
               <TableHead>{t("stock_control.table_items_count")}</TableHead>
               <TableHead>{t("stock_control.table_matched")}</TableHead>
@@ -219,12 +211,11 @@ function StocktakesTab({ branchesList, locationsList }: { branchesList: any[]; l
           </TableHeader>
           <TableBody>
             {stocktakes.length === 0 ? (
-              <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">{t("stock_control.no_stocktakes")}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">{t("stock_control.no_stocktakes")}</TableCell></TableRow>
             ) : stocktakes.map((st: any) => (
               <TableRow key={st.id} data-testid={`row-stocktake-${st.id}`}>
                 <TableCell className="font-mono text-sm">#{st.id}</TableCell>
                 <TableCell className="text-sm">{st.branch_name}</TableCell>
-                <TableCell className="text-sm">{st.location_name}</TableCell>
                 <TableCell>
                   {st.status === "draft" ? (
                     <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs">{t("common.open")}</Badge>
@@ -391,12 +382,11 @@ function StocktakeItemRow({ item, isDraft, onUpdate }: { item: any; isDraft: boo
   );
 }
 
-function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; locationsList: any[] }) {
+function AdjustmentsTab({ branchesList }: { branchesList: any[] }) {
   const { toast } = useToast();
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
   const [addOpen, setAddOpen] = useState(false);
   const [adjBranch, setAdjBranch] = useState("");
-  const [adjLocation, setAdjLocation] = useState("");
   const [adjProduct, setAdjProduct] = useState("");
   const [adjQty, setAdjQty] = useState("");
   const [adjReason, setAdjReason] = useState("");
@@ -413,15 +403,10 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
-  const adjBranchLocations = locationsList.filter((l: any) =>
-    adjBranch ? l.branchId === Number(adjBranch) || l.isCentral : true
-  );
-
   const createMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/inventory-adjustments", {
         branchId: Number(adjBranch),
-        locationId: Number(adjLocation),
         productId: Number(adjProduct),
         qtyChange: Number(adjQty),
         reason: adjReason,
@@ -432,7 +417,7 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
       queryClient.invalidateQueries({ queryKey: [adjUrl] });
       queryClient.invalidateQueries({ queryKey: ["/api/inventory-adjustments"] });
       setAddOpen(false);
-      setAdjBranch(""); setAdjLocation(""); setAdjProduct(""); setAdjQty(""); setAdjReason("");
+      setAdjBranch(""); setAdjProduct(""); setAdjQty(""); setAdjReason("");
     },
     onError: (err: Error) => {
       toast({ title: t("common.error"), description: err.message, variant: "destructive" });
@@ -449,7 +434,7 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
             <SelectContent>
               <SelectItem value="__all__">{t("stock_control.all_branches")}</SelectItem>
               {branchesList.map(b => (
-                <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>
+                <SelectItem key={b.id} value={String(b.id)}>{branchLabel(b)}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -460,38 +445,35 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
                 {t("stock_control.new_adjustment")}
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[450px]">
+            <DialogContent className="sm:max-w-[420px]">
               <DialogHeader>
                 <DialogTitle>{t("stock_control.adjustment_dialog_title")}</DialogTitle>
                 <DialogDescription>{t("stock_control.adjustment_dialog_desc")}</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">{t("stock_control.branch_field")}</label>
-                    <Select value={adjBranch} onValueChange={v => { setAdjBranch(v); setAdjLocation(""); }}>
-                      <SelectTrigger data-testid="select-adj-branch"><SelectValue placeholder={t("stock_control.select_placeholder")} /></SelectTrigger>
-                      <SelectContent>
-                        {branchesList.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">{t("stock_control.location_field")}</label>
-                    <Select value={adjLocation} onValueChange={setAdjLocation}>
-                      <SelectTrigger data-testid="select-adj-location"><SelectValue placeholder={t("stock_control.select_placeholder")} /></SelectTrigger>
-                      <SelectContent>
-                        {adjBranchLocations.map((l: any) => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("stock_control.branch_field")}</label>
+                  <Select value={adjBranch} onValueChange={setAdjBranch}>
+                    <SelectTrigger data-testid="select-adj-branch">
+                      <SelectValue placeholder={t("stock_control.select_placeholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {branchesList.map(b => (
+                        <SelectItem key={b.id} value={String(b.id)}>{branchLabel(b)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">{t("stock_control.product_field")}</label>
                   <Select value={adjProduct} onValueChange={setAdjProduct}>
-                    <SelectTrigger data-testid="select-adj-product"><SelectValue placeholder={t("stock_control.select_product_placeholder")} /></SelectTrigger>
+                    <SelectTrigger data-testid="select-adj-product">
+                      <SelectValue placeholder={t("stock_control.select_product_placeholder")} />
+                    </SelectTrigger>
                     <SelectContent>
-                      {products.map((p: any) => <SelectItem key={p.id} value={String(p.id)}>{p.name} {p.barcode ? `(${p.barcode})` : ""}</SelectItem>)}
+                      {products.map((p: any) => (
+                        <SelectItem key={p.id} value={String(p.id)}>{p.name} {p.barcode ? `(${p.barcode})` : ""}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -507,7 +489,11 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
                 </div>
               </div>
               <DialogFooter>
-                <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !adjBranch || !adjLocation || !adjProduct || !adjQty || !adjReason} data-testid="button-save-adjustment">
+                <Button
+                  onClick={() => createMutation.mutate()}
+                  disabled={createMutation.isPending || !adjBranch || !adjProduct || !adjQty || !adjReason}
+                  data-testid="button-save-adjustment"
+                >
                   {createMutation.isPending ? t("stock_control.saving_adjustment") : t("stock_control.save_adjustment_btn")}
                 </Button>
               </DialogFooter>
@@ -523,7 +509,6 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
               <TableHead>{t("stock_control.table_id")}</TableHead>
               <TableHead>{t("stock_control.table_date")}</TableHead>
               <TableHead>{t("stock_control.table_branch")}</TableHead>
-              <TableHead>{t("stock_control.table_location")}</TableHead>
               <TableHead>{t("stock_control.table_product")}</TableHead>
               <TableHead>{t("stock_control.table_qty_change")}</TableHead>
               <TableHead>{t("stock_control.table_reason")}</TableHead>
@@ -532,13 +517,12 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
           </TableHeader>
           <TableBody>
             {adjustments.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">{t("stock_control.no_adjustments")}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{t("stock_control.no_adjustments")}</TableCell></TableRow>
             ) : adjustments.map((adj: any) => (
               <TableRow key={adj.id} data-testid={`row-adj-${adj.id}`}>
                 <TableCell className="font-mono text-sm">#{adj.id}</TableCell>
                 <TableCell className="text-sm">{fmtDate(adj.createdAt)}</TableCell>
                 <TableCell className="text-sm">{adj.branchName}</TableCell>
-                <TableCell className="text-sm">{adj.locationName}</TableCell>
                 <TableCell className="text-sm font-medium">{adj.productName}</TableCell>
                 <TableCell className={Number(adj.qtyChange) > 0 ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
                   {Number(adj.qtyChange) > 0 ? `+${adj.qtyChange}` : adj.qtyChange}
@@ -555,7 +539,7 @@ function AdjustmentsTab({ branchesList, locationsList }: { branchesList: any[]; 
 }
 
 function ReportTab({ branchesList }: { branchesList: any[] }) {
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
   const [selectedBranch, setSelectedBranch] = useState("__all__");
 
   const reportUrl = selectedBranch !== "__all__" ? `/api/inventory-discrepancy-report?branchId=${selectedBranch}` : "/api/inventory-discrepancy-report";
@@ -576,7 +560,7 @@ function ReportTab({ branchesList }: { branchesList: any[] }) {
           <SelectContent>
             <SelectItem value="__all__">{t("stock_control.all_branches")}</SelectItem>
             {branchesList.map(b => (
-              <SelectItem key={b.id} value={String(b.id)}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>
+              <SelectItem key={b.id} value={String(b.id)}>{branchLabel(b)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
