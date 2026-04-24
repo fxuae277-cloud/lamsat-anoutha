@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-24 (جلسة 29 — إصلاح تنبيهات المخزون + فلتر الفرع + بحث الفواتير في مؤشرات الأداء)_
+_آخر تحديث: 2026-04-24 (جلسة 30 — إصلاح مخزون المشتريات + عرض الأرصدة + تحسين مؤشرات الأداء)_
 
 ---
 
@@ -620,6 +620,41 @@ fetch('/api/run-migration-0018',{method:'POST'}).then(r=>r.json()).then(console.
 
 #### sidebar.tsx — تحديث قائمة المالك (جلسة 29)
 - [x] حُذف "الفواتير" (Invoices) من قسم "العمليات" في sidebar المالك
+
+---
+
+### جلسة 30 — إصلاح مخزون المشتريات + عرض الأرصدة
+
+#### المشكلة الجذرية: المخزون لم يُضاف عند استلام الفاتورة
+- [x] **`server/storage.ts`** — `receivePurchaseInvoice()` مُعاد كتابتها بالكامل:
+  - **Guard**: يتحقق من `inventory_transactions WHERE ref_table='purchase_invoices' AND to_location_id=centralId` لمنع التكرار
+  - **المنتجات مع variantId**: `inventory_balances` + `inventory_ledger` + `location_inventory` + `products` + `inventory_transactions`
+  - **المنتجات بدون variantId** (بسيطة): `location_inventory` + `products` + `inventory_transactions` فقط (بدون إنشاء variant)
+  - **المخزن المركزي**: يُجلب من `locations WHERE is_central=true AND branch_id IS NULL`
+
+#### إصلاح عرض الأرصدة في صفحة التحويلات
+- [x] **`server/storage.ts`** — `getInventoryBalances()` بنمط UNION:
+  - **Part 1**: `inventory_balances JOIN product_variants` حيث `(color IS NOT NULL OR size IS NOT NULL OR sku IS NOT NULL)` — منتجات ذات variants حقيقية
+  - **Part 2**: `location_inventory` حيث `NOT EXISTS (product_variants WHERE color/size/sku IS NOT NULL)` — منتجات بسيطة
+  - سبب الإصلاح: البيانات القديمة في `location_inventory` كانت مُستثناة من العرض بسبب شرط NOT EXISTS الخاطئ
+- [x] **`server/routes.ts`** — `transfer-source-stock` endpoint بنفس نمط UNION:
+  - Part 1: variants حقيقية من `inventory_balances`
+  - Part 2: منتجات بسيطة من `location_inventory` مع default variant_id إذا وُجد
+- [x] **Interface**: تحديث `IStorage.getInventoryBalances(locationId?, branchId?)` لإضافة المعامل الثاني
+
+#### مبدأ "source of truth" للمخزون
+- `inventory_balances` → مصدر الحقيقة لمنتجات ذات variants حقيقية (color/size/sku غير NULL)
+- `location_inventory` → مصدر الحقيقة لمنتجات بسيطة (كل variants بـ NULL أو بدون variants)
+- "auto-created default variant" (color/size/sku = NULL, is_default=true) لا يُعدّ variant حقيقي
+
+#### sidebar.tsx + BranchPerformance.tsx (جلسة 30)
+- [x] **sidebar.tsx**: حُذف "الفواتير (Invoices)" من قسم العمليات في OWNER_SIDEBAR
+- [x] **BranchPerformance.tsx**: شريط بحث + فلاتر كاملة في جدول الفواتير:
+  - بحث نصي (رقم فاتورة / عميل / جوال / مرجع) — client-side
+  - فلتر طريقة الدفع + فلتر الكاشير (مشتق من البيانات المحمّلة)
+  - زر "مسح الفلاتر" + عداد "X من Y فاتورة"
+  - إزالة حد الـ 30 فاتورة — يعرض الكل
+  - أعمدة جديدة: العميل (الاسم + الجوال) + الكاشير
 
 ## ⏳ القادم
 - [ ] لا يوجد مهام محددة حالياً
