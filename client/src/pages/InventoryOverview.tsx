@@ -139,8 +139,9 @@ export default function InventoryOverview() {
     .filter(row => {
       if (filterBranch !== "all" && String(row.branch_id) !== filterBranch) return false;
       if (filterType   !== "all" && row.product_type !== filterType)         return false;
-      if (filterStatus === "low"  && row.qty_on_hand > row.reorder_level)    return false;
-      if (filterStatus === "ok"   && row.qty_on_hand <= row.reorder_level)   return false;
+      const threshold = row.min_qty ?? row.reorder_level ?? 5;
+      if (filterStatus === "low"  && !(row.qty_on_hand > 0 && row.qty_on_hand <= threshold)) return false;
+      if (filterStatus === "ok"   && row.qty_on_hand <= threshold)                            return false;
       if (filterStatus === "zero" && row.qty_on_hand !== 0)                  return false;
       if (filterLocType === "warehouse" && row.branch_id)                    return false;
       if (filterLocType === "branch"    && !row.branch_id)                   return false;
@@ -165,8 +166,11 @@ export default function InventoryOverview() {
   // ── KPIs الأساسية ─────────────────────────────────────────────────────
   const stock = Array.isArray(stockRaw) ? stockRaw : [];
   const totalRows    = stock.length;
-  const lowStockRows = stock.filter(r => r.qty_on_hand > 0 && r.qty_on_hand <= r.reorder_level).length;
-  const zeroRows     = stock.filter(r => r.qty_on_hand === 0).length;
+  const lowStockRows = stock.filter(r => {
+    const threshold = r.min_qty ?? r.reorder_level ?? 5;
+    return r.qty_on_hand > 0 && r.qty_on_hand <= threshold;
+  }).length;
+  const zeroRows = stock.filter(r => r.qty_on_hand === 0).length;
   const totalValue   = stock.reduce((s, r) => s + parseFloat(r.price || "0") * (r.qty_on_hand || 0), 0);
   const totalQty     = stock.reduce((s, r) => s + (r.qty_on_hand || 0), 0);
   const costValue    = stock.reduce((s, r) => s + parseFloat(r.last_purchase_price || "0") * (r.qty_on_hand || 0), 0);
@@ -823,7 +827,8 @@ export default function InventoryOverview() {
                       </TableRow>
                     ) : (
                       filtered.map((row: any, idx: number) => {
-                        const isLow  = row.qty_on_hand > 0 && row.qty_on_hand <= row.reorder_level;
+                        const rowThreshold = row.min_qty ?? row.reorder_level ?? 5;
+                        const isLow  = row.qty_on_hand > 0 && row.qty_on_hand <= rowThreshold;
                         const isZero = row.qty_on_hand === 0;
                         const catName = row.category_name || "";
                         const hasCost = row.last_purchase_price && parseFloat(row.last_purchase_price) > 0;

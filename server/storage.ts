@@ -4788,7 +4788,7 @@ export class DatabaseStorage implements IStorage {
              pv.barcode, pv.sku, pv.color, pv.size, pv.price,
              pv.last_purchase_price, pv.last_receipt_date,
              p.name as product_name, p.product_type, p.category_id, c.name as category_name,
-             p.image,
+             p.image, p.min_qty,
              l.name as location_name, l.type as location_type,
              b.id as branch_id,
              (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
@@ -4802,7 +4802,7 @@ export class DatabaseStorage implements IStorage {
       JOIN locations l ON l.id = ib.location_id
       LEFT JOIN branches b ON b.id = l.branch_id
       LEFT JOIN location_inventory li2 ON li2.location_id = ib.location_id AND li2.product_id = pv.product_id
-      WHERE ib.qty_on_hand > 0
+      WHERE ib.qty_on_hand >= 0
     `;
     if (locationId) {
       params.push(locationId);
@@ -4822,7 +4822,7 @@ export class DatabaseStorage implements IStorage {
              p.barcode, NULL::text as sku, NULL::text as color, NULL::text as size, p.price,
              p.last_purchase_price, NULL::timestamp as last_receipt_date,
              p.name as product_name, p.product_type, p.category_id, c.name as category_name,
-             p.image,
+             p.image, p.min_qty,
              l.name as location_name, l.type as location_type,
              b.id as branch_id,
              (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name,
@@ -4833,7 +4833,7 @@ export class DatabaseStorage implements IStorage {
       JOIN locations l ON l.id = li.location_id
       LEFT JOIN categories c ON c.id = p.category_id
       LEFT JOIN branches b ON b.id = l.branch_id
-      WHERE li.qty_on_hand > 0
+      WHERE li.qty_on_hand >= 0
         AND NOT EXISTS (
           SELECT 1 FROM product_variants pv2
           WHERE pv2.product_id = p.id
