@@ -281,6 +281,33 @@ export async function registerRoutes(
     }
   }
 
+  // Public certificate endpoint — returns the PUBLIC X.509 certificate as PEM
+  // text. The frontend fetches this once during the QZ handshake. Safe to
+  // serve unauthenticated since the certificate is public by design.
+  // The cert is read from client/src/lib/qz-certificate.ts at startup so it
+  // stays in sync with the bundled frontend copy.
+  const qzCertificate = (() => {
+    try {
+      const fs = require("node:fs") as typeof import("node:fs");
+      const path = require("node:path") as typeof import("node:path");
+      const certSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "client/src/lib/qz-certificate.ts"),
+        "utf8"
+      );
+      const m = certSrc.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/);
+      return m ? m[0] : "";
+    } catch (err) {
+      console.error("[QZ-Sign] failed to read qz-certificate.ts:", err);
+      return "";
+    }
+  })();
+  app.get("/api/printing/qz/certificate", (_req, res) => {
+    if (!qzCertificate) {
+      return res.status(500).type("text/plain").send("");
+    }
+    res.type("text/plain").send(qzCertificate);
+  });
+
   // Public diagnostics endpoint — returns ONLY metadata (lengths, flags),
   // never the key. Used to verify env from outside without launching the UI.
   app.get("/api/printing/qz/status", requireAuth, (_req, res) => {

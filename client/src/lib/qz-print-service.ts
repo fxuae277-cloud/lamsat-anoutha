@@ -14,40 +14,48 @@
  *   anonymous prompt for that call.
  *
  * Security boundary:
- *   - Public certificate is imported from ./qz-certificate (safe in browser).
+ *   - Public certificate is fetched from /api/printing/qz/certificate.
  *   - Private key NEVER ships to the browser. The signing step calls
  *     POST /api/printing/qz/sign on the backend, which holds QZ_PRIVATE_KEY
  *     in process.env and signs the request server-side.
  */
 
-import { QZ_CERTIFICATE, QZ_CERTIFICATE_CONFIGURED } from './qz-certificate';
-
 declare const qz: any;
+declare const window: any;
 
 const DEFAULT_RECEIPT_PRINTER = 'EPSON TM-T100 Receipt';
 const DEFAULT_LABEL_PRINTER = 'TSC TTP-244M Pro';
 
+const LOG = '[QZ-Sign]';
+
 let securityConfigured = false;
 let connectPromise: Promise<void> | null = null;
+let cachedCertificate: string | null = null;
+
+// ─── Certificate loader ───────────────────────────────────────────────────────
+
+async function loadCertificate(): Promise<string> {
+  if (cachedCertificate) return cachedCertificate;
+  const res = await fetch('/api/printing/qz/certificate', {
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    throw new Error(
+      `failed to fetch QZ certificate (${res.status}): ${await res.text().catch(() => '')}`
+    );
+  }
+  const cert = (await res.text()).trim();
+  if (!cert.includes('BEGIN CERTIFICATE')) {
+    throw new Error('certificate endpoint returned an invalid PEM');
+  }
+  cachedCertificate = cert;
+  console.log(`${LOG} QZ certificate loaded (length=${cert.length})`);
+  return cert;
+}
 
 // ─── Security setup (runs once) ───────────────────────────────────────────────
 
-const LOG = '[QZ-Sign]';
-
-/**
- * Wires the certificate + signing callbacks into qz.security.
- *
- * Idempotent — calling more than once is a no-op. Must be called BEFORE the
- * first qz.websocket.connect(); QZ Tray reads the callbacks during the
- * handshake.
- *
- * The promises are ALWAYS installed (even when the cert is still the
- * placeholder) — that way every sign attempt is visible in the console for
- * verification. If the placeholder cert/key pair is in use, QZ Tray will
- * reject the signature and fall back to its untrusted prompt, but the logs
- * will tell you exactly what happened.
- */
-function configureSecurity(): void {
+async function configureSecurity(): Promise<void> {
   if (securityConfigured) return;
   if (typeof qz === 'undefined') {
     throw new Error(
@@ -55,37 +63,16 @@ function configureSecurity(): void {
     );
   }
 
-  if (!QZ_CERTIFICATE_CONFIGURED) {
-    console.error(
-      `${LOG} QZ_CERTIFICATE is still the placeholder. Paste the real ` +
-      `digital-certificate.txt into client/src/lib/qz-certificate.ts. ` +
-      `Until you do, QZ Tray will reject the signature and keep showing ` +
-      `the "anonymous request / Untrusted website" prompt.`
-    );
-  }
+  const cert = await loadCertificate();
 
-  // Public certificate — shipped with the frontend bundle.
-  console.log(
-    `${LOG} setCertificatePromise — cert length=${QZ_CERTIFICATE.length}, ` +
-    `configured=${QZ_CERTIFICATE_CONFIGURED}`
-  );
-  console.log(`${LOG} certificate (first 80 chars):`, QZ_CERTIFICATE.slice(0, 80));
   qz.security.setCertificatePromise((resolve: (cert: string) => void) => {
-    console.log(`${LOG} QZ Tray asked for certificate — delivering`);
-    resolve(QZ_CERTIFICATE);
+    resolve(cert);
   });
 
-  // SHA-512 matches the server-side signer (createSign('RSA-SHA512')).
-  console.log(`${LOG} setSignatureAlgorithm("SHA512")`);
   qz.security.setSignatureAlgorithm('SHA512');
 
-  // Each request is signed by the backend; the private key never reaches the
-  // browser. `toSign` is the exact string QZ Tray asks us to sign.
   qz.security.setSignaturePromise((toSign: string) => {
     return (resolve: (sig: string) => void, reject: (err: any) => void) => {
-      console.log(
-        `${LOG} sign requested — toSign length=${toSign?.length ?? 0}`
-      );
       fetch('/api/printing/qz/sign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -95,10 +82,6 @@ function configureSecurity(): void {
         .then(async res => {
           if (!res.ok) {
             const body = await res.text().catch(() => '');
-            console.error(
-              `${LOG} signing endpoint returned ${res.status}:`,
-              body
-            );
             throw new Error(
               `signing endpoint returned ${res.status}: ${body || '(no body)'}`
             );
@@ -107,16 +90,9 @@ function configureSecurity(): void {
         })
         .then(data => {
           if (!data?.signature) {
-            console.error(
-              `${LOG} signing endpoint returned no signature, body=`,
-              data
-            );
             throw new Error('signing endpoint returned no signature');
           }
-          console.log(
-            `${LOG} signature received — length=${data.signature.length}, ` +
-            `preview=${String(data.signature).slice(0, 40)}…`
-          );
+          console.log(`${LOG} QZ signature completed`);
           resolve(data.signature);
         })
         .catch(err => {
@@ -127,7 +103,6 @@ function configureSecurity(): void {
   });
 
   securityConfigured = true;
-  console.log(`${LOG} security configured ✓`);
 }
 
 // ─── Connection ───────────────────────────────────────────────────────────────
@@ -135,30 +110,32 @@ function configureSecurity(): void {
 /**
  * Ensures QZ Tray is loaded, security is wired, and the websocket is open.
  *
+ * Order is critical:
+ *   1) qz must exist on window
+ *   2) certificate + signature promises configured
+ *   3) websocket.connect() — only after the promises are wired so QZ Tray
+ *      reads them during the handshake
+ *
  * Connection attempts are de-duplicated: parallel callers share one promise,
- * and once connected this becomes a cheap isActive() check. We never reconnect
- * on top of an active connection.
+ * and once connected this becomes a cheap isActive() check.
  */
 export async function ensureQzReady(): Promise<void> {
-  if (typeof qz === 'undefined') {
+  if (typeof qz === 'undefined' || !(window as any).qz) {
     console.error(`${LOG} qz library is not loaded on window`);
     throw new Error(
       'QZ Tray غير محمّل — تأكد من تشغيل تطبيق QZ Tray وأعد تحميل الصفحة'
     );
   }
 
-  // Security MUST be configured before connect() — QZ Tray reads the cert
-  // during the handshake.
-  configureSecurity();
+  await configureSecurity();
 
   if (qz.websocket.isActive()) return;
 
   if (!connectPromise) {
-    console.log(`${LOG} qz.websocket.connect() — starting handshake`);
     connectPromise = qz.websocket
       .connect()
       .then(() => {
-        console.log(`${LOG} qz.websocket.connect() — connected ✓`);
+        console.log(`${LOG} QZ websocket connected`);
       })
       .catch((e: any) => {
         connectPromise = null;
@@ -175,10 +152,6 @@ export async function ensureQzReady(): Promise<void> {
 
 // ─── Printer resolution ───────────────────────────────────────────────────────
 
-/**
- * Finds a printer by name (the Windows queue name). Throws an Arabic error
- * message ready to display in a toast if the printer is missing.
- */
 export async function findPrinter(printerName: string): Promise<string> {
   await ensureQzReady();
   const found: string[] = await qz.printers.find(printerName);
@@ -201,22 +174,31 @@ export async function findLabelPrinter(printerName?: string): Promise<string> {
 // ─── Signed print helpers ─────────────────────────────────────────────────────
 
 /**
- * Send a signed print job. `config` and `data` are passed through to
- * qz.print() unchanged — this wrapper exists only to guarantee security
- * setup + connection happen first.
+ * Send a signed print job. Guarantees the websocket is active before
+ * dispatching to qz.print() — this is what prevents the
+ * "Cannot read properties of null (reading 'sendData')" error that fires
+ * when qz.print is called before the transport is ready.
  */
 export async function signedPrint(config: any, data: any[]): Promise<void> {
   await ensureQzReady();
+  if (!qz.websocket.isActive()) {
+    throw new Error('QZ Tray websocket is not active — print aborted');
+  }
   await qz.print(config, data);
+  console.log(`${LOG} QZ print completed`);
 }
 
 /** Send raw ESC/POS bytes (cut, drawer pulse, …) to a named printer. */
 export async function signedRaw(printer: string, raw: string): Promise<void> {
   await ensureQzReady();
+  if (!qz.websocket.isActive()) {
+    throw new Error('QZ Tray websocket is not active — print aborted');
+  }
   await qz.print(
     qz.configs.create(printer),
     [{ type: 'raw', format: 'plain', data: raw }]
   );
+  console.log(`${LOG} QZ print completed`);
 }
 
 /** Build a printer config (units, density, margins, …) — re-export for callers. */
@@ -227,5 +209,5 @@ export function createConfig(printer: string, opts: Record<string, any> = {}): a
 // ─── Diagnostics ──────────────────────────────────────────────────────────────
 
 export function isCertificateConfigured(): boolean {
-  return QZ_CERTIFICATE_CONFIGURED;
+  return cachedCertificate !== null;
 }
