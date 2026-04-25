@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-25 (جلسة 32 — المركز المالي للمالك + ربط حركات الفروع تلقائياً)_
+_آخر تحديث: 2026-04-25 (جلسة 33 — QZ Tray: طباعة مباشرة ESC/POS بدون نافذة المتصفح)_
 
 ---
 
@@ -755,6 +755,43 @@ fetch('/api/run-migration-0018',{method:'POST'}).then(r=>r.json()).then(console.
 - [x] `settings.test_receipt_print` · `test_label_print`
 - [x] `settings.printers_not_detected`
 - [x] `barcode_labels.no_label_printer` · `no_label_printer_desc`
+
+### جلسة 33 — QZ Tray: طباعة إيصالات مباشرة (ESC/POS)
+
+#### `client/index.html`
+- [x] إضافة سكريبت QZ Tray من CDN قبل `main.tsx`:
+  `<script src="https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js"></script>`
+
+#### `client/src/lib/printer.ts` (ملف جديد)
+- [x] `connectQZ()` — يتصل بـ QZ Tray WebSocket، يُعيد الاستخدام إذا كان الاتصال نشطاً (تجنّب إعادة الاتصال)
+- [x] `disconnectQZ()` — قطع الاتصال عند الحاجة
+- [x] `buildReceipt(data)` — يبني سلسلة ESC/POS كاملة:
+  - `ESC @` تهيئة + `ESC t 0x1C` اختيار CP864 (عربي)
+  - عنوان "لمسة أنوثة" مزدوج الحجم + بيانات الفاتورة بعمودين
+  - أصناف مع الكمية × السعر والإجمالي
+  - الخصم + الإجمالي (غامق) + المدفوع + الباقي + طريقة الدفع
+  - `GS V 0x41 0x00` قطع الورق (partial cut)
+- [x] `printReceipt(data, printerName?)` — الدالة المُصدَّرة:
+  1. Guard: `typeof qz !== 'undefined'`
+  2. `connectQZ()` — اتصال آمن
+  3. `qz.printers.find(name)` — البحث عن الطابعة بالاسم (افتراضي: `EPSON TM-T100 Receipt`)
+  4. `qz.print(config, [{type:'raw', format:'plain', options:{encoding:'CP864'}}])`
+- [x] أخطاء عربية وصفية: QZ غير مشغّل / الطابعة غير موجودة
+
+#### `client/src/pages/POS.tsx` — ReceiptModal
+- [x] استبدال `handlePrint` (window.open + window.print) بنسخة async تستدعي `printReceipt()`
+- [x] حذف `printRef` و `ref={printRef}` (لم تعد مطلوبة)
+- [x] حالة `printing` (boolean): زر الطباعة يُعطَّل ويظهر spinner أثناء الطباعة
+- [x] Toast: "تمت الطباعة بنجاح ✅" أو رسالة الخطأ المُفصَّلة
+- [x] `receiptPrinter` من الإعدادات يُمرَّر كـ `printerName` اختياري — يتيح تخصيص اسم الطابعة من Settings
+
+#### ملاحظات التشغيل
+- يتطلب تشغيل تطبيق QZ Tray على جهاز الكاشير
+- اسم الطابعة يطابق اسمها في قائمة طابعات Windows
+- CP864 يدعم الطباعة العربية على طابعات EPSON ذات الفريموير العربي
+- عرض الورق: 80mm = 42 حرفاً في السطر الواحد
+
+---
 
 ## ⏳ القادم
 - [ ] لا يوجد مهام محددة حالياً

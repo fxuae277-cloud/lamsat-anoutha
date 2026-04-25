@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
+import { printReceipt } from "@/lib/printer";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -166,46 +167,41 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId, receipt
   receiptPrinter?: string;
 }) {
   const { toast } = useToast();
-  const printRef = useRef<HTMLDivElement>(null);
-  const total = n(sale.total);
-  const paid  = n(sale.amountPaid ?? sale.amount_paid ?? total);
+  const total  = n(sale.total);
+  const paid   = n(sale.amountPaid ?? sale.amount_paid ?? total);
   const change = n(sale.changeAmount ?? sale.change_amount ?? 0);
+  const [printing, setPrinting] = useState(false);
 
-  const handlePrint = () => {
-    if (!receiptPrinter) {
-      toast({
-        title: "لم يتم تحديد طابعة الإيصال",
-        description: "انتقل إلى الإعدادات ← إعدادات الطباعة وحدّد طابعة الإيصال أولاً.",
-        variant: "destructive",
-      });
+  const handlePrint = async () => {
+    setPrinting(true);
+    try {
+      await printReceipt(
+        {
+          invoiceNumber: sale.invoiceNumber || sale.invoice_number || "",
+          items: (sale.items || []).map((i: any) => ({
+            productName: i.productName || i.product_name,
+            quantity:    i.quantity,
+            unitPrice:   i.unitPrice    ?? i.unit_price,
+            color:       i.color,
+          })),
+          total,
+          amountPaid:    paid,
+          changeAmount:  change,
+          discount:      n(sale.discount),
+          paymentMethod: sale.paymentMethod || sale.payment_method,
+          customerName:  sale.customerName  || sale.customer_name,
+          cashierName,
+          branchName,
+          createdAt:     sale.createdAt     || sale.created_at,
+        },
+        receiptPrinter || undefined,   // use settings name if set
+      );
+      toast({ title: "تمت الطباعة بنجاح ✅" });
+    } catch (e: any) {
+      toast({ title: "خطأ في الطباعة", description: e.message, variant: "destructive" });
+    } finally {
+      setPrinting(false);
     }
-    const el = printRef.current;
-    if (!el) return;
-    const printerHint = receiptPrinter
-      ? `<div style="background:#fff3cd;padding:6px 10px;font-size:11px;text-align:center;border-radius:4px;margin-bottom:8px">
-           اختر الطابعة: <strong>${receiptPrinter}</strong>
-         </div>`
-      : `<div style="background:#f8d7da;padding:6px 10px;font-size:11px;text-align:center;border-radius:4px;margin-bottom:8px">
-           ⚠️ لم يتم تحديد طابعة الإيصال — يرجى الإعداد من الإعدادات
-         </div>`;
-    const w = window.open("", "_blank", "width=320,height=600");
-    if (!w) return;
-    w.document.write(`<html><head><title>فاتورة</title>
-      <style>
-        @page { size: 80mm auto; margin: 0; }
-        body{font-family:'Cairo',sans-serif;direction:rtl;margin:0;padding:10px;font-size:12px}
-        .center{text-align:center} .bold{font-weight:700}
-        table{width:100%;border-collapse:collapse}
-        td,th{padding:3px 4px} th{border-bottom:1px dashed #000}
-        .total-row{border-top:2px solid #000;font-weight:700}
-        hr{border:none;border-top:1px dashed #000;margin:6px 0}
-        .printer-hint{} @media print{.printer-hint{display:none}}
-      </style></head><body>
-      <div class="printer-hint">${printerHint}</div>
-      ${el.innerHTML}</body></html>`);
-    w.document.close();
-    w.focus();
-    setTimeout(() => { w.print(); w.close(); }, 500);
   };
 
   const handleWhatsApp = () => {
@@ -247,7 +243,7 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId, receipt
           </DialogTitle>
         </DialogHeader>
 
-        <div ref={printRef} className="text-sm space-y-1 bg-gray-50 rounded-lg p-4 max-h-[50vh] overflow-y-auto">
+        <div className="text-sm space-y-1 bg-gray-50 rounded-lg p-4 max-h-[50vh] overflow-y-auto">
           <p className="text-center font-bold text-base">🌸 لمسة أنوثة 🌸</p>
           <p className="text-center text-xs text-muted-foreground">{branchName}</p>
           <hr className="border-dashed my-1" />
@@ -304,8 +300,11 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId, receipt
         </div>
 
         <DialogFooter className="flex gap-2 sm:justify-start">
-          <Button size="sm" onClick={handlePrint} className="bg-pink-600 hover:bg-pink-700 gap-1">
-            <Printer className="w-3.5 h-3.5" /> طباعة
+          <Button size="sm" onClick={handlePrint} disabled={printing} className="bg-pink-600 hover:bg-pink-700 gap-1">
+            {printing
+              ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> جارٍ الطباعة...</>
+              : <><Printer className="w-3.5 h-3.5" /> طباعة</>
+            }
           </Button>
           <Button size="sm" variant="outline" onClick={handleWhatsApp} className="gap-1 border-emerald-500 text-emerald-700 hover:bg-emerald-50">
             <MessageSquare className="w-3.5 h-3.5" /> واتساب
