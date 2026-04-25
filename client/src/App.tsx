@@ -48,6 +48,7 @@ import BarcodeLabels from "@/pages/BarcodeLabels";
 import BranchSummary from "@/pages/BranchSummary";
 import BranchPerformance from "@/pages/BranchPerformance";
 import OpeningStock from "@/pages/OpeningStock";
+import OwnerFinancialSummary from "@/pages/OwnerFinancialSummary";
 import { PayrollProvider } from "@/providers/PayrollProvider";
 import EmployeesPage from "@/components/payroll/employees/EmployeesPage";
 import FinancialMovementsPage from "@/components/payroll/financial-movements/FinancialMovementsPage";
@@ -238,6 +239,9 @@ function DesktopRouter() {
         </Route>
         <Route path="/finance-summary">
           <RequireOwner><FinanceSummary /></RequireOwner>
+        </Route>
+        <Route path="/owner-financial">
+          <RequireOwner><OwnerFinancialSummary /></RequireOwner>
         </Route>
         <Route path="/stock-control">
           <RequireOwner><StockControl /></RequireOwner>

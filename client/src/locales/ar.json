@@ -48,7 +48,8 @@
     "barcodeLabels": "طباعة الملصقات",
     "branchSummary": "ملخص الفرع المالي",
     "branchPerformance": "مؤشرات الأداء",
-    "openingStock": "المخزون الافتتاحي"
+    "openingStock": "المخزون الافتتاحي",
+    "ownerFinancial": "المركز المالي للمالك"
   },
   "sidebar": {
     "role_owner": "مالك",
@@ -200,6 +201,16 @@
     "size_a4": "A4 (ورق عادي)",
     "thermal_printer": "طابعة حرارية",
     "thermal_printer_desc": "طباعة الإيصال تلقائياً بعد كل عملية بيع",
+    "printer_assignment": "تعيين الطابعات",
+    "receipt_printer": "طابعة الإيصالات",
+    "receipt_printer_desc": "طابعة حرارية 80mm لطباعة إيصالات البيع",
+    "label_printer": "طابعة الملصقات",
+    "label_printer_desc": "طابعة TSC أو مماثلة لطباعة ملصقات الباركود (40×58mm)",
+    "select_printer": "اختر طابعة...",
+    "no_printer_selected": "بدون تحديد",
+    "test_receipt_print": "طباعة إيصال تجريبي",
+    "test_label_print": "طباعة ملصق تجريبي",
+    "printers_not_detected": "لم يتم اكتشاف طابعات — يمكن إدخال الاسم يدوياً بعد الحفظ",
     "business_logo": "شعار المنشأة (رابط الصورة)",
     "business_logo_desc": "سيظهر في أعلى الفاتورة المطبوعة والإيصال الحراري",
     "backup_settings": "النسخ الاحتياطي",
@@ -2895,7 +2906,9 @@
     "print_btn": "طباعة",
     "print_close": "إغلاق",
     "print_info_stickers": "ملصق • حجم:",
-    "currency": "ر.ع"
+    "currency": "ر.ع",
+    "no_label_printer": "لم يتم تحديد طابعة الملصقات",
+    "no_label_printer_desc": "انتقل إلى الإعدادات ← إعدادات الطباعة وحدّد طابعة الملصقات أولاً."
   },
   "orders_page": {
     "title": "الطلبات",

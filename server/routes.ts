@@ -37,6 +37,7 @@ import { registerMobileRoutes } from "./mobile-routes";
 import { saveUploadedFile, parseInvoiceFile } from "./ocr";
 import { authLimiter, passwordLimiter, uploadLimiter } from "./middleware/rateLimiter";
 import { requireAuth, requireOwnerOrAdmin, requireRole, requireManager, enforceBranchScope, requirePermission } from "./middleware/auth";
+import { exec } from "child_process";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -223,6 +224,22 @@ export async function registerRoutes(
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
+  });
+
+  // ── System printers list (Windows PowerShell / CUPS fallback) ──────────────
+  app.get("/api/printers", requireAuth, async (_req, res) => {
+    const isWindows = process.platform === "win32";
+    const cmd = isWindows
+      ? `powershell.exe -NoProfile -Command "Get-Printer | Select-Object -ExpandProperty Name"`
+      : `lpstat -a 2>/dev/null | awk '{print $1}'`;
+    exec(cmd, { timeout: 5000 }, (err, stdout) => {
+      if (err) return res.json({ printers: [] });
+      const printers = stdout
+        .split(/\r?\n/)
+        .map(s => s.trim())
+        .filter(Boolean);
+      res.json({ printers });
+    });
   });
 
   app.get("/api/dashboard", requireAuth, async (_req, res) => {
@@ -5400,6 +5417,45 @@ export async function registerRoutes(
       if (!from || !to) return res.status(400).json({ message: "from & to مطلوبان" });
       const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
       res.json(await storage.getCashFlowStatement(from, to, branchId));
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  // ── Owner Financial Summary ───────────────────────────────────────────────
+
+  app.get("/api/owner/financial-summary", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    try {
+      res.json(await storage.getOwnerFinancialSummary());
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.get("/api/owner/transactions", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const limit    = req.query.limit    ? Number(req.query.limit)    : 200;
+      const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
+      const from     = req.query.from as string | undefined;
+      const to       = req.query.to   as string | undefined;
+      res.json(await storage.getOwnerTransactions(limit, branchId, from, to));
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+    }
+  });
+
+  app.post("/api/owner/transactions", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const { date, type, branchId, amount, paymentMethod, fromAccount, toAccount, referenceNo, note } = req.body;
+      if (!date || !type || !amount) return res.status(400).json({ message: "date, type, amount مطلوبة" });
+      const validTypes = ["BRANCH_CASH_TRANSFER_TO_OWNER","OWNER_DEPOSIT_TO_BANK","OWNER_WITHDRAWAL","MANUAL_ADJUSTMENT_IN","MANUAL_ADJUSTMENT_OUT"];
+      if (!validTypes.includes(type)) return res.status(400).json({ message: "نوع غير صالح" });
+      const txn = await storage.createOwnerTransaction({
+        date, type, branchId: branchId ? Number(branchId) : undefined,
+        amount: parseFloat(amount), paymentMethod, fromAccount, toAccount,
+        referenceNo, note, createdBy: (req as any).user?.id,
+      });
+      res.json(txn);
     } catch (err: any) {
       res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
     }

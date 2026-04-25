@@ -949,3 +949,31 @@ export const discountRules = pgTable("discount_rules", {
 export const insertDiscountRuleSchema = createInsertSchema(discountRules).omit({ id: true, createdAt: true });
 export type InsertDiscountRule = z.infer<typeof insertDiscountRuleSchema>;
 export type DiscountRule = typeof discountRules.$inferSelect;
+
+// ── Owner Financial Ledger ─────────────────────────────────────────────────────
+export const OWNER_TXN_TYPES = [
+  "BRANCH_CASH_TRANSFER_TO_OWNER",
+  "OWNER_DEPOSIT_TO_BANK",
+  "OWNER_WITHDRAWAL",
+  "MANUAL_ADJUSTMENT_IN",
+  "MANUAL_ADJUSTMENT_OUT",
+] as const;
+export type OwnerTxnType = typeof OWNER_TXN_TYPES[number];
+
+export const ownerTransactions = pgTable("owner_transactions", {
+  id:            integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  date:          date("date").notNull(),
+  type:          text("type").notNull(),
+  branchId:      integer("branch_id").references(() => branches.id),
+  amount:        decimal("amount", { precision: 12, scale: 3 }).notNull(),
+  paymentMethod: text("payment_method").notNull().default("cash"),
+  fromAccount:   text("from_account"),
+  toAccount:     text("to_account"),
+  referenceNo:   text("reference_no"),
+  note:          text("note"),
+  createdBy:     integer("created_by").references(() => users.id),
+  createdAt:     timestamp("created_at").defaultNow(),
+});
+export const insertOwnerTransactionSchema = createInsertSchema(ownerTransactions).omit({ id: true, createdAt: true });
+export type InsertOwnerTransaction = z.infer<typeof insertOwnerTransactionSchema>;
+export type OwnerTransaction = typeof ownerTransactions.$inferSelect;

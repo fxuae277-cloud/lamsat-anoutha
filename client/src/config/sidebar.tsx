@@ -31,6 +31,7 @@ import {
   Printer,
   PieChart,
   BarChart2,
+  DollarSign,
 } from "lucide-react";
 
 export type SidebarItem = {
@@ -96,6 +97,7 @@ export const OWNER_SIDEBAR: SidebarSection[] = [
   {
     sectionKey: "sidebar.section_finance",
     items: [
+      { labelKey: "nav.ownerFinancial",     icon: DollarSign,  path: "/owner-financial" },
       { labelKey: "nav.branchSummary",     icon: PieChart,    path: "/branch-summary" },
       { labelKey: "nav.branchPerformance", icon: BarChart2,   path: "/branch-performance" },
       { labelKey: "nav.financeSummary",    icon: TrendingUp,  path: "/finance-summary" },

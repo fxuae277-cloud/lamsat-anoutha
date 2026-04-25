@@ -5844,6 +5844,202 @@ export class DatabaseStorage implements IStorage {
       totalNetChange: (parseFloat(c.net_change) + parseFloat(b.net_change)).toFixed(3),
     };
   }
+
+  // ── Owner Financial Summary ───────────────────────────────────────────────
+
+  async getOwnerFinancialSummary() {
+    // 1. Branch cash balances: opening + cash_sales - cash_expenses - transferred_to_owner
+    const branchCashRes = await pool.query(`
+      SELECT
+        b.id,
+        b.name,
+        b.address,
+        COALESCE((
+          SELECT sh.opening_cash FROM shifts sh
+          WHERE sh.branch_id = b.id ORDER BY sh.started_at ASC LIMIT 1
+        ), 0) AS opening_cash,
+        COALESCE((
+          SELECT SUM(s.total) FROM sales s
+          WHERE s.branch_id = b.id AND s.payment_method = 'cash'
+        ), 0) AS cash_sales,
+        COALESCE((
+          SELECT SUM(e.amount) FROM expenses e
+          WHERE e.branch_id = b.id AND e.source = 'cash'
+        ), 0) AS cash_expenses,
+        COALESCE((
+          SELECT SUM(ot.amount) FROM owner_transactions ot
+          WHERE ot.branch_id = b.id AND ot.type = 'BRANCH_CASH_TRANSFER_TO_OWNER'
+        ), 0) AS transferred_to_owner,
+        COALESCE((
+          SELECT SUM(s.total) FROM sales s
+          WHERE s.branch_id = b.id AND s.payment_method = 'card'
+        ), 0) AS card_sales,
+        COALESCE((
+          SELECT SUM(s.total) FROM sales s
+          WHERE s.branch_id = b.id AND s.payment_method = 'bank_transfer'
+        ), 0) AS bank_transfer_sales
+      FROM branches b
+      ORDER BY b.id
+    `);
+
+    const branches = branchCashRes.rows.map((r: any) => {
+      const opening      = parseFloat(r.opening_cash);
+      const cashSales    = parseFloat(r.cash_sales);
+      const cashExp      = parseFloat(r.cash_expenses);
+      const transferred  = parseFloat(r.transferred_to_owner);
+      const currentCash  = opening + cashSales - cashExp - transferred;
+      return {
+        id:               r.id,
+        name:             r.name,
+        address:          r.address,
+        openingCash:      opening.toFixed(3),
+        cashSales:        cashSales.toFixed(3),
+        cashExpenses:     cashExp.toFixed(3),
+        transferredToOwner: transferred.toFixed(3),
+        currentCash:      currentCash.toFixed(3),
+        cardSales:        parseFloat(r.card_sales).toFixed(3),
+        bankTransferSales: parseFloat(r.bank_transfer_sales).toFixed(3),
+      };
+    });
+
+    // 2. Owner account balances
+    const ownerRes = await pool.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN type = 'BRANCH_CASH_TRANSFER_TO_OWNER' THEN amount ELSE 0 END), 0) AS received_cash,
+        COALESCE(SUM(CASE WHEN type = 'OWNER_DEPOSIT_TO_BANK' THEN amount ELSE 0 END), 0) AS deposited_to_bank,
+        COALESCE(SUM(CASE WHEN type = 'OWNER_WITHDRAWAL' THEN amount ELSE 0 END), 0) AS withdrawn,
+        COALESCE(SUM(CASE WHEN type = 'MANUAL_ADJUSTMENT_IN' THEN amount ELSE 0 END), 0) AS adj_in,
+        COALESCE(SUM(CASE WHEN type = 'MANUAL_ADJUSTMENT_OUT' THEN amount ELSE 0 END), 0) AS adj_out
+      FROM owner_transactions
+    `);
+    const ow = ownerRes.rows[0];
+    const receivedCash   = parseFloat(ow.received_cash);
+    const depositedBank  = parseFloat(ow.deposited_to_bank);
+    const withdrawn      = parseFloat(ow.withdrawn);
+    const adjIn          = parseFloat(ow.adj_in);
+    const adjOut         = parseFloat(ow.adj_out);
+    const ownerCash      = receivedCash - depositedBank - withdrawn + adjIn - adjOut;
+    const ownerBankBalance = depositedBank;
+
+    // 3. Totals across all branches
+    const totalCashOnHand     = branches.reduce((s: number, b: any) => s + parseFloat(b.currentCash), 0) + ownerCash;
+    const totalCardSales      = branches.reduce((s: number, b: any) => s + parseFloat(b.cardSales), 0);
+    const totalBankTransfers  = branches.reduce((s: number, b: any) => s + parseFloat(b.bankTransferSales), 0);
+
+    // 4. Total expenses (all branches, all payment methods)
+    const expRes = await pool.query(`SELECT COALESCE(SUM(amount), 0) AS total FROM expenses`);
+    const totalExpenses = parseFloat(expRes.rows[0].total);
+
+    // 5. Company available balance
+    const totalAvailable = totalCashOnHand + totalCardSales + totalBankTransfers + ownerBankBalance - totalExpenses - withdrawn;
+
+    // 6. Inventory value
+    const invRes = await pool.query(`
+      SELECT
+        COALESCE(SUM(li.qty_on_hand * p.cost_default), 0)  AS total_cost,
+        COALESCE(SUM(li.qty_on_hand * p.price), 0)          AS total_selling,
+        COALESCE(SUM(li.qty_on_hand), 0)                    AS total_qty
+      FROM location_inventory li
+      JOIN products p ON p.id = li.product_id
+      WHERE li.qty_on_hand > 0
+    `);
+    const inv = invRes.rows[0];
+    const invCost    = parseFloat(inv.total_cost);
+    const invSelling = parseFloat(inv.total_selling);
+    const invProfit  = invSelling - invCost;
+    const invMargin  = invSelling > 0 ? (invProfit / invSelling * 100) : 0;
+
+    // 7. Inventory by branch (via locations → branch)
+    const invBranchRes = await pool.query(`
+      SELECT
+        b.id AS branch_id,
+        b.name AS branch_name,
+        COALESCE(SUM(li.qty_on_hand), 0) AS qty,
+        COALESCE(SUM(li.qty_on_hand * p.cost_default), 0) AS cost_value,
+        COALESCE(SUM(li.qty_on_hand * p.price), 0) AS selling_value
+      FROM branches b
+      LEFT JOIN locations l ON l.branch_id = b.id
+      LEFT JOIN location_inventory li ON li.location_id = l.id AND li.qty_on_hand > 0
+      LEFT JOIN products p ON p.id = li.product_id
+      GROUP BY b.id, b.name
+      ORDER BY b.id
+    `);
+    const inventoryByBranch = invBranchRes.rows.map((r: any) => ({
+      branchId:     r.branch_id,
+      branchName:   r.branch_name,
+      qty:          parseFloat(r.qty).toFixed(3),
+      costValue:    parseFloat(r.cost_value).toFixed(3),
+      sellingValue: parseFloat(r.selling_value).toFixed(3),
+      expectedProfit: (parseFloat(r.selling_value) - parseFloat(r.cost_value)).toFixed(3),
+    }));
+
+    return {
+      summary: {
+        totalCashOnHand:    totalCashOnHand.toFixed(3),
+        totalCardSales:     totalCardSales.toFixed(3),
+        totalBankTransfers: totalBankTransfers.toFixed(3),
+        totalExpenses:      totalExpenses.toFixed(3),
+        totalWithdrawals:   withdrawn.toFixed(3),
+        totalAvailable:     totalAvailable.toFixed(3),
+        ownerCash:          ownerCash.toFixed(3),
+        ownerBankBalance:   ownerBankBalance.toFixed(3),
+        receivedFromBranches: receivedCash.toFixed(3),
+        depositedToBank:    depositedBank.toFixed(3),
+      },
+      branches,
+      inventory: {
+        totalQty:     parseFloat(inv.total_qty).toFixed(3),
+        totalCost:    invCost.toFixed(3),
+        totalSelling: invSelling.toFixed(3),
+        expectedProfit: invProfit.toFixed(3),
+        profitMargin:   invMargin.toFixed(2),
+      },
+      inventoryByBranch,
+    };
+  }
+
+  async getOwnerTransactions(limit = 100, branchId?: number, from?: string, to?: string) {
+    let whereClause = "WHERE 1=1";
+    const params: any[] = [];
+    let idx = 1;
+    if (branchId) { whereClause += ` AND ot.branch_id = $${idx++}`; params.push(branchId); }
+    if (from)     { whereClause += ` AND ot.date >= $${idx++}`;      params.push(from); }
+    if (to)       { whereClause += ` AND ot.date <= $${idx++}`;      params.push(to); }
+
+    const res = await pool.query(`
+      SELECT
+        ot.*,
+        b.name AS branch_name,
+        u.name AS created_by_name
+      FROM owner_transactions ot
+      LEFT JOIN branches b ON b.id = ot.branch_id
+      LEFT JOIN users u ON u.id = ot.created_by
+      ${whereClause}
+      ORDER BY ot.created_at DESC
+      LIMIT $${idx}
+    `, [...params, limit]);
+    return res.rows;
+  }
+
+  async createOwnerTransaction(data: {
+    date: string; type: string; branchId?: number; amount: number;
+    paymentMethod?: string; fromAccount?: string; toAccount?: string;
+    referenceNo?: string; note?: string; createdBy?: number;
+  }) {
+    const res = await pool.query(`
+      INSERT INTO owner_transactions
+        (date, type, branch_id, amount, payment_method, from_account, to_account, reference_no, note, created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      RETURNING *
+    `, [
+      data.date, data.type, data.branchId ?? null, data.amount,
+      data.paymentMethod ?? "cash",
+      data.fromAccount ?? null, data.toAccount ?? null,
+      data.referenceNo ?? null, data.note ?? null,
+      data.createdBy ?? null,
+    ]);
+    return res.rows[0];
+  }
 }
 
 export const storage = new DatabaseStorage();

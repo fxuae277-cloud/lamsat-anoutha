@@ -47,6 +47,7 @@
     "branchSummary": "Branch Financial Summary",
     "branchPerformance": "Branch Performance",
     "openingStock": "Opening Stock",
+    "ownerFinancial": "Owner Financial Position",
     "usersManagement": "Users Management",
     "rolesManagement": "Roles Management"
   },
@@ -200,6 +201,16 @@
     "size_a4": "A4 (regular paper)",
     "thermal_printer": "Thermal Printer",
     "thermal_printer_desc": "Auto-print receipt after each sale",
+    "printer_assignment": "Printer Assignment",
+    "receipt_printer": "Receipt Printer",
+    "receipt_printer_desc": "80mm thermal printer for sales receipts",
+    "label_printer": "Label Printer",
+    "label_printer_desc": "TSC or similar barcode/sticker printer (40×58mm)",
+    "select_printer": "Select printer...",
+    "no_printer_selected": "Not selected",
+    "test_receipt_print": "Print Test Receipt",
+    "test_label_print": "Print Test Label",
+    "printers_not_detected": "No printers detected — you can type the name manually after saving",
     "business_logo": "Business Logo (Image URL)",
     "business_logo_desc": "Will appear at the top of printed invoices and thermal receipts",
     "backup_settings": "Backup",
@@ -2895,7 +2906,9 @@
     "print_btn": "Print",
     "print_close": "Close",
     "print_info_stickers": "labels • Size:",
-    "currency": "OMR"
+    "currency": "OMR",
+    "no_label_printer": "Label printer not configured",
+    "no_label_printer_desc": "Go to Settings → Print Settings and select a label printer first."
   },
   "orders_page": {
     "title": "Orders",
