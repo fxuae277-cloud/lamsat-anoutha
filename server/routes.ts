@@ -250,36 +250,96 @@ export async function registerRoutes(
   // the frontend sets qz.security.setSignatureAlgorithm("SHA512").
   //
   // SECURITY: QZ_PRIVATE_KEY must NEVER be exposed to the frontend. It lives
-  // only in process.env on the server.
+  // only in process.env on the server. We log lengths and PEM markers — never
+  // the key itself.
+
+  // Resolve the private key into a usable PEM string. Returns null when the
+  // env var is missing or empty so callers can surface a clear error.
+  const resolveQzPrivateKey = (): string | null => {
+    const raw = process.env.QZ_PRIVATE_KEY;
+    if (!raw) return null;
+    // Allow the key to be stored with literal \n escapes (common in .env
+    // files) or as a real multi-line string (Railway env vars). Either way
+    // crypto.createSign needs real newlines in the PEM.
+    return raw.includes("\\n") ? raw.replace(/\\n/g, "\n") : raw;
+  };
+
+  // Startup self-check — logs once at boot whether QZ_PRIVATE_KEY is loaded.
+  {
+    const k = resolveQzPrivateKey();
+    if (!k) {
+      console.error(
+        "[QZ-Sign] QZ_PRIVATE_KEY is NOT set — POST /api/printing/qz/sign will return 500"
+      );
+    } else {
+      const looksLikePem =
+        k.includes("BEGIN PRIVATE KEY") || k.includes("BEGIN RSA PRIVATE KEY");
+      console.log(
+        `[QZ-Sign] QZ_PRIVATE_KEY loaded — length=${k.length}, ` +
+        `pem=${looksLikePem ? "yes" : "no (will likely fail to sign)"}`
+      );
+    }
+  }
+
+  // Public diagnostics endpoint — returns ONLY metadata (lengths, flags),
+  // never the key. Used to verify env from outside without launching the UI.
+  app.get("/api/printing/qz/status", requireAuth, (_req, res) => {
+    const key = resolveQzPrivateKey();
+    res.json({
+      privateKeyConfigured: !!key,
+      privateKeyLength: key?.length ?? 0,
+      privateKeyLooksLikePem: !!key &&
+        (key.includes("BEGIN PRIVATE KEY") ||
+         key.includes("BEGIN RSA PRIVATE KEY")),
+      algorithm: "RSA-SHA512",
+    });
+  });
+
   app.post("/api/printing/qz/sign", requireAuth, async (req, res) => {
     try {
       const toSign = req.body?.request;
       if (typeof toSign !== "string" || !toSign) {
+        console.error(
+          "[QZ-Sign] bad request — body.request must be a non-empty string, got:",
+          typeof toSign
+        );
         return res.status(400).json({ message: "request string مطلوب" });
       }
 
-      const rawKey = process.env.QZ_PRIVATE_KEY;
-      if (!rawKey) {
+      const privateKey = resolveQzPrivateKey();
+      if (!privateKey) {
+        console.error(
+          "[QZ-Sign] QZ_PRIVATE_KEY missing — refusing to sign"
+        );
         logger.error("QZ_PRIVATE_KEY missing from environment");
         return res.status(500).json({
           message: "QZ_PRIVATE_KEY غير مضبوط في إعدادات الخادم",
         });
       }
 
-      // Allow the key to be stored with literal \n escapes (common in .env
-      // files) or as a real multi-line string (Railway env vars). Either way
-      // crypto.createSign needs real newlines in the PEM.
-      const privateKey = rawKey.includes("\\n")
-        ? rawKey.replace(/\\n/g, "\n")
-        : rawKey;
+      console.log(
+        `[QZ-Sign] sign request — toSign length=${toSign.length}, ` +
+        `key length=${privateKey.length}`
+      );
 
       const signer = crypto.createSign("RSA-SHA512");
       signer.update(toSign);
       signer.end();
       const signature = signer.sign(privateKey, "base64");
 
+      if (!signature) {
+        console.error("[QZ-Sign] signer produced empty signature");
+        return res.status(500).json({ message: "empty signature" });
+      }
+
+      console.log(
+        `[QZ-Sign] signature produced — length=${signature.length}, ` +
+        `preview=${signature.slice(0, 40)}…`
+      );
+
       res.json({ signature });
     } catch (e: any) {
+      console.error("[QZ-Sign] signing threw:", e);
       logger.error("QZ signing failed", e);
       res.status(500).json({ message: e?.message ?? "QZ signing failed" });
     }

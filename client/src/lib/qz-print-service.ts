@@ -32,12 +32,20 @@ let connectPromise: Promise<void> | null = null;
 
 // ─── Security setup (runs once) ───────────────────────────────────────────────
 
+const LOG = '[QZ-Sign]';
+
 /**
  * Wires the certificate + signing callbacks into qz.security.
  *
  * Idempotent — calling more than once is a no-op. Must be called BEFORE the
  * first qz.websocket.connect(); QZ Tray reads the callbacks during the
  * handshake.
+ *
+ * The promises are ALWAYS installed (even when the cert is still the
+ * placeholder) — that way every sign attempt is visible in the console for
+ * verification. If the placeholder cert/key pair is in use, QZ Tray will
+ * reject the signature and fall back to its untrusted prompt, but the logs
+ * will tell you exactly what happened.
  */
 function configureSecurity(): void {
   if (securityConfigured) return;
@@ -47,50 +55,79 @@ function configureSecurity(): void {
     );
   }
 
-  // If the cert/key pair has not been generated yet, leave QZ in its default
-  // anonymous mode. The user will see the trust prompt once per session, but
-  // printing keeps working — far better than failing every print with a bad
-  // signature handshake.
   if (!QZ_CERTIFICATE_CONFIGURED) {
-    securityConfigured = true;
-    return;
+    console.error(
+      `${LOG} QZ_CERTIFICATE is still the placeholder. Paste the real ` +
+      `digital-certificate.txt into client/src/lib/qz-certificate.ts. ` +
+      `Until you do, QZ Tray will reject the signature and keep showing ` +
+      `the "anonymous request / Untrusted website" prompt.`
+    );
   }
 
   // Public certificate — shipped with the frontend bundle.
+  console.log(
+    `${LOG} setCertificatePromise — cert length=${QZ_CERTIFICATE.length}, ` +
+    `configured=${QZ_CERTIFICATE_CONFIGURED}`
+  );
+  console.log(`${LOG} certificate (first 80 chars):`, QZ_CERTIFICATE.slice(0, 80));
   qz.security.setCertificatePromise((resolve: (cert: string) => void) => {
+    console.log(`${LOG} QZ Tray asked for certificate — delivering`);
     resolve(QZ_CERTIFICATE);
   });
 
-  // SHA-512 matches the server-side signer (createSign('SHA512')).
+  // SHA-512 matches the server-side signer (createSign('RSA-SHA512')).
+  console.log(`${LOG} setSignatureAlgorithm("SHA512")`);
   qz.security.setSignatureAlgorithm('SHA512');
 
   // Each request is signed by the backend; the private key never reaches the
   // browser. `toSign` is the exact string QZ Tray asks us to sign.
   qz.security.setSignaturePromise((toSign: string) => {
     return (resolve: (sig: string) => void, reject: (err: any) => void) => {
+      console.log(
+        `${LOG} sign requested — toSign length=${toSign?.length ?? 0}`
+      );
       fetch('/api/printing/qz/sign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ request: toSign }),
       })
-        .then(res => {
+        .then(async res => {
           if (!res.ok) {
-            throw new Error(`signing endpoint returned ${res.status}`);
+            const body = await res.text().catch(() => '');
+            console.error(
+              `${LOG} signing endpoint returned ${res.status}:`,
+              body
+            );
+            throw new Error(
+              `signing endpoint returned ${res.status}: ${body || '(no body)'}`
+            );
           }
           return res.json();
         })
         .then(data => {
           if (!data?.signature) {
+            console.error(
+              `${LOG} signing endpoint returned no signature, body=`,
+              data
+            );
             throw new Error('signing endpoint returned no signature');
           }
+          console.log(
+            `${LOG} signature received — length=${data.signature.length}, ` +
+            `preview=${String(data.signature).slice(0, 40)}…`
+          );
           resolve(data.signature);
         })
-        .catch(reject);
+        .catch(err => {
+          console.error(`${LOG} sign request failed:`, err);
+          reject(err);
+        });
     };
   });
 
   securityConfigured = true;
+  console.log(`${LOG} security configured ✓`);
 }
 
 // ─── Connection ───────────────────────────────────────────────────────────────
@@ -104,21 +141,29 @@ function configureSecurity(): void {
  */
 export async function ensureQzReady(): Promise<void> {
   if (typeof qz === 'undefined') {
+    console.error(`${LOG} qz library is not loaded on window`);
     throw new Error(
       'QZ Tray غير محمّل — تأكد من تشغيل تطبيق QZ Tray وأعد تحميل الصفحة'
     );
   }
 
+  // Security MUST be configured before connect() — QZ Tray reads the cert
+  // during the handshake.
   configureSecurity();
 
   if (qz.websocket.isActive()) return;
 
   if (!connectPromise) {
+    console.log(`${LOG} qz.websocket.connect() — starting handshake`);
     connectPromise = qz.websocket
       .connect()
+      .then(() => {
+        console.log(`${LOG} qz.websocket.connect() — connected ✓`);
+      })
       .catch((e: any) => {
         connectPromise = null;
         const detail = e?.message ?? String(e);
+        console.error(`${LOG} qz.websocket.connect() failed:`, e);
         throw new Error(
           `تعذّر الاتصال بـ QZ Tray — تأكد من تشغيل البرنامج (${detail})`
         );
