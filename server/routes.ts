@@ -38,6 +38,7 @@ import { saveUploadedFile, parseInvoiceFile } from "./ocr";
 import { authLimiter, passwordLimiter, uploadLimiter } from "./middleware/rateLimiter";
 import { requireAuth, requireOwnerOrAdmin, requireRole, requireManager, enforceBranchScope, requirePermission } from "./middleware/auth";
 import { exec } from "child_process";
+import crypto from "crypto";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -240,6 +241,48 @@ export async function registerRoutes(
         .filter(Boolean);
       res.json({ printers });
     });
+  });
+
+  // ── QZ Tray request signing ────────────────────────────────────────────────
+  // The frontend (qz-print-service.ts) calls this for every QZ Tray request.
+  // We sign the raw `request` string with the private key matching the public
+  // certificate shipped in client/src/lib/qz-certificate.ts. SHA-512 because
+  // the frontend sets qz.security.setSignatureAlgorithm("SHA512").
+  //
+  // SECURITY: QZ_PRIVATE_KEY must NEVER be exposed to the frontend. It lives
+  // only in process.env on the server.
+  app.post("/api/printing/qz/sign", requireAuth, async (req, res) => {
+    try {
+      const toSign = req.body?.request;
+      if (typeof toSign !== "string" || !toSign) {
+        return res.status(400).json({ message: "request string مطلوب" });
+      }
+
+      const rawKey = process.env.QZ_PRIVATE_KEY;
+      if (!rawKey) {
+        logger.error("QZ_PRIVATE_KEY missing from environment");
+        return res.status(500).json({
+          message: "QZ_PRIVATE_KEY غير مضبوط في إعدادات الخادم",
+        });
+      }
+
+      // Allow the key to be stored with literal \n escapes (common in .env
+      // files) or as a real multi-line string (Railway env vars). Either way
+      // crypto.createSign needs real newlines in the PEM.
+      const privateKey = rawKey.includes("\\n")
+        ? rawKey.replace(/\\n/g, "\n")
+        : rawKey;
+
+      const signer = crypto.createSign("RSA-SHA512");
+      signer.update(toSign);
+      signer.end();
+      const signature = signer.sign(privateKey, "base64");
+
+      res.json({ signature });
+    } catch (e: any) {
+      logger.error("QZ signing failed", e);
+      res.status(500).json({ message: e?.message ?? "QZ signing failed" });
+    }
   });
 
   app.get("/api/dashboard", requireAuth, async (_req, res) => {

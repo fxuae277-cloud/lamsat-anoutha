@@ -13,8 +13,13 @@
  */
 
 import html2canvas from 'html2canvas';
-
-declare const qz: any;
+import {
+  ensureQzReady,
+  findReceiptPrinter,
+  signedPrint,
+  signedRaw,
+  createConfig,
+} from './qz-print-service';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -103,36 +108,19 @@ async function getLogoDataUrl(): Promise<string> {
 
 // ─── QZ connection ────────────────────────────────────────────────────────────
 
+/**
+ * Backwards-compatible alias. All connection + signing logic lives in
+ * qz-print-service.ts so the certificate / signature handshake is wired
+ * exactly once per page load.
+ */
 export async function ensureQzConnected(): Promise<void> {
-  if (typeof qz === 'undefined') {
-    throw new Error(
-      'QZ Tray غير محمّل — تأكد من تشغيل تطبيق QZ Tray وأعد تحميل الصفحة'
-    );
-  }
-  if (qz.websocket.isActive()) return;
-  try {
-    await qz.websocket.connect();
-  } catch (e: any) {
-    throw new Error(`تعذّر الاتصال بـ QZ Tray — ${e.message ?? e}`);
-  }
+  await ensureQzReady();
 }
 
 // ─── Printer detection ────────────────────────────────────────────────────────
 
 export async function getReceiptPrinter(printerName?: string): Promise<string> {
-  const target = printerName || DEFAULT_PRINTER;
-  try {
-    const found: string[] = await qz.printers.find(target);
-    if (!found?.length) {
-      throw new Error(
-        `الطابعة "${target}" غير موجودة — تحقق من اسم الطابعة في الإعدادات`
-      );
-    }
-    return found[0];
-  } catch (e: any) {
-    if (String(e.message).includes('غير موجودة')) throw e;
-    throw new Error(`فشل البحث عن الطابعة: ${e.message ?? e}`);
-  }
+  return findReceiptPrinter(printerName || DEFAULT_PRINTER);
 }
 
 // ─── Receipt HTML builder ─────────────────────────────────────────────────────
@@ -202,12 +190,12 @@ export function buildReceiptHtml(data: ReceiptData, logoDataUrl = ''): string {
      direction:${align === 'left' ? 'ltr' : 'rtl'};">${content}</td>`;
 
   // Two-column summary row (label right | amount left)
-  const sumRow = (label: string, value: string, bold = false, size = 17) =>
+  const sumRow = (label: string, value: string, _bold = false, size = 17) =>
     `<tr>
-       <td style="${F}font-size:${size}px;text-align:right;color:#333;padding:5px 0;
-           ${bold ? 'font-weight:bold;' : ''}vertical-align:middle;">${label}</td>
+       <td style="${F}font-size:${size}px;text-align:right;color:#000;padding:5px 0;
+           font-weight:bold;vertical-align:middle;">${label}</td>
        <td style="${F}font-size:${size}px;text-align:left;direction:ltr;color:#000;
-           padding:5px 0;${bold ? 'font-weight:bold;' : ''}vertical-align:middle;">${value}</td>
+           padding:5px 0;font-weight:bold;vertical-align:middle;">${value}</td>
      </tr>`;
 
   // ── Item rows ─────────────────────────────────────────────────────────────
@@ -221,9 +209,9 @@ export function buildReceiptHtml(data: ReceiptData, logoDataUrl = ''): string {
                     padding:9px 4px 3px;vertical-align:top;width:6%;">${idx + 1}</td>
         <td style="${F}font-size:17px;font-weight:bold;text-align:right;color:#000;
                     padding:9px 4px 3px;vertical-align:top;width:40%;">${name}</td>
-        <td style="${F}font-size:16px;text-align:center;color:#444;
+        <td style="${F}font-size:17px;font-weight:bold;text-align:center;color:#000;
                     padding:9px 4px 3px;vertical-align:top;width:12%;">${item.quantity}</td>
-        <td style="${F}font-size:16px;text-align:center;color:#444;
+        <td style="${F}font-size:17px;font-weight:bold;text-align:center;color:#000;
                     padding:9px 4px 3px;vertical-align:top;width:21%;direction:ltr;">
           ${fmtOMR(toNum(item.unitPrice))}</td>
         <td style="${F}font-size:17px;font-weight:bold;text-align:left;color:#000;
@@ -231,7 +219,7 @@ export function buildReceiptHtml(data: ReceiptData, logoDataUrl = ''): string {
           ${fmtOMR(lineTotal)}</td>
       </tr>
       ${!isLast ? `<tr><td colspan="5" style="padding:0 4px;">
-        <div style="border-top:1px dashed #bbb;margin:2px 0;"></div></td></tr>` : ''}`;
+        <div style="border-top:1px dashed #000;margin:2px 0;"></div></td></tr>` : ''}`;
   }).join('');
 
   // ── Full HTML ──────────────────────────────────────────────────────────────
@@ -247,62 +235,68 @@ export function buildReceiptHtml(data: ReceiptData, logoDataUrl = ''): string {
   line-height:1.45;
 ">
 
-  <!-- ══ LOGO ══ -->
+  <!-- ══ LOGO (centered explicitly — text-align:center is unreliable inside RTL) ══ -->
   ${logoDataUrl ? `
-  <div style="text-align:center;margin-bottom:8px;">
-    <img src="${logoDataUrl}"
-         style="max-width:110px;max-height:90px;object-fit:contain;" />
-  </div>` : ''}
+  <table style="width:${INNER_W}px;border-collapse:collapse;margin-bottom:8px;"
+         cellpadding="0" cellspacing="0">
+    <tr>
+      <td style="text-align:center;vertical-align:middle;">
+        <img src="${logoDataUrl}"
+             style="display:block;margin:0 auto;width:140px;height:auto;
+                    max-height:110px;object-fit:contain;" />
+      </td>
+    </tr>
+  </table>` : ''}
 
   <!-- ══ STORE NAME ══ -->
-  <div style="${F}font-size:26px;font-weight:bold;text-align:center;
-              letter-spacing:3px;color:#000;margin-bottom:3px;">
+  <div style="${F}font-size:28px;font-weight:bold;text-align:center;
+              letter-spacing:3px;color:#000;margin-bottom:4px;">
     LAMST ANOTHA
   </div>
 
   <!-- ══ TAGLINE ══ -->
   <div style="text-align:center;margin-bottom:12px;">
-    <span style="${F}font-size:12px;letter-spacing:2px;color:#888;">──────────</span>
-    <span style="${F}font-size:12px;letter-spacing:1px;color:#555;"> TOUCH OF FEMININITY </span>
-    <span style="${F}font-size:12px;letter-spacing:2px;color:#888;">──────────</span><br>
-    <span style="${F}font-size:16px;color:#555;">♥</span>
+    <span style="${F}font-size:13px;letter-spacing:2px;color:#000;font-weight:bold;">──────────</span>
+    <span style="${F}font-size:13px;letter-spacing:1px;color:#000;font-weight:bold;"> TOUCH OF FEMININITY </span>
+    <span style="${F}font-size:13px;letter-spacing:2px;color:#000;font-weight:bold;">──────────</span><br>
+    <span style="${F}font-size:16px;color:#000;font-weight:bold;">♥</span>
   </div>
 
   <!-- ══ CONTACT INFO ══ -->
   <table style="width:${INNER_W}px;border-collapse:collapse;margin-bottom:10px;"
          cellpadding="0" cellspacing="0">
     <tr>
-      <td style="${F}font-size:13px;text-align:center;border-left:1px solid #ccc;
+      <td style="${F}font-size:13px;text-align:center;border-left:2px solid #000;
                   padding:5px 6px;vertical-align:top;width:33%;">
-        <div style="color:#666;margin-bottom:2px;">رقم السجل التجاري</div>
-        <div style="${F}font-weight:bold;font-size:15px;direction:ltr;">1260008</div>
+        <div style="color:#000;margin-bottom:2px;font-weight:bold;">رقم السجل التجاري</div>
+        <div style="${F}font-weight:bold;font-size:15px;direction:ltr;color:#000;">1260008</div>
       </td>
-      <td style="${F}font-size:13px;text-align:center;border-left:1px solid #ccc;
+      <td style="${F}font-size:13px;text-align:center;border-left:2px solid #000;
                   padding:5px 6px;vertical-align:top;width:34%;">
-        <div style="color:#666;margin-bottom:2px;">الانستجرام</div>
-        <div style="${F}font-weight:bold;font-size:15px;direction:ltr;">lamst_anotha</div>
+        <div style="color:#000;margin-bottom:2px;font-weight:bold;">الانستجرام</div>
+        <div style="${F}font-weight:bold;font-size:15px;direction:ltr;color:#000;">lamst_anotha</div>
       </td>
       <td style="${F}font-size:13px;text-align:center;
                   padding:5px 6px;vertical-align:top;width:33%;">
-        <div style="color:#666;margin-bottom:2px;">التواصل مع الإدارة</div>
-        <div style="${F}font-weight:bold;font-size:15px;direction:ltr;">94891122</div>
+        <div style="color:#000;margin-bottom:2px;font-weight:bold;">التواصل مع الإدارة</div>
+        <div style="${F}font-weight:bold;font-size:15px;direction:ltr;color:#000;">94891122</div>
       </td>
     </tr>
   </table>
 
-  <!-- ══ DASHED SEPARATOR ══ -->
-  <div style="border-top:1px dashed #aaa;margin:0 0 10px;"></div>
+  <!-- ══ SOLID SEPARATOR ══ -->
+  <div style="border-top:2px solid #000;margin:0 0 10px;"></div>
 
   <!-- ══ INVOICE HEADER BAR (dark) ══ -->
   <table style="width:${INNER_W}px;border-collapse:collapse;"
          cellpadding="0" cellspacing="0">
     <tr>
-      ${dk(`<div style="${F}font-size:13px;color:#bbb;margin-bottom:3px;">رقم الفاتورة</div>
-            <div style="${F}font-size:21px;font-weight:bold;">${invoiceNumber || '---'}</div>`,
+      ${dk(`<div style="${F}font-size:14px;color:#ffffff;margin-bottom:3px;font-weight:bold;">رقم الفاتورة</div>
+            <div style="${F}font-size:22px;font-weight:bold;color:#ffffff;">${invoiceNumber || '---'}</div>`,
            'right', '50%')}
-      ${dk(`<div style="${F}font-size:13px;color:#bbb;margin-bottom:3px;direction:rtl;text-align:right;">
+      ${dk(`<div style="${F}font-size:14px;color:#ffffff;margin-bottom:3px;font-weight:bold;direction:rtl;text-align:right;">
               التاريخ والوقت</div>
-            <div style="${F}font-size:16px;font-weight:bold;">${dateStr}</div>`,
+            <div style="${F}font-size:17px;font-weight:bold;color:#ffffff;">${dateStr}</div>`,
            'left', '50%')}
     </tr>
   </table>
@@ -311,26 +305,26 @@ export function buildReceiptHtml(data: ReceiptData, logoDataUrl = ''): string {
   <table style="width:${INNER_W}px;border-collapse:collapse;margin-top:8px;"
          cellpadding="0" cellspacing="0">
     <tr>
-      <td style="${F}font-size:16px;text-align:right;padding:3px 2px;width:50%;vertical-align:top;">
-        <div style="${F}font-size:13px;color:#777;">الفرع</div>
-        <div style="font-weight:bold;">${branchName || '---'}</div>
+      <td style="${F}font-size:17px;text-align:right;padding:3px 2px;width:50%;vertical-align:top;color:#000;">
+        <div style="${F}font-size:13px;color:#000;font-weight:bold;">الفرع</div>
+        <div style="font-weight:bold;color:#000;">${branchName || '---'}</div>
       </td>
-      <td style="${F}font-size:16px;text-align:left;padding:3px 2px;width:50%;
-                  direction:ltr;vertical-align:top;">
-        <div style="${F}font-size:13px;color:#777;direction:rtl;text-align:right;">الكاشير</div>
-        <div style="font-weight:bold;">${cashierName || '---'}</div>
+      <td style="${F}font-size:17px;text-align:left;padding:3px 2px;width:50%;
+                  direction:ltr;vertical-align:top;color:#000;">
+        <div style="${F}font-size:13px;color:#000;font-weight:bold;direction:rtl;text-align:right;">الكاشير</div>
+        <div style="font-weight:bold;color:#000;">${cashierName || '---'}</div>
       </td>
     </tr>
     ${customerName ? `<tr>
-      <td colspan="2" style="${F}font-size:16px;text-align:right;padding:3px 2px;border-top:1px dashed #ddd;">
-        <span style="${F}font-size:13px;color:#777;">العميلة: </span>
-        <span style="font-weight:bold;">${customerName}</span>
+      <td colspan="2" style="${F}font-size:16px;text-align:right;padding:3px 2px;border-top:1px solid #000;color:#000;">
+        <span style="${F}font-size:13px;color:#000;font-weight:bold;">العميلة: </span>
+        <span style="font-weight:bold;color:#000;">${customerName}</span>
       </td>
     </tr>` : ''}
   </table>
 
-  <!-- ══ DASHED SEPARATOR ══ -->
-  <div style="border-top:1px dashed #aaa;margin:10px 0;"></div>
+  <!-- ══ SEPARATOR ══ -->
+  <div style="border-top:2px solid #000;margin:10px 0;"></div>
 
   <!-- ══ ITEMS TABLE HEADER (dark) ══ -->
   <table style="width:${INNER_W}px;border-collapse:collapse;"
@@ -391,12 +385,12 @@ export function buildReceiptHtml(data: ReceiptData, logoDataUrl = ''): string {
   <div style="border-top:2px solid #000;margin:12px 0;"></div>
 
   <!-- ══ THANK YOU BOX ══ -->
-  <div style="border:1px dashed #999;border-radius:3px;padding:12px 8px;
+  <div style="border:2px solid #000;border-radius:3px;padding:12px 8px;
               text-align:center;margin-bottom:12px;">
-    <div style="${F}font-size:20px;font-weight:bold;color:#000;margin-bottom:4px;">
+    <div style="${F}font-size:22px;font-weight:bold;color:#000;margin-bottom:4px;">
       ♥ شكراً لثقتكم بنا ♥
     </div>
-    <div style="${F}font-size:16px;color:#444;">
+    <div style="${F}font-size:17px;color:#000;font-weight:bold;">
       نسعد بخدمتكم دائماً
     </div>
   </div>
@@ -405,10 +399,10 @@ export function buildReceiptHtml(data: ReceiptData, logoDataUrl = ''): string {
   <table style="width:${INNER_W}px;border-collapse:collapse;margin-bottom:10px;"
          cellpadding="0" cellspacing="0">
     <tr>
-      <td style="${F}font-size:14px;text-align:right;vertical-align:middle;
-                  width:35%;padding:4px 0;">
+      <td style="${F}font-size:15px;text-align:right;vertical-align:middle;
+                  width:35%;padding:4px 0;color:#000;">
         <div style="font-weight:bold;color:#000;">جودة وأنافة</div>
-        <div style="color:#555;margin-top:2px;">تليق بكِ</div>
+        <div style="color:#000;font-weight:bold;margin-top:2px;">تليق بكِ</div>
       </td>
       <td style="text-align:center;vertical-align:middle;width:30%;padding:4px 0;">
         ${qrCodeDataUrl
@@ -416,10 +410,10 @@ export function buildReceiptHtml(data: ReceiptData, logoDataUrl = ''): string {
                   style="width:68px;height:68px;object-fit:contain;" />`
           : ''}
       </td>
-      <td style="${F}font-size:14px;text-align:left;vertical-align:middle;
-                  width:35%;direction:ltr;padding:4px 0;">
+      <td style="${F}font-size:15px;text-align:left;vertical-align:middle;
+                  width:35%;direction:ltr;padding:4px 0;color:#000;">
         <div style="font-weight:bold;color:#000;">تسوقي الآن</div>
-        <div style="color:#555;margin-top:2px;">مع لمسة أنوثة</div>
+        <div style="color:#000;font-weight:bold;margin-top:2px;">مع لمسة أنوثة</div>
       </td>
     </tr>
   </table>
@@ -428,10 +422,10 @@ export function buildReceiptHtml(data: ReceiptData, logoDataUrl = ''): string {
   <div style="border-top:1px solid #000;margin:6px 0;"></div>
 
   <!-- ══ RETURN POLICY ══ -->
-  <div style="${F}font-size:14px;text-align:center;color:#333;
+  <div style="${F}font-size:15px;font-weight:bold;text-align:center;color:#000;
               padding:6px 0 2px;line-height:1.9;">
     لا يوجد استرجاع أو استبدال بعد الشراء<br>
-    <span style="direction:ltr;display:inline-block;color:#555;">
+    <span style="direction:ltr;display:inline-block;color:#000;font-weight:bold;">
       No Return or Exchange After Purchase
     </span>
   </div>
@@ -496,23 +490,15 @@ async function receiptToBase64(htmlString: string, rotate180 = false): Promise<s
 // ─── Paper cut ────────────────────────────────────────────────────────────────
 
 export async function cutPaper(printerName?: string): Promise<void> {
-  await ensureQzConnected();
   const printer = await getReceiptPrinter(printerName);
-  await qz.print(
-    qz.configs.create(printer),
-    [{ type: 'raw', format: 'plain', data: CMD_CUT }]
-  );
+  await signedRaw(printer, CMD_CUT);
 }
 
 // ─── Cash drawer ──────────────────────────────────────────────────────────────
 
 export async function openCashDrawer(printerName?: string): Promise<void> {
-  await ensureQzConnected();
   const printer = await getReceiptPrinter(printerName);
-  await qz.print(
-    qz.configs.create(printer),
-    [{ type: 'raw', format: 'plain', data: CMD_DRAWER }]
-  );
+  await signedRaw(printer, CMD_DRAWER);
 }
 
 // ─── Main print function ──────────────────────────────────────────────────────
@@ -531,12 +517,6 @@ export async function printReceiptAsImage(
   printerName?: string,
   rotate180 =   false,
 ): Promise<void> {
-  if (typeof qz === 'undefined') {
-    throw new Error(
-      'QZ Tray غير محمّل — تحقق من تشغيل تطبيق QZ Tray وأعد تحميل الصفحة'
-    );
-  }
-
   await ensureQzConnected();
   const printer = await getReceiptPrinter(printerName);
 
@@ -544,14 +524,14 @@ export async function printReceiptAsImage(
   const html        = buildReceiptHtml(data, logoDataUrl);
   const base64      = await receiptToBase64(html, rotate180);
 
-  const imgConfig = qz.configs.create(printer, {
+  const imgConfig = createConfig(printer, {
     units:         'px',
     density:       203,
     margins:       0,
     interpolation: 'nearest-neighbor',
   });
 
-  await qz.print(imgConfig, [{
+  await signedPrint(imgConfig, [{
     type:   'pixel',
     format: 'image',
     flavor: 'base64',
@@ -559,10 +539,7 @@ export async function printReceiptAsImage(
   }]);
 
   // Cut must be a separate raw job sent AFTER the image job completes
-  await qz.print(
-    qz.configs.create(printer),
-    [{ type: 'raw', format: 'plain', data: CMD_CUT }]
-  );
+  await signedRaw(printer, CMD_CUT);
 }
 
 // ─── Test print ───────────────────────────────────────────────────────────────
