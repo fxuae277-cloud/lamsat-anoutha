@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
-import { printReceipt } from "@/lib/printer";
+import { printReceiptAsImage } from "@/lib/printer";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -175,7 +175,8 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId, receipt
   const handlePrint = async () => {
     setPrinting(true);
     try {
-      await printReceipt(
+      // printReceiptAsImage: renders Arabic via html2canvas → PNG → QZ Tray pixel print
+      await printReceiptAsImage(
         {
           invoiceNumber: sale.invoiceNumber || sale.invoice_number || "",
           items: (sale.items || []).map((i: any) => ({
@@ -194,7 +195,8 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId, receipt
           branchName,
           createdAt:     sale.createdAt     || sale.created_at,
         },
-        receiptPrinter || undefined,   // use settings name if set
+        receiptPrinter || undefined,  // printer name from Settings → receiptPrinter key
+        false,                        // rotate180: set true if receipt prints upside-down
       );
       toast({ title: "تمت الطباعة بنجاح ✅" });
     } catch (e: any) {
