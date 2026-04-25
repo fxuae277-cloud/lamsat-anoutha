@@ -163,3 +163,26 @@ input[type="time"] {
     @apply font-sans antialiased bg-background text-foreground;
   }
 }
+
+/* Global full-screen sizing for POS / cashier shell */
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* hide horizontal category scroller scrollbar */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

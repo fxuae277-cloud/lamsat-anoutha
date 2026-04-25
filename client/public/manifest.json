@@ -1,22 +1,27 @@
 {
   "name": "لمسة أنوثة",
-  "short_name": "لمسة",
-  "start_url": "/",
-  "display": "standalone",
+  "short_name": "لمسة أنوثة",
+  "start_url": "/pos",
+  "scope": "/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "orientation": "landscape",
   "background_color": "#ffffff",
-  "theme_color": "#111111",
+  "theme_color": "#E91E63",
   "lang": "ar",
   "dir": "rtl",
   "icons": [
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }

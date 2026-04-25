@@ -8,7 +8,7 @@ import {
   Banknote, LogOut, User as UserIcon, XCircle, Clock, Printer,
   ArrowRight, Receipt, ShoppingCart, MessageSquare, Pause, Play,
   Tag, Package, Percent, CreditCard, Wallet, RotateCcw, ChevronDown,
-  Phone, AlertTriangle, ZapOff,
+  Phone, AlertTriangle, ZapOff, Maximize2, Minimize2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -767,7 +767,32 @@ export default function POS() {
   const [showReturn, setShowReturn]       = useState(false);
   const [confirmClear, setConfirmClear]   = useState(false);
   const [showCloseShift, setShowCloseShift] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // ── Fullscreen toggle (cashier kiosk-style) ──────────────────────────
+  const fullscreenSupported =
+    typeof document !== "undefined" &&
+    typeof (document.documentElement as any).requestFullscreen === "function";
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (error) {
+      console.error("Fullscreen failed:", error);
+    }
+  }, []);
 
   const isOwner = user?.role === "owner" || user?.role === "admin";
   const branchId = user?.branchId || 1;
@@ -1016,10 +1041,10 @@ export default function POS() {
   const rootCats = categories.filter(c => !c.parentId && c.isActive !== false);
 
   return (
-    <div className="h-screen flex overflow-hidden bg-gray-50" dir="rtl">
+    <div className="w-full h-full min-h-0 flex overflow-hidden bg-gray-50" dir="rtl">
 
       {/* ══ Cart (Right) ══ */}
-      <div className="w-[400px] shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden shadow-md">
+      <div className="w-[360px] xl:w-[400px] 2xl:w-[440px] shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden shadow-md min-h-0">
 
           {/* Customer — أول شيء في السلة */}
           <div className="px-3 py-2 border-b shrink-0">
@@ -1197,7 +1222,7 @@ export default function POS() {
         </div>
 
         {/* ══ Products (Left) ══ */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
 
           {/* ── الشريط الوردي: لمسة أنوثة | 🛒 السلة | إرجاع + معلق ── */}
           <div className="flex items-center px-3 py-2 bg-gradient-to-l from-pink-600 to-rose-500 shrink-0 gap-3">
@@ -1241,6 +1266,17 @@ export default function POS() {
                   <span className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-white text-pink-600 text-[9px] font-bold flex items-center justify-center">{heldCount}</span>
                 )}
               </Button>
+              {fullscreenSupported && (
+                <Button size="sm" variant="ghost"
+                  className="h-7 text-xs gap-1 text-white hover:bg-white/20 px-2"
+                  onClick={toggleFullscreen}
+                  title={isFullscreen ? "خروج من ملء الشاشة" : "ملء الشاشة"}>
+                  {isFullscreen
+                    ? <><Minimize2 className="w-3.5 h-3.5" /> تصغير</>
+                    : <><Maximize2 className="w-3.5 h-3.5" /> ملء الشاشة</>
+                  }
+                </Button>
+              )}
               <Button size="sm" variant="ghost"
                 className="h-7 text-xs gap-1 text-orange-200 hover:text-white hover:bg-white/20 px-2 border border-orange-300/40"
                 onClick={() => setShowCloseShift(true)}>

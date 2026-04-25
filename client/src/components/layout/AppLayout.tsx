@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { useLocation } from "wouter";
 import { Sidebar } from "./Sidebar";
 import { Search, Languages } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -6,8 +7,30 @@ import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { NotificationBell } from "./NotificationBell";
 
+// Routes that should fill the entire viewport without the standard
+// admin chrome (top search bar + page padding). Cashier/POS screens.
+const FULL_BLEED_ROUTES = ["/pos", "/shift"];
+
 export function AppLayout({ children }: { children: ReactNode }) {
   const { t, lang, setLang } = useI18n();
+  const [location] = useLocation();
+  const isFullBleed = FULL_BLEED_ROUTES.some(
+    (p) => location === p || location.startsWith(p + "/")
+  );
+
+  if (isFullBleed) {
+    // Cashier mode: keep the navigation sidebar visible but drop the top
+    // search/language header and the page padding so the POS can fill 100%
+    // of the available vertical and horizontal space.
+    return (
+      <div className="flex w-screen h-screen overflow-hidden bg-background text-foreground">
+        <Sidebar />
+        <main className="flex-1 min-w-0 h-full overflow-hidden">
+          {children}
+        </main>
+      </div>
+    );
+  }
 
   const DAY_KEYS = ["sun","mon","tue","wed","thu","fri","sat"] as const;
   const MONTH_KEYS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"] as const;

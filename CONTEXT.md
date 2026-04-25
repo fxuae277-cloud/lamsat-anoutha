@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-25 (جلسة 34 — فاتورة احترافية بهوية العلامة + إعدادات الطابعات الافتراضية)_
+_آخر تحديث: 2026-04-25 (جلسة 35 — شاشة الكاشير ملء الشاشة + PWA fullscreen)_
 
 ---
 
@@ -12,6 +12,61 @@ _آخر تحديث: 2026-04-25 (جلسة 34 — فاتورة احترافية ب
 ---
 
 ## ✅ مكتمل
+
+### جلسة 35 — شاشة الكاشير ملء الشاشة + PWA fullscreen
+
+**الهدف:** فتح شاشة POS بشكل احترافي على كامل الشاشة بدون هوامش فارغة، مع دعم PWA fullscreen للجهاز الكاشير.
+
+#### `client/src/index.css` — تنسيقات عامة لملء الشاشة
+- [x] `html, body, #root { width:100%; height:100%; min-height:100% }` (margin/padding = 0)
+- [x] `body { overflow: hidden }` — لا تمرير على الصفحة الكاملة (التمرير داخل الأقسام فقط)
+- [x] `* { box-sizing: border-box }`
+- [x] `.no-scrollbar` helper للشريط الأفقي للفئات
+
+#### `client/src/components/layout/AppLayout.tsx` — وضع full-bleed لمسارات الكاشير
+- [x] `FULL_BLEED_ROUTES = ["/pos", "/shift"]` — مع كشف عبر `useLocation` من wouter
+- [x] على هذه المسارات: السايدبار يبقى ظاهراً (256px للتنقل) لكن يُحذف:
+  - شريط الـ header العلوي (البحث / تبديل اللغة / التاريخ)
+  - الـ wrapper بـ `p-6 overflow-y-auto`
+- [x] صفحات الإدارة الأخرى (Dashboard, Inventory, إلخ) **غير متأثرة**
+
+#### `client/src/pages/POS.tsx` — تخطيط ملء الشاشة + زر fullscreen
+- [x] الـ root: `h-screen` → `w-full h-full min-h-0 flex` — يملأ خانة AppLayout بدون overflow
+- [x] السلة: عرض responsive — `w-[360px] xl:w-[400px] 2xl:w-[440px]` + `min-h-0`
+- [x] عمود المنتجات: أُضيف `min-w-0 min-h-0` لضمان عمل التمرير الداخلي صحيحاً
+- [x] **زر "ملء الشاشة / تصغير"** جديد في الـ header الوردي:
+  - `document.documentElement.requestFullscreen()` / `document.exitFullscreen()`
+  - try/catch — لا يكسر إذا فشل
+  - يُخفى إذا كان الـ API غير مدعوم
+  - يتزامن مع `fullscreenchange` event عبر useEffect
+- [x] أيقونات `Maximize2 / Minimize2` من lucide-react
+
+#### `client/public/manifest.json` — PWA fullscreen kiosk-style
+- [x] `display: "fullscreen"` + `display_override: ["fullscreen","standalone","minimal-ui"]`
+- [x] `orientation: "landscape"` (أنسب لشاشات الكاشير)
+- [x] `start_url: "/pos"` — التطبيق المثبَّت يفتح مباشرة على شاشة الكاشير
+- [x] `theme_color: "#E91E63"` (وردي لمسة أنوثة) — كان `#111111`
+- [x] `name: "لمسة أنوثة"` (كان `short_name: "لمسة"`)
+- [x] `lang: "ar"` + `dir: "rtl"` — محفوظة
+
+#### `client/index.html`
+- [x] `meta theme-color` → `#E91E63` ليطابق الـ manifest
+
+#### Verification
+- [x] `npx tsc --noEmit` — لا أخطاء جديدة في الملفات المُعدَّلة
+- [x] `npx vite build` — `✓ built in 46.79s`
+
+#### كيفية إعادة تثبيت PWA على سطح المكتب
+1. Chrome/Edge → `⋮` → **Apps** → **Manage apps** → uninstall "لمسة أنوثة"
+2. Hard reload (`Ctrl+Shift+R`)
+3. (اختياري) DevTools → Application → Service Workers → Unregister + Clear site data
+4. أيقونة التثبيت في شريط العنوان → إعادة التثبيت
+
+#### توصيات لـ Kiosk Mode (اختياري)
+- لقفل الجهاز على شاشة الكاشير: `chrome.exe --kiosk --app=https://lamsa-pos-production.up.railway.app/pos --noerrdialogs --disable-pinch`
+- زر "ملء الشاشة" داخل التطبيق يكفي للاستخدام اليومي بدون إعدادات OS
+
+---
 
 ### جلسة 32 — المركز المالي للمالك + ربط حركات الفروع
 
