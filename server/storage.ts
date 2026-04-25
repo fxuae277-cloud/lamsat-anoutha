@@ -5913,25 +5913,32 @@ export class DatabaseStorage implements IStorage {
       FROM owner_transactions
     `);
     const ow = ownerRes.rows[0];
-    const receivedCash   = parseFloat(ow.received_cash);
-    const depositedBank  = parseFloat(ow.deposited_to_bank);
-    const withdrawn      = parseFloat(ow.withdrawn);
+    const receivedCash   = parseFloat(ow.received_cash);   // cash picked up from branches
+    const depositedBank  = parseFloat(ow.deposited_to_bank); // manual deposits to bank
+    const withdrawn      = parseFloat(ow.withdrawn);         // cash withdrawals by owner
     const adjIn          = parseFloat(ow.adj_in);
     const adjOut         = parseFloat(ow.adj_out);
-    const ownerCash      = receivedCash - depositedBank - withdrawn + adjIn - adjOut;
-    const ownerBankBalance = depositedBank;
+
+    // Owner cash in hand = what he picked up from branches - what he deposited - what he withdrew (cash)
+    const ownerCash = receivedCash - depositedBank - withdrawn + adjIn - adjOut;
 
     // 3. Totals across all branches
-    const totalCashOnHand     = branches.reduce((s: number, b: any) => s + parseFloat(b.currentCash), 0) + ownerCash;
-    const totalCardSales      = branches.reduce((s: number, b: any) => s + parseFloat(b.cardSales), 0);
-    const totalBankTransfers  = branches.reduce((s: number, b: any) => s + parseFloat(b.bankTransferSales), 0);
+    const totalCardSales     = branches.reduce((s: number, b: any) => s + parseFloat(b.cardSales), 0);
+    const totalBankTransfers = branches.reduce((s: number, b: any) => s + parseFloat(b.bankTransferSales), 0);
+
+    // Owner bank balance = card sales (go straight to bank) + bank transfers (go straight to bank) + manual deposits
+    // This is the true bank balance the owner should see in his bank account
+    const ownerBankBalance = totalCardSales + totalBankTransfers + depositedBank;
+
+    // Total cash on hand = all branch cash + owner's pocket cash
+    const totalCashOnHand = branches.reduce((s: number, b: any) => s + parseFloat(b.currentCash), 0) + ownerCash;
 
     // 4. Total expenses (all branches, all payment methods)
     const expRes = await pool.query(`SELECT COALESCE(SUM(amount), 0) AS total FROM expenses`);
     const totalExpenses = parseFloat(expRes.rows[0].total);
 
-    // 5. Company available balance
-    const totalAvailable = totalCashOnHand + totalCardSales + totalBankTransfers + ownerBankBalance - totalExpenses - withdrawn;
+    // 5. Company available balance = cash + bank - expenses - withdrawals
+    const totalAvailable = totalCashOnHand + ownerBankBalance - totalExpenses - withdrawn;
 
     // 6. Inventory value
     const invRes = await pool.query(`
@@ -5975,16 +5982,20 @@ export class DatabaseStorage implements IStorage {
 
     return {
       summary: {
-        totalCashOnHand:    totalCashOnHand.toFixed(3),
-        totalCardSales:     totalCardSales.toFixed(3),
-        totalBankTransfers: totalBankTransfers.toFixed(3),
-        totalExpenses:      totalExpenses.toFixed(3),
-        totalWithdrawals:   withdrawn.toFixed(3),
-        totalAvailable:     totalAvailable.toFixed(3),
-        ownerCash:          ownerCash.toFixed(3),
-        ownerBankBalance:   ownerBankBalance.toFixed(3),
+        totalCashOnHand:      totalCashOnHand.toFixed(3),
+        totalCardSales:       totalCardSales.toFixed(3),
+        totalBankTransfers:   totalBankTransfers.toFixed(3),
+        totalExpenses:        totalExpenses.toFixed(3),
+        totalWithdrawals:     withdrawn.toFixed(3),
+        totalAvailable:       totalAvailable.toFixed(3),
+        ownerCash:            ownerCash.toFixed(3),
+        ownerBankBalance:     ownerBankBalance.toFixed(3),
         receivedFromBranches: receivedCash.toFixed(3),
-        depositedToBank:    depositedBank.toFixed(3),
+        depositedToBank:      depositedBank.toFixed(3),
+        // breakdown of bank balance for display
+        bankFromCard:         totalCardSales.toFixed(3),
+        bankFromTransfer:     totalBankTransfers.toFixed(3),
+        bankFromDeposits:     depositedBank.toFixed(3),
       },
       branches,
       inventory: {

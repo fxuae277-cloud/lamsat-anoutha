@@ -188,44 +188,107 @@ export default function OwnerFinancialSummary() {
 
           {/* ── Overview ──────────────────────────────────────────────── */}
           <TabsContent value="overview" className="space-y-4">
-            {/* Top KPIs */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <KpiCard title="إجمالي النقد المتاح"      value={fmtOMR(s?.totalCashOnHand)}    icon={Banknote}    color="text-green-600" sub="جميع الفروع + المالك" />
-              <KpiCard title="إجمالي مبيعات البطاقة"   value={fmtOMR(s?.totalCardSales)}     icon={CreditCard}  color="text-purple-600" />
-              <KpiCard title="إجمالي التحويلات البنكية" value={fmtOMR(s?.totalBankTransfers)} icon={Building2}   color="text-indigo-600" />
-              <KpiCard title="الرصيد البنكي للمالك"    value={fmtOMR(s?.ownerBankBalance)}   icon={Building2}   color="text-blue-600" sub="مجموع الإيداعات" />
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <KpiCard title="نقد المالك (بيده)"       value={fmtOMR(s?.ownerCash)}           icon={Wallet}      color="text-emerald-600" sub={`استلم ${fmtOMR(s?.receivedFromBranches)}`} />
-              <KpiCard title="إجمالي المصروفات"        value={fmtOMR(s?.totalExpenses)}       icon={ArrowUpFromLine} color="text-red-600" />
-              <KpiCard title="إجمالي السحوبات"         value={fmtOMR(s?.totalWithdrawals)}    icon={ArrowUpFromLine} color="text-orange-600" />
-              <KpiCard title="الرصيد الكلي للشركة"     value={fmtOMR(s?.totalAvailable)}      icon={DollarSign}  color="text-primary"
-                sub="نقد + بطاقة + تحويل + بنك - مصروف - سحب" />
+
+            {/* Row 1: Cash side */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">💵 الجانب النقدي</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <KpiCard title="نقد الفروع"          value={fmtOMR((summary?.branches ?? []).reduce((s: number, b: any) => s + Math.max(0, parseFloat(b.currentCash)), 0))}
+                  icon={Banknote}   color="text-green-600" sub="مجموع أرصدة الفروع النقدية" />
+                <KpiCard title="نقد المالك (بيده)"   value={fmtOMR(s?.ownerCash)}
+                  icon={Wallet}     color="text-emerald-600"
+                  sub={s?.receivedFromBranches !== "0.000" ? `استلم من الفروع ${fmtOMR(s?.receivedFromBranches)}` : "لم يستلم كاش من الفروع"} />
+                <KpiCard title="إجمالي المصروفات"   value={fmtOMR(s?.totalExpenses)}
+                  icon={ArrowUpFromLine} color="text-red-500" sub="جميع الفروع - جميع طرق الدفع" />
+                <KpiCard title="إجمالي السحوبات"    value={fmtOMR(s?.totalWithdrawals)}
+                  icon={ArrowUpFromLine} color="text-orange-500" sub="سحوبات شخصية للمالك" />
+              </div>
             </div>
 
-            {/* Formula explanation */}
-            <Card className="bg-muted/40">
-              <CardHeader className="pb-2 pt-4"><CardTitle className="text-sm">معادلة الرصيد الكلي</CardTitle></CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                <span className="text-green-700 font-medium">النقد الكلي {fmtOMR(s?.totalCashOnHand)}</span>
-                {" + "}<span className="text-purple-700 font-medium">البطاقة {fmtOMR(s?.totalCardSales)}</span>
-                {" + "}<span className="text-indigo-700 font-medium">التحويلات {fmtOMR(s?.totalBankTransfers)}</span>
-                {" + "}<span className="text-blue-700 font-medium">البنك {fmtOMR(s?.ownerBankBalance)}</span>
-                {" − "}<span className="text-red-700 font-medium">المصروفات {fmtOMR(s?.totalExpenses)}</span>
-                {" − "}<span className="text-orange-700 font-medium">السحوبات {fmtOMR(s?.totalWithdrawals)}</span>
-                {" = "}<span className="text-primary font-bold text-base">{fmtOMR(s?.totalAvailable)}</span>
+            {/* Row 2: Bank side */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">🏦 الجانب البنكي</p>
+              <Card className="border-blue-200 dark:border-blue-800">
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-sm text-muted-foreground">الرصيد البنكي للمالك</p>
+                      <p className="text-2xl font-bold text-blue-600">{fmtOMR(s?.ownerBankBalance)}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">مبيعات البطاقة + التحويلات البنكية + الإيداعات اليدوية</p>
+                    </div>
+                    <Building2 className="w-10 h-10 text-blue-400" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 border-t pt-3">
+                    <div className="text-center">
+                      <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><CreditCard className="w-3 h-3" />مبيعات البطاقة</p>
+                      <p className="font-bold text-purple-600 text-sm">{fmtOMR(s?.bankFromCard)}</p>
+                      <p className="text-xs text-muted-foreground">تذهب للبنك مباشرة</p>
+                    </div>
+                    <div className="text-center border-x">
+                      <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><Building2 className="w-3 h-3" />التحويلات البنكية</p>
+                      <p className="font-bold text-indigo-600 text-sm">{fmtOMR(s?.bankFromTransfer)}</p>
+                      <p className="text-xs text-muted-foreground">تذهب للبنك مباشرة</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><ArrowDownToLine className="w-3 h-3" />إيداعات يدوية</p>
+                      <p className="font-bold text-blue-600 text-sm">{fmtOMR(s?.bankFromDeposits)}</p>
+                      <p className="text-xs text-muted-foreground">أودعها المالك</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Row 3: Final balance */}
+            <Card className="bg-primary/5 border-primary/20">
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">الرصيد الكلي للشركة</p>
+                    <p className="text-3xl font-bold text-primary">{fmtOMR(s?.totalAvailable)}</p>
+                  </div>
+                  <DollarSign className="w-10 h-10 text-primary/50" />
+                </div>
+                <div className="mt-3 text-xs text-muted-foreground">
+                  <span className="text-green-700 font-medium">نقد ({fmtOMR(s?.totalCashOnHand)})</span>
+                  {" + "}<span className="text-blue-700 font-medium">بنك ({fmtOMR(s?.ownerBankBalance)})</span>
+                  {" − "}<span className="text-red-700 font-medium">مصروفات ({fmtOMR(s?.totalExpenses)})</span>
+                  {" − "}<span className="text-orange-700 font-medium">سحوبات ({fmtOMR(s?.totalWithdrawals)})</span>
+                  {" = "}<span className="text-primary font-bold">{fmtOMR(s?.totalAvailable)}</span>
+                </div>
               </CardContent>
             </Card>
 
-            {/* Owner account detail */}
+            {/* Owner cash detail */}
             <Card>
-              <CardHeader className="pb-2 pt-4"><CardTitle className="text-sm flex items-center gap-2"><ShieldCheck className="w-4 h-4" />حساب المالك</CardTitle></CardHeader>
+              <CardHeader className="pb-2 pt-4">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4" />
+                  حساب المالك النقدي — عند استلام كاش من الفروع
+                </CardTitle>
+              </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div><p className="text-muted-foreground">استلم من الفروع</p><p className="font-bold text-green-600">{fmtOMR(s?.receivedFromBranches)}</p></div>
-                  <div><p className="text-muted-foreground">أودع في البنك</p><p className="font-bold text-blue-600">{fmtOMR(s?.depositedToBank)}</p></div>
-                  <div><p className="text-muted-foreground">سحوبات شخصية</p><p className="font-bold text-red-600">{fmtOMR(s?.totalWithdrawals)}</p></div>
-                  <div><p className="text-muted-foreground">نقد بيد المالك</p><p className="font-bold text-emerald-600">{fmtOMR(s?.ownerCash)}</p></div>
+                  <div className="bg-green-50 dark:bg-green-950/30 rounded p-3">
+                    <p className="text-muted-foreground text-xs">استلم كاش من الفروع</p>
+                    <p className="font-bold text-green-600 text-base">{fmtOMR(s?.receivedFromBranches)}</p>
+                    <p className="text-xs text-muted-foreground mt-1">يُسجَّل بـ "تسجيل معاملة مالية"</p>
+                  </div>
+                  <div className="bg-blue-50 dark:bg-blue-950/30 rounded p-3">
+                    <p className="text-muted-foreground text-xs">أودع في البنك</p>
+                    <p className="font-bold text-blue-600 text-base">{fmtOMR(s?.depositedToBank)}</p>
+                    <p className="text-xs text-muted-foreground mt-1">من النقد → للبنك</p>
+                  </div>
+                  <div className="bg-red-50 dark:bg-red-950/30 rounded p-3">
+                    <p className="text-muted-foreground text-xs">سحوبات شخصية</p>
+                    <p className="font-bold text-red-600 text-base">{fmtOMR(s?.totalWithdrawals)}</p>
+                    <p className="text-xs text-muted-foreground mt-1">خصم من نقد المالك</p>
+                  </div>
+                  <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded p-3">
+                    <p className="text-muted-foreground text-xs">نقد بيد المالك الآن</p>
+                    <p className="font-bold text-emerald-600 text-base">{fmtOMR(s?.ownerCash)}</p>
+                    <p className="text-xs text-muted-foreground mt-1">استلم − أودع − سحب</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
