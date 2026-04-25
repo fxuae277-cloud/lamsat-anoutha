@@ -4,61 +4,75 @@
  * Requires QZ Tray desktop app running on the cashier machine.
  */
 
-// QZ Tray global injected by the CDN script in index.html
+// QZ Tray global injected by the CDN script (async) in index.html
 declare const qz: any;
 
-// ─── ESC/POS command constants ────────────────────────────────────────────────
+// ─── ESC/POS command bytes ─────────────────────────────────────────────────────
 
 const ESC = '\x1B';
 const GS  = '\x1D';
 const LF  = '\x0A';
 
 const CMD = {
-  INIT:         ESC + '@',        // reset printer to defaults
-  ALIGN_LEFT:   ESC + 'a\x00',   // left-align text
-  ALIGN_CENTER: ESC + 'a\x01',   // center-align text
-  ALIGN_RIGHT:  ESC + 'a\x02',   // right-align text
-  BOLD_ON:      ESC + 'E\x01',   // bold on
-  BOLD_OFF:     ESC + 'E\x00',   // bold off
-  DOUBLE_ON:    ESC + '!\x30',   // double height + double width
-  DOUBLE_OFF:   ESC + '!\x00',   // normal character size
-  // ESC t 28 (0x1C) = code page CP864 (Arabic) on EPSON TM series
-  CP864:        ESC + 't\x1C',
-  // GS V 65 0 = partial cut with one-dot paper feed
-  CUT:          GS  + 'V\x41\x00',
+  // ESC @ — reset printer to factory defaults (must be first command)
+  INIT:         ESC + '@',
+
+  // ESC { 0 — disable upside-down printing mode (fixes inverted receipt bug)
+  NO_INVERT:    ESC + '\x7B\x00',
+
+  // ESC t 22 (0x16) — select Windows-1256 Arabic code page
+  // This page maps Arabic Unicode characters to the correct printer bytes
+  ARABIC_PAGE:  ESC + '\x74\x16',
+
+  // ESC a n — text alignment
+  ALIGN_LEFT:   ESC + 'a\x00',
+  ALIGN_CENTER: ESC + 'a\x01',
+  ALIGN_RIGHT:  ESC + 'a\x02',
+
+  // ESC E n — bold text
+  BOLD_ON:      ESC + 'E\x01',
+  BOLD_OFF:     ESC + 'E\x00',
+
+  // ESC ! n — character size (0x30 = double height + double width, 0x00 = normal)
+  DOUBLE_ON:    ESC + '!\x30',
+  DOUBLE_OFF:   ESC + '!\x00',
+
+  // GS V 65 16 — partial cut with 16-dot paper feed before cut
+  CUT:          GS  + '\x56\x41\x10',
 };
 
-// Default printer name — matches the Windows print queue name
+// Default Windows print queue name for the receipt printer
 const DEFAULT_PRINTER = 'EPSON TM-T100 Receipt';
 
-// 80mm paper at normal density = 42 printable characters per line
+// 80mm paper at standard density = 42 characters per line
 const PAPER_WIDTH = 42;
 
 // ─── Connection management ────────────────────────────────────────────────────
 
 /**
- * Connect to QZ Tray.  Safe to call multiple times — reuses the active
- * WebSocket if already open, avoiding redundant reconnects.
+ * Connect to QZ Tray WebSocket.
+ * Safe to call multiple times — reuses the active connection to avoid
+ * redundant reconnects on every print job.
  */
 export async function connectQZ(): Promise<void> {
   if (typeof qz === 'undefined') {
     throw new Error(
-      'QZ Tray script غير محمّل — تأكد من إضافة السكريبت في index.html وإعادة تحميل الصفحة'
+      'QZ Tray script غير محمّل — تأكد من تشغيل تطبيق QZ Tray وأعد تحميل الصفحة'
     );
   }
 
-  if (qz.websocket.isActive()) return; // already connected — reuse
+  if (qz.websocket.isActive()) return; // already open — reuse
 
   try {
     await qz.websocket.connect();
   } catch (e: any) {
     throw new Error(
-      `تعذّر الاتصال بـ QZ Tray — تأكد من تشغيل تطبيق QZ Tray على هذا الجهاز\n(${e.message ?? e})`
+      `تعذّر الاتصال بـ QZ Tray — تأكد من تشغيل التطبيق على هذا الجهاز\n(${e.message ?? e})`
     );
   }
 }
 
-/** Disconnect from QZ Tray.  Call during app teardown if needed. */
+/** Disconnect from QZ Tray. Call on app teardown if needed. */
 export async function disconnectQZ(): Promise<void> {
   if (typeof qz !== 'undefined' && qz.websocket.isActive()) {
     await qz.websocket.disconnect();
@@ -93,20 +107,24 @@ export interface ReceiptData {
 const toNum = (v: string | number | null | undefined) =>
   parseFloat(String(v || '0')) || 0;
 
+// OMR: 3 decimal places with thousands separator
 const omr = (v: number) =>
-  v.toFixed(3).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' ر.ع';
+  v.toFixed(3).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' OMR';
 
-const SEPARATOR  = '-'.repeat(PAPER_WIDTH) + LF;
-const THICK_SEP  = '='.repeat(PAPER_WIDTH) + LF;
+const SEPARATOR = '-'.repeat(PAPER_WIDTH) + LF;
+const THICK_SEP = '='.repeat(PAPER_WIDTH) + LF;
 
 /**
- * Two-column row: left text left-justified, right text right-justified.
- * Total width = PAPER_WIDTH.
+ * Two-column row.
+ * Left text is left-padded; right text is right-aligned.
+ * Total width = PAPER_WIDTH characters.
+ * Works correctly with Arabic because windows-1256 is single-byte
+ * (1 Arabic char = 1 printer column = 1 JS string char for padding math).
  */
 function twoCol(left: string, right: string): string {
   const r = String(right);
   const maxLeft = PAPER_WIDTH - r.length - 1;
-  const l = String(left).slice(0, maxLeft).padEnd(maxLeft);
+  const l = String(left).slice(0, Math.max(1, maxLeft)).padEnd(maxLeft);
   return l + ' ' + r + LF;
 }
 
@@ -120,13 +138,13 @@ function payLabel(method: string): string {
 // ─── Receipt builder ──────────────────────────────────────────────────────────
 
 /**
- * Produces a single ESC/POS string for the entire receipt.
- * QZ Tray encodes the Unicode string to CP864 before sending
- * to the printer, so Arabic characters print correctly.
+ * Assembles the full ESC/POS byte sequence for one receipt.
  *
- * NOTE: Arabic RTL rendering depends on the printer firmware.
- * EPSON printers with Arabic firmware (CP864 support) handle
- * the bidirectional display automatically.
+ * Encoding note: this is a JavaScript UTF-16 string containing both
+ * control bytes (ESC/POS commands) and Arabic Unicode text. QZ Tray
+ * converts the entire string to windows-1256 before sending raw bytes
+ * to the printer. ASCII control bytes (< 0x80) survive the conversion
+ * unchanged; Arabic chars are mapped to their windows-1256 equivalents.
  */
 function buildReceipt(data: ReceiptData): string {
   const {
@@ -149,22 +167,21 @@ function buildReceipt(data: ReceiptData): string {
 
   let r = '';
 
-  // ── Initialization ────────────────────────────────────────────────────
-  r += CMD.INIT;    // reset
-  r += CMD.CP864;   // switch to Arabic code page CP864
+  // ── Boot sequence ─────────────────────────────────────────────────────
+  r += CMD.INIT;         // ESC @ — full reset
+  r += CMD.NO_INVERT;    // ESC { 0 — ensure normal (non-inverted) orientation
+  r += CMD.ARABIC_PAGE;  // ESC t 22 — activate Windows-1256 Arabic code page
 
-  // ── Store header ──────────────────────────────────────────────────────
+  // ── Store header (centered) ───────────────────────────────────────────
   r += CMD.ALIGN_CENTER;
   r += CMD.DOUBLE_ON + CMD.BOLD_ON;
-  r += 'لمسة أنوثة' + LF;        // store title — double-size bold
+  r += 'لمسة أنوثة' + LF;   // double-size bold title
   r += CMD.DOUBLE_OFF + CMD.BOLD_OFF;
 
-  if (branchName) {
-    r += branchName + LF;
-  }
+  if (branchName) r += branchName + LF;
   r += LF;
 
-  // ── Invoice meta ──────────────────────────────────────────────────────
+  // ── Invoice metadata (left aligned) ───────────────────────────────────
   r += CMD.ALIGN_LEFT;
   r += SEPARATOR;
   r += twoCol('رقم الفاتورة:', invoiceNumber || '---');
@@ -179,19 +196,22 @@ function buildReceipt(data: ReceiptData): string {
   r += CMD.BOLD_OFF;
   r += SEPARATOR;
 
-  // ── Line items ────────────────────────────────────────────────────────
+  // ── Line items (left aligned, price right-justified) ──────────────────
   for (const item of items) {
     const lineTotal = toNum(item.unitPrice) * item.quantity;
-    const nameStr   = item.color
+    const nameStr = item.color
       ? `${item.productName} (${item.color})`
       : item.productName;
 
-    // Product name on its own line, truncated to paper width
+    // Product name — truncated to paper width
     r += CMD.ALIGN_LEFT;
     r += nameStr.slice(0, PAPER_WIDTH) + LF;
 
-    // Qty × unit price  →  line total right-justified
-    r += twoCol(`  x${item.quantity}  @${omr(toNum(item.unitPrice))}`, omr(lineTotal));
+    // Qty × unit price on left → line total right-justified
+    r += twoCol(
+      `  x${item.quantity}  @${omr(toNum(item.unitPrice))}`,
+      omr(lineTotal)
+    );
   }
 
   r += SEPARATOR;
@@ -201,9 +221,12 @@ function buildReceipt(data: ReceiptData): string {
     r += twoCol('الخصم:', `- ${omr(toNum(discount))}`);
   }
 
+  // Grand total — bold + right aligned
+  r += CMD.ALIGN_RIGHT;
   r += CMD.BOLD_ON;
-  r += twoCol('الإجمالي:', omr(total));   // grand total in bold
+  r += 'الإجمالي: ' + omr(total) + LF;
   r += CMD.BOLD_OFF;
+  r += CMD.ALIGN_LEFT;
 
   if (amountPaid !== undefined && toNum(amountPaid) > 0) {
     r += twoCol('المدفوع:', omr(toNum(amountPaid)));
@@ -215,12 +238,12 @@ function buildReceipt(data: ReceiptData): string {
 
   r += THICK_SEP;
 
-  // ── Footer ────────────────────────────────────────────────────────────
+  // ── Footer (centered) ─────────────────────────────────────────────────
   r += CMD.ALIGN_CENTER;
   r += 'شكراً لتسوقكم معنا' + LF;
-  r += LF + LF;
+  r += LF + LF; // extra feed before cut
 
-  // Cut paper (partial cut with one-dot feed)
+  // GS V 65 16 — partial cut with paper feed
   r += CMD.CUT;
 
   return r;
@@ -231,40 +254,43 @@ function buildReceipt(data: ReceiptData): string {
 /**
  * Print a receipt directly to the thermal printer via QZ Tray.
  *
- * @param data        Receipt content (items, totals, customer info, etc.)
- * @param printerName Windows print queue name — defaults to DEFAULT_PRINTER
+ * @param data        Receipt content (items, totals, customer, cashier…)
+ * @param printerName Windows print queue name — falls back to DEFAULT_PRINTER
  *
- * Throws a descriptive Arabic error string on any failure so the caller
- * can display it directly in a toast/alert.
+ * Throws an Arabic error string on any failure so the caller can show it
+ * directly in a toast or alert without extra formatting.
  */
 export async function printReceipt(
   data: ReceiptData,
   printerName?: string
 ): Promise<void> {
-  // Guard: QZ Tray script must be loaded
+  // Guard: ensure QZ Tray script finished loading
   if (typeof qz === 'undefined') {
-    throw new Error('QZ Tray غير محمّل — تحقق من تشغيل تطبيق QZ Tray وأعد تحميل الصفحة');
+    throw new Error(
+      'QZ Tray غير محمّل — تحقق من تشغيل تطبيق QZ Tray وأعد تحميل الصفحة'
+    );
   }
 
-  // Step 1: connect (reuses existing connection if active)
+  // 1. Connect (reuses existing WebSocket if already active)
   await connectQZ();
 
-  // Step 2: find the printer by name
+  // 2. Locate the printer by name
   const targetName = printerName || DEFAULT_PRINTER;
   let resolvedName: string;
   try {
     const found: string[] = await qz.printers.find(targetName);
     if (!found || found.length === 0) {
-      throw new Error(`الطابعة "${targetName}" غير موجودة — تحقق من اسم الطابعة في إعدادات الطباعة`);
+      throw new Error(
+        `الطابعة "${targetName}" غير موجودة — تحقق من اسم الطابعة في إعدادات الطباعة`
+      );
     }
     resolvedName = found[0];
   } catch (e: any) {
-    // Re-throw descriptive errors unchanged; wrap QZ internal errors
     if (String(e.message).includes('غير موجودة')) throw e;
     throw new Error(`فشل البحث عن الطابعة: ${e.message ?? e}`);
   }
 
-  // Step 3: build and send the ESC/POS receipt
+  // 3. Build and send the ESC/POS payload
   const config  = qz.configs.create(resolvedName);
   const payload = buildReceipt(data);
 
@@ -275,9 +301,9 @@ export async function printReceipt(
       data:   payload,
       options: {
         language: 'ESCPOS',
-        // QZ Tray converts the JavaScript UTF-16 string to CP864
-        // before sending raw bytes to the printer (Arabic support)
-        encoding: 'CP864',
+        // windows-1256: QZ Tray converts JS UTF-16 → windows-1256 bytes
+        // before sending to the printer, enabling correct Arabic rendering
+        encoding: 'windows-1256',
       },
     },
   ]);
