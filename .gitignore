@@ -5,3 +5,12 @@ server/public
 vite.config.ts.*
 *.tar.gz
 logs/*.log
+
+# Secrets — NEVER commit
+.env
+.env.*
+!.env.example
+*.pem
+scripts/qz-keys/*.pem
+scripts/qz-keys/private.*
+scripts/qz-keys/keys.*

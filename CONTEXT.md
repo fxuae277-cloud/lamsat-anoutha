@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-25 (جلسة 40 — توليد cert/key حقيقيين لـ QZ Tray وإصلاح Signature Missing)_
+_آخر تحديث: 2026-04-25 (جلسة 41 — إصلاح أمني سريع: إزالة `.env` و private-key من git tracking)_
 
 ---
 
@@ -12,6 +12,52 @@ _آخر تحديث: 2026-04-25 (جلسة 40 — توليد cert/key حقيقيي
 ---
 
 ## ✅ مكتمل
+
+### جلسة 41 — إصلاح أمني سريع: إزالة الأسرار من git tracking
+
+**المشكلة:** كان `.env` و `scripts/qz-keys/private-key.pem` و `scripts/qz-keys/digital-certificate.pem` متعقَّبة في git ومرفوعة على GitHub العام — أي أن الأسرار التالية مكشوفة في تاريخ الـ commits:
+- `DATABASE_URL` (Railway PostgreSQL مع كلمة مرور حقيقية)
+- `SESSION_SECRET=lamsat-secret-2024`
+- `QZ_PRIVATE_KEY` (RSA-2048 كامل)
+- نفس الـ private key في `scripts/qz-keys/private-key.pem`
+
+**نطاق الإصلاح (سريع — بدون إعادة كتابة git history):**
+
+#### `.gitignore` — أنماط جديدة
+```
+.env
+.env.*
+!.env.example
+*.pem
+scripts/qz-keys/*.pem
+scripts/qz-keys/private.*
+scripts/qz-keys/keys.*
+```
+
+#### إزالة من tracking (الملفات المحلية محفوظة)
+```bash
+git rm --cached .env
+git rm --cached scripts/qz-keys/private-key.pem
+git rm --cached scripts/qz-keys/digital-certificate.pem
+```
+
+#### `.env.example` — جديد
+ملف placeholder آمن للمطورين الجدد، يوضّح المتغيرات المطلوبة بدون قيم حقيقية.
+
+#### كود التطبيق
+- لا تغييرات على logic — `server/index.ts` و `server/routes.ts` و `server/db.ts` و `server/backup.ts` يستخدمون `process.env` أصلاً.
+- `client/src/lib/qz-certificate.ts` يحتوي الشهادة العامة فقط (آمن للـ frontend بالتصميم) — لم يُلمس.
+
+**الخطوات الحرجة المطلوبة على Railway (لإبطال الأسرار المكشوفة):**
+1. **PostgreSQL → Settings → Reset Database Password** → Railway يحدّث `${{Postgres.DATABASE_URL}}` تلقائياً
+2. **Service Variables:**
+   - `SESSION_SECRET` ← قيمة جديدة من `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`
+   - `QZ_PRIVATE_KEY` ← مفتاح جديد (شغّل `scripts/qz-keys/` لتوليد زوج جديد) — وحدِّث `client/src/lib/qz-certificate.ts` بالشهادة الجديدة في **نفس الكوميت**
+3. **Redeploy**
+
+**ملاحظة:** الأسرار القديمة لا تزال في commits سابقة على GitHub. تدوير المفاتيح في Railway هو ما يُبطلها فعلياً. إعادة كتابة git history مؤجَّلة كإجراء لاحق إن لزم.
+
+---
 
 ### جلسة 40 — إصلاح "Signature Missing / Anonymous request" في QZ Tray نهائياً
 
