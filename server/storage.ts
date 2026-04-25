@@ -1807,16 +1807,26 @@ export class DatabaseStorage implements IStorage {
       count: sql<number>`count(*)::int`,
     }).from(expenses).where(and(eq(expenses.shiftId, shiftId), sql`${expenses.source} != 'cash'`));
 
+    // حركات الإيداع/السحب اليدوية في الصندوق (لتطابق حساب الإغلاق)
+    const [cashDepositRow] = await db.select({
+      totalIn: sql<string>`coalesce(sum(amount_in::numeric),0)::text`,
+      totalOut: sql<string>`coalesce(sum(amount_out::numeric),0)::text`,
+    }).from(cashLedger).where(
+      and(eq(cashLedger.shiftId, shiftId), sql`${cashLedger.type} IN ('deposit','withdrawal')`)
+    );
+
     const salesCash = parseFloat(cashOrders.total) + parseFloat(cashPosSales.total);
     const salesCard = parseFloat(cardOrders.total) + parseFloat(cardPosSales.total);
     const salesBankTransfer = parseFloat(bankOrders.total) + parseFloat(bankPosSales.total);
     const expCash = parseFloat(cashExpenses.total);
     const expBank = parseFloat(bankExpenses.total);
+    const depositsIn = parseFloat(cashDepositRow.totalIn);
+    const withdrawalsOut = parseFloat(cashDepositRow.totalOut);
     const totalSalesAll = salesCash + salesCard + salesBankTransfer;
     const totalExpenses = expCash + expBank;
     const netTotal = totalSalesAll - totalExpenses;
     const openingCash = parseFloat(shiftRow.openingCash || "0");
-    const expectedCash = openingCash + salesCash - expCash;
+    const expectedCash = openingCash + salesCash - expCash + depositsIn - withdrawalsOut;
 
     return {
       shift: shiftRow,

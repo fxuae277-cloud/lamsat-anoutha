@@ -601,25 +601,61 @@ function ReturnModal({ onClose }: { onClose: () => void }) {
 }
 
 // ─── CloseShiftModal ─────────────────────────────────────────────────────────
-function CloseShiftModal({ shift, onClose, onClosed }: {
+function CloseShiftModal({ shift, onClose, onClosed, canEditOpening }: {
   shift: Shift;
   onClose: () => void;
   onClosed: () => void;
+  canEditOpening: boolean;
 }) {
   const { toast } = useToast();
   const [actualCash, setActualCash] = useState("");
   const [summary, setSummary] = useState<any>(null);
   const [loadingSummary, setLoadingSummary] = useState(true);
+  const [editingOpening, setEditingOpening] = useState(false);
+  const [openingDraft, setOpeningDraft] = useState<string>(String(shift.openingCash ?? "0"));
+  const [savingOpening, setSavingOpening] = useState(false);
+  const [openingValue, setOpeningValue] = useState<number>(n(shift.openingCash));
+
+  const reloadSummary = async () => {
+    try {
+      const r = await fetch(`/api/reports/shift?shiftId=${shift.id}`, { credentials: "include" });
+      if (r.ok) setSummary(await r.json());
+    } catch {}
+  };
 
   useEffect(() => {
     (async () => {
-      try {
-        const r = await fetch(`/api/reports/shift?shiftId=${shift.id}`, { credentials: "include" });
-        if (r.ok) setSummary(await r.json());
-      } catch {}
+      await reloadSummary();
       setLoadingSummary(false);
     })();
   }, [shift.id]);
+
+  const saveOpeningCash = async () => {
+    const amount = parseFloat(openingDraft);
+    if (isNaN(amount) || amount < 0) {
+      toast({ title: "قيمة غير صالحة", variant: "destructive" });
+      return;
+    }
+    setSavingOpening(true);
+    try {
+      const r = await fetch(`/api/shifts/${shift.id}/opening-cash`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ openingCash: amount.toFixed(3) }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.message || "فشل تحديث النقد الافتتاحي");
+      setOpeningValue(amount);
+      setEditingOpening(false);
+      await reloadSummary();
+      toast({ title: "تم تحديث النقد الافتتاحي" });
+    } catch (e: any) {
+      toast({ title: "خطأ", description: e.message, variant: "destructive" });
+    } finally {
+      setSavingOpening(false);
+    }
+  };
 
   const closeMutation = useMutation({
     mutationFn: async () => {
@@ -642,11 +678,12 @@ function CloseShiftModal({ shift, onClose, onClosed }: {
   });
 
   const totalSales = n(summary?.totalSales ?? 0);
-  const totalCash  = n(summary?.totalCashIn ?? 0);
-  const totalCard  = n(summary?.totalCardIn ?? 0);
-  const totalBank  = n(summary?.totalBankIn ?? 0);
-  const openingCash = n(shift.openingCash);
-  const expected   = n(summary?.expectedCash ?? openingCash + totalCash);
+  const totalCash  = n(summary?.salesCash?.total ?? 0);
+  const totalCard  = n(summary?.salesCard?.total ?? 0);
+  const totalBank  = n(summary?.salesBankTransfer?.total ?? 0);
+  const openingCash = n(summary?.openingCash ?? openingValue);
+  const cashExp     = n(summary?.expensesCash?.total ?? 0);
+  const expected   = n(summary?.expectedCash ?? (openingCash + totalCash - cashExp));
   const actualNum  = n(actualCash);
   const diff       = actualNum - expected;
 
@@ -675,12 +712,46 @@ function CloseShiftModal({ shift, onClose, onClosed }: {
                 <span className="font-bold text-base">ملخص الوردية</span>
                 <span className="text-muted-foreground text-xs">الفاتورة الإلكترونية</span>
               </div>
+              {/* النقد الافتتاحي — قابل للتعديل */}
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">💰 النقد الافتتاحي</span>
+                {editingOpening ? (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number" step="0.001" min="0"
+                      value={openingDraft}
+                      onChange={e => setOpeningDraft(e.target.value)}
+                      className="h-7 w-24 text-sm text-center"
+                      dir="ltr"
+                      autoFocus
+                    />
+                    <Button size="sm" className="h-7 px-2 text-xs"
+                      onClick={saveOpeningCash} disabled={savingOpening}>
+                      حفظ
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
+                      onClick={() => { setEditingOpening(false); setOpeningDraft(String(openingValue)); }}>
+                      إلغاء
+                    </Button>
+                  </div>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <span className="text-gray-700">{omr(openingCash)} ر.ع</span>
+                    {canEditOpening && (
+                      <Button size="sm" variant="ghost" className="h-6 px-1 text-[11px] text-pink-600 hover:bg-pink-50"
+                        onClick={() => { setOpeningDraft(String(openingCash)); setEditingOpening(true); }}>
+                        تعديل
+                      </Button>
+                    )}
+                  </span>
+                )}
+              </div>
               {[
-                ["💰 النقد الافتتاحي",  omr(openingCash) + " ر.ع", "text-gray-700"],
                 ["🧾 إجمالي المبيعات", omr(totalSales)  + " ر.ع", "text-emerald-600 font-bold"],
                 ["💵 مبيعات نقداً",     omr(totalCash)   + " ر.ع", "text-gray-700"],
                 ["💳 مبيعات بطاقة",    omr(totalCard)   + " ر.ع", "text-purple-600"],
                 ["🏦 تحويل بنكي",       omr(totalBank)   + " ر.ع", "text-blue-600"],
+                ["💸 مصروفات كاش",     "−" + omr(cashExp) + " ر.ع", "text-red-600"],
                 ["📊 الكاش المتوقع",   omr(expected)    + " ر.ع", "text-orange-600 font-semibold"],
               ].map(([label, val, cls]) => (
                 <div key={label as string} className="flex justify-between items-center">
@@ -1444,6 +1515,7 @@ export default function POS() {
           shift={shift}
           onClose={() => setShowCloseShift(false)}
           onClosed={() => { setShift(null); setShowCloseShift(false); clearCart(); }}
+          canEditOpening={isOwner}
         />
       )}
 

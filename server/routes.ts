@@ -3273,6 +3273,33 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     res.status(201).json(await storage.createShift(parsed.data));
   });
+
+  // PATCH /api/shifts/:id/opening-cash — تعديل النقد الافتتاحي لوردية مفتوحة (للمالك/الإدمن فقط لمنع التلاعب)
+  app.patch("/api/shifts/:id/opening-cash", requireAuth, requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const shiftId = Number(req.params.id);
+      const { openingCash } = req.body;
+      if (!shiftId) return res.status(400).json({ message: "shiftId مطلوب" });
+      const amount = parseFloat(String(openingCash));
+      if (isNaN(amount) || amount < 0) {
+        return res.status(400).json({ message: "النقد الافتتاحي مطلوب ولا يقل عن الصفر" });
+      }
+      const [existing] = await db.select().from(shifts).where(eq(shifts.id, shiftId)).limit(1);
+      if (!existing) return res.status(404).json({ message: "الوردية غير موجودة" });
+      if (existing.status !== "open") {
+        return res.status(400).json({ message: "لا يمكن تعديل النقد الافتتاحي لوردية مغلقة" });
+      }
+      const [row] = await db
+        .update(shifts)
+        .set({ openingCash: amount.toFixed(3) })
+        .where(eq(shifts.id, shiftId))
+        .returning();
+      res.json(row);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "خطأ" });
+    }
+  });
+
   app.patch("/api/shifts/:id/close", requireAuth, requirePermission("shift.close"), enforceBranchScope, async (req, res) => {
     const shiftId = Number(req.params.id);
     const pendingOrders = await storage.getPendingOrdersByShift(shiftId);
