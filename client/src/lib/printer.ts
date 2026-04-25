@@ -1,32 +1,31 @@
 /**
- * printer.ts — QZ Tray IMAGE printing for EPSON TM-T100
+ * printer.ts — QZ Tray high-quality image printing for EPSON TM-T100
  *
- * Strategy: the browser renders the receipt to a PNG via html2canvas.
- * The PNG is sent to QZ Tray as a pixel/image job — no Arabic text is
- * ever sent as raw bytes, so encoding issues are eliminated completely.
+ * Arabic is rendered by the browser as a high-res PNG (html2canvas scale:2),
+ * then sent to QZ Tray as a pixel/image job.
+ * No ESC/POS text encoding — no Arabic encoding issues possible.
  *
  * Flow:
- *  1. buildReceiptHtml()  → styled HTML string (RTL Arabic, inline CSS)
- *  2. receiptToBase64()   → off-screen DOM → html2canvas → Base64 PNG
- *  3. printReceiptAsImage() → QZ pixel print + raw cut command
+ *   buildReceiptHtml()  → inline-CSS RTL HTML (576px, 24px font)
+ *   receiptToBase64()   → off-screen DOM → html2canvas (scale 2) → PNG base64
+ *   printReceiptAsImage() → QZ pixel print → separate raw cut command
  */
 
 import html2canvas from 'html2canvas';
 
-// QZ Tray global injected by the CDN script (async) in index.html
 declare const qz: any;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEFAULT_PRINTER = 'EPSON TM-T100 Receipt';
 
-// 80mm paper: 576px is a reliable width for html2canvas rendering
+// HTML receipt render width in pixels (80mm paper ≈ 576px at ~183 DPI)
 const RECEIPT_WIDTH = 576;
 
-// ESC/POS cut command — GS V 65 16 (partial cut with 16-dot feed)
+// GS V 65 16 — partial cut with 16-dot paper feed before cut
 const CMD_CUT = '\x1D\x56\x41\x10';
 
-// ESC/POS cash drawer — ESC p 0 25 250 (pulse pin 0)
+// ESC p 0 25 250 — cash drawer pulse on pin 0
 const CMD_DRAWER = '\x1B\x70\x00\x19\xFA';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -55,50 +54,38 @@ export interface ReceiptData {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const toNum = (v: string | number | null | undefined) =>
-  parseFloat(String(v || '0')) || 0;
+  parseFloat(String(v ?? 0)) || 0;
 
-const omr = (v: number) =>
+const fmtOMR = (v: number) =>
   v.toFixed(3).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' ر.ع';
 
 const payLabel = (m: string) =>
-  m === 'cash' ? 'نقدي' : m === 'card' ? 'بطاقة' : m === 'bank_transfer' ? 'تحويل بنكي' : m;
+  ({ cash: 'نقدي', card: 'بطاقة', bank_transfer: 'تحويل بنكي' } as Record<string, string>)[m] ?? m;
 
 // ─── QZ connection ────────────────────────────────────────────────────────────
 
-/**
- * Connect to QZ Tray WebSocket.
- * Reuses existing connection — safe to call before every print job.
- */
+/** Connect to QZ Tray WebSocket. Safe to call repeatedly — reuses open socket. */
 export async function ensureQzConnected(): Promise<void> {
   if (typeof qz === 'undefined') {
-    throw new Error(
-      'QZ Tray غير محمّل — تأكد من تشغيل تطبيق QZ Tray وأعد تحميل الصفحة'
-    );
+    throw new Error('QZ Tray غير محمّل — تأكد من تشغيل تطبيق QZ Tray وأعد تحميل الصفحة');
   }
   if (qz.websocket.isActive()) return;
   try {
     await qz.websocket.connect();
   } catch (e: any) {
-    throw new Error(
-      `تعذّر الاتصال بـ QZ Tray — تأكد من تشغيل التطبيق\n(${e.message ?? e})`
-    );
+    throw new Error(`تعذّر الاتصال بـ QZ Tray — (${e.message ?? e})`);
   }
 }
 
 // ─── Printer detection ────────────────────────────────────────────────────────
 
-/**
- * Find the printer by name in the Windows print queue.
- * Returns the resolved name as reported by QZ Tray.
- */
+/** Resolve the Windows print queue name via QZ Tray. */
 export async function getReceiptPrinter(printerName?: string): Promise<string> {
   const target = printerName || DEFAULT_PRINTER;
   try {
     const found: string[] = await qz.printers.find(target);
-    if (!found || found.length === 0) {
-      throw new Error(
-        `الطابعة "${target}" غير موجودة — تحقق من اسم الطابعة في إعدادات الطباعة`
-      );
+    if (!found?.length) {
+      throw new Error(`الطابعة "${target}" غير موجودة — تحقق من اسم الطابعة في الإعدادات`);
     }
     return found[0];
   } catch (e: any) {
@@ -110,131 +97,165 @@ export async function getReceiptPrinter(printerName?: string): Promise<string> {
 // ─── Receipt HTML builder ─────────────────────────────────────────────────────
 
 /**
- * Returns a self-contained HTML string for the receipt.
+ * Builds a self-contained HTML string for the receipt.
+ * All styles are inline — html2canvas does not read external CSS.
+ * Arabic is rendered entirely by the browser; no encoding is needed.
  *
- * All styles are inline so html2canvas renders them without needing
- * access to external stylesheets.  Arabic text is handled natively
- * by the browser — no ESC/POS encoding required.
+ * Layout (RTL, 576px wide, 24px base font):
+ *
+ *   ┌───────────────────────────────────┐
+ *   │          لمسة أنوثة               │  ← 30px bold, centered
+ *   │          اسم الفرع                │  ← 20px, centered
+ *   ├═══════════════════════════════════┤  ← solid 2px border
+ *   │  رقم الفاتورة  :  INV-001         │  ← meta rows (label right, value left)
+ *   │  التاريخ       :  …               │
+ *   │  الكاشير       :  …               │
+ *   │  العميل        :  …               │
+ *   ├───────────────────────────────────┤  ← dashed 1px
+ *   │  اسم المنتج   كمية   المبلغ       │  ← items header
+ *   ├───────────────────────────────────┤
+ *   │  حلق دائري    ×1    1.600 ر.ع    │
+ *   ├───────────────────────────────────┤
+ *   │               الإجمالي: 1.600 ر.ع │  ← bold, large
+ *   │               المدفوع:  2.000 ر.ع │
+ *   │               الباقي:   0.400 ر.ع │
+ *   │             طريقة الدفع:  نقدي    │
+ *   ├═══════════════════════════════════┤
+ *   │         شكراً لتسوقكم معنا 💝     │
+ *   └───────────────────────────────────┘
  */
 export function buildReceiptHtml(data: ReceiptData): string {
   const {
-    invoiceNumber,
-    items,
-    total,
-    amountPaid,
-    changeAmount,
-    discount,
+    invoiceNumber, items, total,
+    amountPaid, changeAmount, discount,
     paymentMethod = 'cash',
-    customerName,
-    cashierName,
-    branchName,
-    createdAt,
+    customerName, cashierName, branchName, createdAt,
   } = data;
 
   const dateStr = createdAt
     ? new Date(createdAt).toLocaleString('ar-OM')
     : new Date().toLocaleString('ar-OM');
 
-  // Two-column label/value row — label on right, value on left (RTL)
-  const row = (label: string, value: string) => `
-    <div style="display:flex;justify-content:space-between;align-items:baseline;
-                padding:3px 0;font-size:13px;line-height:1.4;">
-      <span style="direction:ltr;text-align:left;">${value}</span>
-      <span>${label}</span>
+  // ── Shared style snippets ──────────────────────────────────────────────────
+  const FONT       = 'font-family:Tahoma,Arial,sans-serif;';
+  const BORDER_S   = 'border-top:2px solid #000;margin:10px 0;';   // thick solid
+  const BORDER_D   = 'border-top:1px dashed #555;margin:8px 0;';   // thin dashed
+  const ROW_BASE   = `display:flex;justify-content:space-between;align-items:baseline;
+                      padding:3px 0;${FONT}font-size:22px;line-height:1.5;`;
+
+  // Label-value row: label on right (RTL start), value on left
+  const metaRow = (label: string, value: string) => `
+    <div style="${ROW_BASE}">
+      <span style="direction:ltr;text-align:left;color:#111;">${value}</span>
+      <span style="color:#333;">${label}</span>
     </div>`;
 
-  // Full-width separator
-  const sep = (thick = false) =>
-    `<div style="border-top:${thick ? '2px solid #000' : '1px dashed #888'};margin:6px 0;"></div>`;
-
-  // Item rows
+  // ── Item rows ──────────────────────────────────────────────────────────────
   const itemRows = items.map(item => {
     const lineTotal = toNum(item.unitPrice) * item.quantity;
     const name = item.color
       ? `${item.productName} (${item.color})`
       : item.productName;
     return `
-      <div style="padding:5px 0;">
-        <div style="font-size:13px;font-weight:bold;margin-bottom:2px;">${name}</div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:#333;">
-          <span style="direction:ltr;">${omr(lineTotal)}</span>
-          <span>× ${item.quantity} &nbsp;@&nbsp; ${omr(toNum(item.unitPrice))}</span>
+      <div style="padding:6px 0;">
+        <!-- product name — full width, right aligned -->
+        <div style="${FONT}font-size:22px;font-weight:bold;
+                    color:#000;line-height:1.4;text-align:right;">
+          ${name}
+        </div>
+        <!-- qty + price row -->
+        <div style="display:flex;justify-content:space-between;
+                    ${FONT}font-size:20px;color:#333;padding-top:2px;">
+          <span style="direction:ltr;font-weight:bold;color:#000;">
+            ${fmtOMR(lineTotal)}
+          </span>
+          <span>× ${item.quantity} &nbsp;@&nbsp; ${fmtOMR(toNum(item.unitPrice))}</span>
         </div>
       </div>
-      <div style="border-top:1px dashed #ccc;"></div>`;
+      <div style="${BORDER_D}"></div>`;
   }).join('');
 
+  // ── Conditional rows ───────────────────────────────────────────────────────
   const discountRow = discount && toNum(discount) > 0
-    ? row('الخصم:', `- ${omr(toNum(discount))}`)
-    : '';
+    ? metaRow('الخصم:', `- ${fmtOMR(toNum(discount))}`) : '';
 
   const paidRow = amountPaid !== undefined && toNum(amountPaid) > 0
-    ? row('المدفوع:', omr(toNum(amountPaid)))
-    : '';
+    ? metaRow('المدفوع:', fmtOMR(toNum(amountPaid))) : '';
 
   const changeRow = changeAmount !== undefined && toNum(changeAmount) > 0
-    ? row('الباقي:', omr(toNum(changeAmount)))
-    : '';
+    ? metaRow('الباقي:', fmtOMR(toNum(changeAmount))) : '';
 
+  const branchLine = branchName
+    ? `<div style="${FONT}font-size:20px;text-align:center;color:#444;
+                   margin-bottom:6px;">${branchName}</div>` : '';
+
+  // ── Full receipt HTML ──────────────────────────────────────────────────────
   return `
 <div style="
-  width: ${RECEIPT_WIDTH}px;
-  background: #fff;
-  color: #000;
-  font-family: Tahoma, Arial, sans-serif;
-  direction: rtl;
-  text-align: right;
-  padding: 14px 18px;
-  box-sizing: border-box;
+  width:${RECEIPT_WIDTH}px;
+  background:#ffffff;
+  color:#000000;
+  ${FONT}
+  font-size:24px;
+  line-height:1.5;
+  direction:rtl;
+  text-align:right;
+  padding:20px;
+  box-sizing:border-box;
 ">
 
-  <!-- ── Header ── -->
-  <div style="text-align:center;font-size:22px;font-weight:bold;
-              letter-spacing:1px;margin-bottom:2px;">
+  <!-- ══ Header ══ -->
+  <div style="${FONT}font-size:30px;font-weight:bold;text-align:center;
+              letter-spacing:1px;color:#000;margin-bottom:4px;">
     لمسة أنوثة
   </div>
-  ${branchName
-    ? `<div style="text-align:center;font-size:13px;color:#555;margin-bottom:4px;">${branchName}</div>`
-    : ''}
-  ${sep(true)}
+  ${branchLine}
+  <div style="${BORDER_S}"></div>
 
-  <!-- ── Invoice meta ── -->
-  ${row('رقم الفاتورة:', invoiceNumber || '---')}
-  ${row('التاريخ:', dateStr)}
-  ${cashierName ? row('الكاشير:', cashierName) : ''}
-  ${customerName ? row('العميل:', customerName) : ''}
-  ${sep()}
+  <!-- ══ Invoice meta ══ -->
+  ${metaRow('رقم الفاتورة:', invoiceNumber || '---')}
+  ${metaRow('التاريخ:', dateStr)}
+  ${cashierName  ? metaRow('الكاشير:', cashierName)  : ''}
+  ${customerName ? metaRow('العميل:',  customerName) : ''}
+  <div style="${BORDER_D}"></div>
 
-  <!-- ── Items ── -->
+  <!-- ══ Items header ══ -->
   <div style="display:flex;justify-content:space-between;
-              font-size:12px;font-weight:bold;padding:3px 0;">
+              ${FONT}font-size:20px;font-weight:bold;
+              color:#000;padding:4px 0;">
     <span>المبلغ</span>
     <span>المنتج</span>
   </div>
-  ${sep(true)}
-  ${itemRows}
-  ${sep(true)}
+  <div style="${BORDER_S}"></div>
 
-  <!-- ── Totals ── -->
+  <!-- ══ Line items ══ -->
+  ${itemRows}
+
+  <!-- ══ Totals ══ -->
   ${discountRow}
 
-  <!-- Grand total — large, right aligned -->
+  <!-- Grand total — prominent -->
   <div style="display:flex;justify-content:space-between;align-items:baseline;
-              font-size:17px;font-weight:bold;padding:5px 0;">
-    <span style="direction:ltr;">${omr(total)}</span>
+              ${FONT}font-size:26px;font-weight:bold;
+              color:#000;padding:6px 0;">
+    <span style="direction:ltr;">${fmtOMR(total)}</span>
     <span>الإجمالي</span>
   </div>
 
   ${paidRow}
   ${changeRow}
-  ${row('طريقة الدفع:', payLabel(paymentMethod))}
-  ${sep(true)}
+  ${metaRow('طريقة الدفع:', payLabel(paymentMethod))}
 
-  <!-- ── Footer ── -->
-  <div style="text-align:center;font-size:13px;padding:6px 0;color:#333;">
+  <div style="${BORDER_S}"></div>
+
+  <!-- ══ Footer ══ -->
+  <div style="${FONT}font-size:22px;text-align:center;
+              color:#222;padding:8px 0 4px;">
     شكراً لتسوقكم معنا 💝
   </div>
-  <div style="height:20px;"></div>
+
+  <!-- blank feed space before cut -->
+  <div style="height:24px;"></div>
 
 </div>`;
 }
@@ -242,14 +263,13 @@ export function buildReceiptHtml(data: ReceiptData): string {
 // ─── Canvas rendering ─────────────────────────────────────────────────────────
 
 /**
- * Injects the receipt HTML off-screen, renders it with html2canvas,
- * and returns a Base64-encoded PNG string (without the data: prefix).
+ * Renders the receipt HTML off-screen with html2canvas (scale: 2 for sharpness),
+ * returns a raw Base64 PNG string (no "data:image/png;base64," prefix).
  *
- * @param rotate180  Set true if the printer outputs the image upside-down.
- *                   Rotates the canvas 180° before encoding.
+ * @param rotate180  Rotate 180° before encoding — fixes upside-down output.
  */
 async function receiptToBase64(htmlString: string, rotate180 = false): Promise<string> {
-  // Off-screen container — visible to html2canvas but not to the user
+  // Off-screen container — in the DOM but out of view
   const wrapper = document.createElement('div');
   wrapper.style.cssText = [
     'position:fixed',
@@ -259,19 +279,20 @@ async function receiptToBase64(htmlString: string, rotate180 = false): Promise<s
     'pointer-events:none',
     `width:${RECEIPT_WIDTH}px`,
   ].join(';');
-  wrapper.innerHTML = htmlString;
+  wrapper.innerHTML = htmlString.trim();
   document.body.appendChild(wrapper);
 
   try {
     const el = wrapper.firstElementChild as HTMLElement;
 
+    // scale: 2 → 2× pixel density → sharp text on thermal printer
     const canvas = await html2canvas(el, {
-      scale: 1,
+      scale: 2,
       useCORS: true,
       backgroundColor: '#ffffff',
       width: RECEIPT_WIDTH,
       logging: false,
-      // Give html2canvas the full element height, not the viewport height
+      // Prevent html2canvas from using the visible viewport size
       windowWidth: RECEIPT_WIDTH,
       windowHeight: el.scrollHeight,
     });
@@ -279,54 +300,57 @@ async function receiptToBase64(htmlString: string, rotate180 = false): Promise<s
     let target = canvas;
 
     if (rotate180) {
-      // Draw onto a new canvas rotated 180° to fix upside-down output
+      // Draw onto a new canvas rotated 180° to correct upside-down output
       const rotated = document.createElement('canvas');
-      rotated.width = canvas.width;
+      rotated.width  = canvas.width;
       rotated.height = canvas.height;
       const ctx = rotated.getContext('2d')!;
       ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate(Math.PI); // 180 degrees
+      ctx.rotate(Math.PI);
       ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
       target = rotated;
     }
 
-    // Strip the "data:image/png;base64," prefix — QZ Tray wants raw base64
+    // Strip the data URI prefix — QZ Tray needs raw base64 only
     return target.toDataURL('image/png').replace(/^data:image\/[^;]+;base64,/, '');
+
   } finally {
     document.body.removeChild(wrapper);
   }
 }
 
-// ─── Paper cut ────────────────────────────────────────────────────────────────
+// ─── Individual ESC/POS commands ─────────────────────────────────────────────
 
-/** Send a partial-cut ESC/POS command to the printer. */
+/** Partial-cut the paper (sent as a separate raw job after the image). */
 export async function cutPaper(printerName?: string): Promise<void> {
   await ensureQzConnected();
   const printer = await getReceiptPrinter(printerName);
-  const cfg = qz.configs.create(printer);
-  await qz.print(cfg, [{ type: 'raw', format: 'plain', data: CMD_CUT }]);
+  await qz.print(
+    qz.configs.create(printer),
+    [{ type: 'raw', format: 'plain', data: CMD_CUT }]
+  );
 }
-
-// ─── Cash drawer ──────────────────────────────────────────────────────────────
 
 /** Pulse the cash drawer connected to the receipt printer. */
 export async function openCashDrawer(printerName?: string): Promise<void> {
   await ensureQzConnected();
   const printer = await getReceiptPrinter(printerName);
-  const cfg = qz.configs.create(printer);
-  await qz.print(cfg, [{ type: 'raw', format: 'plain', data: CMD_DRAWER }]);
+  await qz.print(
+    qz.configs.create(printer),
+    [{ type: 'raw', format: 'plain', data: CMD_DRAWER }]
+  );
 }
 
 // ─── Main print function ──────────────────────────────────────────────────────
 
 /**
- * Print a receipt as a PNG image via QZ Tray.
+ * Render the receipt to a high-quality PNG and print it via QZ Tray.
  *
  * @param data         Receipt data (items, totals, customer, cashier…)
- * @param printerName  Windows print queue name — falls back to DEFAULT_PRINTER
- * @param rotate180    Rotate the image 180° before printing (upside-down fix)
+ * @param printerName  Windows print queue name — defaults to DEFAULT_PRINTER
+ * @param rotate180    Rotate image 180° before printing (upside-down fix)
  *
- * Throws an Arabic error string on failure — pass it directly to a toast.
+ * On any failure throws an Arabic error string suitable for direct toast display.
  */
 export async function printReceiptAsImage(
   data: ReceiptData,
@@ -334,26 +358,24 @@ export async function printReceiptAsImage(
   rotate180 = false,
 ): Promise<void> {
   if (typeof qz === 'undefined') {
-    throw new Error(
-      'QZ Tray غير محمّل — تحقق من تشغيل تطبيق QZ Tray وأعد تحميل الصفحة'
-    );
+    throw new Error('QZ Tray غير محمّل — تحقق من تشغيل تطبيق QZ Tray وأعد تحميل الصفحة');
   }
 
-  // 1. Connect (reuses existing WebSocket)
+  // 1. Connect (reuses existing WebSocket if already active)
   await ensureQzConnected();
 
-  // 2. Resolve printer name
+  // 2. Resolve printer name in the Windows print queue
   const printer = await getReceiptPrinter(printerName);
 
-  // 3. Render HTML → Base64 PNG (browser handles all Arabic rendering)
+  // 3. Render HTML → high-res PNG via html2canvas (browser handles Arabic)
   const html   = buildReceiptHtml(data);
   const base64 = await receiptToBase64(html, rotate180);
 
-  // 4. Print the image using QZ pixel/image mode
+  // 4. Print the PNG via QZ pixel/image mode
   const imageConfig = qz.configs.create(printer, {
     units: 'px',
-    density: 203,                    // EPSON TM-T100 print density (DPI)
-    margins: 0,                      // no margins — receipt starts at top
+    density: 203,                     // EPSON TM-T100 print resolution (DPI)
+    margins: 0,                       // no margins — receipt starts at paper edge
     interpolation: 'nearest-neighbor',
   });
 
@@ -361,19 +383,25 @@ export async function printReceiptAsImage(
     type:   'pixel',
     format: 'image',
     flavor: 'base64',
-    data:   base64,                  // PNG without "data:image/png;base64," prefix
+    data:   base64,                   // raw base64 PNG, no data: prefix
   }]);
 
-  // 5. Cut paper — sent as a separate raw job after the image
-  const rawConfig = qz.configs.create(printer);
-  await qz.print(rawConfig, [{ type: 'raw', format: 'plain', data: CMD_CUT }]);
+  // 5. Send cut command as a separate raw job (after image finishes)
+  await qz.print(
+    qz.configs.create(printer),
+    [{ type: 'raw', format: 'plain', data: CMD_CUT }]
+  );
 }
 
 // ─── Test print ───────────────────────────────────────────────────────────────
 
 /**
- * Print a test receipt with Arabic content to verify the setup.
+ * Print a test receipt with Arabic content to verify the full pipeline.
  * Call from the browser console or a "طباعة تجريبية" button in Settings.
+ *
+ * Example:
+ *   import { printTestReceiptAsImage } from '@/lib/printer';
+ *   printTestReceiptAsImage();
  */
 export async function printTestReceiptAsImage(
   printerName?: string,
@@ -386,12 +414,14 @@ export async function printTestReceiptAsImage(
       cashierName:   'الكاشير',
       createdAt:     new Date().toISOString(),
       items: [
-        { productName: 'حلق دائري ذهبي',   quantity: 1, unitPrice: 1.6 },
-        { productName: 'قلادة لؤلؤ صغيرة', quantity: 2, unitPrice: 3.5 },
+        { productName: 'حلق دائري ذهبي',   quantity: 1, unitPrice: 1.6  },
+        { productName: 'قلادة لؤلؤ صغيرة', quantity: 2, unitPrice: 3.5  },
+        { productName: 'إسورة فضية ناعمة', quantity: 1, unitPrice: 5.75 },
       ],
-      total:         8.600,
-      amountPaid:    10.000,
-      changeAmount:  1.400,
+      discount:      0.35,
+      total:         14.000,
+      amountPaid:    15.000,
+      changeAmount:   1.000,
       paymentMethod: 'cash',
     },
     printerName,
@@ -402,7 +432,7 @@ export async function printTestReceiptAsImage(
 // ─── Backward-compatible alias ────────────────────────────────────────────────
 
 /**
- * Drop-in replacement for the old printReceipt() — delegates to
- * printReceiptAsImage() so existing call sites need no changes.
+ * Alias kept so existing import sites don't need updating.
+ * Delegates directly to printReceiptAsImage().
  */
 export const printReceipt = printReceiptAsImage;
