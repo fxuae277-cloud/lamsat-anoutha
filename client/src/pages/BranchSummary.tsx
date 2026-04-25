@@ -269,6 +269,33 @@ export default function BranchSummary() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [selectedBranchId, setSelectedBranchId] = useState<string>("");
 
+  // ── تسليم نقدي للمالك ────────────────────────────────────────────
+  const [handoverOpen, setHandoverOpen]       = useState(false);
+  const [handoverAmount, setHandoverAmount]   = useState("");
+  const [handoverNote, setHandoverNote]       = useState("");
+
+  const handoverMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/cash-movements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ type: "owner_handover", amount: handoverAmount, note: handoverNote || undefined }),
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "✅ تم تسجيل التسليم", description: `${parseFloat(handoverAmount).toFixed(3)} ر.ع — تم تحديث حساب المالك تلقائياً` });
+      setHandoverOpen(false);
+      setHandoverAmount("");
+      setHandoverNote("");
+      queryClient.invalidateQueries({ queryKey: ["branch-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["cash-movements"] });
+    },
+    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+  });
+
   // ── Close Shift Dialog ───────────────────────────────────────────
   const [closeOpen, setCloseOpen] = useState(false);
   const [closeActualCash, setCloseActualCash] = useState("");
@@ -438,12 +465,96 @@ export default function BranchSummary() {
               إغلاق الوردية
             </Button>
           )}
+          <Button
+            size="sm"
+            className="gap-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+            onClick={() => { setHandoverAmount(""); setHandoverNote(""); setHandoverOpen(true); }}
+          >
+            <HandCoins className="h-4 w-4" />
+            تسليم نقدي للمالك
+          </Button>
           <Button size="sm" className="gap-1 bg-pink-600 hover:bg-pink-700" onClick={() => setMovOpen(true)}>
             <PlusCircle className="h-3.5 w-3.5" />
             تسجيل حركة نقدية
           </Button>
         </div>
       </div>
+
+      {/* ── تسليم نقدي للمالك Dialog ── */}
+      <Dialog open={handoverOpen} onOpenChange={setHandoverOpen}>
+        <DialogContent className="max-w-sm" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-blue-700">
+              <HandCoins className="w-5 h-5" /> تسليم نقدي للمالك
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            {/* معلومات الرصيد الحالي */}
+            {today && (
+              <div className="rounded-xl border bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">الكاش الحالي في الصندوق</span>
+                  <span className="font-bold text-blue-700">{fmt(today.actualCashInDrawer)} ر.ع</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">إجمالي التسليمات اليوم</span>
+                  <span className="font-medium text-orange-600">
+                    {fmt(today.outflowByType?.["owner_handover"] ?? 0)} ر.ع
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* المبلغ */}
+            <div className="space-y-1">
+              <label className="text-sm font-medium">المبلغ المُسلَّم (ر.ع)</label>
+              <Input
+                type="number"
+                step="0.001"
+                min="0.001"
+                value={handoverAmount}
+                onChange={e => setHandoverAmount(e.target.value)}
+                placeholder="0.000"
+                autoFocus
+                className="text-lg font-bold"
+              />
+            </div>
+
+            {/* ملاحظة */}
+            <div className="space-y-1">
+              <label className="text-sm font-medium">ملاحظة / رقم الإيصال (اختياري)</label>
+              <Input
+                value={handoverNote}
+                onChange={e => setHandoverNote(e.target.value)}
+                placeholder="مثال: تسليم وردية الصباح - إيصال 001"
+              />
+            </div>
+
+            {/* معاينة التأثير */}
+            {handoverAmount && parseFloat(handoverAmount) > 0 && (
+              <div className="rounded-lg bg-green-50 dark:bg-green-950/30 p-3 text-sm space-y-1 border border-green-200">
+                <p className="font-semibold text-green-800">ما سيحدث عند الحفظ:</p>
+                <p className="text-green-700">✓ يُخصم {parseFloat(handoverAmount).toFixed(3)} ر.ع من صندوق الفرع</p>
+                <p className="text-green-700">✓ يُضاف تلقائياً لحساب المالك النقدي</p>
+                <p className="text-green-700">✓ يظهر في ملخص المالك المالي فوراً</p>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setHandoverOpen(false)}>
+                إلغاء
+              </Button>
+              <Button
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+                onClick={() => handoverMutation.mutate()}
+                disabled={!handoverAmount || parseFloat(handoverAmount) <= 0 || handoverMutation.isPending}
+              >
+                {handoverMutation.isPending ? "جارٍ الحفظ..." : "تأكيد التسليم"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Close Shift Dialog ── */}
       <Dialog open={closeOpen} onOpenChange={setCloseOpen}>

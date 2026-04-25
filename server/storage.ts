@@ -5867,8 +5867,8 @@ export class DatabaseStorage implements IStorage {
           WHERE e.branch_id = b.id AND e.source = 'cash'
         ), 0) AS cash_expenses,
         COALESCE((
-          SELECT SUM(ot.amount) FROM owner_transactions ot
-          WHERE ot.branch_id = b.id AND ot.type = 'BRANCH_CASH_TRANSFER_TO_OWNER'
+          SELECT SUM(cl.amount_out) FROM cash_ledger cl
+          WHERE cl.branch_id = b.id AND cl.type = 'owner_handover'
         ), 0) AS transferred_to_owner,
         COALESCE((
           SELECT SUM(s.total) FROM sales s

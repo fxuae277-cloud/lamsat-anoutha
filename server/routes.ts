@@ -1315,6 +1315,28 @@ export async function registerRoutes(
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
         [dateStr, branchId, shiftId ?? null, type, amtIn, amtOut, note ?? null, user.id]
       );
+
+      // عند تسليم كاش للمالك: أنشئ تلقائياً سجلاً في owner_transactions
+      // حتى يظهر في ملخص المالك دون الحاجة لتسجيل مزدوج
+      if (type === "owner_handover" && branchId) {
+        await pool.query(
+          `INSERT INTO owner_transactions
+             (date, type, branch_id, amount, payment_method, from_account, to_account, note, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            dateStr,
+            "BRANCH_CASH_TRANSFER_TO_OWNER",
+            branchId,
+            parseFloat(amount).toFixed(3),
+            "cash",
+            "branch_cash",
+            "owner_cash",
+            note ?? null,
+            user.id,
+          ]
+        );
+      }
+
       res.status(201).json(result.rows[0]);
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
