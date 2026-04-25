@@ -1,28 +1,15 @@
 /**
- * printer.ts — QZ Tray image printing for EPSON TM-T100 (80mm thermal)
+ * printer.ts — QZ Tray image printing | لمسة أنوثة POS
  *
- * HOW IT WORKS
- * ─────────────
- * 1. buildReceiptHtml()   → pure TABLE-based inline-CSS HTML (no flexbox)
- *                           html2canvas renders flexbox poorly in RTL —
- *                           <table> is the only reliable layout engine.
- * 2. receiptToBase64()    → off-screen DOM → html2canvas (scale:2) → PNG
- * 3. printReceiptAsImage() → QZ pixel/image print → separate raw cut
+ * Flow:
+ *  1. getLogoDataUrl()        → fetch /logo.png → base64 (same-origin, no CORS)
+ *  2. buildReceiptHtml()      → self-contained TABLE-based HTML (no flexbox)
+ *  3. receiptToBase64()       → off-screen DOM → html2canvas scale:3 → PNG
+ *  4. printReceiptAsImage()   → QZ pixel/image job → separate cut command
  *
- * WHY TABLE (not flex)
- * ─────────────────────
- * html2canvas v1.4.x has known rendering bugs with:
- *   • justify-content: space-between  (gaps are wrong in RTL)
- *   • flex-direction in RTL context   (order can reverse unexpectedly)
- * Tables give pixel-perfect two-column layout every time.
- *
- * SCALE MATH
- * ───────────
- * HTML width = 576px  ×  scale:2  =  1152px canvas
- * QZ Tray with units:'px', density:203 maps the image to the printer's
- * printable area (80mm paper ≈ 576 printable dots).  QZ automatically
- * downsamples 1152 → 576 dots, giving effectively 2× super-sampled output.
- * Result: sharp, dark, professional text.
+ * Why TABLE (not flex):
+ *   html2canvas v1.4.x misrenders justify-content:space-between in RTL.
+ *   Tables give deterministic column widths every time.
  */
 
 import html2canvas from 'html2canvas';
@@ -32,12 +19,11 @@ declare const qz: any;
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEFAULT_PRINTER = 'EPSON TM-T100 Receipt';
-const RECEIPT_WIDTH   = 576;  // px — HTML element width before scale
+const RECEIPT_WIDTH   = 576;          // px — HTML width before scale
+const INNER_W         = RECEIPT_WIDTH - 40; // 536px (20px padding × 2)
 
-// GS V 65 16 — partial cut with 16-dot paper feed
-const CMD_CUT    = '\x1D\x56\x41\x10';
-// ESC p 0 25 250 — cash drawer pulse on pin 0
-const CMD_DRAWER = '\x1B\x70\x00\x19\xFA';
+const CMD_CUT    = '\x1D\x56\x41\x10';     // GS V 65 16 — partial cut
+const CMD_DRAWER = '\x1B\x70\x00\x19\xFA'; // ESC p — cash drawer pulse
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,20 +32,25 @@ export interface ReceiptItem {
   quantity:    number;
   unitPrice:   number | string;
   color?:      string;
+  size?:       string;
 }
 
 export interface ReceiptData {
   invoiceNumber:  string;
   items:          ReceiptItem[];
+  subtotal?:      number;
+  discount?:      number;
+  vat?:           number;
+  vatRate?:       number;   // percentage: 5, 10, 15…
   total:          number;
   amountPaid?:    number;
   changeAmount?:  number;
-  discount?:      number;
   paymentMethod?: 'cash' | 'card' | 'bank_transfer' | string;
   customerName?:  string | null;
   cashierName?:   string;
   branchName?:    string;
   createdAt?:     string;
+  qrCodeDataUrl?: string;   // optional pre-generated base64 PNG
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -70,13 +61,48 @@ const toNum = (v: string | number | null | undefined) =>
 const fmtOMR = (v: number) =>
   v.toFixed(3).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' ر.ع';
 
-const payLabel = (m: string) =>
-  ({ cash: 'نقدي', card: 'بطاقة', bank_transfer: 'تحويل بنكي' }
-    as Record<string, string>)[m] ?? m;
+const payLabel = (m: string): string => {
+  const labels: Record<string, string> = {
+    cash: 'نقدي',
+    card: 'بطاقة',
+    bank_transfer: 'تحويل بنكي',
+  };
+  return labels[m] ?? m;
+};
+
+const fmtReceiptDate = (dateStr?: string): string => {
+  const d = dateStr ? new Date(dateStr) : new Date();
+  const dd   = String(d.getDate()).padStart(2, '0');
+  const mm   = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  let   h    = d.getHours();
+  const min  = String(d.getMinutes()).padStart(2, '0');
+  const ap   = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${dd}/${mm}/${yyyy} - ${h}:${min} ${ap}`;
+};
+
+// ─── Logo loader ──────────────────────────────────────────────────────────────
+
+/** Fetch /logo.png from same origin → base64 data URL. Silent on failure. */
+async function getLogoDataUrl(): Promise<string> {
+  try {
+    const res = await fetch('/logo.png');
+    if (!res.ok) return '';
+    const blob = await res.blob();
+    return new Promise<string>((resolve) => {
+      const r = new FileReader();
+      r.onload  = () => resolve(r.result as string);
+      r.onerror = () => resolve('');
+      r.readAsDataURL(blob);
+    });
+  } catch {
+    return '';
+  }
+}
 
 // ─── QZ connection ────────────────────────────────────────────────────────────
 
-/** Connect (or reuse existing WebSocket). Safe to call before every print. */
 export async function ensureQzConnected(): Promise<void> {
   if (typeof qz === 'undefined') {
     throw new Error(
@@ -87,13 +113,12 @@ export async function ensureQzConnected(): Promise<void> {
   try {
     await qz.websocket.connect();
   } catch (e: any) {
-    throw new Error(`تعذّر الاتصال بـ QZ Tray — (${e.message ?? e})`);
+    throw new Error(`تعذّر الاتصال بـ QZ Tray — ${e.message ?? e}`);
   }
 }
 
 // ─── Printer detection ────────────────────────────────────────────────────────
 
-/** Resolve Windows print-queue name via QZ Tray. */
 export async function getReceiptPrinter(printerName?: string): Promise<string> {
   const target = printerName || DEFAULT_PRINTER;
   try {
@@ -113,138 +138,101 @@ export async function getReceiptPrinter(printerName?: string): Promise<string> {
 // ─── Receipt HTML builder ─────────────────────────────────────────────────────
 
 /**
- * Builds a self-contained HTML string using ONLY <table> for two-column
- * layouts and <div> borders for separators.
+ * Builds a 576px self-contained receipt using ONLY <table> layouts.
+ * All styles are inline. No flexbox, no grid, no external CSS.
  *
- * Rules for html2canvas compatibility:
- *  ✓ All styles are inline (no external CSS)
- *  ✓ <table> for every label/value pair and item row
- *  ✓ <div style="border-top:..."> for separators (not <hr>)
- *  ✓ No flexbox, no grid, no CSS gap
- *  ✓ Explicit width on every table / cell
- *  ✓ direction:rtl on outer wrapper
- *  ✓ direction:ltr wrapping numbers so they read left-to-right
- *
- * Visual structure (80mm paper, RTL):
- *
+ * Visual structure:
  *  ┌─────────────────────────────────────┐
- *  │          لمسة أنوثة (30px bold)      │
- *  │           اسم الفرع (20px)           │
- *  ╞═════════════════════════════════════╡ 3px solid
- *  │ رقم الفاتورة:          INV-001       │
- *  │ التاريخ:               …             │
- *  │ الكاشير:               …             │
- *  │ العميل:                …             │
- *  ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤ 1px dashed
- *  │     المنتج         الكمية    المبلغ  │ (header)
- *  ╞═════════════════════════════════════╡ 2px solid
- *  │ حلق دائري ذهبي     ×1      1.600 ر.ع│
- *  │ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │ 1px dashed
- *  │ قلادة لؤلؤ صغيرة   ×2      7.000 ر.ع│
- *  ╞═════════════════════════════════════╡ 2px solid
- *  │ الخصم:                  - 0.350 ر.ع │
- *  │ الإجمالي:               14.000 ر.ع  │ (26px bold)
- *  │ المدفوع:                15.000 ر.ع  │
- *  │ الباقي:                  1.000 ر.ع  │
- *  │ طريقة الدفع:            نقدي        │
- *  ╞═════════════════════════════════════╡ 3px solid
- *  │       شكراً لتسوقكم معنا 💝          │
- *  └─────────────────────────────────────┘
+ *  │            [LOGO IMAGE]              │
+ *  │          LAMST ANOTHA               │
+ *  │   ── TOUCH OF FEMININITY ──  ♥      │
+ *  ├─────┬──────────────┬────────────────┤
+ *  │ سجل │  انستجرام    │   تواصل        │ (contact bar)
+ *  ╞═══════════════════════════════════╡ (dashed sep)
+ *  │██ رقم الفاتورة | INV-XXXXX █████│  (dark bar)
+ *  │██ التاريخ 25/04/2026 - 09:12 PM █│
+ *  │   الفرع: …         الكاشير: …     │
+ *  ╞═══════════════════════════════════╡ (dashed sep)
+ *  │██  م  │  الصنف  │ كمية │ سعر │ إجمالي ██│ (dark header)
+ *  │   1   │ منتج    │  ×1  │ … │ … │
+ *  ╞═══════════════════════════════════╡
+ *  │  المجموع الفرعي          X.XXX ر.ع │
+ *  │  الخصم                   X.XXX ر.ع │
+ *  │  ضريبة (5%)               X.XXX ر.ع│
+ *  │██        الإجمالي  XX.XXX ر.ع    ██│ (dark)
+ *  │  المدفوع / الباقي / طريقة الدفع    │
+ *  ╞═══════════════════════════════════╡
+ *  │ ┌ - - - - - - - - - - - - - - ┐  │
+ *  │   ♥ شكراً لثقتكم بنا ♥          │
+ *  │   نسعد بخدمتكم دائماً            │
+ *  │ └ - - - - - - - - - - - - - - ┘  │
+ *  │  جودة  │   [QR]   │   تسوقي       │
+ *  ├──────────────────────────────────┤
+ *  │  لا يوجد استرجاع أو استبدال …     │
+ *  │  No Return or Exchange …          │
+ *  └─────────────────────────────────┘
  */
-export function buildReceiptHtml(data: ReceiptData): string {
+export function buildReceiptHtml(data: ReceiptData, logoDataUrl = ''): string {
   const {
-    invoiceNumber, items, total,
-    amountPaid, changeAmount, discount,
+    invoiceNumber, items,
+    discount, vat, vatRate,
+    total, amountPaid, changeAmount,
     paymentMethod = 'cash',
-    customerName, cashierName, branchName, createdAt,
+    customerName, cashierName, branchName,
+    createdAt, qrCodeDataUrl,
   } = data;
 
-  const dateStr = createdAt
-    ? new Date(createdAt).toLocaleString('ar-OM')
-    : new Date().toLocaleString('ar-OM');
+  const subtotal = data.subtotal ??
+    items.reduce((s, i) => s + toNum(i.unitPrice) * i.quantity, 0);
+  const discVal  = toNum(discount);
+  const vatVal   = toNum(vat);
 
-  // ── Reusable style strings ─────────────────────────────────────────────────
-  const F = 'font-family:Tahoma,Arial,sans-serif;';  // font stack
-  const W = `width:${RECEIPT_WIDTH - 40}px;`;        // inner table width
+  const vatPct = vatRate ??
+    (subtotal > 0 && vatVal > 0 ? Math.round((vatVal / subtotal) * 100) : 0);
 
-  const SEP_THICK = `<div style="border-top:3px solid #000;margin:12px 0;"></div>`;
-  const SEP_MED   = `<div style="border-top:2px solid #000;margin:10px 0;"></div>`;
-  const SEP_DASH  = `<div style="border-top:1px dashed #666;margin:8px 0;"></div>`;
+  const dateStr = fmtReceiptDate(createdAt);
 
-  // Two-column table row (RIGHT = label, LEFT = value, Arabic)
-  // RTL table: first column appears on the RIGHT of the page
-  const metaRow = (label: string, value: string, bold = false) => `
-    <tr>
-      <td style="${F}font-size:22px;text-align:right;color:#222;padding:3px 0;
-                  ${bold ? 'font-weight:bold;' : ''}vertical-align:middle;">
-        ${label}
-      </td>
-      <td style="${F}font-size:22px;text-align:left;direction:ltr;color:#000;
-                  padding:3px 0;${bold ? 'font-weight:bold;' : ''}
-                  vertical-align:middle;">
-        ${value}
-      </td>
-    </tr>`;
+  // Shared font shorthand
+  const F = 'font-family:Tahoma,Arial,sans-serif;';
 
-  // ── Items ─────────────────────────────────────────────────────────────────
+  // Dark-background cell (for header bars)
+  const dk = (content: string, align: 'right' | 'left' | 'center', width = '') =>
+    `<td style="${F}background:#111111;color:#ffffff;padding:10px 12px;
+     text-align:${align};vertical-align:middle;${width ? `width:${width};` : ''}
+     direction:${align === 'left' ? 'ltr' : 'rtl'};">${content}</td>`;
+
+  // Two-column summary row (label right | amount left)
+  const sumRow = (label: string, value: string, bold = false, size = 17) =>
+    `<tr>
+       <td style="${F}font-size:${size}px;text-align:right;color:#333;padding:5px 0;
+           ${bold ? 'font-weight:bold;' : ''}vertical-align:middle;">${label}</td>
+       <td style="${F}font-size:${size}px;text-align:left;direction:ltr;color:#000;
+           padding:5px 0;${bold ? 'font-weight:bold;' : ''}vertical-align:middle;">${value}</td>
+     </tr>`;
+
+  // ── Item rows ─────────────────────────────────────────────────────────────
   const itemRows = items.map((item, idx) => {
     const lineTotal = toNum(item.unitPrice) * item.quantity;
-    const name      = item.color
-      ? `${item.productName} (${item.color})`
-      : item.productName;
+    const name      = item.color ? `${item.productName} (${item.color})` : item.productName;
     const isLast    = idx === items.length - 1;
     return `
       <tr>
-        <td style="${F}font-size:22px;font-weight:bold;text-align:right;
-                    color:#000;padding:7px 0 3px;vertical-align:top;width:55%;">
-          ${name}
-        </td>
-        <td style="${F}font-size:20px;text-align:center;color:#444;
-                    padding:7px 0 3px;vertical-align:top;width:20%;">
-          ×${item.quantity}
-        </td>
-        <td style="${F}font-size:22px;font-weight:bold;text-align:left;
-                    direction:ltr;color:#000;padding:7px 0 3px;
-                    vertical-align:top;width:25%;">
-          ${fmtOMR(lineTotal)}
-        </td>
+        <td style="${F}font-size:17px;font-weight:bold;text-align:right;color:#000;
+                    padding:9px 4px 3px;vertical-align:top;width:6%;">${idx + 1}</td>
+        <td style="${F}font-size:17px;font-weight:bold;text-align:right;color:#000;
+                    padding:9px 4px 3px;vertical-align:top;width:40%;">${name}</td>
+        <td style="${F}font-size:16px;text-align:center;color:#444;
+                    padding:9px 4px 3px;vertical-align:top;width:12%;">${item.quantity}</td>
+        <td style="${F}font-size:16px;text-align:center;color:#444;
+                    padding:9px 4px 3px;vertical-align:top;width:21%;direction:ltr;">
+          ${fmtOMR(toNum(item.unitPrice))}</td>
+        <td style="${F}font-size:17px;font-weight:bold;text-align:left;color:#000;
+                    padding:9px 4px 3px;vertical-align:top;width:21%;direction:ltr;">
+          ${fmtOMR(lineTotal)}</td>
       </tr>
-      <tr>
-        <td colspan="2" style="${F}font-size:18px;color:#555;
-                                  text-align:right;padding:0 0 6px;">
-          @ ${fmtOMR(toNum(item.unitPrice))} للوحدة
-        </td>
-        <td></td>
-      </tr>
-      ${!isLast ? `<tr><td colspan="3" style="padding:0;">
-        <div style="border-top:1px dashed #999;margin:2px 0;"></div>
-      </td></tr>` : ''}`;
+      ${!isLast ? `<tr><td colspan="5" style="padding:0 4px;">
+        <div style="border-top:1px dashed #bbb;margin:2px 0;"></div></td></tr>` : ''}`;
   }).join('');
-
-  // ── Conditional totals rows ────────────────────────────────────────────────
-  const discountRow = (discount && toNum(discount) > 0)
-    ? metaRow('الخصم:', `- ${fmtOMR(toNum(discount))}`) : '';
-
-  const paidRow = (amountPaid !== undefined && toNum(amountPaid) > 0)
-    ? metaRow('المدفوع:', fmtOMR(toNum(amountPaid))) : '';
-
-  const changeRow = (changeAmount !== undefined && toNum(changeAmount) > 0)
-    ? metaRow('الباقي:', fmtOMR(toNum(changeAmount))) : '';
-
-  // Grand total row gets its own larger styling
-  const totalRow = `
-    <tr>
-      <td style="${F}font-size:26px;font-weight:bold;text-align:right;
-                  color:#000;padding:6px 0;border-top:1px solid #ccc;
-                  border-bottom:1px solid #ccc;">
-        الإجمالي:
-      </td>
-      <td style="${F}font-size:26px;font-weight:bold;text-align:left;
-                  direction:ltr;color:#000;padding:6px 0;
-                  border-top:1px solid #ccc;border-bottom:1px solid #ccc;">
-        ${fmtOMR(total)}
-      </td>
-    </tr>`;
 
   // ── Full HTML ──────────────────────────────────────────────────────────────
   return `
@@ -253,84 +241,203 @@ export function buildReceiptHtml(data: ReceiptData): string {
   background:#ffffff;
   color:#000000;
   ${F}
-  font-size:24px;
-  line-height:1.5;
   direction:rtl;
-  text-align:right;
   padding:20px;
   box-sizing:border-box;
+  line-height:1.45;
 ">
 
-  <!-- ══ STORE HEADER ══ -->
-  <div style="${F}font-size:30px;font-weight:bold;text-align:center;
-              color:#000;letter-spacing:1px;margin-bottom:2px;">
-    لمسة أنوثة
-  </div>
-
-  ${branchName ? `
-  <div style="${F}font-size:20px;text-align:center;color:#444;margin-bottom:6px;">
-    ${branchName}
+  <!-- ══ LOGO ══ -->
+  ${logoDataUrl ? `
+  <div style="text-align:center;margin-bottom:8px;">
+    <img src="${logoDataUrl}"
+         style="max-width:110px;max-height:90px;object-fit:contain;" />
   </div>` : ''}
 
-  ${SEP_THICK}
+  <!-- ══ STORE NAME ══ -->
+  <div style="${F}font-size:26px;font-weight:bold;text-align:center;
+              letter-spacing:3px;color:#000;margin-bottom:3px;">
+    LAMST ANOTHA
+  </div>
 
-  <!-- ══ INVOICE META ══ -->
-  <table style="${W}border-collapse:collapse;" cellpadding="0" cellspacing="0">
-    <tbody>
-      ${metaRow('رقم الفاتورة:', invoiceNumber || '---')}
-      ${metaRow('التاريخ:', dateStr)}
-      ${cashierName  ? metaRow('الكاشير:', cashierName)  : ''}
-      ${customerName ? metaRow('العميل:',  customerName) : ''}
-    </tbody>
+  <!-- ══ TAGLINE ══ -->
+  <div style="text-align:center;margin-bottom:12px;">
+    <span style="${F}font-size:12px;letter-spacing:2px;color:#888;">──────────</span>
+    <span style="${F}font-size:12px;letter-spacing:1px;color:#555;"> TOUCH OF FEMININITY </span>
+    <span style="${F}font-size:12px;letter-spacing:2px;color:#888;">──────────</span><br>
+    <span style="${F}font-size:16px;color:#555;">♥</span>
+  </div>
+
+  <!-- ══ CONTACT INFO ══ -->
+  <table style="width:${INNER_W}px;border-collapse:collapse;margin-bottom:10px;"
+         cellpadding="0" cellspacing="0">
+    <tr>
+      <td style="${F}font-size:13px;text-align:center;border-left:1px solid #ccc;
+                  padding:5px 6px;vertical-align:top;width:33%;">
+        <div style="color:#666;margin-bottom:2px;">رقم السجل التجاري</div>
+        <div style="${F}font-weight:bold;font-size:15px;direction:ltr;">1260008</div>
+      </td>
+      <td style="${F}font-size:13px;text-align:center;border-left:1px solid #ccc;
+                  padding:5px 6px;vertical-align:top;width:34%;">
+        <div style="color:#666;margin-bottom:2px;">الانستجرام</div>
+        <div style="${F}font-weight:bold;font-size:15px;direction:ltr;">lamst_anotha</div>
+      </td>
+      <td style="${F}font-size:13px;text-align:center;
+                  padding:5px 6px;vertical-align:top;width:33%;">
+        <div style="color:#666;margin-bottom:2px;">التواصل مع الإدارة</div>
+        <div style="${F}font-weight:bold;font-size:15px;direction:ltr;">94891122</div>
+      </td>
+    </tr>
   </table>
 
-  ${SEP_DASH}
+  <!-- ══ DASHED SEPARATOR ══ -->
+  <div style="border-top:1px dashed #aaa;margin:0 0 10px;"></div>
 
-  <!-- ══ ITEMS HEADER ══ -->
-  <table style="${W}border-collapse:collapse;" cellpadding="0" cellspacing="0">
+  <!-- ══ INVOICE HEADER BAR (dark) ══ -->
+  <table style="width:${INNER_W}px;border-collapse:collapse;"
+         cellpadding="0" cellspacing="0">
+    <tr>
+      ${dk(`<div style="${F}font-size:13px;color:#bbb;margin-bottom:3px;">رقم الفاتورة</div>
+            <div style="${F}font-size:21px;font-weight:bold;">${invoiceNumber || '---'}</div>`,
+           'right', '50%')}
+      ${dk(`<div style="${F}font-size:13px;color:#bbb;margin-bottom:3px;direction:rtl;text-align:right;">
+              التاريخ والوقت</div>
+            <div style="${F}font-size:16px;font-weight:bold;">${dateStr}</div>`,
+           'left', '50%')}
+    </tr>
+  </table>
+
+  <!-- ══ BRANCH / CASHIER ══ -->
+  <table style="width:${INNER_W}px;border-collapse:collapse;margin-top:8px;"
+         cellpadding="0" cellspacing="0">
+    <tr>
+      <td style="${F}font-size:16px;text-align:right;padding:3px 2px;width:50%;vertical-align:top;">
+        <div style="${F}font-size:13px;color:#777;">الفرع</div>
+        <div style="font-weight:bold;">${branchName || '---'}</div>
+      </td>
+      <td style="${F}font-size:16px;text-align:left;padding:3px 2px;width:50%;
+                  direction:ltr;vertical-align:top;">
+        <div style="${F}font-size:13px;color:#777;direction:rtl;text-align:right;">الكاشير</div>
+        <div style="font-weight:bold;">${cashierName || '---'}</div>
+      </td>
+    </tr>
+    ${customerName ? `<tr>
+      <td colspan="2" style="${F}font-size:16px;text-align:right;padding:3px 2px;border-top:1px dashed #ddd;">
+        <span style="${F}font-size:13px;color:#777;">العميلة: </span>
+        <span style="font-weight:bold;">${customerName}</span>
+      </td>
+    </tr>` : ''}
+  </table>
+
+  <!-- ══ DASHED SEPARATOR ══ -->
+  <div style="border-top:1px dashed #aaa;margin:10px 0;"></div>
+
+  <!-- ══ ITEMS TABLE HEADER (dark) ══ -->
+  <table style="width:${INNER_W}px;border-collapse:collapse;"
+         cellpadding="0" cellspacing="0">
     <thead>
       <tr>
-        <th style="${F}font-size:20px;font-weight:bold;text-align:right;
-                    color:#000;padding:4px 0;width:55%;">المنتج</th>
-        <th style="${F}font-size:20px;font-weight:bold;text-align:center;
-                    color:#000;padding:4px 0;width:20%;">الكمية</th>
-        <th style="${F}font-size:20px;font-weight:bold;text-align:left;
-                    direction:ltr;color:#000;padding:4px 0;width:25%;">المبلغ</th>
+        ${dk('<span style="font-size:14px;font-weight:bold;">م</span>',          'right', '6%')}
+        ${dk('<span style="font-size:14px;font-weight:bold;">الصنف</span>',       'right', '40%')}
+        ${dk('<span style="font-size:14px;font-weight:bold;">الكمية</span>',      'center', '12%')}
+        ${dk('<span style="font-size:14px;font-weight:bold;">سعر الوحدة</span>',  'center', '21%')}
+        ${dk('<span style="font-size:14px;font-weight:bold;">الإجمالي</span>',    'left', '21%')}
       </tr>
     </thead>
   </table>
 
-  ${SEP_MED}
-
   <!-- ══ ITEMS ══ -->
-  <table style="${W}border-collapse:collapse;" cellpadding="0" cellspacing="0">
+  <table style="width:${INNER_W}px;border-collapse:collapse;margin-top:4px;"
+         cellpadding="0" cellspacing="0">
+    <tbody>${itemRows}</tbody>
+  </table>
+
+  <!-- ══ SOLID SEPARATOR ══ -->
+  <div style="border-top:2px solid #000;margin:10px 0 8px;"></div>
+
+  <!-- ══ SUBTOTALS ══ -->
+  <table style="width:${INNER_W}px;border-collapse:collapse;"
+         cellpadding="0" cellspacing="0">
     <tbody>
-      ${itemRows}
+      ${sumRow('المجموع الفرعي', fmtOMR(subtotal))}
+      ${sumRow('الخصم', fmtOMR(discVal))}
+      ${vatVal > 0 ? sumRow(
+          vatPct > 0 ? `ضريبة القيمة المضافة (${vatPct}%)` : 'ضريبة القيمة المضافة',
+          fmtOMR(vatVal)
+        ) : ''}
     </tbody>
   </table>
 
-  ${SEP_MED}
+  <!-- ══ GRAND TOTAL BAR (dark) ══ -->
+  <table style="width:${INNER_W}px;border-collapse:collapse;margin-top:6px;"
+         cellpadding="0" cellspacing="0">
+    <tr>
+      ${dk('<span style="font-size:22px;font-weight:bold;">الإجمالي</span>', 'right')}
+      ${dk(`<span style="font-size:22px;font-weight:bold;">${fmtOMR(total)}</span>`, 'left')}
+    </tr>
+  </table>
 
-  <!-- ══ TOTALS ══ -->
-  <table style="${W}border-collapse:collapse;" cellpadding="0" cellspacing="0">
+  <!-- ══ PAYMENT DETAILS ══ -->
+  <table style="width:${INNER_W}px;border-collapse:collapse;margin-top:8px;"
+         cellpadding="0" cellspacing="0">
     <tbody>
-      ${discountRow}
-      ${totalRow}
-      ${paidRow}
-      ${changeRow}
-      ${metaRow('طريقة الدفع:', payLabel(paymentMethod))}
+      ${toNum(amountPaid) > 0 ? sumRow('المدفوع', fmtOMR(toNum(amountPaid))) : ''}
+      ${toNum(changeAmount) > 0 ? sumRow('الباقي',   fmtOMR(toNum(changeAmount))) : ''}
+      ${sumRow('طريقة الدفع', payLabel(paymentMethod))}
     </tbody>
   </table>
 
-  ${SEP_THICK}
+  <!-- ══ SOLID SEPARATOR ══ -->
+  <div style="border-top:2px solid #000;margin:12px 0;"></div>
 
-  <!-- ══ FOOTER ══ -->
-  <div style="${F}font-size:22px;text-align:center;color:#222;padding:8px 0 2px;">
-    شكراً لتسوقكم معنا 💝
+  <!-- ══ THANK YOU BOX ══ -->
+  <div style="border:1px dashed #999;border-radius:3px;padding:12px 8px;
+              text-align:center;margin-bottom:12px;">
+    <div style="${F}font-size:20px;font-weight:bold;color:#000;margin-bottom:4px;">
+      ♥ شكراً لثقتكم بنا ♥
+    </div>
+    <div style="${F}font-size:16px;color:#444;">
+      نسعد بخدمتكم دائماً
+    </div>
+  </div>
+
+  <!-- ══ FOOTER 3-COLUMN ══ -->
+  <table style="width:${INNER_W}px;border-collapse:collapse;margin-bottom:10px;"
+         cellpadding="0" cellspacing="0">
+    <tr>
+      <td style="${F}font-size:14px;text-align:right;vertical-align:middle;
+                  width:35%;padding:4px 0;">
+        <div style="font-weight:bold;color:#000;">جودة وأنافة</div>
+        <div style="color:#555;margin-top:2px;">تليق بكِ</div>
+      </td>
+      <td style="text-align:center;vertical-align:middle;width:30%;padding:4px 0;">
+        ${qrCodeDataUrl
+          ? `<img src="${qrCodeDataUrl}"
+                  style="width:68px;height:68px;object-fit:contain;" />`
+          : ''}
+      </td>
+      <td style="${F}font-size:14px;text-align:left;vertical-align:middle;
+                  width:35%;direction:ltr;padding:4px 0;">
+        <div style="font-weight:bold;color:#000;">تسوقي الآن</div>
+        <div style="color:#555;margin-top:2px;">مع لمسة أنوثة</div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- ══ SEPARATOR ══ -->
+  <div style="border-top:1px solid #000;margin:6px 0;"></div>
+
+  <!-- ══ RETURN POLICY ══ -->
+  <div style="${F}font-size:14px;text-align:center;color:#333;
+              padding:6px 0 2px;line-height:1.9;">
+    لا يوجد استرجاع أو استبدال بعد الشراء<br>
+    <span style="direction:ltr;display:inline-block;color:#555;">
+      No Return or Exchange After Purchase
+    </span>
   </div>
 
   <!-- feed gap before cutter -->
-  <div style="height:24px;"></div>
+  <div style="height:18px;"></div>
 
 </div>`;
 }
@@ -338,14 +445,10 @@ export function buildReceiptHtml(data: ReceiptData): string {
 // ─── Canvas rendering ─────────────────────────────────────────────────────────
 
 /**
- * Renders the receipt HTML in a hidden off-screen container,
- * captures it with html2canvas at scale:2, and returns a raw Base64
- * PNG string (no "data:image/png;base64," prefix).
- *
- * @param rotate180  Rotate canvas 180° before encoding — fixes upside-down output.
+ * Appends receipt HTML off-screen, captures with html2canvas at scale:3,
+ * returns raw Base64 PNG (no data URI prefix).
  */
 async function receiptToBase64(htmlString: string, rotate180 = false): Promise<string> {
-  // Container positioned off-screen — visible to html2canvas, hidden from user
   const wrapper = document.createElement('div');
   wrapper.style.cssText = [
     'position:fixed',
@@ -362,11 +465,9 @@ async function receiptToBase64(htmlString: string, rotate180 = false): Promise<s
   try {
     const el = wrapper.firstElementChild as HTMLElement;
 
-    // scale:2 → canvas is 1152×H px → QZ downsamples to printer's ~576 dots
-    // Result: 2× super-sampled text — sharp and professional
     const canvas = await html2canvas(el, {
-      scale:           2,
-      useCORS:         false,          // no external resources
+      scale:           3,
+      useCORS:         true,
       backgroundColor: '#ffffff',
       width:           RECEIPT_WIDTH,
       height:          el.scrollHeight,
@@ -376,20 +477,17 @@ async function receiptToBase64(htmlString: string, rotate180 = false): Promise<s
     let target = canvas;
 
     if (rotate180) {
-      // Rotate 180° on a fresh canvas — fixes printers that feed paper upside-down
-      const rotated = document.createElement('canvas');
-      rotated.width  = canvas.width;
-      rotated.height = canvas.height;
-      const ctx = rotated.getContext('2d')!;
+      const rot  = document.createElement('canvas');
+      rot.width  = canvas.width;
+      rot.height = canvas.height;
+      const ctx  = rot.getContext('2d')!;
       ctx.translate(canvas.width / 2, canvas.height / 2);
       ctx.rotate(Math.PI);
       ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
-      target = rotated;
+      target = rot;
     }
 
-    // QZ Tray needs raw base64 — strip the data URI prefix
     return target.toDataURL('image/png').replace(/^data:image\/[^;]+;base64,/, '');
-
   } finally {
     document.body.removeChild(wrapper);
   }
@@ -397,7 +495,6 @@ async function receiptToBase64(htmlString: string, rotate180 = false): Promise<s
 
 // ─── Paper cut ────────────────────────────────────────────────────────────────
 
-/** Send a partial-cut command to the printer (separate raw job). */
 export async function cutPaper(printerName?: string): Promise<void> {
   await ensureQzConnected();
   const printer = await getReceiptPrinter(printerName);
@@ -409,7 +506,6 @@ export async function cutPaper(printerName?: string): Promise<void> {
 
 // ─── Cash drawer ──────────────────────────────────────────────────────────────
 
-/** Pulse the cash drawer connected to the receipt printer. */
 export async function openCashDrawer(printerName?: string): Promise<void> {
   await ensureQzConnected();
   const printer = await getReceiptPrinter(printerName);
@@ -422,13 +518,13 @@ export async function openCashDrawer(printerName?: string): Promise<void> {
 // ─── Main print function ──────────────────────────────────────────────────────
 
 /**
- * Render the receipt to a high-quality PNG and print via QZ Tray.
+ * Render receipt → PNG (scale:3) → QZ Tray pixel print → cut.
  *
- * @param data         Receipt data (items, totals, customer, cashier…)
- * @param printerName  Windows print queue name — defaults to DEFAULT_PRINTER
- * @param rotate180    Set true if the receipt prints upside-down
+ * @param data         Receipt data
+ * @param printerName  Windows queue name — defaults to DEFAULT_PRINTER
+ * @param rotate180    Flip 180° before printing — fix upside-down output
  *
- * Throws an Arabic error string on failure — pass directly to a toast.
+ * Throws Arabic error string on failure — pass directly to toast.
  */
 export async function printReceiptAsImage(
   data:         ReceiptData,
@@ -441,34 +537,28 @@ export async function printReceiptAsImage(
     );
   }
 
-  // 1. Connect (reuses existing WebSocket)
   await ensureQzConnected();
-
-  // 2. Resolve printer name
   const printer = await getReceiptPrinter(printerName);
 
-  // 3. Build HTML → render with html2canvas (scale:2) → Base64 PNG
-  const html   = buildReceiptHtml(data);
-  const base64 = await receiptToBase64(html, rotate180);
+  const logoDataUrl = await getLogoDataUrl();
+  const html        = buildReceiptHtml(data, logoDataUrl);
+  const base64      = await receiptToBase64(html, rotate180);
 
-  // 4. Send PNG via QZ pixel/image job
-  //    units:'px' + density:203 → QZ maps the 1152px canvas to the
-  //    printer's physical dots (80mm × 203 DPI ≈ 640 dots printable width)
-  const imageConfig = qz.configs.create(printer, {
+  const imgConfig = qz.configs.create(printer, {
     units:         'px',
     density:       203,
     margins:       0,
     interpolation: 'nearest-neighbor',
   });
 
-  await qz.print(imageConfig, [{
+  await qz.print(imgConfig, [{
     type:   'pixel',
     format: 'image',
     flavor: 'base64',
-    data:   base64,          // raw base64, no "data:image/png;base64," prefix
+    data:   base64,
   }]);
 
-  // 5. Cut paper — must be a separate raw job sent AFTER the image job
+  // Cut must be a separate raw job sent AFTER the image job completes
   await qz.print(
     qz.configs.create(printer),
     [{ type: 'raw', format: 'plain', data: CMD_CUT }]
@@ -477,30 +567,29 @@ export async function printReceiptAsImage(
 
 // ─── Test print ───────────────────────────────────────────────────────────────
 
-/**
- * Print a full Arabic test receipt to verify the visual output.
- * Call from console: printTestReceiptAsImage()
- * Or wire to a "طباعة تجريبية" button in Settings.
- */
+/** Prints a full Arabic test receipt. Call from browser console or Settings. */
 export async function printTestReceiptAsImage(
   printerName?: string,
   rotate180 = false,
 ): Promise<void> {
   await printReceiptAsImage(
     {
-      invoiceNumber: 'INV-TEST',
-      branchName:    'لمسة أنوثة',
-      cashierName:   'الكاشير',
+      invoiceNumber: 'INV-TEST-001',
+      branchName:    'الفرع الرئيسي',
+      cashierName:   'ahmed',
       createdAt:     new Date().toISOString(),
       items: [
         { productName: 'حلق دائري ذهبي',   quantity: 1, unitPrice: 1.600 },
-        { productName: 'قلادة لؤلؤ صغيرة', quantity: 2, unitPrice: 3.500 },
-        { productName: 'إسورة فضية ناعمة', quantity: 1, unitPrice: 5.750 },
+        { productName: 'سوار فضي ناعم',    quantity: 1, unitPrice: 2.500 },
+        { productName: 'عقد لؤلؤ طبيعي',   quantity: 1, unitPrice: 3.900 },
       ],
-      discount:      0.350,
-      total:         14.000,
-      amountPaid:    15.000,
-      changeAmount:   1.000,
+      subtotal:      8.000,
+      discount:      0,
+      vat:           0.400,
+      vatRate:       5,
+      total:         8.400,
+      amountPaid:    10.000,
+      changeAmount:  1.600,
       paymentMethod: 'cash',
     },
     printerName,
@@ -510,5 +599,4 @@ export async function printTestReceiptAsImage(
 
 // ─── Backward-compatible alias ────────────────────────────────────────────────
 
-/** Drop-in alias — existing call sites require no changes. */
 export const printReceipt = printReceiptAsImage;

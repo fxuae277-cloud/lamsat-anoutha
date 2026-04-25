@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
-import { printReceiptAsImage } from "@/lib/printer";
+import { printReceiptAsImage, openCashDrawer } from "@/lib/printer";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -175,7 +175,6 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId, receipt
   const handlePrint = async () => {
     setPrinting(true);
     try {
-      // printReceiptAsImage: renders Arabic via html2canvas → PNG → QZ Tray pixel print
       await printReceiptAsImage(
         {
           invoiceNumber: sale.invoiceNumber || sale.invoice_number || "",
@@ -185,18 +184,20 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId, receipt
             unitPrice:   i.unitPrice    ?? i.unit_price,
             color:       i.color,
           })),
+          subtotal:      n(sale.subtotal),
+          discount:      n(sale.discount),
+          vat:           n(sale.vat),
           total,
           amountPaid:    paid,
           changeAmount:  change,
-          discount:      n(sale.discount),
           paymentMethod: sale.paymentMethod || sale.payment_method,
           customerName:  sale.customerName  || sale.customer_name,
           cashierName,
           branchName,
           createdAt:     sale.createdAt     || sale.created_at,
         },
-        receiptPrinter || undefined,  // printer name from Settings → receiptPrinter key
-        false,                        // rotate180: set true if receipt prints upside-down
+        receiptPrinter || undefined,
+        false,  // rotate180: set true if receipt prints upside-down
       );
       toast({ title: "تمت الطباعة بنجاح ✅" });
     } catch (e: any) {
@@ -931,12 +932,51 @@ export default function POS() {
         customerPhone: customer?.phone ?? null,
       };
     },
-    onSuccess: (sale) => {
+    onSuccess: async (sale) => {
       setCompletedSale(sale);
       clearCart();
       setAmountPaid("");
       setPayRef("");
       qc.invalidateQueries({ queryKey: ["/api/pos/products"] });
+
+      // Auto-print receipt immediately after sale is saved in DB
+      try {
+        await printReceiptAsImage(
+          {
+            invoiceNumber: sale.invoiceNumber || sale.invoice_number || "",
+            items: (sale.items || []).map((i: any) => ({
+              productName: i.productName || i.product_name,
+              quantity:    i.quantity,
+              unitPrice:   i.unitPrice    ?? i.unit_price,
+              color:       i.color,
+            })),
+            subtotal:      n(sale.subtotal),
+            discount:      n(sale.discount),
+            vat:           n(sale.vat),
+            total:         n(sale.total),
+            amountPaid:    n(sale.amountPaid ?? sale.amount_paid),
+            changeAmount:  n(sale.changeAmount ?? sale.change_amount),
+            paymentMethod: sale.paymentMethod || sale.payment_method,
+            customerName:  sale.customerName  || sale.customer_name || null,
+            cashierName:   user?.name,
+            branchName,
+            createdAt:     sale.createdAt     || sale.created_at,
+          },
+          receiptPrinter || undefined,
+          false,
+        );
+        // Open cash drawer only for cash payments
+        const pm = sale.paymentMethod || sale.payment_method;
+        if (pm === "cash") {
+          await openCashDrawer(receiptPrinter || undefined);
+        }
+      } catch (e: any) {
+        toast({
+          title: "تحذير: لم تتم الطباعة التلقائية",
+          description: e.message,
+          variant: "destructive",
+        });
+      }
     },
     onError: (e: Error) => toast({ title: "خطأ في الفاتورة", description: e.message, variant: "destructive" }),
   });
