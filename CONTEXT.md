@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-25 (جلسة 38 — تغميق نص الفاتورة + توسيط الشعار + fallback آمن لتوقيع QZ)_
+_آخر تحديث: 2026-04-25 (جلسة 39 — تصحيح الكاش المتوقع في إغلاق الوردية + تعديل النقد الافتتاحي)_
 
 ---
 
@@ -12,6 +12,25 @@ _آخر تحديث: 2026-04-25 (جلسة 38 — تغميق نص الفاتورة
 ---
 
 ## ✅ مكتمل
+
+### جلسة 39 — إصلاح حساب الكاش المتوقع + تعديل النقد الافتتاحي
+
+**المشكلة:** dialog إغلاق الوردية كان يعرض "الكاش المتوقع" يساوي مبيعات الكاش فقط (مثلاً 6.529 ر.ع) متجاهلاً النقد الافتتاحي والمصروفات. كذلك أسطر "مبيعات نقداً/بطاقة/تحويل" دائماً صفر.
+
+**السبب الجذري — ثلاث مشاكل متراكبة:**
+1. **Bug عرض في `CloseShiftModal`:** الـ frontend كان يقرأ `summary?.totalCashIn / totalCardIn / totalBankIn` لكن الـ API `/api/reports/shift` يُرجع `salesCash.total / salesCard.total / salesBankTransfer.total`. النتيجة: كل الحقول صفر دائماً.
+2. **عدم تطابق الحساب:** `getShiftReport` كان يحسب `expectedCash = opening + salesCash − expCash` بينما `closeShift` يضيف `+ depositsIn − withdrawalsOut` → القيمة المعروضة لا تطابق المحفوظة.
+3. **النقد الافتتاحي = 0:** الورديات المفتوحة عبر `/api/admin/backfill-shift-today` تُنشأ بـ `opening_cash='0'` بدون طريقة لتعديلها بعد ذلك.
+
+**الإصلاحات — server/routes.ts + storage.ts + POS.tsx:**
+- [x] `CloseShiftModal`: قراءة الحقول الصحيحة (`summary.salesCash.total` … إلخ) + إضافة سطر "💸 مصروفات كاش" قبل "الكاش المتوقع"
+- [x] `getShiftReport`: تضمين `cash_ledger` بنوع `deposit/withdrawal` في حساب `expectedCash` للتطابق مع `closeShift`
+- [x] `PATCH /api/shifts/:id/opening-cash` (requireOwnerOrAdmin): يسمح بتعديل النقد الافتتاحي لوردية مفتوحة فقط (قاصر على المالك/الإدمن لمنع تلاعب الكاشير)
+- [x] في dialog الإغلاق: زر "تعديل" بجانب "النقد الافتتاحي" يظهر فقط للمالك/الإدمن — يفتح حقل inline → حفظ → إعادة تحميل ملخص الوردية
+
+**نتيجة:** بعد الإصلاح: `expected = opening + cashSales − cashExpenses + deposits − withdrawals` متطابق بين العرض والحفظ. لو الوردية كانت من backfill، المالك يضغط "تعديل" بجانب النقد الافتتاحي ويُدخل القيمة الصحيحة قبل الإغلاق.
+
+---
 
 ### جلسة 38 — تغميق الفاتورة المطبوعة + توسيط الشعار + fallback آمن لتوقيع QZ
 
