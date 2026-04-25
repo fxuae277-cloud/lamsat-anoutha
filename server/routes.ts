@@ -2546,6 +2546,12 @@ export async function registerRoutes(
       const shift = await storage.getCurrentShift(user.branchId, user.terminalName);
       if (shift) shiftId = shift.id;
     }
+    if (!shiftId && (user.role === "cashier" || user.role === "employee")) {
+      return res.status(403).json({
+        code: "NO_OPEN_SHIFT",
+        message: "لا يمكن إصدار فاتورة بدون فتح وردية. الرجاء فتح الوردية من شاشة نقطة البيع أولاً.",
+      });
+    }
     const parsed = insertSaleSchema.safeParse({
       ...saleData,
       branchId: user.branchId,
@@ -3018,6 +3024,12 @@ export async function registerRoutes(
       if (user.terminalName) {
         const shift = await storage.getCurrentShift(branchId, user.terminalName);
         if (shift) shiftId = shift.id;
+      }
+      if (!shiftId && (user.role === "cashier" || user.role === "employee")) {
+        return res.status(403).json({
+          code: "NO_OPEN_SHIFT",
+          message: "لا يمكن صرف أي مبلغ بدون فتح وردية. الرجاء فتح الوردية أولاً.",
+        });
       }
 
       const todayStr = expenseDate && /^\d{4}-\d{2}-\d{2}$/.test(expenseDate) ? expenseDate : new Date().toISOString().slice(0, 10);
@@ -6236,6 +6248,147 @@ export async function registerRoutes(
       res.json({ locations: locs.rows, centralInventory: centralInventory.rows[0] });
     } catch (err: any) {
       res.status(500).json({ message: err?.message });
+    }
+  });
+
+  // ── Backfill: فتح وردية اليوم الساعة 9 صباحاً وربط فواتير اليوم بها ──────
+  // استخدام: fetch('/api/admin/backfill-shift-today',{method:'POST'}).then(r=>r.json()).then(console.log)
+  app.post("/api/admin/backfill-shift-today", requireAuth, requireOwnerOrAdmin, async (_req, res) => {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      // 1. كل الفروع التي عليها فواتير اليوم بدون شفت (حسب توقيت مسقط)
+      //    created_at هنا timestamp بدون TZ مخزَّن بالـ UTC، فنحوّله إلى UTC ثم Muscat
+      const branchesRes = await client.query(`
+        SELECT DISTINCT branch_id
+        FROM sales
+        WHERE shift_id IS NULL
+          AND status != 'returned'
+          AND ((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Muscat')::date
+              = (NOW() AT TIME ZONE 'Asia/Muscat')::date
+      `);
+
+      const results: any[] = [];
+      for (const { branch_id } of branchesRes.rows) {
+        // 2. الكاشير الأكثر فواتير اليوم (بدون شفت) في هذا الفرع
+        const cashierRes = await client.query(
+          `SELECT cashier_id, COUNT(*)::int AS c
+             FROM sales
+            WHERE branch_id = $1
+              AND shift_id IS NULL
+              AND cashier_id IS NOT NULL
+              AND (created_at AT TIME ZONE 'Asia/Muscat')::date
+                  = (NOW() AT TIME ZONE 'Asia/Muscat')::date
+            GROUP BY cashier_id
+            ORDER BY c DESC
+            LIMIT 1`,
+          [branch_id]
+        );
+        if (cashierRes.rows.length === 0) continue;
+        const cashierId = cashierRes.rows[0].cashier_id;
+
+        // 3. terminal_name من المستخدم
+        const userRes = await client.query(
+          `SELECT terminal_name FROM users WHERE id = $1`,
+          [cashierId]
+        );
+        const terminalName = userRes.rows[0]?.terminal_name || "T1";
+
+        // 4. هل يوجد شفت مفتوح أصلاً لنفس الكاشير/الفرع/الجهاز؟
+        let shiftId: number;
+        const existingRes = await client.query(
+          `SELECT id FROM shifts
+            WHERE status = 'open'
+              AND branch_id = $1
+              AND terminal_name = $2
+            ORDER BY id DESC LIMIT 1`,
+          [branch_id, terminalName]
+        );
+        if (existingRes.rows.length > 0) {
+          shiftId = existingRes.rows[0].id;
+        } else {
+          // 5. فتح شفت جديد بداية اليوم 9 صباحاً بتوقيت مسقط
+          const insertRes = await client.query(
+            `INSERT INTO shifts
+               (branch_id, cashier_id, terminal_name, opening_cash, status, started_at)
+             VALUES (
+               $1, $2, $3, '0', 'open',
+               (date_trunc('day', NOW() AT TIME ZONE 'Asia/Muscat') + INTERVAL '9 hours')
+                 AT TIME ZONE 'Asia/Muscat'
+             )
+             RETURNING id`,
+            [branch_id, cashierId, terminalName]
+          );
+          shiftId = insertRes.rows[0].id;
+        }
+
+        // 6. ربط فواتير + مرتجعات + مصروفات + سندات الصندوق/البنك اليوم
+        const upSales = await client.query(
+          `UPDATE sales SET shift_id = $1
+            WHERE shift_id IS NULL
+              AND branch_id = $2
+              AND ((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Muscat')::date
+                  = (NOW() AT TIME ZONE 'Asia/Muscat')::date`,
+          [shiftId, branch_id]
+        );
+        const upReturns = await client.query(
+          `UPDATE sale_returns SET shift_id = $1
+            WHERE shift_id IS NULL
+              AND branch_id = $2
+              AND ((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Muscat')::date
+                  = (NOW() AT TIME ZONE 'Asia/Muscat')::date`,
+          [shiftId, branch_id]
+        );
+        const upExpenses = await client.query(
+          `UPDATE expenses SET shift_id = $1
+            WHERE shift_id IS NULL
+              AND branch_id = $2
+              AND date::date = (NOW() AT TIME ZONE 'Asia/Muscat')::date`,
+          [shiftId, branch_id]
+        );
+        const upCash = await client.query(
+          `UPDATE cash_ledger SET shift_id = $1
+            WHERE shift_id IS NULL
+              AND branch_id = $2
+              AND date::date = (NOW() AT TIME ZONE 'Asia/Muscat')::date`,
+          [shiftId, branch_id]
+        );
+        const upBank = await client.query(
+          `UPDATE bank_ledger SET shift_id = $1
+            WHERE shift_id IS NULL
+              AND branch_id = $2
+              AND date::date = (NOW() AT TIME ZONE 'Asia/Muscat')::date`,
+          [shiftId, branch_id]
+        );
+
+        results.push({
+          branchId: branch_id,
+          shiftId,
+          cashierId,
+          terminalName,
+          updated: {
+            sales: upSales.rowCount,
+            returns: upReturns.rowCount,
+            expenses: upExpenses.rowCount,
+            cashLedger: upCash.rowCount,
+            bankLedger: upBank.rowCount,
+          },
+        });
+      }
+
+      await client.query("COMMIT");
+      res.json({
+        success: true,
+        message: `تم فتح/إيجاد وردية اليوم لـ ${results.length} فرع وربط حركات اليوم بها`,
+        results,
+      });
+    } catch (err: any) {
+      await client.query("ROLLBACK");
+      console.error("[backfill-shift-today]", err);
+      res.status(500).json({ success: false, message: err?.message ?? "خطأ" });
+    } finally {
+      client.release();
     }
   });
 
