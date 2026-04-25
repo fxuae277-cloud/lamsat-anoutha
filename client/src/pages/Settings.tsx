@@ -19,6 +19,7 @@ import {
   Settings2, Save, X, Loader2, AlertTriangle, Globe,
   Banknote, Receipt, FileText, Printer, Database, Download, Percent
 } from "lucide-react";
+import { printTestReceiptAsImage } from "@/lib/printer";
 
 type SettingsData = Record<string, string>;
 
@@ -53,8 +54,8 @@ const DEFAULT_SETTINGS: SettingsData = {
   allowCancelAfterClose: "false",
   receiptSize: "80mm",
   thermalPrinter: "true",
-  receiptPrinter: "",
-  labelPrinter: "",
+  receiptPrinter: "EPSON TM-T100 Receipt",
+  labelPrinter: "TSC TTP-244M Pro",
   businessLogo: "",
   autoBackup: "true",
   default_profit_margin: "50",
@@ -89,6 +90,7 @@ export default function Settings() {
   const [pendingTab, setPendingTab] = useState<string | null>(null);
   const [showLeaveWarning, setShowLeaveWarning] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
+  const [testPrinting, setTestPrinting] = useState(false);
 
   const { data: branchesList = [] } = useQuery<Branch[]>({ queryKey: ["/api/branches"], queryFn: getQueryFn({ on401: "throw" }) });
 
@@ -99,6 +101,11 @@ export default function Settings() {
   });
   const systemPrinters: string[] = printersData?.printers ?? [];
 
+  // طابعات ثابتة تظهر دائماً بغض النظر عن اكتشاف النظام
+  const FIXED_PRINTERS = ['EPSON TM-T100 Receipt', 'TSC TTP-244M Pro'];
+  // دمج الثابتة مع المكتشفة (بدون تكرار)
+  const allPrinters = Array.from(new Set([...FIXED_PRINTERS, ...systemPrinters]));
+
   const { data: serverSettings } = useQuery<SettingsData>({
     queryKey: ["/api/settings"],
     queryFn: getQueryFn({ on401: "throw" }),
@@ -107,6 +114,14 @@ export default function Settings() {
   useEffect(() => {
     if (serverSettings) {
       const merged = { ...DEFAULT_SETTINGS, ...serverSettings };
+      // لا تستبدل قيم الطابعات الافتراضية إذا كانت المحفوظة فارغة أو "بدون تحديد"
+      const EMPTY_VALUES = ["", "بدون تحديد", "__none__"];
+      if (EMPTY_VALUES.includes(merged.receiptPrinter ?? "")) {
+        merged.receiptPrinter = DEFAULT_SETTINGS.receiptPrinter;
+      }
+      if (EMPTY_VALUES.includes(merged.labelPrinter ?? "")) {
+        merged.labelPrinter = DEFAULT_SETTINGS.labelPrinter;
+      }
       setCurrentSettings(merged);
       setSavedSettings(merged);
     }
@@ -187,38 +202,25 @@ export default function Settings() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
 
-  const testReceiptPrint = () => {
-    const printer = currentSettings.receiptPrinter;
-    const w = window.open("", "_blank", "width=340,height=500");
-    if (!w) return;
-    w.document.write(`<html><head><title>اختبار طابعة الإيصال</title>
-    <style>
-      @page { size: 80mm auto; margin: 0; }
-      body { font-family: 'Cairo', Arial, sans-serif; direction: rtl; margin: 0; padding: 10px; font-size: 12px; }
-      .center { text-align: center; } .bold { font-weight: 700; }
-      hr { border: none; border-top: 1px dashed #000; margin: 6px 0; }
-      .hint { background: #fff3cd; padding: 6px; font-size: 11px; border-radius: 4px; margin-bottom: 8px; text-align: center; }
-      @media print { .hint { display: none; } }
-    </style></head><body>
-    ${printer ? `<div class="hint">اختر الطابعة: <strong>${printer}</strong></div>` : ""}
-    <p class="center bold">🌸 لمسة أنوثة 🌸</p>
-    <p class="center" style="font-size:10px">اختبار طباعة الإيصال</p>
-    <hr/>
-    <p>رقم الفاتورة: TEST-001</p>
-    <p>التاريخ: ${new Date().toLocaleDateString("ar-SA")}</p>
-    <hr/>
-    <table style="width:100%;font-size:11px"><tr><td>منتج تجريبي</td><td align="left">1 × 1.500</td></tr></table>
-    <hr/>
-    <p class="bold">الإجمالي: 1.500 ر.ع</p>
-    <hr/>
-    <p class="center" style="font-size:10px">شكراً لتسوقكم معنا 💝</p>
-    <script>setTimeout(()=>{window.print();window.close();},400);</script>
-    </body></html>`);
-    w.document.close();
+  const testReceiptPrint = async () => {
+    const printer = currentSettings.receiptPrinter || DEFAULT_SETTINGS.receiptPrinter;
+    setTestPrinting(true);
+    try {
+      await printTestReceiptAsImage(printer, false);
+      toast({ title: "تمت الطباعة التجريبية بنجاح ✅", description: printer });
+    } catch (e: any) {
+      toast({
+        title: "خطأ في طباعة الإيصال التجريبية",
+        description: e.message,
+        variant: "destructive",
+      });
+    } finally {
+      setTestPrinting(false);
+    }
   };
 
   const testLabelPrint = () => {
-    const printer = currentSettings.labelPrinter;
+    const printer = currentSettings.labelPrinter || DEFAULT_SETTINGS.labelPrinter;
     const w = window.open("", "_blank", "width=300,height=400");
     if (!w) return;
     w.document.write(`<html><head><title>اختبار طابعة الملصقات</title>
@@ -672,7 +674,7 @@ export default function Settings() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">{t("settings.no_printer_selected")}</SelectItem>
-                        {systemPrinters.map(p => (
+                        {allPrinters.map(p => (
                           <SelectItem key={p} value={p}>{p}</SelectItem>
                         ))}
                       </SelectContent>
@@ -684,8 +686,12 @@ export default function Settings() {
                       size="sm"
                       className="gap-1 text-xs"
                       onClick={testReceiptPrint}
+                      disabled={testPrinting}
                     >
-                      <Printer className="w-3 h-3" /> {t("settings.test_receipt_print")}
+                      {testPrinting
+                        ? <><Loader2 className="w-3 h-3 animate-spin" /> جارٍ الطباعة...</>
+                        : <><Printer className="w-3 h-3" /> {t("settings.test_receipt_print")}</>
+                      }
                     </Button>
                   </div>
 
@@ -701,7 +707,7 @@ export default function Settings() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">{t("settings.no_printer_selected")}</SelectItem>
-                        {systemPrinters.map(p => (
+                        {allPrinters.map(p => (
                           <SelectItem key={p} value={p}>{p}</SelectItem>
                         ))}
                       </SelectContent>
@@ -719,8 +725,8 @@ export default function Settings() {
                   </div>
                 </div>
                 {systemPrinters.length === 0 && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> {t("settings.printers_not_detected")}
+                  <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                    <Printer className="w-3 h-3" /> الطابعات الافتراضية جاهزة — يمكنك إضافة طابعات أخرى من إعدادات Windows إذا لزم الأمر
                   </p>
                 )}
               </div>
