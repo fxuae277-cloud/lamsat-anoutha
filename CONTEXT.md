@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-25 (جلسة 33 — QZ Tray: طباعة مباشرة ESC/POS بدون نافذة المتصفح)_
+_آخر تحديث: 2026-04-25 (جلسة 34 — فاتورة احترافية بهوية العلامة + إعدادات الطابعات الافتراضية)_
 
 ---
 
@@ -755,6 +755,62 @@ fetch('/api/run-migration-0018',{method:'POST'}).then(r=>r.json()).then(console.
 - [x] `settings.test_receipt_print` · `test_label_print`
 - [x] `settings.printers_not_detected`
 - [x] `barcode_labels.no_label_printer` · `no_label_printer_desc`
+
+### جلسة 34 — فاتورة احترافية بهوية العلامة + إعدادات الطابعات الافتراضية
+
+#### `client/src/lib/printer.ts` — إعادة تصميم كاملة للفاتورة الحرارية
+
+**تصميم الفاتورة (مطابق لهوية لمسة أنوثة):**
+- [x] **شعار المتجر**: يُحمَّل `/logo.png` كـ base64 data URL (آمن لـ html2canvas — نفس الـ origin)
+- [x] **اسم العلامة**: `LAMST ANOTHA` بحروف كبيرة + سطر `── TOUCH OF FEMININITY ── ♥`
+- [x] **شريط التواصل** (3 أعمدة): رقم السجل التجاري 1260008 | @lamst_anotha | 94891122
+- [x] **شريط الفاتورة** (خلفية سوداء): رقم الفاتورة (يمين) | التاريخ والوقت (يسار)
+- [x] **الفرع / الكاشير / العميل** في صف منفصل
+- [x] **رأس جدول الأصناف** (خلفية سوداء): م | الصنف | الكمية | سعر الوحدة | الإجمالي
+- [x] **صفوف الأصناف** مع فواصل متقطعة بين كل صنف
+- [x] **قسم الإجماليات**: المجموع الفرعي + الخصم + ضريبة القيمة المضافة (إذا > 0)
+- [x] **شريط الإجمالي الكلي** (خلفية سوداء): الإجمالي | XX.XXX ر.ع
+- [x] **تفاصيل الدفع**: المدفوع + الباقي + طريقة الدفع
+- [x] **صندوق الشكر** (حدود متقطعة): ♥ شكراً لثقتكم بنا ♥ / نسعد بخدمتكم دائماً
+- [x] **تذييل 3 أعمدة**: جودة وأنافة تليق بكِ | [QR اختياري] | تسوقي الآن مع لمسة أنوثة
+- [x] **سياسة الاسترجاع**: بالعربي والإنجليزي
+
+**تقنيات:**
+- [x] `scale: 3` (بدلاً من 2) → دقة أعلى: 1728px canvas → 576 dots طابعة
+- [x] `useCORS: true` لتحميل الشعار من نفس الـ origin
+- [x] جميع التخطيطات بـ `<table>` (بدون flexbox) — html2canvas متوافق 100%
+- [x] جميع الأنماط inline — لا اعتماد على CSS خارجي
+- [x] `qrCodeDataUrl?: string` في `ReceiptData` — QR اختياري إذا مُمرَّر
+
+**الطباعة التلقائية في POS:**
+- [x] `saleMutation.onSuccess` أصبح `async` — يطبع الفاتورة فوراً بعد حفظ البيع في DB
+- [x] فشل الطباعة = toast تحذيري فقط، لا يمنع إتمام البيع
+- [x] `openCashDrawer()` تُستدعى تلقائياً عند الدفع النقدي (`paymentMethod === 'cash'`)
+- [x] `ReceiptModal.handlePrint` يمرر الآن `subtotal` و`vat` للفاتورة
+
+**الدوال المُصدَّرة:**
+- `ensureQzConnected()` · `getReceiptPrinter()` · `buildReceiptHtml(data, logoDataUrl)`
+- `printReceiptAsImage(data, printerName?, rotate180?)` · `cutPaper()` · `openCashDrawer()`
+- `printTestReceiptAsImage()` · `printReceipt` (alias للتوافق العكسي)
+
+---
+
+#### `client/src/pages/Settings.tsx` — إعدادات الطابعات الافتراضية
+
+- [x] **`DEFAULT_SETTINGS`**: `receiptPrinter: 'EPSON TM-T100 Receipt'` · `labelPrinter: 'TSC TTP-244M Pro'`
+- [x] **`FIXED_PRINTERS`**: ثابت يحتوي الطابعتين — يظهر دائماً في القوائم بغض النظر عن اكتشاف Windows
+- [x] **`allPrinters`**: `Array.from(new Set([...FIXED_PRINTERS, ...systemPrinters]))` — بدون تكرار
+- [x] **`useEffect`** محمّي: إذا كانت القيمة المحفوظة فارغة أو `"بدون تحديد"` يُستعاد الافتراضي
+- [x] **`testReceiptPrint`**: أصبح يستدعي `printTestReceiptAsImage(printer)` عبر QZ Tray (بدل `window.open`) مع spinner
+- [x] **`testLabelPrint`**: يستخدم القيمة الافتراضية إذا لم تُحدَّد طابعة
+- [x] الـ dropdown يستخدم `allPrinters` بدلاً من `systemPrinters`
+- [x] رسالة التحذير تحوّلت من تحذير إلى إشعار أزرق معلوماتي
+
+**النتيجة:** فتح إعدادات الطباعة يعرض فوراً:
+- طابعة الإيصالات: `EPSON TM-T100 Receipt` ✅
+- طابعة الملصقات: `TSC TTP-244M Pro` ✅
+
+---
 
 ### جلسة 33 — QZ Tray: طباعة إيصالات مباشرة (ESC/POS)
 
