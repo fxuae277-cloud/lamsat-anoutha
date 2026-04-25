@@ -53,6 +53,8 @@ const DEFAULT_SETTINGS: SettingsData = {
   allowCancelAfterClose: "false",
   receiptSize: "80mm",
   thermalPrinter: "true",
+  receiptPrinter: "",
+  labelPrinter: "",
   businessLogo: "",
   autoBackup: "true",
   default_profit_margin: "50",
@@ -89,6 +91,13 @@ export default function Settings() {
   const [backupLoading, setBackupLoading] = useState(false);
 
   const { data: branchesList = [] } = useQuery<Branch[]>({ queryKey: ["/api/branches"], queryFn: getQueryFn({ on401: "throw" }) });
+
+  const { data: printersData } = useQuery<{ printers: string[] }>({
+    queryKey: ["/api/printers"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    staleTime: 60_000,
+  });
+  const systemPrinters: string[] = printersData?.printers ?? [];
 
   const { data: serverSettings } = useQuery<SettingsData>({
     queryKey: ["/api/settings"],
@@ -177,6 +186,64 @@ export default function Settings() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
+
+  const testReceiptPrint = () => {
+    const printer = currentSettings.receiptPrinter;
+    const w = window.open("", "_blank", "width=340,height=500");
+    if (!w) return;
+    w.document.write(`<html><head><title>اختبار طابعة الإيصال</title>
+    <style>
+      @page { size: 80mm auto; margin: 0; }
+      body { font-family: 'Cairo', Arial, sans-serif; direction: rtl; margin: 0; padding: 10px; font-size: 12px; }
+      .center { text-align: center; } .bold { font-weight: 700; }
+      hr { border: none; border-top: 1px dashed #000; margin: 6px 0; }
+      .hint { background: #fff3cd; padding: 6px; font-size: 11px; border-radius: 4px; margin-bottom: 8px; text-align: center; }
+      @media print { .hint { display: none; } }
+    </style></head><body>
+    ${printer ? `<div class="hint">اختر الطابعة: <strong>${printer}</strong></div>` : ""}
+    <p class="center bold">🌸 لمسة أنوثة 🌸</p>
+    <p class="center" style="font-size:10px">اختبار طباعة الإيصال</p>
+    <hr/>
+    <p>رقم الفاتورة: TEST-001</p>
+    <p>التاريخ: ${new Date().toLocaleDateString("ar-SA")}</p>
+    <hr/>
+    <table style="width:100%;font-size:11px"><tr><td>منتج تجريبي</td><td align="left">1 × 1.500</td></tr></table>
+    <hr/>
+    <p class="bold">الإجمالي: 1.500 ر.ع</p>
+    <hr/>
+    <p class="center" style="font-size:10px">شكراً لتسوقكم معنا 💝</p>
+    <script>setTimeout(()=>{window.print();window.close();},400);</script>
+    </body></html>`);
+    w.document.close();
+  };
+
+  const testLabelPrint = () => {
+    const printer = currentSettings.labelPrinter;
+    const w = window.open("", "_blank", "width=300,height=400");
+    if (!w) return;
+    w.document.write(`<html><head><title>اختبار طابعة الملصقات</title>
+    <style>
+      @page { size: 58mm 40mm; margin: 0; }
+      body { font-family: Arial, sans-serif; margin: 0; padding: 2mm; font-size: 7pt; color: #000; background: #fff; }
+      .label { width: 54mm; height: 36mm; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 0.5pt dashed #999; }
+      .brand { font-size: 9pt; font-weight: 800; letter-spacing: 0.1em; }
+      .price { font-size: 14pt; font-weight: 800; }
+      .hint { background: #fff3cd; padding: 4px; font-size: 9px; text-align: center; margin-bottom: 3px; }
+      @media print { .hint { display: none; } @page { size: 58mm 40mm; margin: 0; } }
+    </style></head><body>
+    ${printer ? `<div class="hint">اختر الطابعة: <strong>${printer}</strong></div>` : ""}
+    <div class="label">
+      <p class="brand">LAMST ANOTHA</p>
+      <p style="font-size:6pt;letter-spacing:0.06em">TOUCH OF FEMININITY</p>
+      <div style="width:85%;height:0.3pt;background:#000;margin:2px 0"></div>
+      <p style="font-size:7pt">Test Product</p>
+      <div style="width:85%;height:0.3pt;background:#000;margin:2px 0"></div>
+      <p class="price">1.500 <span style="font-size:9pt">R.O</span></p>
+    </div>
+    <script>setTimeout(()=>{window.print();window.close();},400);</script>
+    </body></html>`);
+    w.document.close();
+  };
 
   type BackupFile = { filename: string; size: number; createdAt: string };
   type ValidationCheck = { name: string; passed: boolean; details: string };
@@ -585,6 +652,79 @@ export default function Settings() {
                   <Switch checked={currentSettings.thermalPrinter === "true"} onCheckedChange={v => updateSetting("thermalPrinter", v ? "true" : "false")} data-testid="switch-thermal-printer" />
                 </div>
               </div>
+
+              {/* Printer Assignment */}
+              <div className="border rounded-lg p-4 space-y-4 bg-blue-50/40 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-2 mb-1">
+                  <Printer className="w-4 h-4 text-blue-600" />
+                  <span className="font-semibold text-sm text-blue-700 dark:text-blue-400">{t("settings.printer_assignment")}</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Receipt Printer */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">{t("settings.receipt_printer")}</Label>
+                    <Select
+                      value={currentSettings.receiptPrinter || "__none__"}
+                      onValueChange={v => updateSetting("receiptPrinter", v === "__none__" ? "" : v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("settings.select_printer")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">{t("settings.no_printer_selected")}</SelectItem>
+                        {systemPrinters.map(p => (
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">{t("settings.receipt_printer_desc")}</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1 text-xs"
+                      onClick={testReceiptPrint}
+                    >
+                      <Printer className="w-3 h-3" /> {t("settings.test_receipt_print")}
+                    </Button>
+                  </div>
+
+                  {/* Label Printer */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">{t("settings.label_printer")}</Label>
+                    <Select
+                      value={currentSettings.labelPrinter || "__none__"}
+                      onValueChange={v => updateSetting("labelPrinter", v === "__none__" ? "" : v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("settings.select_printer")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">{t("settings.no_printer_selected")}</SelectItem>
+                        {systemPrinters.map(p => (
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">{t("settings.label_printer_desc")}</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1 text-xs"
+                      onClick={testLabelPrint}
+                    >
+                      <Printer className="w-3 h-3" /> {t("settings.test_label_print")}
+                    </Button>
+                  </div>
+                </div>
+                {systemPrinters.length === 0 && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" /> {t("settings.printers_not_detected")}
+                  </p>
+                )}
+              </div>
+
               <div className="space-y-2">
                 <Label>{t("settings.business_logo")}</Label>
                 <Input value={currentSettings.businessLogo} onChange={e => updateSetting("businessLogo", e.target.value)} placeholder="https://example.com/logo.png" dir="ltr" className="text-left" data-testid="input-business-logo" />

@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-24 (جلسة 30 — إصلاح مخزون المشتريات + عرض الأرصدة + تحسين مؤشرات الأداء)_
+_آخر تحديث: 2026-04-25 (جلسة 31 — نظام طابعتين: إيصالات + ملصقات)_
 
 ---
 
@@ -655,6 +655,47 @@ fetch('/api/run-migration-0018',{method:'POST'}).then(r=>r.json()).then(console.
   - زر "مسح الفلاتر" + عداد "X من Y فاتورة"
   - إزالة حد الـ 30 فاتورة — يعرض الكل
   - أعمدة جديدة: العميل (الاسم + الجوال) + الكاشير
+
+---
+
+### جلسة 31 — نظام طابعتين (Receipt + Label)
+
+#### `server/routes.ts` — endpoint جديد
+- [x] **`GET /api/printers`**: يُرجع قائمة الطابعات المثبتة على النظام
+  - Windows: `powershell Get-Printer | Select-Object -ExpandProperty Name`
+  - Linux/Mac: `lpstat -a | awk '{print $1}'`
+  - يُرجع `{ printers: string[] }` — مصفوفة فارغة عند الخطأ أو عدم الاكتشاف
+
+#### `client/src/pages/Settings.tsx` — قسم تعيين الطابعات
+- [x] **إعدادات جديدة** في `DEFAULT_SETTINGS`: `receiptPrinter: ""` + `labelPrinter: ""`
+- [x] **useQuery** لجلب `GET /api/printers` وتخزين القائمة في `systemPrinters`
+- [x] **UI** في قسم "إعدادات الطباعة": بلوك أزرق بعنوان "تعيين الطابعات" يحتوي:
+  - Dropdown "طابعة الإيصالات" مع قائمة الطابعات + "بدون تحديد"
+  - Dropdown "طابعة الملصقات" مع نفس القائمة
+  - زر "طباعة إيصال تجريبي" — يفتح نافذة 80mm ويطبع
+  - زر "طباعة ملصق تجريبي" — يفتح نافذة 58×40mm ويطبع
+  - تحذير إذا لم تُكتشف طابعات
+- [x] **الحفظ** يمر عبر نفس `PATCH /api/settings` الموجود (key-value store)
+
+#### `client/src/pages/POS.tsx` — ReceiptModal
+- [x] `useQuery` لجلب `/api/settings` واستخراج `receiptPrinter`
+- [x] `receiptPrinter` prop مُمرَّر من الكومبوننت الرئيسي إلى `ReceiptModal`
+- [x] **Validation**: toast destructive إذا لم تُحدَّد طابعة الإيصال
+- [x] **Printer hint**: شريط أصفر في نافذة الطباعة يعرض اسم الطابعة (يختفي عند الطباعة)
+- [x] `@page { size: 80mm auto; margin: 0; }` في CSS نافذة الطباعة
+
+#### `client/src/pages/BarcodeLabels.tsx` — handlePrint
+- [x] `useQuery` لجلب `/api/settings` واستخراج `labelPrinter`
+- [x] **Validation**: toast destructive إذا لم تُحدَّد طابعة الملصقات
+- [x] **Printer hint**: شريط أصفر في نافذة الطباعة يعرض اسم الطابعة
+- [x] `@page { size: ${mm_w}mm ${mm_h}mm; margin: 0; }` مخصص لحجم الملصق
+
+#### ترجمة (ar.json + en.json)
+- [x] `settings.printer_assignment` · `receipt_printer` · `label_printer`
+- [x] `settings.select_printer` · `no_printer_selected`
+- [x] `settings.test_receipt_print` · `test_label_print`
+- [x] `settings.printers_not_detected`
+- [x] `barcode_labels.no_label_printer` · `no_label_printer_desc`
 
 ## ⏳ القادم
 - [ ] لا يوجد مهام محددة حالياً

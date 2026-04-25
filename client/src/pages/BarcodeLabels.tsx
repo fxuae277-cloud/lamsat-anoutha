@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -119,6 +120,7 @@ function LabelCard({ item, size }: { item: LabelItem; size: typeof SIZE_DIMS[Siz
 // ══════════════════════════════════════════════════════════════════════════════
 export default function BarcodeLabels() {
   const { t, lang } = useI18n();
+  const { toast } = useToast();
 
   const [search, setSearch]       = useState("");
   const [items, setItems]         = useState<LabelItem[]>([]);
@@ -132,6 +134,14 @@ export default function BarcodeLabels() {
     medium: { ...SIZE_DIMS.medium, label: t("barcode_labels.size_medium") },
     large:  { ...SIZE_DIMS.large,  label: t("barcode_labels.size_large") },
   };
+
+  // ── settings (label printer) ───────────────────────────────────────────────
+  const { data: appSettings } = useQuery<Record<string, string>>({
+    queryKey: ["/api/settings"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    staleTime: 120_000,
+  });
+  const labelPrinter = appSettings?.labelPrinter || "";
 
   // ── product search ─────────────────────────────────────────────────────────
   const { data: _results } = useQuery<any>({
@@ -179,6 +189,13 @@ export default function BarcodeLabels() {
 
   // ── print ──────────────────────────────────────────────────────────────────
   const handlePrint = () => {
+    if (!labelPrinter) {
+      toast({
+        title: t("barcode_labels.no_label_printer"),
+        description: t("barcode_labels.no_label_printer_desc"),
+        variant: "destructive",
+      });
+    }
     const sz = SIZES[size];
     const logoUrl = `${window.location.origin}/logo.png`;
 
@@ -222,6 +239,14 @@ export default function BarcodeLabels() {
 
     const win = window.open("", "_blank", "width=900,height=700");
     if (!win) return;
+    const printerBanner = labelPrinter
+      ? `<div style="background:#fff3cd;padding:6px 14px;font-size:12px;display:inline-block;border-radius:4px;margin-right:12px;">
+           🖨️ اختر الطابعة: <strong>${labelPrinter}</strong>
+         </div>`
+      : `<div style="background:#f8d7da;padding:6px 14px;font-size:12px;display:inline-block;border-radius:4px;margin-right:12px;">
+           ⚠️ لم يتم تحديد طابعة الملصقات — راجع الإعدادات
+         </div>`;
+
     win.document.write(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -254,7 +279,7 @@ export default function BarcodeLabels() {
   .price { font-size: ${sz.font + 5}pt; font-weight:800; letter-spacing:0.03em; line-height:1; }
   .ro { font-size: ${sz.font + 2}pt; font-weight:600; }
   @media print {
-    @page { margin: 4mm; size: A4; }
+    @page { margin: 0; size: ${sz.mm_w}mm ${sz.mm_h}mm; }
     body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   }
   .no-print { text-align:center; padding:10px; background:#f5f5f5; }
@@ -269,7 +294,8 @@ export default function BarcodeLabels() {
   <button onclick="window.close()" style="padding:8px 24px;background:#666;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;margin:4px;">
     ✕ ${t("barcode_labels.print_close")}
   </button>
-  <span style="margin-right:12px;font-size:13px;color:#555;">${totalLabels} ${t("barcode_labels.print_info_stickers")} — ${sz.mm_w}×${sz.mm_h}mm</span>
+  <span style="font-size:13px;color:#555;">${totalLabels} ${t("barcode_labels.print_info_stickers")} — ${sz.mm_w}×${sz.mm_h}mm</span>
+  ${printerBanner}
 </div>
 <div class="grid">${labelsHtml}</div>
 <script>setTimeout(()=>window.print(),500);</script>

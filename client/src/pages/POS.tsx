@@ -160,29 +160,49 @@ function StartPOS({ branchName, terminalName, userName, onShiftOpened }: {
 }
 
 // ─── ReceiptModal ─────────────────────────────────────────────────────────────
-function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId }: {
+function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId, receiptPrinter }: {
   sale: any; onClose: () => void;
   branchName: string; cashierName: string; shiftId?: number;
+  receiptPrinter?: string;
 }) {
+  const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
   const total = n(sale.total);
   const paid  = n(sale.amountPaid ?? sale.amount_paid ?? total);
   const change = n(sale.changeAmount ?? sale.change_amount ?? 0);
 
   const handlePrint = () => {
+    if (!receiptPrinter) {
+      toast({
+        title: "لم يتم تحديد طابعة الإيصال",
+        description: "انتقل إلى الإعدادات ← إعدادات الطباعة وحدّد طابعة الإيصال أولاً.",
+        variant: "destructive",
+      });
+    }
     const el = printRef.current;
     if (!el) return;
+    const printerHint = receiptPrinter
+      ? `<div style="background:#fff3cd;padding:6px 10px;font-size:11px;text-align:center;border-radius:4px;margin-bottom:8px">
+           اختر الطابعة: <strong>${receiptPrinter}</strong>
+         </div>`
+      : `<div style="background:#f8d7da;padding:6px 10px;font-size:11px;text-align:center;border-radius:4px;margin-bottom:8px">
+           ⚠️ لم يتم تحديد طابعة الإيصال — يرجى الإعداد من الإعدادات
+         </div>`;
     const w = window.open("", "_blank", "width=320,height=600");
     if (!w) return;
     w.document.write(`<html><head><title>فاتورة</title>
       <style>
+        @page { size: 80mm auto; margin: 0; }
         body{font-family:'Cairo',sans-serif;direction:rtl;margin:0;padding:10px;font-size:12px}
         .center{text-align:center} .bold{font-weight:700}
         table{width:100%;border-collapse:collapse}
         td,th{padding:3px 4px} th{border-bottom:1px dashed #000}
         .total-row{border-top:2px solid #000;font-weight:700}
         hr{border:none;border-top:1px dashed #000;margin:6px 0}
-      </style></head><body>${el.innerHTML}</body></html>`);
+        .printer-hint{} @media print{.printer-hint{display:none}}
+      </style></head><body>
+      <div class="printer-hint">${printerHint}</div>
+      ${el.innerHTML}</body></html>`);
     w.document.close();
     w.focus();
     setTimeout(() => { w.print(); w.close(); }, 500);
@@ -755,6 +775,12 @@ export default function POS() {
     queryKey: ["/api/branches"], queryFn: getQueryFn({ on401: "returnNull" }),
   });
   const branchName = branches.find(b => b.id === branchId)?.name || "الفرع";
+
+  const { data: appSettings } = useQuery<Record<string, string>>({
+    queryKey: ["/api/settings"], queryFn: getQueryFn({ on401: "returnNull" }),
+    staleTime: 120_000,
+  });
+  const receiptPrinter = appSettings?.receiptPrinter || "";
 
   const { data: categories = [] } = useQuery<any[]>({
     queryKey: ["/api/categories"], queryFn: getQueryFn({ on401: "returnNull" }),
@@ -1329,6 +1355,7 @@ export default function POS() {
           branchName={branchName}
           cashierName={user.name}
           shiftId={shift?.id}
+          receiptPrinter={receiptPrinter}
           onClose={() => { setCompletedSale(null); searchRef.current?.focus(); }}
         />
       )}
