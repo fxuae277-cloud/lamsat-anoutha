@@ -1,3 +1,31 @@
+// ── .env loader (must run before any other import touches process.env) ───────
+// We don't depend on the dotenv package; this is a tiny loader using only
+// node built-ins. Railway and Docker inject env vars directly so this file
+// is only consulted in local dev. Real shell env vars always win — we never
+// overwrite a value that's already set.
+import { readFileSync, existsSync } from "node:fs";
+import { resolve as pathResolve } from "node:path";
+{
+  const envPath = pathResolve(process.cwd(), ".env");
+  if (existsSync(envPath)) {
+    const text = readFileSync(envPath, "utf8");
+    // Match KEY=VALUE where VALUE may be:
+    //   - unquoted single line
+    //   - "double quoted" (allows multi-line for PEM keys)
+    //   - 'single quoted'
+    const re = /^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*(?:"((?:\\.|[^"\\])*)"|'([^']*)'|([^\r\n#]*))/gm;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const key = m[1];
+      if (process.env[key] !== undefined) continue; // shell wins
+      let value = m[2] !== undefined ? m[2] : m[3] !== undefined ? m[3] : (m[4] ?? "").trim();
+      // \n escapes are common for PEM keys stored on a single line
+      if (m[2] !== undefined) value = value.replace(/\\n/g, "\n").replace(/\\"/g, '"');
+      process.env[key] = value;
+    }
+  }
+}
+
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
 import session from "express-session";

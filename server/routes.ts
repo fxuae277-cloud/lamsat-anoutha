@@ -295,6 +295,66 @@ export async function registerRoutes(
     });
   });
 
+  // End-to-end self-test — POST a `certificate` (PEM string), backend signs a
+  // fixed nonce with QZ_PRIVATE_KEY and verifies the signature against the
+  // certificate's public key. PASS means the cert/key pair will work in QZ
+  // Tray; FAIL means they don't match (or one of them is invalid).
+  //
+  // Body: { certificate: string }   Response: { ok, error?, details }
+  app.post("/api/printing/qz/sign-test", requireAuth, (req, res) => {
+    try {
+      const certificate = req.body?.certificate;
+      if (typeof certificate !== "string" || !certificate.includes("BEGIN CERTIFICATE")) {
+        return res.status(400).json({
+          ok: false,
+          error: "certificate (PEM string) is required in body",
+        });
+      }
+      const privateKey = resolveQzPrivateKey();
+      if (!privateKey) {
+        return res.status(500).json({
+          ok: false,
+          error: "QZ_PRIVATE_KEY not set on server",
+        });
+      }
+
+      const payload = `qz-tray-sign-test-${Date.now()}`;
+      const signer = crypto.createSign("RSA-SHA512");
+      signer.update(payload);
+      signer.end();
+      const signature = signer.sign(privateKey, "base64");
+
+      const verifier = crypto.createVerify("RSA-SHA512");
+      verifier.update(payload);
+      verifier.end();
+      const verified = verifier.verify(certificate, signature, "base64");
+
+      console.log(
+        `[QZ-Sign] sign-test — keyPemBytes=${privateKey.length}, ` +
+        `certPemBytes=${certificate.length}, sigLen=${signature.length}, ` +
+        `verified=${verified}`
+      );
+
+      res.json({
+        ok: verified,
+        details: {
+          algorithm: "RSA-SHA512",
+          keyPemBytes: privateKey.length,
+          certPemBytes: certificate.length,
+          signatureLength: signature.length,
+          payload,
+        },
+        ...(verified ? {} : {
+          error: "signature did not verify against certificate — cert and " +
+                 "private key are NOT a matching pair",
+        }),
+      });
+    } catch (e: any) {
+      console.error("[QZ-Sign] sign-test threw:", e);
+      res.status(500).json({ ok: false, error: e?.message ?? String(e) });
+    }
+  });
+
   app.post("/api/printing/qz/sign", requireAuth, async (req, res) => {
     try {
       const toSign = req.body?.request;

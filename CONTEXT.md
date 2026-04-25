@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-25 (جلسة 39 — تصحيح الكاش المتوقع في إغلاق الوردية + تعديل النقد الافتتاحي)_
+_آخر تحديث: 2026-04-25 (جلسة 40 — توليد cert/key حقيقيين لـ QZ Tray وإصلاح Signature Missing)_
 
 ---
 
@@ -12,6 +12,46 @@ _آخر تحديث: 2026-04-25 (جلسة 39 — تصحيح الكاش المتو
 ---
 
 ## ✅ مكتمل
+
+### جلسة 40 — إصلاح "Signature Missing / Anonymous request" في QZ Tray نهائياً
+
+**سبب المشكلة (سببان متراكبان):**
+1. `QZ_CERTIFICATE` كان لا يزال placeholder (`PASTE_DIGITAL_CERTIFICATE_HERE`) → QZ Tray يرفض الـ cert في الـ handshake ولا يستدعي `setSignaturePromise` أبداً → "Signature: Missing" + "Anonymous request"
+2. `dotenv` غير مثبَّت ولا `--env-file` في scripts → `.env` كان لا يُقرأ أصلاً → `process.env.QZ_PRIVATE_KEY` كان `undefined`
+
+#### `scripts/qz-keys/` (جديد) — مولِّد cert/key + verifier
+- `private-key.pem` + `digital-certificate.pem` — RSA-2048 self-signed صالحة 10 سنوات (CN=Lamsat Anotha POS)
+- `verify-pair.mjs` — يوقّع nonce بـ `.env` ويتحقق ضد الـ cert في `qz-certificate.ts` → PASS ✓ مؤكَّد
+- `README.md` — شرح كامل + أوامر openssl للتوليد
+
+#### `client/src/lib/qz-certificate.ts`
+- استبدال placeholder بشهادة X.509 حقيقية مولَّدة من openssl
+- `QZ_CERTIFICATE_CONFIGURED = true` الآن
+
+#### `.env`
+- `QZ_PRIVATE_KEY` بقيمة multi-line PEM داخل علامتي تنصيص (حسب صيغة المُحمِّل)
+- على Railway: انسخ نفس القيمة إلى Variables → QZ_PRIVATE_KEY
+
+#### `server/index.ts` — مُحمِّل `.env` مدمج
+- ~25 سطر باستخدام `node:fs` فقط (بدون اعتماد جديد)
+- يدعم: قيم بدون اقتباس / `"double quoted"` (multi-line + `\n` escapes) / `'single quoted'`
+- متغيرات الـ shell الحقيقية تتقدم على `.env` (لا نكتب فوقها)
+
+#### `server/routes.ts` — endpoints جديدة للتشخيص
+- `GET /api/printing/qz/status` — يرجع metadata فقط: `privateKeyConfigured`, `privateKeyLength`, `privateKeyLooksLikePem`, `algorithm`
+- `POST /api/printing/qz/sign-test` — body: `{ certificate }` → يوقّع nonce ويتحقق ضد الـ cert المُمرَّر → `{ ok, details, error? }` — يكشف فوراً إذا الـ pair لا يطابق
+- `POST /api/printing/qz/sign` — يطبع `[QZ-Sign] sign request — toSign length=N, key length=K` ثم `signature produced — length=L` على كل طلب
+
+#### اختبار سريع
+```
+node scripts/qz-keys/verify-pair.mjs  →  verify with cert: PASS ✓
+```
+
+#### الخطوة الأخيرة لإنهاء الـ prompt
+- على Railway: ضبط `QZ_PRIVATE_KEY` في Variables من قيمة `.env`
+- في QZ Tray عند أول طباعة بعد النشر: Allow + ✓ Remember this decision
+
+---
 
 ### جلسة 39 — إصلاح حساب الكاش المتوقع + تعديل النقد الافتتاحي
 

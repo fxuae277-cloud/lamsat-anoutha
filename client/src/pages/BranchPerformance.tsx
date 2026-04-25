@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateInput } from "@/components/ui/date-input";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth";
 import { fmtDate, fmtTime } from "@/lib/formatters";
 import { parseServerError } from "@/lib/queryClient";
 import { GitBranch, Search, X } from "lucide-react";
@@ -64,10 +65,16 @@ function KpiCard({ label, value, sub, color, border, icon }: {
 }
 
 export default function BranchPerformance() {
+  const { data: authData } = useAuth();
+  const user = authData?.user;
+  const isOwner = user?.role === "owner" || user?.role === "admin";
+
   const [period, setPeriod] = useState<Period>("month");
   const [customFrom, setCustomFrom] = useState(startOfMonthStr());
   const [customTo, setCustomTo] = useState(todayStr());
-  const [selectedBranch, setSelectedBranch] = useState<string>("all");
+  const [selectedBranch, setSelectedBranch] = useState<string>(
+    isOwner ? "all" : (user?.branchId ? String(user.branchId) : "all")
+  );
 
   // Search & filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -91,6 +98,7 @@ export default function BranchPerformance() {
       return res.json();
     },
     staleTime: 300_000,
+    enabled: isOwner,
   });
 
   const salesUrl = useMemo(() => {
@@ -224,45 +232,49 @@ export default function BranchPerformance() {
         </div>
       </div>
 
-      {/* Filters row: branch + custom date */}
-      <div className="flex items-center gap-3 flex-wrap p-3 bg-muted/30 rounded-lg border">
-        {/* Branch selector */}
-        <div className="flex items-center gap-2">
-          <GitBranch className="w-4 h-4 text-muted-foreground shrink-0" />
-          <label className="text-xs font-medium text-gray-600 whitespace-nowrap">الفرع</label>
-          <Select value={selectedBranch} onValueChange={setSelectedBranch}>
-            <SelectTrigger className="h-8 text-xs w-52">
-              <SelectValue placeholder="اختر الفرع..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">الكل — جميع الفروع</SelectItem>
-              {branches.map((b: any) => (
-                <SelectItem key={b.id} value={String(b.id)}>
-                  {b.name}{b.address ? ` — ${b.address}` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {/* Filters row: branch (owner only) + custom date */}
+      {(isOwner || period === "custom") && (
+        <div className="flex items-center gap-3 flex-wrap p-3 bg-muted/30 rounded-lg border">
+          {/* Branch selector — owners/admins only */}
+          {isOwner && (
+            <div className="flex items-center gap-2">
+              <GitBranch className="w-4 h-4 text-muted-foreground shrink-0" />
+              <label className="text-xs font-medium text-gray-600 whitespace-nowrap">الفرع</label>
+              <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+                <SelectTrigger className="h-8 text-xs w-52">
+                  <SelectValue placeholder="اختر الفرع..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل — جميع الفروع</SelectItem>
+                  {branches.map((b: any) => (
+                    <SelectItem key={b.id} value={String(b.id)}>
+                      {b.name}{b.address ? ` — ${b.address}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Custom date range */}
+          {period === "custom" && (
+            <>
+              {isOwner && <div className="w-px h-5 bg-border" />}
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-gray-600">من</label>
+                <DateInput value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="w-36 h-8 text-xs" />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-gray-600">إلى</label>
+                <DateInput value={customTo} onChange={e => setCustomTo(e.target.value)} className="w-36 h-8 text-xs" />
+              </div>
+            </>
+          )}
         </div>
+      )}
 
-        {/* Custom date range */}
-        {period === "custom" && (
-          <>
-            <div className="w-px h-5 bg-border" />
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-medium text-gray-600">من</label>
-              <DateInput value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="w-36 h-8 text-xs" />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-medium text-gray-600">إلى</label>
-              <DateInput value={customTo} onChange={e => setCustomTo(e.target.value)} className="w-36 h-8 text-xs" />
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Active branch badge */}
-      {selectedBranchName && (
+      {/* Active branch badge — owner only (cashier always sees own branch) */}
+      {isOwner && selectedBranchName && (
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-pink-700 border-pink-300 bg-pink-50 text-xs gap-1 py-1 px-2.5">
             <GitBranch className="w-3 h-3" />
