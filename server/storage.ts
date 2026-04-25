@@ -5913,31 +5913,46 @@ export class DatabaseStorage implements IStorage {
       FROM owner_transactions
     `);
     const ow = ownerRes.rows[0];
-    const receivedCash   = parseFloat(ow.received_cash);   // cash picked up from branches
-    const depositedBank  = parseFloat(ow.deposited_to_bank); // manual deposits to bank
-    const withdrawn      = parseFloat(ow.withdrawn);         // cash withdrawals by owner
-    const adjIn          = parseFloat(ow.adj_in);
-    const adjOut         = parseFloat(ow.adj_out);
+    const receivedCash  = parseFloat(ow.received_cash);    // استلم كاش من الفروع (owner_handover)
+    const depositedBank = parseFloat(ow.deposited_to_bank); // أودع في البنك (bank_deposit)
+    const withdrawn     = parseFloat(ow.withdrawn);          // سحوبات شخصية
+    const adjIn         = parseFloat(ow.adj_in);
+    const adjOut        = parseFloat(ow.adj_out);
 
-    // Owner cash in hand = what he picked up from branches - what he deposited - what he withdrew (cash)
-    const ownerCash = receivedCash - depositedBank - withdrawn + adjIn - adjOut;
+    // الكاش المرسل للفروع (owner_cash_in) → يُخصم من نقد المالك
+    const cashSentToBranchesRes = await pool.query(`
+      SELECT COALESCE(SUM(amount), 0) AS total
+      FROM owner_transactions
+      WHERE type = 'MANUAL_ADJUSTMENT_OUT' AND from_account = 'owner_cash'
+    `);
+    const cashSentToBranches = parseFloat(cashSentToBranchesRes.rows[0].total);
+
+    // التحويل البنكي المرسل للفروع (owner_transfer_in) → يُخصم من بنك المالك
+    const bankSentToBranchesRes = await pool.query(`
+      SELECT COALESCE(SUM(amount), 0) AS total
+      FROM owner_transactions
+      WHERE type = 'MANUAL_ADJUSTMENT_OUT' AND from_account = 'owner_bank'
+    `);
+    const bankSentToBranches = parseFloat(bankSentToBranchesRes.rows[0].total);
+
+    // نقد المالك = استلم من الفروع - أودع في البنك - سحب شخصي - كاش أرسله للفروع + تعديلات
+    const ownerCash = receivedCash - depositedBank - withdrawn - cashSentToBranches + adjIn - adjOut;
 
     // 3. Totals across all branches
     const totalCardSales     = branches.reduce((s: number, b: any) => s + parseFloat(b.cardSales), 0);
     const totalBankTransfers = branches.reduce((s: number, b: any) => s + parseFloat(b.bankTransferSales), 0);
 
-    // Owner bank balance = card sales (go straight to bank) + bank transfers (go straight to bank) + manual deposits
-    // This is the true bank balance the owner should see in his bank account
-    const ownerBankBalance = totalCardSales + totalBankTransfers + depositedBank;
+    // بنك المالك = مبيعات بطاقة + تحويلات بنكية + إيداعات (من bank_deposit) − تحويلات أرسلها للفروع
+    const ownerBankBalance = totalCardSales + totalBankTransfers + depositedBank - bankSentToBranches;
 
-    // Total cash on hand = all branch cash + owner's pocket cash
+    // إجمالي النقد = نقد الفروع + نقد المالك
     const totalCashOnHand = branches.reduce((s: number, b: any) => s + parseFloat(b.currentCash), 0) + ownerCash;
 
     // 4. Total expenses (all branches, all payment methods)
     const expRes = await pool.query(`SELECT COALESCE(SUM(amount), 0) AS total FROM expenses`);
     const totalExpenses = parseFloat(expRes.rows[0].total);
 
-    // 5. Company available balance = cash + bank - expenses - withdrawals
+    // 5. الرصيد الكلي = نقد + بنك - مصروفات - سحوبات
     const totalAvailable = totalCashOnHand + ownerBankBalance - totalExpenses - withdrawn;
 
     // 6. Inventory value
@@ -5996,6 +6011,8 @@ export class DatabaseStorage implements IStorage {
         bankFromCard:         totalCardSales.toFixed(3),
         bankFromTransfer:     totalBankTransfers.toFixed(3),
         bankFromDeposits:     depositedBank.toFixed(3),
+        cashSentToBranches:   cashSentToBranches.toFixed(3),
+        bankSentToBranches:   bankSentToBranches.toFixed(3),
       },
       branches,
       inventory: {

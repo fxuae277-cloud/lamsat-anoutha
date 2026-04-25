@@ -1316,25 +1316,49 @@ export async function registerRoutes(
         [dateStr, branchId, shiftId ?? null, type, amtIn, amtOut, note ?? null, user.id]
       );
 
-      // عند تسليم كاش للمالك: أنشئ تلقائياً سجلاً في owner_transactions
-      // حتى يظهر في ملخص المالك دون الحاجة لتسجيل مزدوج
-      if (type === "owner_handover" && branchId) {
-        await pool.query(
-          `INSERT INTO owner_transactions
-             (date, type, branch_id, amount, payment_method, from_account, to_account, note, created_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [
-            dateStr,
-            "BRANCH_CASH_TRANSFER_TO_OWNER",
-            branchId,
-            parseFloat(amount).toFixed(3),
-            "cash",
-            "branch_cash",
-            "owner_cash",
-            note ?? null,
-            user.id,
-          ]
-        );
+      // ── ربط تلقائي بحساب المالك (بدون تسجيل مزدوج) ──────────────────────────
+      // كل حركة بين الفروع والمالك تُحدِّث owner_transactions تلقائياً
+      if (branchId) {
+        let ownerTxnType: string | null = null;
+        let fromAccount: string | null = null;
+        let toAccount:   string | null = null;
+        let pmtMethod = "cash";
+
+        if (type === "owner_handover") {
+          // الفرع سلّم كاش للمالك → نقد المالك ↑
+          ownerTxnType = "BRANCH_CASH_TRANSFER_TO_OWNER";
+          fromAccount  = "branch_cash";
+          toAccount    = "owner_cash";
+        } else if (type === "bank_deposit") {
+          // الفرع أودع نقداً في البنك → بنك المالك ↑
+          ownerTxnType = "OWNER_DEPOSIT_TO_BANK";
+          fromAccount  = "branch_cash";
+          toAccount    = "owner_bank";
+        } else if (type === "owner_cash_in") {
+          // المالك أرسل كاش للفرع → نقد المالك ↓
+          ownerTxnType = "MANUAL_ADJUSTMENT_OUT";
+          fromAccount  = "owner_cash";
+          toAccount    = "branch_cash";
+        } else if (type === "owner_transfer_in") {
+          // المالك حوّل بنكياً للفرع → بنك المالك ↓
+          ownerTxnType = "MANUAL_ADJUSTMENT_OUT";
+          fromAccount  = "owner_bank";
+          toAccount    = "branch_cash";
+          pmtMethod    = "bank_transfer";
+        }
+
+        if (ownerTxnType) {
+          await pool.query(
+            `INSERT INTO owner_transactions
+               (date, type, branch_id, amount, payment_method, from_account, to_account, note, created_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [
+              dateStr, ownerTxnType, branchId,
+              parseFloat(amount).toFixed(3), pmtMethod,
+              fromAccount, toAccount, note ?? null, user.id,
+            ]
+          );
+        }
       }
 
       res.status(201).json(result.rows[0]);
