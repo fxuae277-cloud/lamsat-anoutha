@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-25 (جلسة 41 — إصلاح أمني سريع: إزالة `.env` و private-key من git tracking)_
+_آخر تحديث: 2026-04-25 (جلسة 41 — إصلاح أمني كامل: إزالة الأسرار من git + تدوير DATABASE/SESSION/QZ على Railway)_
 
 ---
 
@@ -56,6 +56,20 @@ git rm --cached scripts/qz-keys/digital-certificate.pem
 3. **Redeploy**
 
 **ملاحظة:** الأسرار القديمة لا تزال في commits سابقة على GitHub. تدوير المفاتيح في Railway هو ما يُبطلها فعلياً. إعادة كتابة git history مؤجَّلة كإجراء لاحق إن لزم.
+
+#### تنفيذ التدوير على Railway (تم)
+- **`SESSION_SECRET`** ← قيمة جديدة (96 hex chars) عبر Variables
+- **`QZ_PRIVATE_KEY`** ← أُضيف لأول مرة (لم يكن مضبوطاً على production أصلاً)، مُطابق للـ cert في commit `229700c`
+- **كلمة مرور Postgres** ← دُوِّرت بطريقتين متتابعتين:
+  1. ❌ المحاولة الأولى: تغيير `POSTGRES_PASSWORD` كمتغير مباشرةً → كراش `28P01 invalid_password` (صورة `postgres-ssl:18` لا تُزامن المتغير مع المستخدم الداخلي)
+  2. ✅ الحل الصحيح: استعادة الكلمة القديمة مؤقتاً → تنفيذ `ALTER USER postgres WITH PASSWORD ...` عبر Postgres → tab Database → Query → ثم تحديث `POSTGRES_PASSWORD` ليطابق
+- **`DATABASE_URL`** على lamsa-pos: مرجع ديناميكي `${{Postgres.DATABASE_URL}}` → تحدّث تلقائياً
+
+#### درس مستفاد
+- على Railway، **لا تغيّر `POSTGRES_PASSWORD` يدوياً ولا تستخدم Reset Password (إن وجد) قبل تنفيذ `ALTER USER` داخل Postgres نفسه**. الترتيب الصحيح: ALTER داخل DB أولاً، ثم تحديث المتغير ليطابق.
+- الـ health endpoint `/api/health` نافع للتحقق السريع من اتصال السيرفر بقاعدة البيانات بعد أي تغيير.
+
+**الحالة النهائية:** الموقع online على https://lamsa-pos.up.railway.app — `/api/health` → `{status:"ok"}`. كل الأسرار المسرَّبة مُبطَلة فعلياً.
 
 ---
 
