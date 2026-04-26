@@ -1,5 +1,112 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-26 (جلسة 48 — تبسيط تحديث الخدمة المحلية: dist في git + سكربت نقرة واحدة)_
+_آخر تحديث: 2026-04-26 (جلسة 49 — ربط زر طباعة الكاشير مباشرة بـ `Invoice.tsx` عبر browser print)_
+
+---
+
+## 🖨️ مسار طباعة الإيصال (الحالي بعد جلسة 49)
+
+```
+Cashier clicks طباعة (ReceiptModal)  أو  Sale completes (auto-print)
+            │
+            ▼
+   printInvoiceInBrowser(saleData)
+   client/src/lib/browserPrintInvoice.ts
+            │
+            ▼
+   renderToStaticMarkup(<Invoice ... />)   ← نفس Invoice.tsx الجديد
+   client/src/components/Invoice.tsx
+            │
+            ▼
+   window.open() + write HTML + window.print()
+            │
+            ▼
+   Chrome → Windows printer driver → EPSON TM-T100
+```
+
+**أين Invoice.tsx الآن؟** → هو **مصدر التصميم الوحيد** للإيصال. لا ESC/POS، لا local-print-service في هذا المسار.
+
+---
+
+## ✅ مكتمل
+
+### جلسة 49 — ربط زر طباعة الكاشير مباشرة بـ `Invoice.tsx`
+
+**الإشكال:** بعد الجلسات 46–48 الكاشير لا يزال يرى التصميم القديم على الورق رغم أن `Invoice.tsx` و `printInvoice.ts` (ESC/POS) كلاهما يحتوي التصميم الجديد على GitHub. السبب الحقيقي محتمل أن dist محلية على PC الكاشير stale — لكن الحل الأكثر ضماناً: **نلغي الاعتماد على local-print-service لمسار الإيصال كلياً ونستخدم Invoice.tsx مباشرة**.
+
+#### الحل — مسار جديد: Browser Print لـ `<Invoice />`
+
+**ملف جديد — `client/src/lib/browserPrintInvoice.ts`:**
+- يستورد `Invoice` و `InvoiceItem` من `@/components/Invoice`
+- `printInvoiceInBrowser(data)` يعمل:
+  1. يبني `InvoiceProps` من بيانات البيع (mapping للحقول، حساب `vatRate = vat / subtotal`)
+  2. `renderToStaticMarkup(<Invoice .../>)` ← يحوّل React component لـ HTML ثابت
+  3. `window.open("", "_blank", "width=420,height=800")` — popup صغير
+  4. يكتب الـ HTML مع:
+     - Tailwind CSS عبر CDN (`https://cdn.tailwindcss.com`)
+     - خطوط Google: Tajawal / Aref Ruqaa / Cairo / Playfair Display
+     - `@page { size: 80mm auto; margin: 0; }` — حجم الورق الحراري
+  5. JavaScript داخل النافذة ينتظر `document.fonts.ready` ثم `window.print()` ثم `window.close()` بعد 800ms
+- يحتفظ بنفس **حارس التكرار** (in-flight Set + 3s recent Map) كما في `localPrintClient.ts` السابق
+- يعطي `{ ok, error?, ignoredDuplicate? }` متوافق مع نفس contract الأقدم
+
+**تعديل `client/src/pages/POS.tsx`:**
+- استبدال `import { printInvoiceLocal } from "@/lib/localPrintClient"` بـ `import { printInvoiceInBrowser } from "@/lib/browserPrintInvoice"`
+- `ReceiptModal.handlePrint` (السطر ~175): يستدعي `printInvoiceInBrowser(...)` بدل `printInvoiceLocal(...)`
+- Auto-print بعد البيع (السطر ~1049): نفس الاستبدال
+- لم يتبقَّ أي استدعاء لـ `printInvoiceLocal` في POS.tsx (تم التحقق بـ grep → 0 نتائج)
+- نفس `printingRef` re-entrancy guard، نفس `disabled={printing}`، نفس toast `"تمت الطباعة بنجاح"`، نفس صمت `ignoredDuplicate`
+
+#### كيف يصل التصميم للورق الآن؟
+
+1. Chrome (سحابي على Railway HTTPS) يفتح popup → يكتب HTML الذي يحتوي JSX من `Invoice.tsx` بعد renderToStaticMarkup
+2. CSS من Tailwind CDN يُنزَّل، خطوط Google تُحمَّل
+3. JavaScript داخل النافذة يستدعي `window.print()` → Chrome يفتح طباعة بحجم 80mm
+4. Driver Windows لـ EPSON TM-T100 يرسم الـ HTML rasterized → الورق
+
+**الميزة:** `Invoice.tsx` = source of truth واحد. أي تعديل على التصميم في `Invoice.tsx` يصل تلقائياً لـ:
+- العرض على الشاشة في POS (لو احتجنا preview)
+- الطباعة الفعلية (نفس الـ component يُرندَر للطباعة)
+
+#### ما لم يُلمس (مقصود)
+
+- **`local-print-service/`**: الخدمة المحلية تبقى شغالة كما هي. Task Scheduler لم يُمَس. لم تُحذف `printInvoice.ts` ولا `dist/` — تبقى للاستخدامات الأخرى (testing، label printing مستقبلاً، أو عودة لـ ESC/POS path إذا قرّرنا)
+- **`Invoice.tsx`**: لم يتغيّر — يبقى كما هو في commit 7109cd3
+- **حارس التكرار في الخدمة المحلية**: يبقى نشطاً للمسارات الأخرى التي قد تستدعي `/print/invoice`
+- **`localPrintClient.ts`**: يبقى الملف لكن لا مستهلك له الآن من POS
+
+#### التحقق
+
+- `grep printInvoiceLocal client/src/pages/POS.tsx` → **0 نتائج**
+- `grep printInvoiceInBrowser client/src/pages/POS.tsx` → سطرين (handlePrint + auto-print)
+- `grep "renderToStaticMarkup\|<Invoice\|from \"@/components/Invoice\"" client/src/lib/browserPrintInvoice.ts` → ✓
+- `npx tsc --noEmit` على ملفات الجلسة (browserPrintInvoice.ts و POS.tsx و localPrintClient.ts) → 0 أخطاء (الأخطاء القديمة في ملفات أخرى pre-existing وغير مرتبطة)
+
+#### كيف تختبر من الكاشير
+
+1. على PC الكاشير: `git pull` (يصلك التغيير من Railway تلقائياً بعد deploy، أو من git مباشرة)
+2. **لا حاجة لإعادة بناء أي شيء على PC الكاشير** — التصميم الآن في frontend، Railway يخدم بناء جديد بعد كل push
+3. أكمل بيع تجريبي → popup صغير يفتح، ينتظر ثانية للخطوط، ثم Chrome يفتح حوار الطباعة → اطبع → الإيصال الجديد على الورق
+
+#### ملاحظات تشغيلية مهمة
+
+- **Pop-ups:** لازم Chrome يسمح بالـ popups على نطاق `lamsa-pos-production.up.railway.app`. إذا حُجبت، الكاشير يرى toast "متصفّحك يحجب النوافذ المنبثقة"
+- **طباعة صامتة:** افتراضياً Chrome يعرض حوار الطباعة. لطباعة بدون حوار: شغّل Chrome بـ `--kiosk-printing` flag مع EPSON TM-T100 = Default Printer
+- **الإنترنت:** Tailwind CDN + Google Fonts تتطلّب اتصال (الكاشير أصلاً يحتاج اتصال للـ POS السحابي)
+
+#### ما هو الملف الذي كان "يطبع القديم"؟
+
+→ **لا شيء على GitHub كان يطبع القديم.** التصميم الجديد كان موجوداً في:
+- `client/src/components/Invoice.tsx` (jsx) ✓
+- `local-print-service/src/printInvoice.ts` (ESC/POS) ✓ (جلسة 47)
+- `local-print-service/dist/printInvoice.js` (مُجمَّع) ✓ (جلسة 48)
+
+السبب الفعلي للإشكال على PC الكاشير محتملاً: **dist محلية stale**، أو node process قديم في الذاكرة، أو git pull ما تم.
+
+→ **الملف الذي تم ربطه الآن:** `client/src/pages/POS.tsx` صار يستدعي `printInvoiceInBrowser` من `client/src/lib/browserPrintInvoice.ts`، الذي يستخدم `client/src/components/Invoice.tsx` مباشرة عبر `renderToStaticMarkup`. هذا المسار الجديد **لا يعتمد على PC الكاشير المحلي إطلاقاً** — يكفي Railway deploy.
+
+---
+
+### جلسة 48 — تبسيط تحديث الخدمة المحلية: dist في git + سكربت نقرة واحدة
 
 ---
 
