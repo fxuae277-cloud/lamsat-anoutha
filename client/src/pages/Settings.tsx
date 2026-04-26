@@ -19,7 +19,7 @@ import {
   Settings2, Save, X, Loader2, AlertTriangle, Globe,
   Banknote, Receipt, FileText, Printer, Database, Download, Percent
 } from "lucide-react";
-import { printTestReceiptAsImage } from "@/lib/printer";
+import { printTestInvoiceLocal } from "@/lib/localPrintClient";
 
 type SettingsData = Record<string, string>;
 
@@ -205,17 +205,16 @@ export default function Settings() {
   const testReceiptPrint = async () => {
     const printer = currentSettings.receiptPrinter || DEFAULT_SETTINGS.receiptPrinter;
     setTestPrinting(true);
-    try {
-      await printTestReceiptAsImage(printer, false);
-      toast({ title: "تمت الطباعة التجريبية بنجاح ✅", description: printer });
-    } catch (e: any) {
+    const result = await printTestInvoiceLocal(printer);
+    setTestPrinting(false);
+    if (result.ok) {
+      toast({ title: "تمت الطباعة", description: printer });
+    } else {
       toast({
         title: "خطأ في طباعة الإيصال التجريبية",
-        description: e.message,
+        description: result.error,
         variant: "destructive",
       });
-    } finally {
-      setTestPrinting(false);
     }
   };
 

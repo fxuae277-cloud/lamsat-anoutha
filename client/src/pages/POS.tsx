@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
-import { printReceiptAsImage, openCashDrawer } from "@/lib/printer";
+import { printInvoiceLocal } from "@/lib/localPrintClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -174,36 +174,34 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId, receipt
 
   const handlePrint = async () => {
     setPrinting(true);
-    try {
-      await printReceiptAsImage(
-        {
-          invoiceNumber: sale.invoiceNumber || sale.invoice_number || "",
-          items: (sale.items || []).map((i: any) => ({
-            productName: i.productName || i.product_name,
-            quantity:    i.quantity,
-            unitPrice:   i.unitPrice    ?? i.unit_price,
-            color:       i.color,
-          })),
-          subtotal:      n(sale.subtotal),
-          discount:      n(sale.discount),
-          vat:           n(sale.vat),
-          total,
-          amountPaid:    paid,
-          changeAmount:  change,
-          paymentMethod: sale.paymentMethod || sale.payment_method,
-          customerName:  sale.customerName  || sale.customer_name,
-          cashierName,
-          branchName,
-          createdAt:     sale.createdAt     || sale.created_at,
-        },
-        receiptPrinter || undefined,
-        false,  // rotate180: set true if receipt prints upside-down
-      );
-      toast({ title: "تمت الطباعة بنجاح ✅" });
-    } catch (e: any) {
-      toast({ title: "خطأ في الطباعة", description: e.message, variant: "destructive" });
-    } finally {
-      setPrinting(false);
+    const result = await printInvoiceLocal(
+      {
+        invoiceNumber: sale.invoiceNumber || sale.invoice_number || "",
+        items: (sale.items || []).map((i: any) => ({
+          productName: i.productName || i.product_name,
+          quantity:    i.quantity,
+          unitPrice:   i.unitPrice    ?? i.unit_price,
+          color:       i.color,
+        })),
+        subtotal:      n(sale.subtotal),
+        discount:      n(sale.discount),
+        vat:           n(sale.vat),
+        total,
+        amountPaid:    paid,
+        changeAmount:  change,
+        paymentMethod: sale.paymentMethod || sale.payment_method,
+        customerName:  sale.customerName  || sale.customer_name,
+        cashierName,
+        branchName,
+        createdAt:     sale.createdAt     || sale.created_at,
+      },
+      receiptPrinter || undefined,
+    );
+    setPrinting(false);
+    if (result.ok) {
+      toast({ title: "تمت الطباعة" });
+    } else {
+      toast({ title: "خطأ في الطباعة", description: result.error, variant: "destructive" });
     }
   };
 
@@ -1035,41 +1033,35 @@ export default function POS() {
       setPayRef("");
       qc.invalidateQueries({ queryKey: ["/api/pos/products"] });
 
-      // Auto-print receipt immediately after sale is saved in DB
-      try {
-        await printReceiptAsImage(
-          {
-            invoiceNumber: sale.invoiceNumber || sale.invoice_number || "",
-            items: (sale.items || []).map((i: any) => ({
-              productName: i.productName || i.product_name,
-              quantity:    i.quantity,
-              unitPrice:   i.unitPrice    ?? i.unit_price,
-              color:       i.color,
-            })),
-            subtotal:      n(sale.subtotal),
-            discount:      n(sale.discount),
-            vat:           n(sale.vat),
-            total:         n(sale.total),
-            amountPaid:    n(sale.amountPaid ?? sale.amount_paid),
-            changeAmount:  n(sale.changeAmount ?? sale.change_amount),
-            paymentMethod: sale.paymentMethod || sale.payment_method,
-            customerName:  sale.customerName  || sale.customer_name || null,
-            cashierName:   user?.name,
-            branchName,
-            createdAt:     sale.createdAt     || sale.created_at,
-          },
-          receiptPrinter || undefined,
-          false,
-        );
-        // Open cash drawer only for cash payments
-        const pm = sale.paymentMethod || sale.payment_method;
-        if (pm === "cash") {
-          await openCashDrawer(receiptPrinter || undefined);
-        }
-      } catch (e: any) {
+      // Auto-print receipt immediately after sale is saved in DB.
+      // Cash drawer pulse is deferred to Phase 3 (POST /drawer/open on local service).
+      const autoPrintResult = await printInvoiceLocal(
+        {
+          invoiceNumber: sale.invoiceNumber || sale.invoice_number || "",
+          items: (sale.items || []).map((i: any) => ({
+            productName: i.productName || i.product_name,
+            quantity:    i.quantity,
+            unitPrice:   i.unitPrice    ?? i.unit_price,
+            color:       i.color,
+          })),
+          subtotal:      n(sale.subtotal),
+          discount:      n(sale.discount),
+          vat:           n(sale.vat),
+          total:         n(sale.total),
+          amountPaid:    n(sale.amountPaid ?? sale.amount_paid),
+          changeAmount:  n(sale.changeAmount ?? sale.change_amount),
+          paymentMethod: sale.paymentMethod || sale.payment_method,
+          customerName:  sale.customerName  || sale.customer_name || null,
+          cashierName:   user?.name,
+          branchName,
+          createdAt:     sale.createdAt     || sale.created_at,
+        },
+        receiptPrinter || undefined,
+      );
+      if (!autoPrintResult.ok) {
         toast({
           title: "تحذير: لم تتم الطباعة التلقائية",
-          description: e.message,
+          description: autoPrintResult.error,
           variant: "destructive",
         });
       }

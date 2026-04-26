@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-26 (جلسة 43 — Local Print Service: قرار استبدال QZ Tray + بناء جسر طباعة محلي Phase 1+2)_
+_آخر تحديث: 2026-04-26 (جلسة 44 — Phase 4: تكامل POS مع الخدمة المحلية + إزالة استدعاءات QZ من runtime path)_
 
 ---
 
@@ -12,6 +12,81 @@ _آخر تحديث: 2026-04-26 (جلسة 43 — Local Print Service: قرار ا
 ---
 
 ## ✅ مكتمل
+
+### جلسة 44 — Phase 4: تكامل POS مع الخدمة المحلية + إزالة استدعاءات QZ من runtime path
+
+**الهدف:** بعد إنجاز Phase 1+2 من الخدمة المحلية في الجلسة السابقة، الـ POS كان لا يزال يستدعي QZ Tray (وكان يُظهر "Connection blocked by client"). هذه الجلسة توصِل القنوات: زر الطباعة + auto-print + Settings test print كلها الآن تذهب لـ `http://127.0.0.1:3030/print/invoice` بدلاً من QZ.
+
+#### Helper جديد — `client/src/lib/localPrintClient.ts`
+
+~200 سطر، يغلِّف كل التواصل مع الخدمة المحلية:
+- `printInvoiceLocal(receipt, printerName?)` — `POST /print/invoice` مع `x-lamsa-print-key: 123456`
+- `printTestInvoiceLocal(printerName?)` — sample invoice ثابتة لاختبار Settings
+- `checkLocalPrintHealth()` — pre-flight اختياري على `/health`
+- `toLocalInvoice()` — يحوّل شكل POS الغني (`color/size/vat/amountPaid/changeAmount`) إلى schema الخدمة المسطّح (`name/qty/price/total + subtotal/discount/tax/grandTotal`)
+- `fetchWithTimeout` (15s + AbortController) — لا hang إن الخدمة لم ترد
+- رسائل عربية مخصّصة لكل حالة:
+  - 401 → "مفتاح x-lamsa-print-key خاطئ"
+  - 400 → "بيانات الفاتورة ناقصة"
+  - 403 → "خدمة الطباعة رفضت الطلب (CORS)"
+  - 5xx → "فشل الطباعة في الطابعة. تحقق من حالتها"
+  - network/abort → "خدمة الطباعة المحلية غير مفعّلة على جهاز الكاشير"
+- ثوابت hardcoded في هذه المرحلة (Phase 4 الكامل سيُخرجها لـ Settings UI):
+  - `LOCAL_PRINT_URL = "http://127.0.0.1:3030"`
+  - `LOCAL_PRINT_API_KEY = "123456"`
+  - `DEFAULT_PRINTER = "EPSON TM-T100 Receipt"`
+
+**ملاحظة المتصفّح/HTTPS:** Chrome/Firefox يعفيان `127.0.0.1` و `localhost` من mixed-content blocking حتى لو الصفحة الأم HTTPS من Railway — لذا الـ fetch من Railway → localhost يعمل.
+
+#### تعديلات POS.tsx
+
+- السطر 19: `import { printInvoiceLocal } from "@/lib/localPrintClient"` بدل `printReceiptAsImage, openCashDrawer` من `@/lib/printer`
+- `handlePrint` (السطر ~175): لا try/catch ميزّع — `printInvoiceLocal` لا يرمي أبداً، يرجع `{ ok, error?, detail? }`. toast نجاح: `"تمت الطباعة"`. toast فشل: يعرض `result.error` العربي
+- Auto-print بعد البيع (السطر ~1038): نفس النمط مع toast تحذيري "لم تتم الطباعة التلقائية" عند الفشل
+- **استدعاء `openCashDrawer` محذوف** — endpoint `POST /drawer/open` لم يُكتب بعد (Phase 3). البيع النقدي يكتمل لكن الدرج لا يفتح تلقائياً حتى Phase 3
+
+#### تعديل Settings.tsx
+
+- استبدال `printTestReceiptAsImage` بـ `printTestInvoiceLocal` (sample invoice ثابتة)
+- نفس نمط `{ ok, error }` مع toast عربي
+
+#### ما لم يُلمس (مقصود — سياسة "لا تحذف QZ")
+
+- `client/src/lib/printer.ts` — لا مستهلك له الآن (orphan dead code)، يبقى محفوظ
+- `client/src/lib/qz-print-service.ts` و `qz-certificate.ts` — محفوظة بدون تعديل
+- `client/src/lib/qzPrinter.ts` — untracked محلياً من جلسة 43، لم يُرفع
+- `client/index.html:29` — `<script src="qz-tray.js" async>` يبقى يُحمَّل، لكن لا يُستدعى من runtime
+- `local-print-service/` — لا تغيير في هذه الجلسة (Phase 1+2 من جلسة 43 كافيان لـ POS الآن)
+
+#### التحقق
+
+- TypeScript: 0 أخطاء في `localPrintClient.ts` و `POS.tsx` و `Settings.tsx` و `printer.ts`
+- بحث على `qz.print|qz.websocket|qz.connect|qz.printers|sendData` في runtime path الجديد → **لا نتائج**
+- Vite HMR التقط التعديلات أثناء dev server شغّال على port 5000
+
+#### أثر النشر على Railway
+
+⚠️ **تغيير سلوك للمستخدمين:** بعد الـ deploy، أي PC كاشير لا يشغّل `local-print-service` ستفشل عنده الطباعة بـ toast `"خدمة الطباعة المحلية غير مفعّلة"`. **البيع نفسه ينجح** (الـ catch لا يرمي خطأ يوقف flow البيع) — فقط الطباعة لا تتم. هذا تطلّب:
+
+1. تثبيت `local-print-service/` على كل PC كاشير قبل أن يستفيد من POS الجديد
+2. ضبط `LOCAL_PRINT_API_KEY=123456` في `.env` على كل PC (يطابق المفتاح في `localPrintClient.ts`)
+3. تأكيد أن متصفّح POS وخدمة الطباعة على **نفس الجهاز** (127.0.0.1 لا يصل عبر LAN)
+
+#### الخطوات القادمة
+
+**Phase 3 (مرحلة الخدمة المحلية):**
+- `POST /drawer/open` — ESC p pulse — لإعادة فتح الدرج تلقائياً مع الدفع النقدي
+- `POST /print/label` — TSPL لـ TSC TTP-244M Pro
+- اختبار Arabic code page على firmware TM-T100 الفعلي + RTL host-side composition
+
+**Phase 4 الكامل (إعدادات UI):**
+- إخراج `LOCAL_PRINT_URL` و `LOCAL_PRINT_API_KEY` و `DEFAULT_PRINTER` إلى Settings UI (localStorage لكل PC كاشير)
+- زر "اختبار الاتصال" يستدعي `checkLocalPrintHealth()`
+- زر "تحميل قائمة الطابعات" من `/printers` لاختيار طابعة من dropdown بدل الكتابة اليدوية
+
+**Phase 5 (نشر):** تغليف الخدمة كـ Windows service مع NSSM/Task Scheduler + auto-startup عند تشغيل PC الكاشير.
+
+---
 
 ### جلسة 43 — Local Print Service: قرار استبدال QZ Tray + بناء جسر طباعة محلي (Phase 1 + 2)
 
