@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-26 (جلسة 42 — منطق عُهدة الكاشير: استبدال "الكاش الفعلي في الصندوق" بـ "إجمالي النقد بعهدة الموظف")_
+_آخر تحديث: 2026-04-26 (جلسة 43 — Local Print Service: قرار استبدال QZ Tray + بناء جسر طباعة محلي Phase 1+2)_
 
 ---
 
@@ -12,6 +12,96 @@ _آخر تحديث: 2026-04-26 (جلسة 42 — منطق عُهدة الكاشي
 ---
 
 ## ✅ مكتمل
+
+### جلسة 43 — Local Print Service: قرار استبدال QZ Tray + بناء جسر طباعة محلي (Phase 1 + 2)
+
+**القرار المعماري:** إزالة QZ Tray من سير عمل الطباعة بالكامل واستبداله بخدمة محلية على PC الكاشير. POS السحابي يستدعيها عبر HTTP على `127.0.0.1:3030`.
+
+**الدوافع:** prompts متكرّرة من QZ على شهادة self-signed، مشكلة `Cannot read properties of null (reading 'sendData')` بعد فشل OS-level (الـ `_socket = null` بينما `isActive()` لا يزال true)، اعتماد على websocket لا يطلق close callbacks دائماً، تضييق licensing مستقبلاً.
+
+**النطاق في هذه الجلسة:** Phase 1 + Phase 2 فقط (داخل مجلد جديد منعزل). **لم يُلمس** POS.tsx ولا Settings.tsx ولا أي ملف QZ — Railway production يبقى يعمل بمسار QZ كما كان حتى يكتمل الجسر المحلي ويُختبر فيزيائياً على EPSON TM-T100.
+
+#### Phase 1 — جسر HTTP أساسي
+
+مجلد جديد `local-print-service/`:
+- `package.json` — Express 5 + cors + dotenv + tsx + TS 5.6 (sub-project مستقل، لا يؤثر على بناء Railway)
+- `tsconfig.json` — NodeNext ESM strict
+- `.env.example` — `PORT=3030`, `LOCAL_PRINT_API_KEY=change-me`, `LOCAL_PRINT_ALLOW_ALL=false`
+- `src/index.ts` — bootstrap + CORS allow-list (Railway URLs + localhost) + auth middleware + bind على `127.0.0.1` فقط
+- `src/printers.ts` — `Get-Printer | ConvertTo-Json` عبر `child_process.execFile`
+- `src/rawPrint.ts` — Phase 1: `Out-Printer` للنص العادي (للـ /print/test فقط)
+- `README.md` — install + run + curl + troubleshooting
+
+**Endpoints:**
+- `GET /health` — مفتوح
+- `GET /printers` — مفتوح، يرجع `Name/DriverName/PortName/Shared/Default`
+- `POST /print/test` — يتطلب `x-lamsa-print-key`
+
+#### Phase 2 — طباعة فاتورة 80mm حقيقية (ESC/POS raw عبر winspool.drv)
+
+- `src/escpos.ts` (جديد) — bytes builders كاملة: init / align / bold / size (1×–8×) / codepage / cut partial+full / drawer pulse + `EscposBuilder` fluent API + `latin1()` encoder
+- `src/printInvoice.ts` (جديد) — `Invoice` type + `buildInvoiceBytes()` ينتج فاتورة 80mm @ 48 cols
+- `src/rawPrint.ts` (تعديل) — أُضيفت `printRawBytes(printerName, Buffer)`:
+  - تكتب bytes إلى temp file
+  - تُحمِّل C# inline `RawPrinterHelper` عبر PowerShell `Add-Type`
+  - تستدعي `winspool.drv` P/Invoke (`OpenPrinter` → `StartDocPrinter` بـ datatype `RAW` → `WritePrinter`) — تتجاوز spooler GDI rendering كلياً فيصل ESC/POS كما هو
+  - تستخدم `-EncodedCommand` (UTF-16LE base64) لتجنّب quoting في PowerShell
+- `src/index.ts` (تعديل) — أُضيف `POST /print/invoice` مع validation للحقول المطلوبة
+
+**Body schema المتوقَّع:**
+```json
+{
+  "printerName": "EPSON TM-T100 Receipt",
+  "invoice": {
+    "invoiceNo", "date", "cashier", "branch", "customerName?",
+    "items": [{ "name", "sku?", "qty", "price", "total" }],
+    "subtotal", "discount", "tax", "grandTotal", "paymentMethod"
+  }
+}
+```
+
+**اللاوت الناتج (48 عمود):**
+- header مركّز: `LAMST ANOTHA` بحجم 2× + bold، ثم `CR: 1260008` + `Instagram: lamst_anotha` + `Admin Contact: 94891122`
+- meta داخل `=` separators: invoice/date/branch/cashier/customer
+- items: name + (SKU optional) + سطر `qty x price` يميناً والـ total يساراً، فاصل `-` بين البنود
+- totals: subtotal/discount/tax + GRAND TOTAL بحجم 2× bold + payment
+- footer: "Thank you for shopping with us"
+- partial cut مع feed 3 dots (`GS V 66 03`)
+
+**حدود مقصودة في Phase 2:**
+- code page = 16 (CP1252 / Latin-1) — العربية تطبع `?` placeholders. الدعم الكامل (CP864/CP1256 + RTL line composition من جهة الـ host) مؤجَّل لـ Phase 3 لاختباره على firmware TM-T100 الفعلي بدلاً من التخمين
+- لا labels TSPL ولا cash drawer endpoint بعد — Phase 3
+- Performance: أول استدعاء بعد start بطيء 1-2s (Roslyn يجمّع C# inline)؛ التالية sub-second
+
+#### التحقق
+
+- `npm run build` → 0 أخطاء، 5 ملفات `.js` مولَّدة في `dist/`
+- Smoke test على dev box (لا EPSON متصلة):
+  - `POST /print/invoice` بدون مفتاح → 401 ✓
+  - payload ناقص → 400 (`invoice is required`) ✓
+  - طابعة وهمية → 500 + `OpenPrinter failed: Win32=1801` (ERROR_INVALID_PRINTER_NAME) — يثبت أن C# helper تجمَّع، نُفِّذ، استدعى `winspool.drv` فعلياً، عاد بكود Win32 صحيح. كامل pipeline حتى نقطة driver Windows يعمل
+- اختبار فيزيائي على EPSON TM-T100: **معلَّق** — يتطلب تنفيذ من المستخدم على PC الكاشير حيث الطابعة موصولة
+
+#### ما لم يُلمس (مقصود)
+
+- `client/src/pages/POS.tsx` — لا تكامل بعد (Phase 4)
+- `client/src/pages/Settings.tsx` — لا UI للخدمة المحلية بعد (Phase 4)
+- `client/src/lib/qz-print-service.ts` و `client/src/lib/printer.ts` — مسار QZ القديم محفوظ كما كان على HEAD
+- `client/src/lib/qzPrinter.ts` — محاولة جراحية لـ QZ كُتبت محلياً ثم تركَت (untracked) بعد قرار التخلّي عن QZ — لم تُرفع لأنها dead code
+- Railway production — لا تأثير: Phase 1+2 مجلد منعزل بـ `package.json` خاص، الـ build السحابي يتجاهله
+
+#### الخطوات القادمة
+
+**Phase 3 (المرحلة التالية):**
+1. `POST /print/label` — TSPL لـ TSC TTP-244M Pro (58×40mm، باركود، شعار، سعر)
+2. `POST /drawer/open` — ESC p pulse على printer connector pin 2
+3. اختبار Arabic code page على firmware TM-T100 الفعلي + RTL line composition من الـ host
+
+**Phase 4 (تكامل سحابي):** `client/src/lib/localPrintClient.ts` + UI في Settings.tsx (printer names + API key + test buttons) + استدعاء من POS.tsx بعد البيع، مع إبقاء مسار QZ كـ fallback خلال فترة الانتقال.
+
+**Phase 5 (نشر):** packaging كـ Windows service (NSSM أو Task Scheduler) + auto-startup script + توثيق نشر على PC الكاشير.
+
+---
 
 ### جلسة 42 — Employee Cash Custody: عُهدة الكاشير في الملخص المالي
 
