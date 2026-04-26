@@ -9,7 +9,8 @@ import bcrypt from "bcryptjs";
 import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
-import { 
+import { readFileSync } from "node:fs";
+import {
   insertBranchSchema, insertCategorySchema, insertProductSchema,
   insertCustomerSchema, insertSupplierSchema, insertExpenseSchema,
   insertEmployeeSchema, insertOrderSchema, insertSaleSchema,
@@ -18,6 +19,8 @@ import {
   shifts,
   PAYMENT_METHODS, type PaymentMethod,
   insertPayrollRunSchema, insertEmployeeAdvanceSchema, insertEmployeeDeductionSchema,
+  CASH_MOVEMENT_TYPES, CASH_MOVEMENT_INFLOW_TYPES, CASH_MOVEMENT_OUTFLOW_TYPES,
+  cashMovementInputSchema,
 } from "@shared/schema";
 import {
   formatZodError,
@@ -288,9 +291,7 @@ export async function registerRoutes(
   // stays in sync with the bundled frontend copy.
   const qzCertificate = (() => {
     try {
-      const fs = require("node:fs") as typeof import("node:fs");
-      const path = require("node:path") as typeof import("node:path");
-      const certSrc = fs.readFileSync(
+      const certSrc = readFileSync(
         path.resolve(process.cwd(), "client/src/lib/qz-certificate.ts"),
         "utf8"
       );
@@ -1483,31 +1484,52 @@ export async function registerRoutes(
     res.json(await storage.getInventoryBalances(locationId, branchId));
   });
 
-  // ── Cash Movements (تسجيل حركات الصندوق) ────────────────────────────
+  // ── Cash Movements (تسجيل حركات الصندوق / عُهدة الكاشير) ───────────────
+  // كل حركة هنا تؤثر مباشرة في إجمالي عُهدة الكاشير.
+  // فتح الوردية بمبلغ من العُهدة لا يُسجَّل هنا (محايد) — يُمثَّل بـ shifts.opening_cash.
   app.post("/api/cash-movements", requireAuth, async (req, res) => {
     try {
       const user = await storage.getUser((req as any).session.userId!);
       if (!user) return res.status(401).json({ message: "غير مصرح" });
-      const { type, amount, note, shiftId } = req.body;
-      if (!type || !amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0)
-        return res.status(400).json({ message: "النوع والمبلغ مطلوبان" });
-      const outflowTypes = ["owner_handover", "bank_deposit"];
-      const inflowTypes  = ["owner_cash_in", "owner_transfer_in"];
-      const allTypes = [...outflowTypes, ...inflowTypes];
-      if (!allTypes.includes(type)) return res.status(400).json({ message: "نوع غير صالح" });
-      const isInflow = inflowTypes.includes(type);
+
+      const parsed = cashMovementInputSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: formatZodError(parsed.error) });
+      }
+      const { type, amount, note, shiftId } = parsed.data;
+
+      const isInflow  = (CASH_MOVEMENT_INFLOW_TYPES  as readonly string[]).includes(type);
+      const isOutflow = (CASH_MOVEMENT_OUTFLOW_TYPES as readonly string[]).includes(type);
+      if (!isInflow && !isOutflow) return res.status(400).json({ message: "نوع غير صالح" });
+
       const branchId = user.branchId ?? null;
-      const dateStr = new Date().toISOString().slice(0, 10);
-      const amtIn  = isInflow  ? parseFloat(amount).toFixed(3) : "0";
-      const amtOut = !isInflow ? parseFloat(amount).toFixed(3) : "0";
+      const dateStr  = new Date().toISOString().slice(0, 10);
+      const amtIn    = isInflow  ? amount.toFixed(3) : "0";
+      const amtOut   = isOutflow ? amount.toFixed(3) : "0";
+
+      // cashier_id: المستخدم الحالي إذا كان كاشير، وإلا من الوردية المفتوحة (إن وُجدت).
+      let cashierId: number | null = null;
+      if (user.role === "cashier") {
+        cashierId = user.id;
+      } else if (branchId) {
+        const openShift = await pool.query(
+          `SELECT cashier_id FROM shifts
+           WHERE branch_id = $1 AND status = 'open'
+           ORDER BY started_at DESC LIMIT 1`,
+          [branchId],
+        );
+        cashierId = openShift.rows[0]?.cashier_id ?? null;
+      }
+
       const result = await pool.query(
-        `INSERT INTO cash_ledger (date, branch_id, shift_id, type, amount_in, amount_out, note, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-        [dateStr, branchId, shiftId ?? null, type, amtIn, amtOut, note ?? null, user.id]
+        `INSERT INTO cash_ledger
+           (date, branch_id, shift_id, cashier_id, type, amount_in, amount_out, note, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+        [dateStr, branchId, shiftId ?? null, cashierId, type, amtIn, amtOut, note ?? null, user.id],
       );
 
       // ── ربط تلقائي بحساب المالك (بدون تسجيل مزدوج) ──────────────────────────
-      // كل حركة بين الفروع والمالك تُحدِّث owner_transactions تلقائياً
+      // التسويات (adjustment_in/out) لا تُربط بالمالك — عُهدة الكاشير فقط.
       if (branchId) {
         let ownerTxnType: string | null = null;
         let fromAccount: string | null = null;
@@ -1515,22 +1537,18 @@ export async function registerRoutes(
         let pmtMethod = "cash";
 
         if (type === "owner_handover") {
-          // الفرع سلّم كاش للمالك → نقد المالك ↑
           ownerTxnType = "BRANCH_CASH_TRANSFER_TO_OWNER";
           fromAccount  = "branch_cash";
           toAccount    = "owner_cash";
         } else if (type === "bank_deposit") {
-          // الفرع أودع نقداً في البنك → بنك المالك ↑
           ownerTxnType = "OWNER_DEPOSIT_TO_BANK";
           fromAccount  = "branch_cash";
           toAccount    = "owner_bank";
         } else if (type === "owner_cash_in") {
-          // المالك أرسل كاش للفرع → نقد المالك ↓
           ownerTxnType = "MANUAL_ADJUSTMENT_OUT";
           fromAccount  = "owner_cash";
           toAccount    = "branch_cash";
         } else if (type === "owner_transfer_in") {
-          // المالك حوّل بنكياً للفرع → بنك المالك ↓
           ownerTxnType = "MANUAL_ADJUSTMENT_OUT";
           fromAccount  = "owner_bank";
           toAccount    = "branch_cash";
@@ -1542,11 +1560,7 @@ export async function registerRoutes(
             `INSERT INTO owner_transactions
                (date, type, branch_id, amount, payment_method, from_account, to_account, note, created_by)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-            [
-              dateStr, ownerTxnType, branchId,
-              parseFloat(amount).toFixed(3), pmtMethod,
-              fromAccount, toAccount, note ?? null, user.id,
-            ]
+            [dateStr, ownerTxnType, branchId, amount.toFixed(3), pmtMethod, fromAccount, toAccount, note ?? null, user.id],
           );
         }
       }
@@ -1563,9 +1577,8 @@ export async function registerRoutes(
       const reqBranchId = req.query.branchId ? Number(req.query.branchId) : null;
       const branchId = isPrivileged ? reqBranchId : (user.branchId ?? null);
       const dateStr = (req.query.date as string) || new Date().toISOString().slice(0, 10);
-      const MANUAL_MOV_TYPES = ["owner_handover","bank_deposit","owner_cash_in","owner_transfer_in"];
-      const params: any[] = [dateStr, ...MANUAL_MOV_TYPES];
-      const typeIn = MANUAL_MOV_TYPES.map((_, i) => `$${i + 2}`).join(",");
+      const params: any[] = [dateStr, ...CASH_MOVEMENT_TYPES];
+      const typeIn = CASH_MOVEMENT_TYPES.map((_, i) => `$${i + 2}`).join(",");
       let bClause = "";
       if (branchId) { params.push(branchId); bClause = `AND cl.branch_id = $${params.length}`; }
       const result = await pool.query(
@@ -1575,7 +1588,7 @@ export async function registerRoutes(
            AND cl.type IN (${typeIn})
            ${bClause}
          ORDER BY cl.created_at DESC`,
-        params
+        params,
       );
       res.json(result.rows);
     } catch (err: any) { res.status(500).json({ message: err.message }); }
@@ -1664,6 +1677,7 @@ export async function registerRoutes(
         SELECT
           s.id,
           s.status,
+          s.cashier_id,
           s.opening_cash,
           s.actual_cash,
           s.expected_cash,
@@ -1706,6 +1720,7 @@ export async function registerRoutes(
       const allShifts = allShiftsRes.rows.map((s: any) => ({
         id: s.id,
         status: s.status,
+        cashierId: s.cashier_id,
         openingCash: parseFloat(s.opening_cash ?? "0"),
         actualCash: s.actual_cash != null ? parseFloat(s.actual_cash) : null,
         expectedCash: s.expected_cash != null ? parseFloat(s.expected_cash) : null,
@@ -1724,10 +1739,11 @@ export async function registerRoutes(
       // Current open shift (first in list)
       const currentShift = allShifts.find(s => s.status === "open") ?? allShifts[0] ?? null;
 
-      // حركات الصندوق اليدوية (dialog فقط) — لا تشمل expenses لتجنّب بيانات خاطئة
-      const MANUAL_TYPES = ["owner_handover","bank_deposit","owner_cash_in","owner_transfer_in"];
-      const typeList = MANUAL_TYPES.map((_, i) => `$${i + 2}`).join(",");
-      const movParams: any[] = [dateStr, ...MANUAL_TYPES];
+      // ── حركات الصندوق اليدوية (لليوم المحدد) — للعرض في الواجهة ──────────
+      // تشمل كل أنواع cash_ledger (inflow + outflow) باستثناء expenses (تُحسب من جدول expenses).
+      const movTypes = [...CASH_MOVEMENT_INFLOW_TYPES, ...CASH_MOVEMENT_OUTFLOW_TYPES];
+      const typeList = movTypes.map((_, i) => `$${i + 2}`).join(",");
+      const movParams: any[] = [dateStr, ...movTypes];
       const movBFilter = branchId ? `AND cl.branch_id = $${movParams.push(branchId)}` : "";
       const movRes = await pool.query(`
         SELECT
@@ -1751,28 +1767,148 @@ export async function registerRoutes(
         if (inp > 0) { inflowMap[r.type]  = inp; totalInflows  += inp; }
       }
 
-      // رصيد مرحّل: actual_cash من آخر وردية مغلقة قبل تاريخ اليوم
-      let carryForward = 0;
-      try {
-        const cfParams: any[] = [dateStr];
-        const cfBFilter = branchId ? `AND branch_id = $${cfParams.push(branchId)}` : "";
-        const cfRes = await pool.query(`
-          SELECT COALESCE(actual_cash, 0)::numeric AS carry
-          FROM shifts
-          WHERE status = 'closed'
-            AND DATE(ended_at) < $1
-            ${cfBFilter}
-          ORDER BY ended_at DESC
-          LIMIT 1
-        `, cfParams);
-        if (cfRes.rows[0]) carryForward = parseFloat(cfRes.rows[0].carry);
-      } catch (_) { /* غير حرج */ }
-
-      // الأساس: رصيد مرحّل إذا وُجد (هو الكاش الفعلي الموروث)، وإلا نقد الافتتاح
+      // ─────────────────────────────────────────────────────────────────────
+      // 💰 منطق عُهدة الكاشير (Employee Cash Custody)
+      // ─────────────────────────────────────────────────────────────────────
+      // المعادلة (تراكمياً عبر كل التاريخ، للفرع + الكاشير الحالي):
+      //   عُهدة = Σ(cash_sales) + Σ(owner_cash_in + owner_transfer_in + adjustment_in)
+      //         − Σ(owner_handover + bank_deposit + adjustment_out)
+      //         − Σ(cash_expenses)
+      // لا نحسب opening_cash (محايد: نقل من العُهدة إلى الدرج).
+      // درج اليوم: openingCash + cashSalesForShift + inflowsForShift − outflowsForShift − expensesForShift
+      // outsideDrawer = custody − drawer
       const openingCash = parseFloat(shiftTotals.total_opening_cash);
       const cashSales   = parseFloat(saleTotals.total_cash);
-      const baseBalance = carryForward > 0 ? carryForward : openingCash;
-      const actualCashInDrawer = baseBalance + cashSales + totalInflows - totalOutflows;
+
+      // الكاشير الذي تُنسب له العُهدة: الوردية المفتوحة الآن، أو آخر وردية في اليوم.
+      const custodyCashierId: number | null = (currentShift as any)?.cashierId
+        ?? (allShiftsRes.rows[0]?.cashier_id ?? null);
+      const currentShiftId: number | null = (currentShift as any)?.id ?? null;
+
+      // ── 1) Σ(مبيعات نقدية) تراكمياً للكاشير + الفرع ────────────────────────
+      let totalCashSalesAllTime = 0;
+      {
+        const params: any[] = [];
+        const conds: string[] = [`payment_method = 'cash'`, `status != 'returned'`];
+        if (branchId)        { params.push(branchId);        conds.push(`branch_id  = $${params.length}`); }
+        if (custodyCashierId){ params.push(custodyCashierId); conds.push(`cashier_id = $${params.length}`); }
+        const where = conds.join(" AND ");
+        const r = await pool.query(
+          `SELECT COALESCE(SUM(total::numeric), 0) AS s FROM sales WHERE ${where}`,
+          params,
+        );
+        totalCashSalesAllTime = parseFloat(r.rows[0].s);
+      }
+
+      // ── 2) Σ(حركات cash_ledger) تراكمياً للكاشير + الفرع ────────────────────
+      const inflowTypes  = [...CASH_MOVEMENT_INFLOW_TYPES];
+      const outflowTypes = [...CASH_MOVEMENT_OUTFLOW_TYPES];
+      let totalOwnerInflowsAllTime = 0;   // owner_cash_in + owner_transfer_in
+      let totalOwnerOutflowsAllTime = 0;  // owner_handover + bank_deposit
+      let totalAdjustmentsInAllTime = 0;
+      let totalAdjustmentsOutAllTime = 0;
+      {
+        const params: any[] = [];
+        const conds: string[] = [];
+        if (branchId)         { params.push(branchId);         conds.push(`branch_id  = $${params.length}`); }
+        if (custodyCashierId) { params.push(custodyCashierId); conds.push(`cashier_id = $${params.length}`); }
+        const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+        const r = await pool.query(
+          `SELECT type,
+                  COALESCE(SUM(amount_in::numeric),  0) AS total_in,
+                  COALESCE(SUM(amount_out::numeric), 0) AS total_out
+           FROM   cash_ledger ${where}
+           GROUP BY type`,
+          params,
+        );
+        for (const row of r.rows) {
+          const inAmt  = parseFloat(row.total_in);
+          const outAmt = parseFloat(row.total_out);
+          if (row.type === "adjustment_in")  totalAdjustmentsInAllTime  += inAmt;
+          else if (row.type === "adjustment_out") totalAdjustmentsOutAllTime += outAmt;
+          else if (inflowTypes.includes(row.type))  totalOwnerInflowsAllTime  += inAmt;
+          else if (outflowTypes.includes(row.type)) totalOwnerOutflowsAllTime += outAmt;
+        }
+      }
+
+      // ── 3) Σ(مصروفات نقدية) تراكمياً للفرع ──────────────────────────────────
+      // ملاحظة: expenses لا تحوي cashier_id — نَنسبها للفرع كاملاً.
+      let totalCashExpensesAllTime = 0;
+      {
+        const params: any[] = [];
+        const conds: string[] = [`source = 'cash'`];
+        if (branchId) { params.push(branchId); conds.push(`branch_id = $${params.length}`); }
+        const where = conds.join(" AND ");
+        const r = await pool.query(
+          `SELECT COALESCE(SUM(amount::numeric), 0) AS s FROM expenses WHERE ${where}`,
+          params,
+        );
+        totalCashExpensesAllTime = parseFloat(r.rows[0].s);
+      }
+
+      // ── 4) المعادلة النهائية للعُهدة ────────────────────────────────────────
+      const totalAdjustments = totalAdjustmentsInAllTime - totalAdjustmentsOutAllTime;
+      const totalEmployeeCashCustody =
+        totalCashSalesAllTime
+        + totalOwnerInflowsAllTime
+        + totalAdjustmentsInAllTime
+        - totalOwnerOutflowsAllTime
+        - totalAdjustmentsOutAllTime
+        - totalCashExpensesAllTime;
+
+      // ── 5) كاش الدرج الحالي (للوردية المفتوحة فقط، وإلا 0) ──────────────────
+      let drawerCash = 0;
+      if (currentShiftId && currentShift?.status === "open") {
+        // مبيعات نقدية للوردية + حركات الوردية + مصروفات الوردية
+        const sShift = await pool.query(
+          `SELECT COALESCE(SUM(total::numeric), 0) AS cash_sales
+           FROM   sales
+           WHERE  shift_id = $1 AND payment_method = 'cash' AND status != 'returned'`,
+          [currentShiftId],
+        );
+        const lShift = await pool.query(
+          `SELECT COALESCE(SUM(amount_in::numeric),  0) AS in_sum,
+                  COALESCE(SUM(amount_out::numeric), 0) AS out_sum
+           FROM   cash_ledger WHERE shift_id = $1`,
+          [currentShiftId],
+        );
+        const eShift = await pool.query(
+          `SELECT COALESCE(SUM(amount::numeric), 0) AS exp_sum
+           FROM   expenses WHERE shift_id = $1 AND source = 'cash'`,
+          [currentShiftId],
+        );
+        const shiftCashSales = parseFloat(sShift.rows[0].cash_sales);
+        const shiftIn        = parseFloat(lShift.rows[0].in_sum);
+        const shiftOut       = parseFloat(lShift.rows[0].out_sum);
+        const shiftExpenses  = parseFloat(eShift.rows[0].exp_sum);
+        const shiftOpening   = Number(currentShift.openingCash ?? 0);
+        drawerCash = shiftOpening + shiftCashSales + shiftIn - shiftOut - shiftExpenses;
+      }
+
+      const outsideDrawerCash = totalEmployeeCashCustody - drawerCash;
+
+      // ── 6) أرقام اليوم (للعرض في البطاقات) ──────────────────────────────────
+      // ownerInflows/ownerOutflows/cashExpenses هنا = أرقام اليوم فقط (للسياق).
+      const todayCashSales = cashSales;
+      const todayOwnerInflows = (inflowMap.owner_cash_in ?? 0) + (inflowMap.owner_transfer_in ?? 0);
+      const todayOwnerOutflows = (outflowMap.owner_handover ?? 0) + (outflowMap.bank_deposit ?? 0);
+      const todayAdjustments = (inflowMap.adjustment_in ?? 0) - (outflowMap.adjustment_out ?? 0);
+      // مصروفات نقدية لليوم
+      let todayCashExpenses = 0;
+      {
+        const params: any[] = [dateStr];
+        const conds: string[] = [`date = $1`, `source = 'cash'`];
+        if (branchId) { params.push(branchId); conds.push(`branch_id = $${params.length}`); }
+        const r = await pool.query(
+          `SELECT COALESCE(SUM(amount::numeric), 0) AS s FROM expenses WHERE ${conds.join(" AND ")}`,
+          params,
+        );
+        todayCashExpenses = parseFloat(r.rows[0].s);
+      }
+
+      // باقي القيم القديمة (backward compat)
+      const baseBalance = openingCash;
+      const actualCashInDrawer = drawerCash; // للعرض القديم — نفس المعنى الآن
 
       res.json({
         date: dateStr,
@@ -1795,7 +1931,37 @@ export async function registerRoutes(
           totalInflows,
           inflowByType: inflowMap,
           actualCashInDrawer,
-          carryForward,
+          carryForward: 0, // أُلغي لصالح custody
+        },
+        // 💼 حقول عُهدة الموظف (الجديدة)
+        custody: {
+          employeeId: custodyCashierId,
+          branchId,
+          currentShiftId,
+          totalEmployeeCashCustody,
+          drawerCash,
+          outsideDrawerCash,
+          // أرقام اليوم
+          todayCashSales,
+          ownerInflows: todayOwnerInflows,
+          ownerOutflows: todayOwnerOutflows,
+          cashExpenses: todayCashExpenses,
+          adjustments: todayAdjustments,
+          // أرقام تراكمية (للتفسير)
+          cumulativeCashSales: totalCashSalesAllTime,
+          cumulativeOwnerInflows: totalOwnerInflowsAllTime,
+          cumulativeOwnerOutflows: totalOwnerOutflowsAllTime,
+          cumulativeAdjustments: totalAdjustments,
+          cumulativeCashExpenses: totalCashExpensesAllTime,
+          formulaBreakdown: {
+            cashSales:       totalCashSalesAllTime,
+            ownerInflows:    totalOwnerInflowsAllTime,
+            adjustmentsIn:   totalAdjustmentsInAllTime,
+            ownerOutflows:   -totalOwnerOutflowsAllTime,
+            adjustmentsOut:  -totalAdjustmentsOutAllTime,
+            cashExpenses:    -totalCashExpensesAllTime,
+            total:           totalEmployeeCashCustody,
+          },
         },
       });
     } catch (err: any) {

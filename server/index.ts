@@ -249,6 +249,29 @@ app.get("/api/health", (_req, res) => {
     console.error("[startup] migration 0023 failed:", err);
   }
 
+  // Migration 0024 — extend cash_ledger for employee cash custody:
+  //   - cashier_id: who holds this cash (derived from shift if NULL)
+  //   - new types: adjustment_in / adjustment_out (manual cash adjustments)
+  // النوع opening_drawer_allocation محايد ضمنياً عبر shifts.opening_cash — لا يُسجَّل في cash_ledger.
+  try {
+    await pool.query(`
+      ALTER TABLE cash_ledger ADD COLUMN IF NOT EXISTS cashier_id INTEGER REFERENCES users(id);
+      CREATE INDEX IF NOT EXISTS idx_cash_ledger_cashier ON cash_ledger(cashier_id);
+      CREATE INDEX IF NOT EXISTS idx_cash_ledger_branch_cashier ON cash_ledger(branch_id, cashier_id);
+    `);
+    // Backfill cashier_id for old rows from shifts.cashier_id (idempotent)
+    await pool.query(`
+      UPDATE cash_ledger cl
+      SET    cashier_id = s.cashier_id
+      FROM   shifts s
+      WHERE  cl.shift_id = s.id
+        AND  cl.cashier_id IS NULL;
+    `);
+    console.log("[startup] migration 0024: cash_ledger.cashier_id ready");
+  } catch (err) {
+    console.error("[startup] migration 0024 failed:", err);
+  }
+
   // Migration 0022 — add model_number column to products
   try {
     await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS model_number TEXT`);

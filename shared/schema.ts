@@ -315,11 +315,27 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true,
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 export type Expense = typeof expenses.$inferSelect;
 
+/**
+ * cash_ledger — حركات نقدية تخص عُهدة الكاشير وعلاقات الفرع/المالك.
+ * Types المستعملة (text للمرونة):
+ *   - "owner_handover"      = الكاشير سلّم نقد للمالك (out)  → عُهدة −
+ *   - "bank_deposit"        = الكاشير أودع في البنك (out)   → عُهدة −
+ *   - "owner_cash_in"       = المالك سلّم الكاشير نقد (in)  → عُهدة +
+ *   - "owner_transfer_in"   = المالك حوّل بنكياً للفرع (in) → عُهدة +
+ *   - "adjustment_in"       = تسوية يدوية موجبة (in)        → عُهدة +
+ *   - "adjustment_out"      = تسوية يدوية سالبة (out)       → عُهدة −
+ *   - "cash_sale" (افتراضي): لا يُسجَّل هنا — يُحسب من sales.payment_method='cash'.
+ *   - "cash_expense"        : لا يُسجَّل هنا — يُحسب من expenses.source='cash'.
+ *   - "opening_drawer_allocation": محايد، يُمثَّل ضمنياً بـ shifts.opening_cash، لا تسجيل.
+ *
+ * cashier_id يُحدِّد صاحب العُهدة. إذا NULL يُشتق من shift_id.cashier_id.
+ */
 export const cashLedger = pgTable("cash_ledger", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   date: date("date").notNull(),
   branchId: integer("branch_id").references(() => branches.id).notNull(),
   shiftId: integer("shift_id").references(() => shifts.id),
+  cashierId: integer("cashier_id").references(() => users.id),
   type: text("type").notNull(),
   amountIn: decimal("amount_in", { precision: 12, scale: 3 }).default("0"),
   amountOut: decimal("amount_out", { precision: 12, scale: 3 }).default("0"),
@@ -331,6 +347,31 @@ export const cashLedger = pgTable("cash_ledger", {
 export const insertCashLedgerSchema = createInsertSchema(cashLedger).omit({ id: true, createdAt: true });
 export type InsertCashLedger = z.infer<typeof insertCashLedgerSchema>;
 export type CashLedger = typeof cashLedger.$inferSelect;
+
+// أنواع حركات الصندوق المسموحة في POST /api/cash-movements
+export const CASH_MOVEMENT_INFLOW_TYPES = [
+  "owner_cash_in",
+  "owner_transfer_in",
+  "adjustment_in",
+] as const;
+export const CASH_MOVEMENT_OUTFLOW_TYPES = [
+  "owner_handover",
+  "bank_deposit",
+  "adjustment_out",
+] as const;
+export const CASH_MOVEMENT_TYPES = [
+  ...CASH_MOVEMENT_INFLOW_TYPES,
+  ...CASH_MOVEMENT_OUTFLOW_TYPES,
+] as const;
+export type CashMovementType = typeof CASH_MOVEMENT_TYPES[number];
+
+export const cashMovementInputSchema = z.object({
+  type: z.enum(CASH_MOVEMENT_TYPES),
+  amount: z.coerce.number().positive("المبلغ يجب أن يكون موجباً"),
+  note: z.string().optional(),
+  shiftId: z.coerce.number().int().positive().optional(),
+});
+export type CashMovementInput = z.infer<typeof cashMovementInputSchema>;
 
 export const bankLedger = pgTable("bank_ledger", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),

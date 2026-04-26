@@ -10,6 +10,7 @@ import {
   RefreshCw, Calendar, CheckCircle2, AlertCircle,
   PlusCircle, HandCoins, Building2, ShoppingBag, Wallet,
   ArrowUpCircle, ArrowDownCircle, ArrowUp, ArrowDown, XCircle,
+  Plus, Minus, User, Briefcase,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 interface ShiftDetail {
   id: number;
   status: "open" | "closed";
+  cashierId?: number | null;
   openingCash: number;
   actualCash: number | null;
   expectedCash: number | null;
@@ -37,6 +39,34 @@ interface ShiftDetail {
   totalCard: number;
   totalTransfer: number;
   invoiceCount: number;
+}
+
+interface CustodyData {
+  employeeId: number | null;
+  branchId: number | null;
+  currentShiftId: number | null;
+  totalEmployeeCashCustody: number;
+  drawerCash: number;
+  outsideDrawerCash: number;
+  todayCashSales: number;
+  ownerInflows: number;
+  ownerOutflows: number;
+  cashExpenses: number;
+  adjustments: number;
+  cumulativeCashSales: number;
+  cumulativeOwnerInflows: number;
+  cumulativeOwnerOutflows: number;
+  cumulativeAdjustments: number;
+  cumulativeCashExpenses: number;
+  formulaBreakdown: {
+    cashSales: number;
+    ownerInflows: number;
+    adjustmentsIn: number;
+    ownerOutflows: number;
+    adjustmentsOut: number;
+    cashExpenses: number;
+    total: number;
+  };
 }
 
 interface BranchSummaryData {
@@ -62,6 +92,7 @@ interface BranchSummaryData {
     carryForward: number;
     baseBalance: number;
   };
+  custody: CustodyData;
 }
 
 interface CashMovement {
@@ -80,20 +111,23 @@ interface Branch { id: number; name: string; address?: string | null; }
 
 // للعرض في بطاقة المخرجات (تشمل expense من جدول expenses)
 const OUTFLOW_TYPES = [
-  { value: "owner_handover",  label: "تسليم للمالك",   icon: HandCoins,  color: "text-blue-600",   bg: "bg-blue-50",   border: "border-blue-200",   dot: "bg-blue-500"   },
-  { value: "bank_deposit",    label: "إيداع بنكي",     icon: Building2,  color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-200", dot: "bg-purple-500" },
-  { value: "expense",         label: "مصروفات نقدية",  icon: ShoppingBag,color: "text-red-600",    bg: "bg-red-50",    border: "border-red-200",    dot: "bg-red-500"    },
+  { value: "owner_handover",  label: "تسليم للمالك",     icon: HandCoins,   color: "text-blue-600",   bg: "bg-blue-50",   border: "border-blue-200",   dot: "bg-blue-500"   },
+  { value: "bank_deposit",    label: "إيداع بنكي",       icon: Building2,   color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-200", dot: "bg-purple-500" },
+  { value: "expense",         label: "مصروفات نقدية",    icon: ShoppingBag, color: "text-red-600",    bg: "bg-red-50",    border: "border-red-200",    dot: "bg-red-500"    },
+  { value: "adjustment_out",  label: "تسوية سالبة",      icon: Minus,       color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-200", dot: "bg-orange-500" },
 ] as const;
 
 // للـ dialog فقط — لا نسمح بإدخال مصروف هنا (يُدخل من صفحة المصروفات)
 const DIALOG_OUTFLOW_TYPES = [
-  { value: "owner_handover",  label: "تسليم للمالك",   icon: HandCoins,  color: "text-blue-600",   bg: "bg-blue-50",   border: "border-blue-200",   dot: "bg-blue-500"   },
-  { value: "bank_deposit",    label: "إيداع بنكي",     icon: Building2,  color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-200", dot: "bg-purple-500" },
+  { value: "owner_handover",  label: "تسليم للمالك",     icon: HandCoins,   color: "text-blue-600",   bg: "bg-blue-50",   border: "border-blue-200",   dot: "bg-blue-500"   },
+  { value: "bank_deposit",    label: "إيداع بنكي",       icon: Building2,   color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-200", dot: "bg-purple-500" },
+  { value: "adjustment_out",  label: "تسوية سالبة",      icon: Minus,       color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-200", dot: "bg-orange-500" },
 ] as const;
 
 const INFLOW_TYPES = [
-  { value: "owner_cash_in",      label: "استلم نقد من المالك",     icon: Banknote,   color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200", dot: "bg-emerald-500" },
-  { value: "owner_transfer_in",  label: "استلم تحويل من المالك",   icon: ArrowDownCircle, color: "text-teal-600", bg: "bg-teal-50", border: "border-teal-200", dot: "bg-teal-500" },
+  { value: "owner_cash_in",      label: "استلم نقد من المالك",     icon: Banknote,        color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200", dot: "bg-emerald-500" },
+  { value: "owner_transfer_in",  label: "استلم تحويل من المالك",   icon: ArrowDownCircle, color: "text-teal-600",    bg: "bg-teal-50",    border: "border-teal-200",    dot: "bg-teal-500"    },
+  { value: "adjustment_in",      label: "تسوية موجبة",             icon: Plus,            color: "text-orange-600",  bg: "bg-orange-50",  border: "border-orange-200",  dot: "bg-orange-500"  },
 ] as const;
 
 type OutflowType = typeof OUTFLOW_TYPES[number]["value"];
@@ -569,7 +603,7 @@ export default function BranchSummary() {
             </div>
 
             {/* نوع الحركة */}
-            <div className={`grid gap-2 ${activeTypes.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
+            <div className={`grid gap-2 ${(activeTypes.length as number) <= 2 ? "grid-cols-2" : "grid-cols-3"}`}>
               {activeTypes.map(({ value, label, icon: Icon, color }) => (
                 <button
                   key={value}
@@ -652,7 +686,15 @@ export default function BranchSummary() {
             </div>
           )}
 
-          {/* ── بطاقة الصندوق الرئيسية ── */}
+          {/* ── 💼 بطاقة عُهدة الموظف الرئيسية ── */}
+          {/*
+            إجمالي النقد بعهدة الموظف = ما هو فعلياً في يد الكاشير،
+            سواء داخل الدرج أو محتفظ به خارج الصندوق.
+            معادلة (تراكمية):
+              + مبيعات نقدية + استلامات من المالك + تسويات موجبة
+              − تسليمات للمالك − إيداعات بنكية − تسويات سالبة − مصروفات نقدية
+            فتح الدرج بمبلغ من العُهدة = حركة محايدة (نقل من العُهدة إلى الدرج).
+          */}
           <Card className="border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-white overflow-hidden">
             <CardContent className="pt-5 pb-5">
               <div className="flex flex-col gap-4">
@@ -660,111 +702,126 @@ export default function BranchSummary() {
                 {/* الرقم الرئيسي */}
                 <div className="flex items-center gap-3">
                   <div className="p-3 rounded-2xl bg-emerald-500 shrink-0">
-                    <Wallet className="h-7 w-7 text-white" />
+                    <User className="h-7 w-7 text-white" />
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground font-medium">الكاش الفعلي في الصندوق</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-muted-foreground font-medium">إجمالي النقد بعهدة الموظف</p>
                     <p className="text-3xl font-bold text-emerald-700 leading-none mt-0.5">
-                      {fmt(today?.actualCashInDrawer ?? 0)}
+                      {fmt(data?.custody?.totalEmployeeCashCustody ?? 0)}
                       <span className="text-lg font-medium text-emerald-600 mr-1">{omr}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      يشمل نقد الدرج + النقد المرحّل/المحتفظ به خارج الصندوق
                     </p>
                   </div>
                 </div>
 
-                {/* معادلة الحساب */}
-                <div className="bg-white/70 rounded-xl border border-emerald-100 px-4 py-3">
-                  <p className="text-xs text-muted-foreground mb-2 font-medium">طريقة الحساب:</p>
-                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                    <span className="font-semibold text-blue-700">{fmt(today?.baseBalance ?? today?.totalOpeningCash ?? 0)}</span>
-                    <span className="text-xs text-muted-foreground">{(today?.carryForward ?? 0) > 0 ? "رصيد مرحّل" : "افتتاح"}</span>
-                    <span className="text-emerald-500 font-bold">+</span>
-                    <span className="font-semibold text-emerald-700">{fmt(today?.totalCash ?? 0)}</span>
-                    <span className="text-xs text-muted-foreground">مبيعات نقدية</span>
-                    {(today?.totalInflows ?? 0) > 0 && (
-                      <>
-                        <span className="text-emerald-500 font-bold">+</span>
-                        <span className="font-semibold text-teal-700">{fmt(today!.totalInflows)}</span>
-                        <span className="text-xs text-muted-foreground">واردات</span>
-                      </>
+                {/* تقسيم: درج + خارج الدرج */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-xl border-2 border-blue-200 bg-blue-50 px-4 py-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Briefcase className="w-4 h-4 text-blue-600" />
+                      <p className="text-xs text-blue-700 font-semibold">نقد داخل الدرج الحالي</p>
+                    </div>
+                    <p className="text-2xl font-bold text-blue-700">
+                      {fmt(data?.custody?.drawerCash ?? 0)}
+                      <span className="text-sm font-medium text-blue-600 mr-1">{omr}</span>
+                    </p>
+                    {(data?.custody?.currentShiftId ?? null) === null && (
+                      <p className="text-xs text-muted-foreground mt-1">لا توجد وردية مفتوحة</p>
                     )}
-                    {(today?.totalOutflows ?? 0) > 0 && (
+                  </div>
+                  <div className="rounded-xl border-2 border-amber-200 bg-amber-50 px-4 py-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <HandCoins className="w-4 h-4 text-amber-600" />
+                      <p className="text-xs text-amber-700 font-semibold">نقد مرحّل / خارج الصندوق</p>
+                    </div>
+                    <p className="text-2xl font-bold text-amber-700">
+                      {fmt(data?.custody?.outsideDrawerCash ?? 0)}
+                      <span className="text-sm font-medium text-amber-600 mr-1">{omr}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">عُهدة بحوزة الموظف خارج الدرج</p>
+                  </div>
+                </div>
+
+                {/* معادلة الحساب التراكمية */}
+                <div className="bg-white/70 rounded-xl border border-emerald-100 px-4 py-3">
+                  <p className="text-xs text-muted-foreground mb-2 font-medium">طريقة الحساب (تراكمياً):</p>
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                    <span className="font-semibold text-emerald-700">{fmt(data?.custody?.cumulativeCashSales ?? 0)}</span>
+                    <span className="text-xs text-muted-foreground">مبيعات نقدية</span>
+                    <span className="text-emerald-500 font-bold">+</span>
+                    <span className="font-semibold text-teal-700">{fmt(data?.custody?.cumulativeOwnerInflows ?? 0)}</span>
+                    <span className="text-xs text-muted-foreground">واردات من المالك</span>
+                    <span className="text-red-500 font-bold">−</span>
+                    <span className="font-semibold text-red-700">{fmt(data?.custody?.cumulativeOwnerOutflows ?? 0)}</span>
+                    <span className="text-xs text-muted-foreground">مسلّم للمالك</span>
+                    {(data?.custody?.cumulativeCashExpenses ?? 0) > 0 && (
                       <>
                         <span className="text-red-500 font-bold">−</span>
-                        <span className="font-semibold text-red-700">{fmt(today!.totalOutflows)}</span>
-                        <span className="text-xs text-muted-foreground">مخرجات</span>
+                        <span className="font-semibold text-red-700">{fmt(data!.custody.cumulativeCashExpenses)}</span>
+                        <span className="text-xs text-muted-foreground">مصروفات نقدية</span>
+                      </>
+                    )}
+                    {Math.abs(data?.custody?.cumulativeAdjustments ?? 0) > 0.001 && (
+                      <>
+                        <span className={`font-bold ${(data?.custody?.cumulativeAdjustments ?? 0) >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                          {(data?.custody?.cumulativeAdjustments ?? 0) >= 0 ? "+" : "−"}
+                        </span>
+                        <span className="font-semibold text-orange-700">{fmt(Math.abs(data!.custody.cumulativeAdjustments))}</span>
+                        <span className="text-xs text-muted-foreground">تسويات</span>
                       </>
                     )}
                     <span className="text-muted-foreground">=</span>
-                    <span className="font-bold text-emerald-700">{fmt(today?.actualCashInDrawer ?? 0)}</span>
+                    <span className="font-bold text-emerald-700">{fmt(data?.custody?.totalEmployeeCashCustody ?? 0)}</span>
                   </div>
-                  {(today?.carryForward ?? 0) > 0 && (today?.totalOpeningCash ?? 0) !== (today?.carryForward ?? 0) && (
-                    <p className="text-xs text-muted-foreground mt-2 border-t border-emerald-100 pt-2">
-                      الافتتاح المُدخل: {fmt(today!.totalOpeningCash)} {omr} — الأساس المستخدم: رصيد مرحّل
-                    </p>
-                  )}
                 </div>
 
-                {/* بطاقات التفاصيل */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {/* واردات من المالك */}
-                  <div className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2.5 flex flex-col gap-0.5">
-                    <div className="flex items-center gap-1.5">
-                      <ArrowDownCircle className="w-3.5 h-3.5 text-teal-600" />
-                      <p className="text-xs text-teal-700 font-medium">واردات المالك</p>
-                    </div>
-                    <p className="text-base font-bold text-teal-700">+{fmt(today?.totalInflows ?? 0)} {omr}</p>
-                    {(today?.totalInflows ?? 0) > 0 && (
-                      <div className="mt-0.5 space-y-0.5">
-                        {INFLOW_TYPES.map(({ value, label }) =>
-                          (today?.inflowByType?.[value] ?? 0) > 0 ? (
-                            <p key={value} className="text-xs text-muted-foreground">{label}: {fmt(today!.inflowByType[value])}</p>
-                          ) : null
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* مخرجات */}
-                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 flex flex-col gap-0.5">
-                    <div className="flex items-center gap-1.5">
-                      <ArrowUpCircle className="w-3.5 h-3.5 text-red-600" />
-                      <p className="text-xs text-red-700 font-medium">المخرجات</p>
-                    </div>
-                    <p className="text-base font-bold text-red-700">−{fmt(today?.totalOutflows ?? 0)} {omr}</p>
-                    {(today?.totalOutflows ?? 0) > 0 && (
-                      <div className="mt-0.5 space-y-0.5">
-                        {OUTFLOW_TYPES.map(({ value, label }) =>
-                          (today?.outflowByType?.[value] ?? 0) > 0 ? (
-                            <p key={value} className="text-xs text-muted-foreground">{label}: {fmt(today!.outflowByType[value])}</p>
-                          ) : null
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* نقد الافتتاح / الرصيد المرحّل */}
-                  <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 flex flex-col gap-0.5">
-                    <div className="flex items-center gap-1.5">
-                      <Banknote className="w-3.5 h-3.5 text-blue-600" />
-                      <p className="text-xs text-blue-700 font-medium">
-                        {(today?.carryForward ?? 0) > 0 ? "رصيد مرحّل" : "نقد الافتتاح"}
-                      </p>
-                    </div>
-                    <p className="text-base font-bold text-blue-700">
-                      {fmt(today?.baseBalance ?? today?.totalOpeningCash ?? 0)} {omr}
-                    </p>
-                    {(today?.carryForward ?? 0) > 0 && (today?.totalOpeningCash ?? 0) !== (today?.carryForward ?? 0) && (
-                      <p className="text-xs text-muted-foreground">افتتاح مُدخل: {fmt(today!.totalOpeningCash)} {omr}</p>
-                    )}
-                  </div>
-
-                  {/* مبيعات نقدية */}
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 flex flex-col gap-0.5">
-                    <div className="flex items-center gap-1.5">
+                {/* بطاقات تفاصيل اليوم */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+                    <div className="flex items-center gap-1.5 mb-0.5">
                       <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-                      <p className="text-xs text-emerald-700 font-medium">مبيعات نقدية</p>
+                      <p className="text-xs text-emerald-700 font-medium">مبيعات نقدية اليوم</p>
                     </div>
-                    <p className="text-base font-bold text-emerald-700">{fmt(today?.totalCash ?? 0)} {omr}</p>
+                    <p className="text-base font-bold text-emerald-700">+{fmt(data?.custody?.todayCashSales ?? 0)} {omr}</p>
+                  </div>
+
+                  <div className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2.5">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <ArrowDownCircle className="w-3.5 h-3.5 text-teal-600" />
+                      <p className="text-xs text-teal-700 font-medium">واردات من المالك</p>
+                    </div>
+                    <p className="text-base font-bold text-teal-700">+{fmt(data?.custody?.ownerInflows ?? 0)} {omr}</p>
+                  </div>
+
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <HandCoins className="w-3.5 h-3.5 text-blue-600" />
+                      <p className="text-xs text-blue-700 font-medium">مسلّم للمالك</p>
+                    </div>
+                    <p className="text-base font-bold text-blue-700">−{fmt(data?.custody?.ownerOutflows ?? 0)} {omr}</p>
+                  </div>
+
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <ShoppingBag className="w-3.5 h-3.5 text-red-600" />
+                      <p className="text-xs text-red-700 font-medium">مصروفات نقدية</p>
+                    </div>
+                    <p className="text-base font-bold text-red-700">−{fmt(data?.custody?.cashExpenses ?? 0)} {omr}</p>
+                  </div>
+
+                  <div className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      {(data?.custody?.adjustments ?? 0) >= 0
+                        ? <Plus className="w-3.5 h-3.5 text-orange-600" />
+                        : <Minus className="w-3.5 h-3.5 text-orange-600" />}
+                      <p className="text-xs text-orange-700 font-medium">تسويات نقدية</p>
+                    </div>
+                    <p className="text-base font-bold text-orange-700">
+                      {(data?.custody?.adjustments ?? 0) >= 0 ? "+" : "−"}
+                      {fmt(Math.abs(data?.custody?.adjustments ?? 0))} {omr}
+                    </p>
                   </div>
                 </div>
               </div>

@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-25 (جلسة 41 — إصلاح أمني كامل: إزالة الأسرار من git + تدوير DATABASE/SESSION/QZ على Railway)_
+_آخر تحديث: 2026-04-26 (جلسة 42 — منطق عُهدة الكاشير: استبدال "الكاش الفعلي في الصندوق" بـ "إجمالي النقد بعهدة الموظف")_
 
 ---
 
@@ -12,6 +12,69 @@ _آخر تحديث: 2026-04-25 (جلسة 41 — إصلاح أمني كامل: إ
 ---
 
 ## ✅ مكتمل
+
+### جلسة 42 — Employee Cash Custody: عُهدة الكاشير في الملخص المالي
+
+**المشكلة:** بطاقة "الكاش الفعلي في الصندوق" في `BranchSummary` كانت تعرض حساباً يخلط بين:
+- ما هو فعلاً في الدرج اليوم
+- وما تراكم بحوزة الكاشير عبر الأيام كعُهدة (cash kept outside the drawer)
+
+النتيجة: الموظف لا يعرف كم ريال إجمالي عليه تسليمه/تبريره للمالك. المثال:
+> الموظف عنده عهدة 100 ريال — يفتح وردية بـ 20 — يبيع 30 نقداً → الإجمالي 130 (50 في الدرج + 80 خارجه).
+
+**الحل (Backend):**
+
+#### Migration 0024 (idempotent عند startup) — `server/index.ts`
+- إضافة `cashier_id INTEGER REFERENCES users(id)` على `cash_ledger` (بدون جدول جديد)
+- Backfill تلقائي: `UPDATE cash_ledger SET cashier_id = shifts.cashier_id WHERE shift_id IS NOT NULL`
+- فهارس: `idx_cash_ledger_cashier`, `idx_cash_ledger_branch_cashier`
+
+#### Schema (`shared/schema.ts`)
+- `cashLedger.cashierId` (drizzle)
+- ثوابت: `CASH_MOVEMENT_INFLOW_TYPES` / `OUTFLOW_TYPES` / `TYPES`
+- `cashMovementInputSchema` (Zod) للتحقق
+- أنواع جديدة: **`adjustment_in`** / **`adjustment_out`** (تسويات يدوية)
+
+#### POST `/api/cash-movements` — `server/routes.ts:1487`
+- Zod validation
+- يدعم الأنواع الجديدة (تسويات)
+- يُسجّل `cashier_id` تلقائياً (المستخدم إن كان كاشير، أو من الوردية المفتوحة)
+- التسويات لا تُربط بـ `owner_transactions` (custody-only)
+
+#### GET `/api/branch-summary` — كائن `custody` جديد
+```ts
+custody: {
+  employeeId, branchId, currentShiftId,
+  totalEmployeeCashCustody,   // التراكمي للكاشير + الفرع
+  drawerCash,                 // الوردية المفتوحة فقط
+  outsideDrawerCash,          // custody − drawer
+  todayCashSales, ownerInflows, ownerOutflows, cashExpenses, adjustments,
+  cumulativeCashSales, cumulativeOwnerInflows, cumulativeOwnerOutflows,
+  cumulativeAdjustments, cumulativeCashExpenses,
+  formulaBreakdown,           // شرح المعادلة
+}
+```
+
+**القواعد المطبَّقة:**
+- `opening_cash` **محايد** — لا يُحسب كدخل (نقل من العُهدة إلى الدرج)
+- المبيعات النقدية: `sales WHERE payment_method='cash' AND status!='returned'` بفلتر cashier_id+branch_id
+- المصروفات النقدية: `expenses WHERE source='cash'` (بفلتر branch — `expenses` بلا `cashier_id`)
+- التسويات/التحويلات من `cash_ledger` بفلتر cashier_id+branch_id
+
+**Frontend (`client/src/pages/BranchSummary.tsx`):**
+- استبدال البطاقة الرئيسية: **«إجمالي النقد بعهدة الموظف»** + helper text
+- بطاقتان مستقلتان: «نقد داخل الدرج الحالي» + «نقد مرحّل / خارج الصندوق»
+- شريط معادلة الحساب التراكمية
+- 5 بطاقات تفاصيل اليوم (مبيعات/واردات/تسليمات/مصروفات/تسويات)
+- إضافة `adjustment_in`/`adjustment_out` لحوار "تسجيل حركة نقدية"
+
+**التحقق:**
+- Typecheck: 238 → 238 (لا أخطاء جديدة)
+- السيناريو المرجعي يعطي 130/50/80 ✓
+- Backward compat: `actualCashInDrawer` و `today.*` تظل في الاستجابة (alias لـ drawerCash)
+- POS/shifts/sales لم تُلمس
+
+---
 
 ### جلسة 41 — إصلاح أمني سريع: إزالة الأسرار من git tracking
 
