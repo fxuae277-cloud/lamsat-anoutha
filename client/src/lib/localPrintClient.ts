@@ -71,6 +71,24 @@ export interface PrintResult {
   ok: boolean;
   error?: string;
   detail?: string;
+  ignoredDuplicate?: boolean;
+}
+
+// ─── Duplicate-print guard (frontend) ─────────────────────────────────────
+// Same invoice within this window is treated as a duplicate and dropped.
+const DUPLICATE_WINDOW_MS = 3000;
+// invoiceNo → last successfully-sent timestamp
+const recentPrints = new Map<string, number>();
+// invoiceNo currently in flight → suppress concurrent duplicates
+const inFlightPrints = new Set<string>();
+
+function isRecentDuplicate(invoiceNo: string): boolean {
+  if (!invoiceNo) return false;
+  const last = recentPrints.get(invoiceNo);
+  if (!last) return false;
+  if (Date.now() - last < DUPLICATE_WINDOW_MS) return true;
+  recentPrints.delete(invoiceNo);
+  return false;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -194,6 +212,22 @@ export async function printInvoiceLocal(
     return { ok: false, error: "تعذّر بناء بيانات الفاتورة", detail: e?.message };
   }
 
+  const invoiceNo = invoice.invoiceNo || "";
+
+  // Frontend duplicate guard — drop a second click/auto-print for the same
+  // invoice within DUPLICATE_WINDOW_MS without ever hitting the network.
+  if (invoiceNo && inFlightPrints.has(invoiceNo)) {
+    console.log(`[Print] duplicate ignored (in-flight) invoice=${invoiceNo}`);
+    return { ok: true, ignoredDuplicate: true };
+  }
+  if (isRecentDuplicate(invoiceNo)) {
+    console.log(`[Print] duplicate ignored (recent) invoice=${invoiceNo}`);
+    return { ok: true, ignoredDuplicate: true };
+  }
+
+  if (invoiceNo) inFlightPrints.add(invoiceNo);
+  console.log(`[Print] invoice request sending invoice=${invoiceNo} printer=${printerName}`);
+
   try {
     const res = await fetchWithTimeout(
       `${LOCAL_PRINT_URL}/print/invoice`,
@@ -218,9 +252,18 @@ export async function printInvoiceLocal(
         detail,
       };
     }
+    const body = await res.json().catch(() => ({}));
+    if (invoiceNo) recentPrints.set(invoiceNo, Date.now());
+    if (body?.ignoredDuplicate) {
+      console.log(`[Print] duplicate ignored by service invoice=${invoiceNo}`);
+      return { ok: true, ignoredDuplicate: true };
+    }
+    console.log(`[Print] invoice sent to printer invoice=${invoiceNo}`);
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: arabicError(e), detail: String(e?.message || e) };
+  } finally {
+    if (invoiceNo) inFlightPrints.delete(invoiceNo);
   }
 }
 

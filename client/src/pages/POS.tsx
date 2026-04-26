@@ -171,8 +171,13 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId, receipt
   const paid   = n(sale.amountPaid ?? sale.amount_paid ?? total);
   const change = n(sale.changeAmount ?? sale.change_amount ?? 0);
   const [printing, setPrinting] = useState(false);
+  const printingRef = useRef(false);
 
   const handlePrint = async () => {
+    // Re-entrancy guard — `printing` state may not have flushed yet on a
+    // double-click, so use a ref for the synchronous check.
+    if (printingRef.current) return;
+    printingRef.current = true;
     setPrinting(true);
     const result = await printInvoiceLocal(
       {
@@ -198,8 +203,13 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId, receipt
       receiptPrinter || undefined,
     );
     setPrinting(false);
+    printingRef.current = false;
     if (result.ok) {
-      toast({ title: "تمت الطباعة" });
+      if (result.ignoredDuplicate) {
+        toast({ title: "تم تجاهل طباعة مكررة" });
+      } else {
+        toast({ title: "تمت الطباعة" });
+      }
     } else {
       toast({ title: "خطأ في الطباعة", description: result.error, variant: "destructive" });
     }

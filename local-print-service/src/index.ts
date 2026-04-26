@@ -100,6 +100,34 @@ app.post("/print/test", requireApiKey, async (req, res) => {
   }
 });
 
+// ─── Duplicate-print guard (server) ────────────────────────────────────────
+// Same (invoiceNo, printerName) within this window is treated as a duplicate
+// and not sent to the printer a second time. Protects against frontend
+// double-clicks, retried POSTs, or auto-print + manual-print racing.
+const DUPLICATE_WINDOW_MS = 3000;
+type RecentPrint = { at: number };
+const recentPrintsByKey = new Map<string, RecentPrint>();
+
+function makePrintKey(invoiceNo: string, printerName: string) {
+  return `${invoiceNo}__${printerName}`;
+}
+
+function isRecentDuplicatePrint(key: string): boolean {
+  const last = recentPrintsByKey.get(key);
+  if (!last) return false;
+  if (Date.now() - last.at < DUPLICATE_WINDOW_MS) return true;
+  recentPrintsByKey.delete(key);
+  return false;
+}
+
+// Periodic sweep so the map cannot grow unbounded under heavy traffic.
+setInterval(() => {
+  const cutoff = Date.now() - DUPLICATE_WINDOW_MS;
+  for (const [k, v] of recentPrintsByKey) {
+    if (v.at < cutoff) recentPrintsByKey.delete(k);
+  }
+}, 10_000).unref();
+
 app.post("/print/invoice", requireApiKey, async (req, res) => {
   const { printerName, invoice } = req.body ?? {};
 
@@ -131,11 +159,34 @@ app.post("/print/invoice", requireApiKey, async (req, res) => {
       .json({ ok: false, error: "invoice.items must be a non-empty array" });
   }
 
+  const invoiceNo = String(invoice.invoiceNo ?? "");
+  const dupKey = makePrintKey(invoiceNo, printerName);
+  console.log(
+    `[Print] invoice request received invoice=${invoiceNo} printer=${printerName}`
+  );
+
+  if (invoiceNo && isRecentDuplicatePrint(dupKey)) {
+    console.log(
+      `[Print] duplicate ignored invoice=${invoiceNo} printer=${printerName}`
+    );
+    return res.json({ ok: true, ignoredDuplicate: true });
+  }
+
+  // Reserve the slot before the (async) print so a second request that lands
+  // mid-print is also recognised as a duplicate.
+  if (invoiceNo) recentPrintsByKey.set(dupKey, { at: Date.now() });
+
   try {
     const bytes = buildInvoiceBytes(invoice as Invoice);
     await printRawBytes(printerName, bytes);
+    if (invoiceNo) recentPrintsByKey.set(dupKey, { at: Date.now() });
+    console.log(
+      `[Print] invoice sent to printer invoice=${invoiceNo} bytes=${bytes.length}`
+    );
     res.json({ ok: true, bytesSent: bytes.length });
   } catch (e: any) {
+    // Print failed — clear the guard so the cashier can retry immediately.
+    if (invoiceNo) recentPrintsByKey.delete(dupKey);
     console.error("[print/invoice] failed:", e);
     res.status(500).json({
       ok: false,
