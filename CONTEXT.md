@@ -1,5 +1,5 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-26 (جلسة 46 — إصلاح ازدواج الطباعة على EPSON TM-T100)_
+_آخر تحديث: 2026-04-26 (جلسة 47 — إخفاء toast التكرار + تحديث تصميم الإيصال الحراري)_
 
 ---
 
@@ -12,6 +12,80 @@ _آخر تحديث: 2026-04-26 (جلسة 46 — إصلاح ازدواج الطب
 ---
 
 ## ✅ مكتمل
+
+### جلسة 47 — إخفاء toast التكرار + تحديث تصميم الإيصال الحراري (ESC/POS)
+
+**العَرَض بعد جلسة 46:**
+1. عند تكرار الطلب يظهر toast `"تم تجاهل طباعة مكررة"` للكاشير — غير مرغوب
+2. إيصال EPSON TM-T100 لا يزال بالتصميم القديم البسيط، الكاشير يريد التصميم الجديد المطابق لـ `Invoice.tsx` (commit 7109cd3)
+
+#### الإصلاح A — إخفاء toast التكرار (`client/src/pages/POS.tsx`)
+
+في `ReceiptModal.handlePrint`:
+- نجاح + `ignoredDuplicate=true` → **لا toast** (ضوضاء UI صامت). الديباج عبر console (`[Print] duplicate ignored …`) واللوج على الخدمة المحلية كافيان
+- نجاح عادي → toast `"تمت الطباعة بنجاح"`
+- خطأ حقيقي → toast destructive
+
+#### الإصلاح B — رسم الإيصال يطابق `Invoice.tsx` (`local-print-service/src/printInvoice.ts`)
+
+**القرار المعماري:** الإيصال يبقى ESC/POS عبر الخدمة المحلية ("local printing works 100%"، لا تكسره). أعدت كتابة `buildInvoiceBytes()` لتعكس هيكل التصميم الجديد ضمن قيود ESC/POS النصّي 48 عمود.
+
+**أقسام الإيصال الجديد (مطابقة لـ Invoice.tsx بقدر ما يسمح text-mode):**
+
+1. **Header** — `LAMST ANOTHA` بحجم 2× وbold في المنتصف
+2. **Tagline** — `TOUCH OF FEMININITY` بين شَرطَتين على الجانبين
+3. **شريط 3 معلومات** — `CR: 1260008` يساراً + `IG: lamst_anotha` وسطاً + `TEL: 94891122` يميناً
+4. **Dashed divider** (`-` × 48)
+5. **Date+Time + Invoice No.** — bold، كل واحد على سطر بـ `pad()`
+6. **Branch + Cashier** — صف واحد إن سعَ، وإلا سطرين منفصلين، يليهم Customer لو موجود
+7. **جدول العناصر** بأعمدة 2/26/4/7/9 = 48 عمود:
+   - حدود `=` × 48 فوق وتحت الترويسة (محاكاة الـ black-bg row)
+   - رأس bold: `# Item ... Qty Unit Total`
+   - بين كل عنصر `- - - - …` (dashed) كما في React
+8. **Summary** — `Subtotal / Discount / VAT (5%)` بـ `pad()`
+9. **TOTAL bar** — حدود `=` × 48 + سطر bold بـ 2× `TOTAL ……… X.XXX OMR`
+10. **Payment**
+11. **Thank-you box** — إطار `+----+` مع `<3 THANK YOU FOR YOUR TRUST <3` و `We are happy to serve you`
+12. **Footer سطر واحد:** `QUALITY & ELEGANCE | SHOP NOW WITH US`
+13. **Partial cut** (3 dots feed)
+
+**Helpers جديدة في الملف:** `repeat`, `clip`, `leftAlign`, `rightAlign`, `center`, `pad`, ثوابت `SOLID`/`DASH`، ثابتات `BRAND.cr/ig/tel`. كلها بدون أي primitive ESC/POS جديد — استخدمت فقط ما هو موجود في `escpos.ts` (init/codepage/align/bold/size/cutPartial). صفر تغيير على `escpos.ts` أو `rawPrint.ts` أو نقطة `/print/invoice`.
+
+#### Encoding — لم يُلمس (مقصود)
+
+- لا يزال CP1252 (Latin-1) عبر `ESC t 16` كما كان
+- النصوص العربية (اسم الفرع/الكاشير/المنتج) تبقى تطبع كـ `?` كما في README — هذا سلوك Phase 2 الحالي
+- Labels على الإيصال **بالإنجليزية** (Invoice/Date/Branch/Cashier/Subtotal/VAT/TOTAL/Payment/Thank You) لأن CP1252 لا يدعم العربي. تحويل CP864/CP1256 + bidi shaping = شغل Phase 3 منفصل ومخاطرة كسر الطباعة الحالية
+- Brand text (`LAMST ANOTHA` / `TOUCH OF FEMININITY`) تطابق التصميم 1:1 لأنه أصلاً English في Invoice.tsx
+
+#### ما لم يُلمس (مقصود)
+
+- إعداد Task Scheduler — لم يُمس
+- بدء تشغيل الخدمة المحلية — لم يُمس
+- `escpos.ts`/`rawPrint.ts`/`printers.ts`/`index.ts` — صفر تغيير
+- `client/src/components/Invoice.tsx` (الذي أُضيف في commit 7109cd3) يبقى كما هو، مرشَّح لـ "browser print path" مستقبلي بدون استبدال ESC/POS الذي يعمل الآن
+- `/print/test` و label printing — لا تأثير
+
+#### التحقق
+
+- TypeScript: `npm run build` على الخدمة المحلية بدون أخطاء
+- `dist/printInvoice.js` يحتوي `LAMST ANOTHA`, `TOUCH OF FEMININITY`, `THANK YOU FOR YOUR TRUST`, `TOTAL` ✓
+- لوجات الحارس من جلسة 46 لا تزال شغالة كما هي
+
+#### كيف تختبر من الكاشير
+
+1. سحب الكود الجديد على PC الكاشير: `git pull`
+2. إعادة بناء الخدمة المحلية: `cd local-print-service && npm run build`
+3. إعادة تشغيل الخدمة (إنهاء العملية الحالية، Task Scheduler يلتقطها بعد reboot — أو شغّلها يدوياً `node dist/index.js` للاختبار)
+4. أكمل بيع تجريبي على POS → الإيصال الجديد يطلع
+5. اضغط "طباعة" مرتين سريعاً → طبعة واحدة فقط، **بدون toast** للتكرار (صامت)
+
+#### هل يحتاج Railway deploy؟
+
+- **نعم Frontend (Railway)** — لتعديل الـ toast في `POS.tsx`. يصل تلقائياً بعد push
+- **نعم Local print service** — لتصميم الإيصال الجديد في `printInvoice.ts`. لكن `dist/` خارج git → يُعاد بناؤه يدوياً على كل PC كاشير: `npm run build` ثم إعادة تشغيل الخدمة
+
+---
 
 ### جلسة 46 — إصلاح ازدواج الطباعة (طبعتان لكل فاتورة)
 

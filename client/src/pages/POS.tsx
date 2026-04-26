@@ -205,10 +205,11 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId, receipt
     setPrinting(false);
     printingRef.current = false;
     if (result.ok) {
-      if (result.ignoredDuplicate) {
-        toast({ title: "تم تجاهل طباعة مكررة" });
-      } else {
-        toast({ title: "تمت الطباعة" });
+      // Silent on ignoredDuplicate — duplicate suppression is an internal
+      // safeguard, the cashier should not see it. The console/server logs
+      // ([Print] duplicate ignored …) are enough for diagnosis.
+      if (!result.ignoredDuplicate) {
+        toast({ title: "تمت الطباعة بنجاح" });
       }
     } else {
       toast({ title: "خطأ في الطباعة", description: result.error, variant: "destructive" });
