@@ -53,7 +53,7 @@ export default function Invoice({
   return (
     <div
       dir="rtl"
-      className="bg-white text-black mx-auto w-full max-w-[420px] p-6 font-sans print:p-2 print:max-w-none print:w-[80mm] print:shadow-none"
+      className="bg-white text-black mx-auto w-full max-w-[420px] px-4 pt-2 pb-3 font-sans print:px-2 print:pt-1 print:pb-2 print:max-w-none print:w-[80mm] print:shadow-none"
       style={{ fontFamily: "'Tajawal','Cairo','Noto Naskh Arabic',sans-serif" }}
     >
       {/* ===== Header (شعار + معلومات المتجر كصورة واحدة) ===== */}
@@ -65,108 +65,99 @@ export default function Invoice({
         />
       </div>
 
-      {/* dashed separator */}
-      <div className="border-t border-dashed border-gray-400 my-4" />
-
-      {/* ===== Invoice info bar ===== */}
-      <div className="flex justify-between items-stretch">
-        {/* Right (RTL start): Date */}
-        <div className="py-2 text-right">
-          <div className="text-[11px] text-gray-700">التاريخ والوقت</div>
-          <div className="text-[13px] font-semibold mt-1">
-            {date} - {time}
-          </div>
-        </div>
-        {/* Left (RTL end): Invoice number with black tag */}
-        <div className="flex items-stretch">
-          <div className="flex items-center px-3 text-[13px] font-semibold">
-            {invoiceNumber}
-          </div>
-          <div className="bg-black text-white flex items-center px-4 text-[12px]">
-            رقم الفاتورة
-          </div>
-        </div>
-      </div>
-
-      {/* ===== Cashier / Branch ===== */}
-      <div className="flex justify-between items-stretch mt-1">
-        <div className="py-2 text-right">
-          <div className="text-[11px] text-gray-700">الفرع</div>
-          <div className="text-[13px] font-semibold mt-1">{branch}</div>
-        </div>
-        <div className="py-2 text-right">
-          <div className="text-[11px] text-gray-700">الكاشير</div>
-          <div className="text-[13px] font-semibold mt-1">{cashier}</div>
-        </div>
+      {/* ===== Meta grid: التاريخ | رقم الفاتورة | الفرع | الكاشير ===== */}
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-2 text-[11px] leading-tight">
+        <MetaCell label="التاريخ والوقت" value={`${date} - ${time}`} />
+        <MetaCell label="رقم الفاتورة" value={invoiceNumber} highlight />
+        <MetaCell label="الفرع" value={branch} />
+        <MetaCell label="الكاشير" value={cashier} />
       </div>
 
       {/* ===== Items table ===== */}
-      <div className="mt-4">
+      <div className="mt-3">
         {/* Header */}
-        <div className="bg-black text-white grid grid-cols-[0.6fr_2.6fr_1fr_1.6fr_1.6fr] text-[12px]">
-          <div className="py-3 px-2 text-center">م</div>
-          <div className="py-3 px-2 text-right">الصنف</div>
-          <div className="py-3 px-2 text-center">الكمية</div>
-          <div className="py-3 px-2 text-right">سعر الوحدة</div>
-          <div className="py-3 px-2 text-right">الإجمالي</div>
+        <div className="bg-black text-white grid grid-cols-[0.5fr_2.6fr_0.8fr_1.4fr_1.4fr] text-[11px] font-semibold">
+          <div className="py-1.5 px-1.5 text-center">م</div>
+          <div className="py-1.5 px-1.5 text-right">الصنف</div>
+          <div className="py-1.5 px-1.5 text-center">الكمية</div>
+          <div className="py-1.5 px-1.5 text-right">السعر</div>
+          <div className="py-1.5 px-1.5 text-right">الإجمالي</div>
         </div>
 
         {/* Rows */}
         {items.map((item, idx) => (
           <div
             key={idx}
-            className={`grid grid-cols-[0.6fr_2.6fr_1fr_1.6fr_1.6fr] text-[13px] py-3 ${
+            className={`grid grid-cols-[0.5fr_2.6fr_0.8fr_1.4fr_1.4fr] text-[12px] py-1.5 ${
               idx > 0 ? "border-t border-dashed border-gray-400" : ""
             }`}
           >
-            <div className="px-2 text-center">{idx + 1}</div>
-            <div className="px-2 text-right">{item.name}</div>
-            <div className="px-2 text-center">{item.qty}</div>
-            <div className="px-2 text-right">{item.unitPrice.toFixed(3)} ر.ع</div>
-            <div className="px-2 text-right">{item.total.toFixed(3)} ر.ع</div>
+            <div className="px-1.5 text-center">{idx + 1}</div>
+            <div className="px-1.5 text-right">{item.name}</div>
+            <div className="px-1.5 text-center">{item.qty}</div>
+            <div className="px-1.5 text-right">{item.unitPrice.toFixed(3)}</div>
+            <div className="px-1.5 text-right">{item.total.toFixed(3)}</div>
           </div>
         ))}
       </div>
 
       {/* ===== Summary ===== */}
-      <div className="border-t border-gray-300 mt-2 pt-3 text-[13px] space-y-2">
+      <div className="border-t border-gray-300 mt-1.5 pt-1.5 text-[12px] space-y-0.5">
         <SummaryRow label="المجموع الفرعي" value={fmt(subtotal)} />
         <SummaryRow label="الخصم" value={fmt(discount)} />
         <SummaryRow label="ضريبة القيمة المضافة (5%)" value={fmt(vat)} />
       </div>
 
       {/* Total bar */}
-      <div className="bg-black text-white flex justify-between items-center px-4 py-3 mt-3 text-[15px] font-bold">
+      <div className="bg-black text-white flex justify-between items-center px-3 py-1.5 mt-1.5 text-[14px] font-bold">
         <span>الإجمالي</span>
         <span>{fmt(total)}</span>
       </div>
 
-      {/* ===== Thank-you box ===== */}
-      <div className="border border-dashed border-gray-400 rounded mt-5 px-4 py-4 text-center">
-        <div className="flex items-center justify-center gap-3 text-[14px] font-bold">
-          <Heart className="w-3 h-3 fill-black text-black" strokeWidth={0} />
-          <span>شكرا لثقتكم بنا</span>
-          <Heart className="w-3 h-3 fill-black text-black" strokeWidth={0} />
-        </div>
-        <div className="text-[12px] mt-2">نسعد بخدمتكم دائما</div>
-      </div>
-
-      {/* ===== Footer with QR ===== */}
-      <div className="border-t border-gray-300 mt-4 pt-4 grid grid-cols-3 items-center text-[11px]">
-        <div className="text-right text-gray-700 leading-snug">
+      {/* ===== Footer: thank-you + QR في صفّ واحد ===== */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 mt-3">
+        <div className="text-right text-[10px] text-gray-700 leading-tight">
           <div>جودة وأناقة</div>
           <div>تليق بكِ</div>
         </div>
-        <div className="flex justify-center">
-          <div className="w-[88px] h-[88px] bg-white p-1">
-            <QRPattern value={qrValue || invoiceNumber} />
-          </div>
+        <div className="w-[64px] h-[64px] bg-white">
+          <QRPattern value={qrValue || invoiceNumber} />
         </div>
-        <div className="text-left text-gray-700 leading-snug">
+        <div className="text-left text-[10px] text-gray-700 leading-tight">
           <div>تسوقي الآن</div>
           <div>مع لمسة أنوثة</div>
         </div>
       </div>
+
+      {/* Thank-you single line */}
+      <div className="flex items-center justify-center gap-2 mt-2 text-[12px] font-bold">
+        <Heart className="w-2.5 h-2.5 fill-black text-black" strokeWidth={0} />
+        <span>شكراً لثقتكم — نسعد بخدمتكم دائماً</span>
+        <Heart className="w-2.5 h-2.5 fill-black text-black" strokeWidth={0} />
+      </div>
+    </div>
+  );
+}
+
+function MetaCell({
+  label,
+  value,
+  highlight = false,
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 border-b border-dotted border-gray-300 pb-0.5">
+      <span className="text-gray-600 shrink-0">{label}</span>
+      <span
+        className={`font-semibold text-black truncate ${
+          highlight ? "tracking-wide" : ""
+        }`}
+      >
+        {value}
+      </span>
     </div>
   );
 }
