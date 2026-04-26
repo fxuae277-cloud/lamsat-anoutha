@@ -1,5 +1,68 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-26 (جلسة 47 — إخفاء toast التكرار + تحديث تصميم الإيصال الحراري)_
+_آخر تحديث: 2026-04-26 (جلسة 48 — تبسيط تحديث الخدمة المحلية: dist في git + سكربت نقرة واحدة)_
+
+---
+
+## ⚡ تحديث الخدمة المحلية على PC الكاشير (الطريقة الجديدة — جلسة 48)
+
+**نقرة واحدة فقط — بدون terminal، بدون npm:**
+
+1. افتح المجلد `C:\Users\HP\lamsat-anoutha\local-print-service`
+2. **double-click** على `update-print.bat`
+3. السكربت يعمل تلقائياً: `git pull` → kill node → restart node بالكود الجديد
+
+السكربت لا يلمس Task Scheduler. عند reboot الجهاز، Task Scheduler يبدأ الخدمة طبيعياً بآخر كود مرفوع.
+
+**لماذا تغيّر؟** سابقاً `dist/` كان في `.gitignore` وأي تحديث على تصميم الإيصال يتطلّب `npm run build` يدوياً على كل PC. الآن `local-print-service/dist/` مرفوع داخل git → التحديث يصير `git pull` فقط.
+
+---
+
+## ✅ مكتمل
+
+### جلسة 48 — تبسيط تحديث الخدمة المحلية
+
+**العَرَض:** بعد جلسة 47 طلب الكاشير "هل في طريقة أسهل من npm install + npm run build على كل تحديث؟"
+
+**الحل — طبقتان:**
+
+1. **`local-print-service/dist/` صار مرفوعاً في git:** عُدّل `.gitignore` لإلغاء استثناء هذا المجلد فقط (مع إبقاء استثناء `dist/` العام للـ root build):
+   ```
+   node_modules
+   dist
+   !/local-print-service/dist
+   !/local-print-service/dist/**
+   ```
+   — التحديث على PC الكاشير يصير `git pull` فقط، بدون `npm install` ولا `npm run build`.
+
+2. **`local-print-service/update-print.bat` (جديد):** سكربت Windows واحد ينفّذ:
+   - `cd` لمجلد المشروع
+   - `git pull --ff-only` (يفشل بوضوح لو فيه local divergence)
+   - `taskkill /F /IM node.exe` لإيقاف الخدمة الحالية
+   - `start /MIN node dist\index.js` لتشغيلها فوراً بالكود الجديد
+   
+   الكاشير double-click عليه → انتهى. لا terminal. لا أوامر.
+
+**ما لم يُلمس (مقصود):**
+- Task Scheduler — السكربت لا يعدّله. عند reboot، Task Scheduler يبدأ الخدمة كالمعتاد بأحدث كود (لأن git pull وضع الكود الجديد على القرص).
+- مسار التطوير (`npm run dev`/`npm run build`) — يبقى متوفّراً للمطوّر، لكن غير ضروري للكاشير.
+- صفحة Railway / frontend — لا تأثير.
+
+#### كيف تختبر بعد هذه الجلسة
+
+على PC الكاشير، مرة واحدة فقط:
+1. double-click على `C:\Users\HP\lamsat-anoutha\local-print-service\update-print.bat`
+2. انتظر السطر `Done. The new receipt design is active.`
+3. أكمل بيع تجريبي → الإيصال يطلع بالتصميم الجديد (LAMST ANOTHA + tagline + جدول العناصر مع `=` bars + شريط TOTAL)
+
+#### التحديثات المستقبلية
+
+أي تعديل من Claude على ESC/POS أو على frontend → بعد `git push` على main:
+- Frontend ينزل تلقائياً من Railway
+- خدمة الطباعة المحلية: الكاشير double-click على `update-print.bat` → انتهى
+
+---
+
+### جلسة 47 — إخفاء toast التكرار + تحديث تصميم الإيصال الحراري (ESC/POS)
 
 ---
 

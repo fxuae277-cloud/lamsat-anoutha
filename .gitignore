@@ -1,5 +1,9 @@
 node_modules
 dist
+# Keep the local print service's compiled output IN git so cashier PCs can
+# update with `git pull` only — no `npm install` / `npm run build` needed.
+!/local-print-service/dist
+!/local-print-service/dist/**
 .DS_Store
 server/public
 vite.config.ts.*
