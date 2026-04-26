@@ -1,4 +1,4 @@
-import { Clipboard, Instagram, Phone, Heart } from "lucide-react";
+import { Heart } from "lucide-react";
 
 export interface InvoiceItem {
   name: string;
@@ -13,14 +13,18 @@ export interface InvoiceProps {
   time?: string;
   cashier?: string;
   branch?: string;
+  /** @deprecated القيمة مدمجة الآن في صورة الهيدر (header-lamst-anotha.png) */
   commercialRegister?: string;
+  /** @deprecated القيمة مدمجة الآن في صورة الهيدر (header-lamst-anotha.png) */
   instagram?: string;
+  /** @deprecated القيمة مدمجة الآن في صورة الهيدر (header-lamst-anotha.png) */
   phone?: string;
   items?: InvoiceItem[];
   subtotal?: number;
   discount?: number;
   vatRate?: number;
   qrValue?: string;
+  /** @deprecated الشعار الآن جزء من صورة الهيدر (header-lamst-anotha.png) */
   logoSrc?: string;
 }
 
@@ -36,15 +40,11 @@ export default function Invoice({
   time = "09:12 AM",
   cashier = "ahmed",
   branch = "الفرع الرئيسي",
-  commercialRegister = "1260008",
-  instagram = "lamst_anotha",
-  phone = "94891122",
   items = DEFAULT_ITEMS,
   subtotal = 8.0,
   discount = 0.0,
   vatRate = 0.05,
   qrValue,
-  logoSrc,
 }: InvoiceProps) {
   const fmt = (n: number) => `${n.toFixed(3)} ر.ع`;
   const vat = +(subtotal * vatRate).toFixed(3);
@@ -56,56 +56,12 @@ export default function Invoice({
       className="bg-white text-black mx-auto w-full max-w-[420px] p-6 font-sans print:p-2 print:max-w-none print:w-[80mm] print:shadow-none"
       style={{ fontFamily: "'Tajawal','Cairo','Noto Naskh Arabic',sans-serif" }}
     >
-      {/* ===== Header ===== */}
-      <div className="flex flex-col items-center text-center">
-        {logoSrc ? (
-          <img src={logoSrc} alt="logo" className="h-24 object-contain mb-2" />
-        ) : (
-          <div
-            className="h-24 mb-2 flex items-center justify-center text-[56px] leading-none font-bold"
-            style={{ fontFamily: "'Aref Ruqaa','Amiri',serif" }}
-          >
-            لمسة أنوثة
-          </div>
-        )}
-
-        <h1
-          className="text-[30px] leading-none font-bold tracking-[0.18em]"
-          style={{ fontFamily: "'Playfair Display','Cormorant Garamond',serif" }}
-        >
-          LAMST ANOTHA
-        </h1>
-
-        <div className="flex items-center w-full mt-2 mb-1">
-          <span className="flex-1 border-t border-black" />
-          <span className="px-3 text-[10px] tracking-[0.35em] font-medium">
-            TOUCH OF FEMININITY
-          </span>
-          <span className="flex-1 border-t border-black" />
-        </div>
-
-        <Heart className="w-3 h-3 fill-black text-black" strokeWidth={0} />
-      </div>
-
-      {/* ===== 3 info blocks ===== */}
-      <div className="grid grid-cols-3 mt-5 text-[11px]">
-        <InfoBlock
-          icon={<Clipboard className="w-5 h-5" strokeWidth={1.5} />}
-          label="رقم السجل التجاري"
-          value={commercialRegister}
-          className="pl-2 border-l border-gray-300"
-        />
-        <InfoBlock
-          icon={<Instagram className="w-5 h-5" strokeWidth={1.5} />}
-          label="الانستجرام"
-          value={instagram}
-          className="px-2 border-l border-gray-300"
-        />
-        <InfoBlock
-          icon={<Phone className="w-5 h-5" strokeWidth={1.5} />}
-          label="التواصل مع الإدارة"
-          value={phone}
-          className="pr-2"
+      {/* ===== Header (شعار + معلومات المتجر كصورة واحدة) ===== */}
+      <div className="flex justify-center">
+        <img
+          src="/header-lamst-anotha.png"
+          alt="Lamst Anotha"
+          className="w-full max-w-[720px] object-contain block"
         />
       </div>
 
@@ -211,28 +167,6 @@ export default function Invoice({
           <div>مع لمسة أنوثة</div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function InfoBlock({
-  icon,
-  label,
-  value,
-  className = "",
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  className?: string;
-}) {
-  return (
-    <div className={`flex items-center justify-end gap-2 ${className}`}>
-      <div className="text-right">
-        <div className="text-gray-600">{label}</div>
-        <div className="font-bold text-black mt-0.5">{value}</div>
-      </div>
-      <div className="shrink-0">{icon}</div>
     </div>
   );
 }
