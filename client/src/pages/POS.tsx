@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
-import { printInvoiceInBrowser } from "@/lib/browserPrintInvoice";
+import { printInvoiceLocal } from "@/lib/localPrintClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -179,28 +179,29 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId, receipt
     if (printingRef.current) return;
     printingRef.current = true;
     setPrinting(true);
-    // Browser-print path — renders <Invoice /> directly (single source of
-    // truth for the design) and lets Chrome drive the EPSON via the Windows
-    // printer driver. No dependency on local-print-service or its dist/.
-    const result = await printInvoiceInBrowser({
+    // Direct ESC/POS path — sends bytes to 127.0.0.1:3030 which uses the
+    // raw winspool driver to print on EPSON TM-T100. No browser print
+    // dialog, no popup, no preview.
+    const result = await printInvoiceLocal({
       invoiceNumber: sale.invoiceNumber || sale.invoice_number || "",
       createdAt:     sale.createdAt     || sale.created_at,
-      cashier:       cashierName,
-      branch:        branchName,
-      items: (sale.items || []).map((i: any) => {
-        const unit = n(i.unitPrice ?? i.unit_price);
-        const namePart = i.productName || i.product_name || "";
-        const variant = [i.color, i.size].filter(Boolean).join(" ");
-        return {
-          name: variant ? `${namePart} (${variant})` : namePart,
-          qty: i.quantity,
-          unitPrice: unit,
-          total: unit * i.quantity,
-        };
-      }),
-      subtotal: n(sale.subtotal),
-      discount: n(sale.discount),
-      vat:      n(sale.vat),
+      cashierName:   cashierName,
+      branchName:    branchName,
+      customerName:  sale.customerName ?? null,
+      items: (sale.items || []).map((i: any) => ({
+        productName: i.productName || i.product_name || "",
+        quantity:    i.quantity,
+        unitPrice:   n(i.unitPrice ?? i.unit_price),
+        color:       i.color,
+        size:        i.size,
+      })),
+      subtotal:      n(sale.subtotal),
+      discount:      n(sale.discount),
+      vat:           n(sale.vat),
+      total:         n(sale.total),
+      amountPaid:    n(sale.amountPaid ?? sale.amount_paid ?? sale.total),
+      changeAmount:  n(sale.changeAmount ?? sale.change_amount ?? 0),
+      paymentMethod: sale.paymentMethod || sale.payment_method || "cash",
     });
     setPrinting(false);
     printingRef.current = false;
@@ -1045,27 +1046,27 @@ export default function POS() {
       qc.invalidateQueries({ queryKey: ["/api/pos/products"] });
 
       // Auto-print receipt immediately after sale is saved in DB.
-      // Browser-print path — same as the manual print button (uses
-      // Invoice.tsx directly, no local-service dependency).
-      const autoPrintResult = await printInvoiceInBrowser({
+      // Direct ESC/POS path — same as the manual print button.
+      const autoPrintResult = await printInvoiceLocal({
         invoiceNumber: sale.invoiceNumber || sale.invoice_number || "",
         createdAt:     sale.createdAt     || sale.created_at,
-        cashier:       user?.name || "",
-        branch:        branchName,
-        items: (sale.items || []).map((i: any) => {
-          const unit = n(i.unitPrice ?? i.unit_price);
-          const namePart = i.productName || i.product_name || "";
-          const variant = [i.color, i.size].filter(Boolean).join(" ");
-          return {
-            name: variant ? `${namePart} (${variant})` : namePart,
-            qty: i.quantity,
-            unitPrice: unit,
-            total: unit * i.quantity,
-          };
-        }),
-        subtotal: n(sale.subtotal),
-        discount: n(sale.discount),
-        vat:      n(sale.vat),
+        cashierName:   user?.name || "",
+        branchName:    branchName,
+        customerName:  sale.customerName ?? null,
+        items: (sale.items || []).map((i: any) => ({
+          productName: i.productName || i.product_name || "",
+          quantity:    i.quantity,
+          unitPrice:   n(i.unitPrice ?? i.unit_price),
+          color:       i.color,
+          size:        i.size,
+        })),
+        subtotal:      n(sale.subtotal),
+        discount:      n(sale.discount),
+        vat:           n(sale.vat),
+        total:         n(sale.total),
+        amountPaid:    n(sale.amountPaid ?? sale.amount_paid ?? sale.total),
+        changeAmount:  n(sale.changeAmount ?? sale.change_amount ?? 0),
+        paymentMethod: sale.paymentMethod || sale.payment_method || "cash",
       });
       if (!autoPrintResult.ok) {
         toast({

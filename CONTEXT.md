@@ -1,29 +1,106 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-26 (جلسة 49 — ربط زر طباعة الكاشير مباشرة بـ `Invoice.tsx` عبر browser print)_
+_آخر تحديث: 2026-04-27 (جلسة 50 — طباعة صامتة كاملة: لا CMD، لا حوار طباعة)_
 
 ---
 
-## 🖨️ مسار طباعة الإيصال (الحالي بعد جلسة 49)
+## 🖨️ مسار طباعة الإيصال (الحالي بعد جلسة 50)
 
 ```
 Cashier clicks طباعة (ReceiptModal)  أو  Sale completes (auto-print)
             │
             ▼
-   printInvoiceInBrowser(saleData)
-   client/src/lib/browserPrintInvoice.ts
+   printInvoiceLocal(saleData)
+   client/src/lib/localPrintClient.ts
+            │
+            ▼ POST http://127.0.0.1:3030/print/invoice
+            │
+   local-print-service (node, hidden — لا CMD window)
+   local-print-service/dist/index.js
             │
             ▼
-   renderToStaticMarkup(<Invoice ... />)   ← نفس Invoice.tsx الجديد
-   client/src/components/Invoice.tsx
+   buildInvoiceBytes()  →  ESC/POS bytes (تصميم جلسة 47)
+   local-print-service/src/printInvoice.ts
             │
-            ▼
-   window.open() + write HTML + window.print()
+            ▼ winspool RAW write (P/Invoke)
             │
-            ▼
-   Chrome → Windows printer driver → EPSON TM-T100
+   EPSON TM-T100 — طباعة فورية بنقرة واحدة، بدون حوار
 ```
 
-**أين Invoice.tsx الآن؟** → هو **مصدر التصميم الوحيد** للإيصال. لا ESC/POS، لا local-print-service في هذا المسار.
+**صامت تماماً:**
+- لا نافذة CMD (الخدمة تشتغل عبر `start-print-service-hidden.vbs`)
+- لا حوار طباعة في المتصفح (الـ POS يكلّم 127.0.0.1:3030 مباشرة، بدون `window.print()`)
+- لا preview ولا popups
+
+**أين Invoice.tsx الآن؟** → يبقى مرجع التصميم البصري على الشاشة (في `ReceiptModal` preview)، لكن الطباعة الفعلية الآن من `printInvoice.ts` (ESC/POS).
+
+---
+
+## ✅ مكتمل
+
+### جلسة 50 — طباعة صامتة كاملة (لا CMD، لا حوار طباعة)
+
+**العَرَض:**
+1. عند تشغيل الجهاز، تظهر نافذة CMD سوداء `[Lamsa Local Print] listening on http://127.0.0.1:3030` — غير مقبول في بيئة كاشير إنتاج.
+2. عند الطباعة، يفتح Chrome حوار الطباعة (preview + زر اطبع) — غير مقبول، الكاشير يحتاج طباعة فورية بنقرة واحدة.
+
+#### الإصلاح A — إخفاء نافذة CMD
+
+**ملف جديد — `local-print-service/start-print-service-hidden.vbs`:**
+- يستخدم `WScript.Shell.Run` بـ `intWindowStyle=0` (مخفي تماماً، لا taskbar entry)
+- يفحص قبل التشغيل: لو في `node.exe` يشغّل نفس `dist/index.js` مسبقاً → خروج صامت (singleton guard)
+- يكتب stdout/stderr إلى `logs/print-service.log` بدلاً من نافذة CMD
+
+**ملف جديد — `local-print-service/install-startup-shortcut.bat`:**
+- ينشئ shortcut في `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Lamsa Local Print.lnk`
+- الـ shortcut يستهدف `wscript.exe "...start-print-service-hidden.vbs"` مع `WindowStyle=7` (Minimized)
+- بعد تشغيله مرة واحدة، الخدمة تشتغل صامتة في كل تسجيل دخول
+
+**تعديل — `local-print-service/update-print.bat`:**
+- استبدال `start "Lamsa Local Print" /MIN cmd /c "node ...index.js"` بـ
+- `wscript.exe "C:\Users\HP\lamsat-anoutha\local-print-service\start-print-service-hidden.vbs"`
+- النتيجة: حتى التحديث اليدوي ما يفتح نافذة CMD للخدمة
+
+#### الإصلاح B — إلغاء حوار طباعة المتصفح
+
+**تعديل — `client/src/pages/POS.tsx`:**
+- استبدال `import { printInvoiceInBrowser } from "@/lib/browserPrintInvoice"` بـ `import { printInvoiceLocal } from "@/lib/localPrintClient"`
+- `ReceiptModal.handlePrint`: يستدعي `printInvoiceLocal(...)` بدل `printInvoiceInBrowser(...)`
+- Auto-print بعد البيع: نفس الاستبدال
+- نفس contract: `{ ok, error?, ignoredDuplicate? }`
+
+**ما تم الحفاظ عليه:**
+- نفس `printingRef` re-entrancy guard
+- نفس `disabled={printing}` على زر "طباعة"
+- نفس toast `"تمت الطباعة بنجاح"` عند النجاح
+- نفس صمت `ignoredDuplicate` (لا toast)
+- نفس رسائل الخطأ بالعربي (موجودة أصلاً في `localPrintClient.ts:170-183` — `arabicError()`)
+- زر واتساب لم يتأثر إطلاقاً
+- تصميم ESC/POS (جلسة 47) محفوظ في `dist/printInvoice.js`
+
+**ما لم يُلمس (مقصود):**
+- `client/src/lib/browserPrintInvoice.ts`: يبقى الملف بدون consumers — تنظيفه بجلسة لاحقة
+- باقي مسارات `window.print()` (HR payroll، Inventory reports، Invoices A4 reprint، Purchases، BarcodeLabels): admin-only، تتطلّب تحويلاً منفصلاً (التقارير A4 لا يمكن نقلها لـ ESC/POS بشكل مباشر). تبقى على المسار الحالي في هذه الجلسة.
+
+#### كيف يختبر الكاشير
+
+**مرة واحدة فقط للإعداد:**
+1. اقفل أي عملية node.exe قديمة (`taskkill /F /IM node.exe`)
+2. شغّل `local-print-service/install-startup-shortcut.bat` (double-click)
+3. شغّل `local-print-service/start-print-service-hidden.vbs` يدوياً مرة واحدة لبدء الخدمة بدون reboot
+4. تحقّق: `curl http://127.0.0.1:3030/health` → يرجع `{ ok: true, ... }` ولا في نافذة CMD مفتوحة
+
+**اختبار يومي:**
+1. أعد تشغيل الجهاز → لا تظهر أي نافذة CMD
+2. افتح POS من Chrome → سجّل بيع تجريبي
+3. اضغط "طباعة" أو انتظر الـ auto-print → الإيصال يطلع فوراً، لا حوار، لا preview
+4. لو الخدمة المحلية موقفة → toast بالعربي: `"خدمة الطباعة المحلية غير مفعّلة على جهاز الكاشير. شغّل الخدمة ثم أعد المحاولة."`
+
+#### التحقق
+
+- `grep printInvoiceInBrowser client/src/pages/POS.tsx` → **0 نتائج**
+- `grep printInvoiceLocal client/src/pages/POS.tsx` → 3 نتائج (import + handlePrint + auto-print)
+- `npx tsc --noEmit` على `POS.tsx` و `localPrintClient.ts` → **0 أخطاء** (الأخطاء الموجودة في `server/storage.ts` و `Orders.tsx` …إلخ pre-existing)
+- VBS launcher اختُبر منطقياً: WMI singleton guard + `shell.Run cmd, 0, False` (مخفي + non-blocking)
 
 ---
 

@@ -5,10 +5,13 @@ REM What it does (no npm, no build):
 REM   1. Pulls latest code from GitHub (compiled dist/ is shipped inside git
 REM      starting from session 47 — see CONTEXT.md).
 REM   2. Stops the running print-service node process.
-REM   3. Starts the freshly-pulled service in a minimised background window.
+REM   3. Starts the freshly-pulled service via the SILENT VBS launcher
+REM      (start-print-service-hidden.vbs). No CMD window appears — neither
+REM      foreground nor minimised.
 REM
-REM Task Scheduler config is NOT touched. After the next reboot, Task
-REM Scheduler still respawns the service exactly as it does today.
+REM Task Scheduler / Startup-folder shortcut config is NOT touched. After
+REM the next reboot, whatever auto-start mechanism the cashier installed
+REM still respawns the service exactly as it does today.
 REM
 REM Usage: double-click this file. That is all.
 
@@ -44,8 +47,10 @@ taskkill /F /IM node.exe >nul 2>&1
 timeout /t 2 /nobreak >nul
 echo.
 
-echo [3/3] Starting print service in background...
-start "Lamsa Local Print" /MIN cmd /c "node C:\Users\HP\lamsat-anoutha\local-print-service\dist\index.js"
+echo [3/3] Starting print service silently in background...
+REM wscript runs the VBS host, which spawns node hidden via shell.Run with
+REM intWindowStyle=0. No taskbar entry, no console flash.
+wscript.exe "C:\Users\HP\lamsat-anoutha\local-print-service\start-print-service-hidden.vbs"
 timeout /t 2 /nobreak >nul
 echo.
 
