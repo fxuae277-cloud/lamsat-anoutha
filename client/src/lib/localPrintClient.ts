@@ -1,6 +1,8 @@
 /**
  * localPrintClient.ts — calls the Lamsa Local Print Service running on the
- * cashier PC at 127.0.0.1:3030. This replaces all direct QZ Tray usage.
+ * cashier PC. Default base URL is http://127.0.0.1:3030, but the cashier
+ * can override it from Settings; the resolved config is cached in
+ * localStorage under `lamsa.localPrintConfig`.
  *
  * Why fetch to localhost works from a Railway HTTPS page:
  *   Modern Chrome/Firefox treat http://127.0.0.1 and http://localhost as
@@ -12,10 +14,55 @@
  * fetching 127.0.0.1 from another machine on the LAN will always fail.
  */
 
-const LOCAL_PRINT_URL = "http://127.0.0.1:3030";
-const LOCAL_PRINT_API_KEY = "123456";
+const LOCAL_PRINT_CONFIG_KEY = "lamsa.localPrintConfig";
+export const DEFAULT_LOCAL_PRINT_URL = "http://127.0.0.1:3030";
+export const DEFAULT_LOCAL_PRINT_API_KEY = "123456";
 const DEFAULT_PRINTER = "EPSON TM-T100 Receipt";
 const REQUEST_TIMEOUT_MS = 15000;
+
+export interface LocalPrintConfig {
+  baseUrl: string;
+  apiKey: string;
+  enabled: boolean;
+}
+
+const DEFAULT_CONFIG: LocalPrintConfig = {
+  baseUrl: DEFAULT_LOCAL_PRINT_URL,
+  apiKey: DEFAULT_LOCAL_PRINT_API_KEY,
+  enabled: true,
+};
+
+function normalizeBaseUrl(u: string | undefined | null): string {
+  const trimmed = (u || "").trim().replace(/\/+$/, "");
+  return trimmed || DEFAULT_LOCAL_PRINT_URL;
+}
+
+/** Read the cached local-print config from localStorage (with safe defaults). */
+export function getLocalPrintConfig(): LocalPrintConfig {
+  if (typeof localStorage === "undefined") return { ...DEFAULT_CONFIG };
+  try {
+    const raw = localStorage.getItem(LOCAL_PRINT_CONFIG_KEY);
+    if (!raw) return { ...DEFAULT_CONFIG };
+    const parsed = JSON.parse(raw) as Partial<LocalPrintConfig>;
+    return {
+      baseUrl: normalizeBaseUrl(parsed.baseUrl),
+      apiKey: parsed.apiKey ?? DEFAULT_CONFIG.apiKey,
+      enabled: parsed.enabled !== false,
+    };
+  } catch {
+    return { ...DEFAULT_CONFIG };
+  }
+}
+
+/** Persist (merge) the local-print config in localStorage. */
+export function setLocalPrintConfig(patch: Partial<LocalPrintConfig>): LocalPrintConfig {
+  const merged: LocalPrintConfig = { ...getLocalPrintConfig(), ...patch };
+  merged.baseUrl = normalizeBaseUrl(merged.baseUrl);
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem(LOCAL_PRINT_CONFIG_KEY, JSON.stringify(merged));
+  }
+  return merged;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -169,11 +216,12 @@ export function toLocalInvoice(receipt: ReceiptInput): LocalInvoice {
 
 function arabicError(e: unknown, status?: number): string {
   const msg = String((e as any)?.message || e || "");
+  const cfg = getLocalPrintConfig();
   if ((e as any)?.name === "AbortError" || /timeout|abort/i.test(msg)) {
     return "انتهت مهلة الاتصال بخدمة الطباعة المحلية. تأكد من تشغيلها.";
   }
   if (/failed to fetch|networkerror|load failed|blocked by client/i.test(msg)) {
-    return "خدمة الطباعة المحلية غير مفعّلة على جهاز الكاشير. شغّل الخدمة ثم أعد المحاولة.";
+    return `تعذر الاتصال بخدمة الطباعة المحلية، تأكد أن الرابط هو ${cfg.baseUrl}`;
   }
   if (status === 401) return "مفتاح x-lamsa-print-key خاطئ في خدمة الطباعة.";
   if (status === 400) return "بيانات الفاتورة ناقصة أو غير صالحة.";
@@ -184,19 +232,63 @@ function arabicError(e: unknown, status?: number): string {
 
 // ─── Public API ───────────────────────────────────────────────────────────
 
-/** Returns true if the local print service responds to /health within 3s. */
-export async function checkLocalPrintHealth(): Promise<boolean> {
+export interface HealthResult {
+  ok: boolean;
+  baseUrl: string;
+  error?: string;
+}
+
+/** Probe GET /health on the configured local print service (3s timeout). */
+export async function checkLocalPrintHealth(
+  baseUrlOverride?: string
+): Promise<HealthResult> {
+  const baseUrl = normalizeBaseUrl(baseUrlOverride ?? getLocalPrintConfig().baseUrl);
   try {
     const res = await fetchWithTimeout(
-      `${LOCAL_PRINT_URL}/health`,
+      `${baseUrl}/health`,
       { method: "GET" },
       3000
     );
-    if (!res.ok) return false;
-    const json = await res.json();
-    return !!json?.ok;
-  } catch {
-    return false;
+    if (!res.ok) return { ok: false, baseUrl, error: `HTTP ${res.status}` };
+    const json = await res.json().catch(() => null);
+    if (json && json.ok === false) return { ok: false, baseUrl, error: "service reported not ok" };
+    return { ok: true, baseUrl };
+  } catch (e: any) {
+    return { ok: false, baseUrl, error: String(e?.message || e) };
+  }
+}
+
+export interface LoadPrintersResult {
+  ok: boolean;
+  baseUrl: string;
+  printers: string[];
+  error?: string;
+}
+
+/** Fetch GET /printers from the configured local print service. */
+export async function loadPrintersLocal(
+  baseUrlOverride?: string,
+  apiKeyOverride?: string
+): Promise<LoadPrintersResult> {
+  const cfg = getLocalPrintConfig();
+  const baseUrl = normalizeBaseUrl(baseUrlOverride ?? cfg.baseUrl);
+  const apiKey = apiKeyOverride ?? cfg.apiKey;
+  try {
+    const res = await fetchWithTimeout(
+      `${baseUrl}/printers`,
+      { method: "GET", headers: { "x-lamsa-print-key": apiKey } },
+      5000
+    );
+    if (!res.ok) {
+      return { ok: false, baseUrl, printers: [], error: `HTTP ${res.status}` };
+    }
+    const body = await res.json().catch(() => ({}));
+    const list: string[] = Array.isArray(body?.printers)
+      ? body.printers.map((p: any) => (typeof p === "string" ? p : p?.name)).filter(Boolean)
+      : [];
+    return { ok: true, baseUrl, printers: list };
+  } catch (e: any) {
+    return { ok: false, baseUrl, printers: [], error: String(e?.message || e) };
   }
 }
 
@@ -205,6 +297,14 @@ export async function printInvoiceLocal(
   receipt: ReceiptInput,
   printerName: string = DEFAULT_PRINTER
 ): Promise<PrintResult> {
+  const cfg = getLocalPrintConfig();
+  if (!cfg.enabled) {
+    return {
+      ok: false,
+      error: "الطباعة المحلية معطّلة من الإعدادات. فعّلها أولاً.",
+    };
+  }
+  const resolvedPrinter = (printerName || "").trim() || DEFAULT_PRINTER;
   let invoice: LocalInvoice;
   try {
     invoice = toLocalInvoice(receipt);
@@ -226,18 +326,18 @@ export async function printInvoiceLocal(
   }
 
   if (invoiceNo) inFlightPrints.add(invoiceNo);
-  console.log(`[Print] invoice request sending invoice=${invoiceNo} printer=${printerName}`);
+  console.log(`[Print] invoice request sending invoice=${invoiceNo} printer=${resolvedPrinter} url=${cfg.baseUrl}`);
 
   try {
     const res = await fetchWithTimeout(
-      `${LOCAL_PRINT_URL}/print/invoice`,
+      `${cfg.baseUrl}/print/invoice`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-lamsa-print-key": LOCAL_PRINT_API_KEY,
+          "x-lamsa-print-key": cfg.apiKey,
         },
-        body: JSON.stringify({ printerName, invoice }),
+        body: JSON.stringify({ printerName: resolvedPrinter, invoice }),
       },
       REQUEST_TIMEOUT_MS
     );

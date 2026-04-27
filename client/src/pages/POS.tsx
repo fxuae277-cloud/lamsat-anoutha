@@ -202,7 +202,7 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId, receipt
       amountPaid:    n(sale.amountPaid ?? sale.amount_paid ?? sale.total),
       changeAmount:  n(sale.changeAmount ?? sale.change_amount ?? 0),
       paymentMethod: sale.paymentMethod || sale.payment_method || "cash",
-    });
+    }, receiptPrinter);
     setPrinting(false);
     printingRef.current = false;
     if (result.ok) {
@@ -1067,7 +1067,7 @@ export default function POS() {
         amountPaid:    n(sale.amountPaid ?? sale.amount_paid ?? sale.total),
         changeAmount:  n(sale.changeAmount ?? sale.change_amount ?? 0),
         paymentMethod: sale.paymentMethod || sale.payment_method || "cash",
-      });
+      }, receiptPrinter);
       if (!autoPrintResult.ok) {
         toast({
           title: "تحذير: لم تتم الطباعة التلقائية",
