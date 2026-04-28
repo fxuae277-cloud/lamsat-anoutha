@@ -22,6 +22,7 @@ import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { fmtOMR, fmtDateTime, fmtDate } from "@/lib/formatters";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
+import { DevicePrintSettingsDialog } from "@/components/DevicePrintSettingsDialog";
 import type { Branch, Shift } from "@shared/schema";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -1353,6 +1354,7 @@ export default function POS() {
                   }
                 </Button>
               )}
+              <DevicePrintSettingsDialog />
               <Button size="sm" variant="ghost"
                 className="h-7 text-xs gap-1 text-orange-200 hover:text-white hover:bg-white/20 px-2 border border-orange-300/40"
                 onClick={() => setShowCloseShift(true)}>
