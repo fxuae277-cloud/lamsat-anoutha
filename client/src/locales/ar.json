@@ -2889,7 +2889,7 @@
     "size_small": "صغير (40×25 مم)",
     "size_medium": "متوسط (58×40 مم)",
     "size_large": "كبير (90×50 مم)",
-    "size_large_2": "كبير 2 (58×39 مم — landscape)",
+    "size_large_2": "كبير2 — 39×58mm — عمود واحد",
     "single_label_hint": "هذا الحجم يطبع حبة بعد حبة",
     "cols_label": "أعمدة في الصف",
     "cols_suffix": "أعمدة",
@@ -2910,7 +2910,13 @@
     "print_info_stickers": "ملصق • حجم:",
     "currency": "ر.ع",
     "no_label_printer": "لم يتم تحديد طابعة الملصقات",
-    "no_label_printer_desc": "انتقل إلى الإعدادات ← إعدادات الطباعة وحدّد طابعة الملصقات أولاً."
+    "no_label_printer_desc": "انتقل إلى الإعدادات ← إعدادات الطباعة وحدّد طابعة الملصقات أولاً.",
+    "label_printer_label": "طابعة الملصقات",
+    "label_printer_placeholder": "اختر طابعة الملصقات",
+    "btn_refresh_printers": "تحديث الطابعات",
+    "selected_printer_label": "الطابعة المختارة:",
+    "no_printer_selected": "لا توجد طابعة مختارة",
+    "label_printer_auto_picked": "تم اختيار الطابعة تلقائياً من الخدمة المحلية"
   },
   "orders_page": {
     "title": "الطلبات",

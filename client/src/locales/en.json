@@ -2889,7 +2889,7 @@
     "size_small": "Small (40×25 mm)",
     "size_medium": "Medium (58×40 mm)",
     "size_large": "Large (90×50 mm)",
-    "size_large_2": "Large 2 (58×39 mm — landscape)",
+    "size_large_2": "Large2 — 39×58mm — 1 column",
     "single_label_hint": "This size prints one label per page",
     "cols_label": "Columns per Row",
     "cols_suffix": "columns",
@@ -2910,7 +2910,13 @@
     "print_info_stickers": "labels • Size:",
     "currency": "OMR",
     "no_label_printer": "Label printer not configured",
-    "no_label_printer_desc": "Go to Settings → Print Settings and select a label printer first."
+    "no_label_printer_desc": "Go to Settings → Print Settings and select a label printer first.",
+    "label_printer_label": "Label printer",
+    "label_printer_placeholder": "Select a label printer",
+    "btn_refresh_printers": "Refresh printers",
+    "selected_printer_label": "Selected printer:",
+    "no_printer_selected": "No printer selected",
+    "label_printer_auto_picked": "Auto-selected from local print service"
   },
   "orders_page": {
     "title": "Orders",

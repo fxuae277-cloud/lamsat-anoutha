@@ -10,10 +10,15 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Printer, Search, Plus, Minus, Trash2, Tag, Package, X, Eye,
+  Printer, Search, Plus, Minus, Trash2, Tag, Package, X, Eye, RefreshCw,
 } from "lucide-react";
 import JsBarcode from "jsbarcode";
 import { useI18n } from "@/lib/i18n";
+import {
+  getDeviceProfile,
+  setDeviceProfile,
+  loadPrintersLocal,
+} from "@/lib/localPrintClient";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 interface LabelItem {
@@ -29,16 +34,55 @@ interface LabelItem {
 
 // ─── label size keys ──────────────────────────────────────────────────────────
 // 58mm × 40mm thermal label @ 96dpi ≈ 219px × 151px
+// LARGE_2 ("كبير2") is portrait 39×58mm @ 96dpi ≈ 147 × 219 px, one column,
+// one label per page (page-break-after: always).
 const SIZE_DIMS = {
   small:   { w: 164, h: 113, font: 7,  bh: 32, mm_w: 43, mm_h: 30 },
   medium:  { w: 219, h: 151, font: 8,  bh: 40, mm_w: 58, mm_h: 40 },
   large:   { w: 302, h: 208, font: 10, bh: 55, mm_w: 80, mm_h: 55 },
-  LARGE_2: { w: 219, h: 147, font: 8,  bh: 38, mm_w: 58, mm_h: 39, singleLabel: true },
+  LARGE_2: { w: 147, h: 219, font: 8,  bh: 38, mm_w: 39, mm_h: 58, singleLabel: true },
 } as const;
 type SizeKey = keyof typeof SIZE_DIMS;
 type SizeDim = typeof SIZE_DIMS[SizeKey];
 const isSingleLabel = (s: SizeDim): boolean =>
   ("singleLabel" in s) && (s as { singleLabel?: boolean }).singleLabel === true;
+
+// ─── label-printer setting keys (try every shape we have used) ────────────
+// Older builds wrote to localStorage directly under one of these names; newer
+// builds put the value inside the device profile (lamsa.deviceProfile). We
+// read all of them so the warning never appears for a cashier that already
+// configured a printer in the past.
+const LEGACY_LABEL_PRINTER_KEYS = [
+  "labelPrinter",
+  "labelPrinterName",
+  "barcodePrinter",
+  "barcodePrinterName",
+  "selectedLabelPrinter",
+];
+
+function readLegacyLabelPrinter(): string {
+  if (typeof localStorage === "undefined") return "";
+  for (const key of LEGACY_LABEL_PRINTER_KEYS) {
+    const v = localStorage.getItem(key);
+    if (v && v.trim()) return v.trim();
+  }
+  // Sometimes nested under a single "printerSettings" object.
+  const nested = localStorage.getItem("printerSettings");
+  if (nested) {
+    try {
+      const parsed = JSON.parse(nested);
+      const candidates = [
+        parsed?.labelPrinter,
+        parsed?.labelPrinterName,
+        parsed?.barcodePrinter,
+      ];
+      for (const v of candidates) {
+        if (typeof v === "string" && v.trim()) return v.trim();
+      }
+    } catch { /* fall through */ }
+  }
+  return "";
+}
 
 // ─── single barcode SVG (bars only, no built-in number) ──────────────────────
 function BarcodeImg({ barcode, height, width }: { barcode: string; height: number; width: number }) {
@@ -152,12 +196,72 @@ export default function BarcodeLabels() {
   };
 
   // ── settings (label printer) ───────────────────────────────────────────────
+  // Resolution order (first non-empty wins):
+  //   1. Device profile (localStorage `lamsa.deviceProfile.labelPrinterName`) —
+  //      this is what the per-device "إعدادات الطباعة لهذا الجهاز" dialog writes.
+  //   2. Legacy localStorage keys (labelPrinter, labelPrinterName, barcodePrinter,
+  //      barcodePrinterName, selectedLabelPrinter, printerSettings.labelPrinter)
+  //      — for cashiers configured before the device-profile rollout.
+  //   3. /api/settings (server-wide labelPrinter) — for tenants that set it once
+  //      from the back-office.
+  //   4. First printer reported by the local print service (auto fallback).
+  // Only when all four are empty do we show the warning.
   const { data: appSettings } = useQuery<Record<string, string>>({
     queryKey: ["/api/settings"],
     queryFn: getQueryFn({ on401: "returnNull" }),
     staleTime: 120_000,
   });
-  const labelPrinter = appSettings?.labelPrinter || "";
+
+  const [deviceLabelPrinter, setDeviceLabelPrinter] = useState<string>(
+    () => getDeviceProfile().labelPrinterName?.trim() || readLegacyLabelPrinter(),
+  );
+  const [availablePrinters, setAvailablePrinters] = useState<string[]>([]);
+  const [autoPicked, setAutoPicked] = useState(false);
+  const [refreshingPrinters, setRefreshingPrinters] = useState(false);
+
+  // Prefer the device profile value, then legacy LS keys, then app settings.
+  const persistedLabelPrinter =
+    deviceLabelPrinter ||
+    readLegacyLabelPrinter() ||
+    appSettings?.labelPrinter?.trim() ||
+    "";
+
+  // Auto-pick first printer from the local service if nothing is configured.
+  // This runs once on mount and again whenever the printer list refreshes.
+  const refreshPrinters = useCallback(async () => {
+    setRefreshingPrinters(true);
+    try {
+      const result = await loadPrintersLocal();
+      if (result.ok) {
+        setAvailablePrinters(result.printers);
+        if (!persistedLabelPrinter && result.printers.length > 0) {
+          const first = result.printers[0];
+          setDeviceLabelPrinter(first);
+          setDeviceProfile({ labelPrinterName: first });
+          setAutoPicked(true);
+        }
+      } else {
+        setAvailablePrinters([]);
+      }
+    } finally {
+      setRefreshingPrinters(false);
+    }
+  }, [persistedLabelPrinter]);
+
+  useEffect(() => {
+    void refreshPrinters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const labelPrinter = persistedLabelPrinter;
+  const printerListUnavailable = availablePrinters.length === 0;
+
+  const handleSelectLabelPrinter = (v: string) => {
+    const next = v === "__none__" ? "" : v;
+    setDeviceLabelPrinter(next);
+    setDeviceProfile({ labelPrinterName: next });
+    setAutoPicked(false);
+  };
 
   // ── product search ─────────────────────────────────────────────────────────
   const { data: _results } = useQuery<any>({
@@ -204,13 +308,20 @@ export default function BarcodeLabels() {
   const totalLabels = items.reduce((s, i) => s + i.qty, 0);
 
   // ── print ──────────────────────────────────────────────────────────────────
+  // Only warn when there is no label printer at all — neither in the device
+  // profile, nor in legacy LS, nor in app settings, nor auto-picked from the
+  // local print service. Receipt-printer state is irrelevant here: label
+  // printing must NEVER require a receipt printer to be configured.
   const handlePrint = () => {
-    if (!labelPrinter) {
+    const haveLabelPrinter = !!labelPrinter;
+    if (!haveLabelPrinter) {
       toast({
         title: t("barcode_labels.no_label_printer"),
         description: t("barcode_labels.no_label_printer_desc"),
         variant: "destructive",
       });
+      // Continue to preview window so the cashier can still see the labels
+      // — but the print button inside the preview shows the warning banner.
     }
     const sz = SIZES[size];
     const single = isSingleLabel(sz);
@@ -330,11 +441,11 @@ export default function BarcodeLabels() {
   .price { font-size: ${sz.font + 4}pt; font-weight:800; letter-spacing:0.03em; line-height:1; text-align:center; }
   .ro { font-size: ${sz.font + 1}pt; font-weight:600; }
 
-  /* ── Single-label (LARGE_2) — landscape 58×39mm، content area 50×33mm ── */
+  /* ── Single-label (LARGE_2) — portrait 39×58mm، content area 33×52mm ── */
   .label.single-label { padding: 0; }
   .label.single-label .content {
-    width: 50mm;
-    height: 33mm;
+    width: 33mm;
+    height: 52mm;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
@@ -457,15 +568,28 @@ export default function BarcodeLabels() {
         <h1 className="text-2xl font-bold flex items-center gap-2 text-primary">
           <Tag className="w-6 h-6" /> {t("barcode_labels.title")}
         </h1>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowPreview(!showPreview)} className="gap-2">
-            <Eye className="h-4 w-4" />
-            {showPreview ? t("barcode_labels.btn_hide_preview") : t("barcode_labels.btn_preview")}
-          </Button>
-          <Button onClick={handlePrint} disabled={items.length === 0} className="gap-2">
-            <Printer className="h-4 w-4" />
-            {t("barcode_labels.btn_print")} {totalLabels > 0 && `(${totalLabels} ${t("barcode_labels.label_stickers")})`}
-          </Button>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowPreview(!showPreview)} className="gap-2">
+              <Eye className="h-4 w-4" />
+              {showPreview ? t("barcode_labels.btn_hide_preview") : t("barcode_labels.btn_preview")}
+            </Button>
+            <Button
+              onClick={handlePrint}
+              disabled={items.length === 0}
+              className="gap-2"
+              data-testid="button-print-labels"
+            >
+              <Printer className="h-4 w-4" />
+              {t("barcode_labels.btn_print")} {totalLabels > 0 && `(${totalLabels} ${t("barcode_labels.label_stickers")})`}
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground" data-testid="text-selected-label-printer">
+            {t("barcode_labels.selected_printer_label")}{" "}
+            <span className={labelPrinter ? "font-semibold text-foreground" : "italic text-amber-600"}>
+              {labelPrinter || t("barcode_labels.no_printer_selected")}
+            </span>
+          </p>
         </div>
       </div>
 
@@ -483,7 +607,7 @@ export default function BarcodeLabels() {
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">{t("barcode_labels.label_size_label")}</label>
                 <Select value={size} onValueChange={handleSizeChange}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger data-testid="select-label-size"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {(Object.keys(SIZES) as SizeKey[]).map(k => (
                       <SelectItem key={k} value={k}>{SIZES[k].label}</SelectItem>
@@ -498,7 +622,7 @@ export default function BarcodeLabels() {
                   onValueChange={v => setCols(Number(v))}
                   disabled={singleLabelMode}
                 >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger data-testid="select-label-cols"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {[1, 2, 3, 4, 5, 6].map(n => (
                       <SelectItem key={n} value={String(n)}>{n} {t("barcode_labels.cols_suffix")}</SelectItem>
@@ -508,6 +632,60 @@ export default function BarcodeLabels() {
                 {singleLabelMode && (
                   <p className="text-[11px] text-muted-foreground mt-1">
                     {t("barcode_labels.single_label_hint")}
+                  </p>
+                )}
+              </div>
+
+              {/* ── Label printer selector ─────────────────────────────────── */}
+              <div className="pt-2 border-t border-muted">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-muted-foreground">
+                    {t("barcode_labels.label_printer_label")}
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[11px] gap-1"
+                    onClick={() => void refreshPrinters()}
+                    disabled={refreshingPrinters}
+                    data-testid="button-refresh-label-printers"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${refreshingPrinters ? "animate-spin" : ""}`} />
+                    {t("barcode_labels.btn_refresh_printers")}
+                  </Button>
+                </div>
+                <Select
+                  value={labelPrinter || "__none__"}
+                  onValueChange={handleSelectLabelPrinter}
+                >
+                  <SelectTrigger data-testid="select-label-printer">
+                    <SelectValue placeholder={t("barcode_labels.label_printer_placeholder")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      {t("barcode_labels.no_printer_selected")}
+                    </SelectItem>
+                    {/* Always show the persisted value even if it's not in the
+                        live discovery list (printer offline, service down). */}
+                    {labelPrinter && !availablePrinters.includes(labelPrinter) && (
+                      <SelectItem value={labelPrinter}>{labelPrinter}</SelectItem>
+                    )}
+                    {availablePrinters.map(p => (
+                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {autoPicked && labelPrinter && (
+                  <p className="text-[11px] text-emerald-600 mt-1">
+                    {t("barcode_labels.label_printer_auto_picked")}
+                  </p>
+                )}
+                {printerListUnavailable && (
+                  <p className="text-[11px] text-amber-600 mt-1">
+                    {/* Local print service unreachable — preview still works
+                        but actual silent print needs the service running. */}
+                    {t("barcode_labels.no_label_printer_desc")}
                   </p>
                 )}
               </div>

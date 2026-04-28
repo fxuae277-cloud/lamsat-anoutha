@@ -4,7 +4,9 @@ import cors from "cors";
 import { listPrinters } from "./printers.js";
 import { printText, printRawBytes } from "./rawPrint.js";
 import { pngToEscposRaster, RASTER_BUILD_MARKER, PAPER_WIDTH_DOTS, } from "./escposRaster.js";
-const PORT = Number(process.env.PORT ?? 3030);
+// PORT: support both 3001 (cashier-machine convention) and 3030 (legacy default).
+// Cashier PCs run `node dist/index.js` from this directory, so .env wins.
+const PORT = Number(process.env.PORT ?? 3001);
 // Default to the canonical cashier key so a missing .env doesn't break setup.
 // The matching default lives in the frontend (DEFAULT_LOCAL_PRINT_API_KEY).
 const API_KEY = (process.env.LOCAL_PRINT_API_KEY || "123456").trim();
@@ -25,6 +27,12 @@ const app = express();
 // PNG receipts (576px wide × ~2000px tall) base64-encoded land around 1–3 MB.
 // 8mb gives plenty of headroom without exposing us to absurd payloads.
 app.use(express.json({ limit: "8mb" }));
+// Lightweight request log so 404s and route mismatches show up in the service
+// console without us having to reproduce them in the cashier's browser.
+app.use((req, _res, next) => {
+    console.log(`[LocalPrint] ${req.method} ${req.path}`);
+    next();
+});
 app.use(cors({
     origin: (origin, cb) => {
         // Same-origin / curl / Postman requests have no Origin header — allow.
@@ -56,10 +64,11 @@ app.get("/health", (_req, res) => {
     res.json({
         ok: true,
         service: "Lamsa Local Print Service",
-        version: "2.0.0",
+        version: "2.1.0",
         pipeline: "raster",
     });
 });
+app.get("/api/health", (_req, res) => res.json({ ok: true, service: "Lamsa Local Print Service", version: "2.1.0", pipeline: "raster" }));
 app.get("/printers", async (_req, res) => {
     try {
         const printers = await listPrinters();
@@ -72,6 +81,16 @@ app.get("/printers", async (_req, res) => {
             error: "failed to list printers",
             detail: e?.message ?? String(e),
         });
+    }
+});
+app.get("/api/printers", async (_req, res) => {
+    try {
+        const printers = await listPrinters();
+        res.json({ ok: true, printers });
+    }
+    catch (e) {
+        console.error("[printers] failed:", e);
+        res.status(500).json({ ok: false, error: "failed to list printers", detail: e?.message ?? String(e) });
     }
 });
 app.post("/print/test", requireApiKey, async (req, res) => {
@@ -125,23 +144,21 @@ setInterval(() => {
             recentPrintsByKey.delete(k);
     }
 }, 10_000).unref();
-// ─── /print/invoice-image ──────────────────────────────────────────────────
-// New (and only) invoice path. Frontend renders Invoice80/Invoice58 React
-// components off-screen via html2canvas, base64-encodes the PNG, and posts
-// it here. We rasterise → ESC/POS GS v 0 → printer driver. This is the only
-// pipeline that supports full Arabic shaping/RTL on a thermal printer.
-app.post("/print/invoice-image", requireApiKey, async (req, res) => {
+// ─── Invoice / receipt print handler (shared by all aliases) ───────────────
+// Frontend renders Invoice80/Invoice58 React components off-screen via
+// html2canvas, base64-encodes the PNG, and posts it here. We rasterise →
+// ESC/POS GS v 0 → printer driver. This is the only pipeline that supports
+// full Arabic shaping/RTL on a thermal printer.
+const handleInvoicePrint = async (req, res) => {
     const { printerName, paperWidth: rawPaperWidth, invoiceNo: rawInvoiceNo, imageBase64, } = req.body ?? {};
     const paperWidth = rawPaperWidth === "58mm" ? "58mm" : "80mm";
     if (!printerName || typeof printerName !== "string") {
-        return res
-            .status(400)
-            .json({ ok: false, error: "printerName is required" });
+        res.status(400).json({ ok: false, error: "printerName is required" });
+        return;
     }
     if (typeof imageBase64 !== "string" || imageBase64.length < 100) {
-        return res
-            .status(400)
-            .json({ ok: false, error: "imageBase64 is required (PNG, base64)" });
+        res.status(400).json({ ok: false, error: "imageBase64 is required (PNG, base64)" });
+        return;
     }
     const invoiceNo = String(rawInvoiceNo ?? "");
     const dupKey = makePrintKey(invoiceNo, printerName);
@@ -149,7 +166,8 @@ app.post("/print/invoice-image", requireApiKey, async (req, res) => {
         `paperWidth=${paperWidth} b64chars=${imageBase64.length}`);
     if (invoiceNo && isRecentDuplicatePrint(dupKey)) {
         console.log(`[Print] duplicate ignored invoice=${invoiceNo} printer=${printerName}`);
-        return res.json({ ok: true, ignoredDuplicate: true });
+        res.json({ ok: true, ignoredDuplicate: true });
+        return;
     }
     // Reserve the slot before the (async) raster build + print so a second
     // request that lands mid-print is recognised as a duplicate.
@@ -178,13 +196,152 @@ app.post("/print/invoice-image", requireApiKey, async (req, res) => {
         // Print failed — clear the guard so the cashier can retry immediately.
         if (invoiceNo)
             recentPrintsByKey.delete(dupKey);
-        console.error("[print/invoice-image] failed:", e);
+        console.error("[print/invoice] failed:", e);
         res.status(500).json({
             ok: false,
             error: "invoice print failed",
             detail: e?.message ?? String(e),
         });
     }
+};
+// All these paths must accept the same payload — older builds of the cashier
+// app, plus a few different code paths in the current frontend, hit different
+// URLs for what is logically the same operation.
+const INVOICE_ROUTES = [
+    "/print/invoice",
+    "/api/print/invoice",
+    "/api/local-print/invoice",
+    "/print/receipt",
+    "/api/print/receipt",
+    "/print/invoice-image",
+    "/api/print/invoice-image",
+];
+for (const route of INVOICE_ROUTES) {
+    app.post(route, requireApiKey, handleInvoicePrint);
+}
+// ─── Label / barcode print handler ─────────────────────────────────────────
+// Two payload shapes are accepted:
+//   1. { printerName, imageBase64, labelSize?: { widthMm, heightMm } }
+//      → rasterise the PNG at the requested width and send raw bytes.
+//   2. { printerName, items, labelSize, columns }
+//      → 501 with a clear next-step JSON, never 404. The cashier's browser
+//      still has the window.print() fallback for this shape.
+//
+// We *always* validate that printerName resolves to an installed printer so
+// the cashier sees a real error instead of "the request was sent but nothing
+// printed."
+const handleLabelPrint = async (req, res) => {
+    const { printerName, imageBase64, labelSize, columns, items, } = req.body ?? {};
+    if (!printerName || typeof printerName !== "string") {
+        res.status(400).json({ ok: false, error: "printerName is required" });
+        return;
+    }
+    // Validate printerName against the installed printer list — this is the
+    // single most common source of silent label-print failures.
+    let installed = [];
+    try {
+        installed = await listPrinters();
+    }
+    catch (e) {
+        console.error("[print/label] failed to enumerate printers:", e);
+        // Fall through — listPrinters can fail on locked-down hosts, and we'd
+        // rather try to print than reject every request.
+    }
+    if (installed.length > 0 &&
+        !installed.some((p) => p.Name === printerName)) {
+        res.status(400).json({
+            ok: false,
+            error: "printer not found",
+            detail: `Printer '${printerName}' is not installed on this PC.`,
+            availablePrinters: installed.map((p) => p.Name),
+        });
+        return;
+    }
+    const widthMm = labelSize && typeof labelSize.widthMm === "number" ? labelSize.widthMm : 39;
+    const heightMm = labelSize && typeof labelSize.heightMm === "number" ? labelSize.heightMm : 58;
+    const cols = typeof columns === "number" && columns > 0 ? columns : 1;
+    console.log(`[Label] request printer=${printerName} size=${widthMm}×${heightMm}mm ` +
+        `cols=${cols} hasImage=${typeof imageBase64 === "string"} ` +
+        `itemCount=${Array.isArray(items) ? items.length : 0}`);
+    // ── Path A: PNG payload → raster print ──────────────────────────────────
+    if (typeof imageBase64 === "string" && imageBase64.length >= 100) {
+        try {
+            const pngBuffer = Buffer.from(imageBase64, "base64");
+            if (pngBuffer.length === 0)
+                throw new Error("decoded PNG buffer is empty");
+            // Label printers vary wildly — use the closest standard width bucket.
+            // 39mm @ 203dpi ≈ 312 dots, but we round to one of our raster presets
+            // (58mm = 384 dots, 80mm = 576 dots) and let the driver scale.
+            const raster = await pngToEscposRaster(pngBuffer, widthMm <= 50 ? "58mm" : "80mm");
+            await printRawBytes(printerName, raster.bytes);
+            console.log(`[Label] sent printer=${printerName} bytes=${raster.bytes.length}`);
+            res.json({
+                ok: true,
+                bytesSent: raster.bytes.length,
+                widthDots: raster.widthDots,
+                heightRows: raster.heightRows,
+            });
+            return;
+        }
+        catch (e) {
+            console.error("[print/label] raster print failed:", e);
+            res.status(500).json({
+                ok: false,
+                error: "label print failed",
+                detail: e?.message ?? String(e),
+            });
+            return;
+        }
+    }
+    // ── Path B: structured items, no image — frontend should fall back to
+    // window.print() for now. Return a clear 501 (NOT 404) so the cashier
+    // knows the route is wired but this payload shape isn't yet rendered.
+    if (Array.isArray(items) && items.length > 0) {
+        res.status(501).json({
+            ok: false,
+            error: "label items rendering not implemented on this service version",
+            detail: "Send `imageBase64` (PNG of the rendered label) instead, or use the " +
+                "browser's window.print() fallback. printerName was validated.",
+            printerName,
+            labelSize: { widthMm, heightMm },
+            columns: cols,
+        });
+        return;
+    }
+    res.status(400).json({
+        ok: false,
+        error: "imageBase64 or items[] is required",
+    });
+};
+const LABEL_ROUTES = [
+    "/print/label",
+    "/api/print/label",
+    "/print/barcode-label",
+    "/api/print/barcode-label",
+    "/print/labels",
+    "/api/print/labels",
+];
+for (const route of LABEL_ROUTES) {
+    app.post(route, requireApiKey, handleLabelPrint);
+}
+// ─── 404 handler ───────────────────────────────────────────────────────────
+// Detailed JSON so a wrong path in the cashier's browser console shows what
+// the service actually accepts.
+const AVAILABLE_ROUTES = [
+    "GET  /health",
+    "GET  /printers",
+    "POST /print/test",
+    ...INVOICE_ROUTES.map((r) => `POST ${r}`),
+    ...LABEL_ROUTES.map((r) => `POST ${r}`),
+];
+app.use((req, res) => {
+    res.status(404).json({
+        ok: false,
+        error: "Route not found",
+        method: req.method,
+        path: req.path,
+        availableRoutes: AVAILABLE_ROUTES,
+    });
 });
 // CORS rejections come through here as plain errors with our message prefix.
 app.use((err, _req, res, _next) => {
@@ -202,6 +359,8 @@ app.listen(PORT, "127.0.0.1", () => {
     console.log(`[Lamsa Local Print] CORS allow-all: ${ALLOW_ALL}`);
     console.log(`[Lamsa Local Print] ${RASTER_BUILD_MARKER} ` +
         `paper widths: 80mm=${PAPER_WIDTH_DOTS["80mm"]}dots, 58mm=${PAPER_WIDTH_DOTS["58mm"]}dots`);
+    console.log(`[Lamsa Local Print] invoice routes: ${INVOICE_ROUTES.join(", ")}`);
+    console.log(`[Lamsa Local Print] label routes:   ${LABEL_ROUTES.join(", ")}`);
     if (!process.env.LOCAL_PRINT_API_KEY) {
         console.log("[Lamsa Local Print] using built-in default x-lamsa-print-key (123456). " +
             "Set LOCAL_PRINT_API_KEY in .env to override.");
