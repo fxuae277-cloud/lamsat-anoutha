@@ -21,6 +21,7 @@ const ALLOWED_ORIGINS = [
     "http://127.0.0.1:5000",
     "http://192.168.100.170:5000",
     "https://lamsa-pos-production.up.railway.app",
+    "https://lamsa-pos.up.railway.app",
     "https://lamsa-pos.com",
 ];
 const app = express();
@@ -31,6 +32,17 @@ app.use(express.json({ limit: "8mb" }));
 // console without us having to reproduce them in the cashier's browser.
 app.use((req, _res, next) => {
     console.log(`[LocalPrint] ${req.method} ${req.path}`);
+    next();
+});
+// Private Network Access (PNA) preflight header. The cashier's browser loads
+// the POS over HTTPS (Railway) and then calls this loopback service — Chrome/
+// Edge require an explicit opt-in via this header on the OPTIONS preflight,
+// otherwise the preflight is rejected with a misleading "header not allowed"
+// error before the cors() middleware below ever gets to inspect the request.
+app.use((req, res, next) => {
+    if (req.method === "OPTIONS") {
+        res.setHeader("Access-Control-Allow-Private-Network", "true");
+    }
     next();
 });
 app.use(cors({
@@ -44,10 +56,14 @@ app.use(cors({
             return cb(null, true);
         cb(new Error(`origin not allowed: ${origin}`));
     },
-    methods: ["GET", "POST", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     // Accept both the canonical x-api-key (new) and x-lamsa-print-key (legacy
-    // — kept so any older deployed client still authenticates).
-    allowedHeaders: ["Content-Type", "x-api-key", "x-lamsa-print-key"],
+    // — kept so any older deployed client still authenticates). Authorization
+    // is included so Bearer-token clients can reach the service without a
+    // second preflight failure.
+    allowedHeaders: ["Content-Type", "x-api-key", "x-lamsa-print-key", "Authorization"],
+    maxAge: 86400,
+    optionsSuccessStatus: 204,
 }));
 // Auth gate for write endpoints. Read endpoints (/health, /printers) stay open
 // so the POS UI can probe the service before the user enters the key.

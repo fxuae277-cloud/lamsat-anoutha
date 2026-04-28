@@ -28,6 +28,7 @@ const ALLOWED_ORIGINS = [
   "http://127.0.0.1:5000",
   "http://192.168.100.170:5000",
   "https://lamsa-pos-production.up.railway.app",
+  "https://lamsa-pos.up.railway.app",
   "https://lamsa-pos.com",
 ];
 
@@ -43,6 +44,18 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   next();
 });
 
+// Private Network Access (PNA) preflight header. The cashier's browser loads
+// the POS over HTTPS (Railway) and then calls this loopback service — Chrome/
+// Edge require an explicit opt-in via this header on the OPTIONS preflight,
+// otherwise the preflight is rejected with a misleading "header not allowed"
+// error before the cors() middleware below ever gets to inspect the request.
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Private-Network", "true");
+  }
+  next();
+});
+
 app.use(
   cors({
     origin: (origin, cb) => {
@@ -52,10 +65,14 @@ app.use(
       if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
       cb(new Error(`origin not allowed: ${origin}`));
     },
-    methods: ["GET", "POST", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     // Accept both the canonical x-api-key (new) and x-lamsa-print-key (legacy
-    // — kept so any older deployed client still authenticates).
-    allowedHeaders: ["Content-Type", "x-api-key", "x-lamsa-print-key"],
+    // — kept so any older deployed client still authenticates). Authorization
+    // is included so Bearer-token clients can reach the service without a
+    // second preflight failure.
+    allowedHeaders: ["Content-Type", "x-api-key", "x-lamsa-print-key", "Authorization"],
+    maxAge: 86400,
+    optionsSuccessStatus: 204,
   })
 );
 
