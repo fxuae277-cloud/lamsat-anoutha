@@ -17,8 +17,9 @@
  * the working print pipeline is not destabilised.
  */
 import { EscposBuilder } from "./escpos.js";
-/** 80mm thermal at standard font A. */
-const COLS = 48;
+/** Column counts at default font A: 48 cols on 80mm, 32 cols on 58mm. */
+const COLS_80 = 48;
+const COLS_58 = 32;
 // Static brand info (matches Invoice.tsx defaults).
 const BRAND = {
     cr: "1260008",
@@ -48,24 +49,68 @@ function rightAlign(s, width) {
         return s.slice(0, width);
     return repeat(" ", width - s.length) + s;
 }
-function center(text, width = COLS) {
+function centerW(text, width) {
     if (text.length >= width)
         return text;
     const left = Math.floor((width - text.length) / 2);
     return repeat(" ", left) + text + repeat(" ", width - text.length - left);
 }
 /** "Label............value" filling `width` columns. */
-function pad(label, value, width = COLS) {
+function padW(label, value, width) {
     const sep = Math.max(1, width - label.length - value.length);
     return label + repeat(" ", sep) + value;
 }
-const SOLID = repeat("=", COLS);
-const DASH = repeat("-", COLS);
+/** Wrap `s` into chunks of at most `width` characters, breaking on spaces when possible. */
+function wrap(s, width) {
+    if (width <= 0)
+        return [s];
+    const words = s.split(/\s+/).filter(Boolean);
+    if (words.length === 0)
+        return [""];
+    const lines = [];
+    let line = "";
+    for (const w of words) {
+        if (w.length > width) {
+            // Hard-break very long tokens.
+            if (line) {
+                lines.push(line);
+                line = "";
+            }
+            for (let i = 0; i < w.length; i += width)
+                lines.push(w.slice(i, i + width));
+            continue;
+        }
+        if (!line) {
+            line = w;
+            continue;
+        }
+        if (line.length + 1 + w.length <= width)
+            line += " " + w;
+        else {
+            lines.push(line);
+            line = w;
+        }
+    }
+    if (line)
+        lines.push(line);
+    return lines;
+}
 /**
  * Compose the receipt as ESC/POS bytes. Caller pipes them to the printer
- * in RAW datatype (see rawPrint.ts). Layout mirrors Invoice.tsx.
+ * in RAW datatype (see rawPrint.ts). Layout depends on `paperWidth`:
+ *   - "80mm" (default) → full design mirroring Invoice.tsx (48 cols)
+ *   - "58mm" → compact layout with shorter separators and wrapped names (32 cols)
  */
-export function buildInvoiceBytes(invoice) {
+export function buildInvoiceBytes(invoice, paperWidth = "80mm") {
+    return paperWidth === "58mm" ? build58(invoice) : build80(invoice);
+}
+// ──────────────────────────── 80mm builder ───────────────────────────────
+function build80(invoice) {
+    const COLS = COLS_80;
+    const SOLID = repeat("=", COLS);
+    const DASH = repeat("-", COLS);
+    const center = (s, w = COLS) => centerW(s, w);
+    const pad = (l, v, w = COLS) => padW(l, v, w);
     const b = new EscposBuilder();
     b.init();
     b.codepage(16); // CP1252 (Latin-1) — see Phase-3 note above.
@@ -186,6 +231,90 @@ export function buildInvoiceBytes(invoice) {
     b.textln("QUALITY & ELEGANCE   |   SHOP NOW WITH US");
     b.lf(2);
     // ─── 11. Partial cut ───────────────────────────────────────────────
+    b.align(0);
+    b.cutPartial(3);
+    return b.build();
+}
+// ──────────────────────────── 58mm builder ───────────────────────────────
+// Compact layout for 58mm thermal printers (e.g. P0S-58, 32 cols default
+// font A). Avoids long `=`/`-` runs that clutter the narrower page, wraps
+// long product names across multiple lines, and drops the boxed thank-you
+// banner in favour of a single centred line.
+function build58(invoice) {
+    const COLS = COLS_58;
+    const DIV = repeat("-", COLS);
+    const center = (s, w = COLS) => centerW(s, w);
+    const pad = (l, v, w = COLS) => padW(l, v, w);
+    const b = new EscposBuilder();
+    b.init();
+    b.codepage(16);
+    // ─── Brand header ────────────────────────────────────────────────────
+    b.align(1);
+    b.bold(true);
+    // 58mm doesn't comfortably fit 2× width on long brand names — keep 1×
+    // height boost for emphasis without overflowing.
+    b.size(0, 1);
+    b.textln("LAMST ANOTHA");
+    b.size(0, 0);
+    b.bold(false);
+    b.textln("Touch of Femininity");
+    b.lf(1);
+    // ─── Compact info strip — two lines instead of three columns ────────
+    b.align(0);
+    b.textln(`CR: ${BRAND.cr}`);
+    b.textln(`IG: ${BRAND.ig}    TEL: ${BRAND.tel}`);
+    b.textln(DIV);
+    // ─── Invoice meta ────────────────────────────────────────────────────
+    b.bold(true);
+    b.textln(pad("DATE:", clip(invoice.date, COLS - 6)));
+    b.textln(pad("INV#:", clip(invoice.invoiceNo, COLS - 6)));
+    b.bold(false);
+    b.textln(pad("BR:", clip(invoice.branch || "-", COLS - 4)));
+    b.textln(pad("CSH:", clip(invoice.cashier || "-", COLS - 5)));
+    if (invoice.customerName) {
+        b.textln(pad("CUST:", clip(invoice.customerName, COLS - 6)));
+    }
+    b.textln(DIV);
+    // ─── Items — name on its own line(s), then qty × unit = total ───────
+    // 32 cols is too tight for a tabular header, so use a vertical layout:
+    //   1. Product Name (wrapped)
+    //   2. "  3 x 1.500 = 4.500 OMR"
+    invoice.items.forEach((item, idx) => {
+        const namePrefix = `${idx + 1}. `;
+        const nameLines = wrap(item.name, COLS - namePrefix.length);
+        nameLines.forEach((ln, i) => {
+            b.textln((i === 0 ? namePrefix : repeat(" ", namePrefix.length)) + ln);
+        });
+        const qtyLine = `${item.qty} x ${fmt3(item.price)} = ${fmt3(item.total)} OMR`;
+        b.textln(rightAlign(qtyLine, COLS));
+        if (item.sku)
+            b.textln(`   SKU: ${clip(item.sku, COLS - 8)}`);
+    });
+    b.textln(DIV);
+    // ─── Summary ────────────────────────────────────────────────────────
+    b.textln(pad("Subtotal:", omr(invoice.subtotal)));
+    if (invoice.discount > 0) {
+        b.textln(pad("Discount:", `-${omr(invoice.discount)}`));
+    }
+    if (invoice.tax > 0) {
+        b.textln(pad("VAT:", omr(invoice.tax)));
+    }
+    b.textln(DIV);
+    // ─── Total — bold + 1× height boost (no width boost on 58mm) ────────
+    b.bold(true);
+    b.size(0, 1);
+    b.textln(pad("TOTAL:", omr(invoice.grandTotal), COLS));
+    b.size(0, 0);
+    b.bold(false);
+    b.textln(pad("Payment:", clip(invoice.paymentMethod, COLS - 9)));
+    b.lf(1);
+    // ─── Single-line thank-you (no boxed banner on 58mm) ────────────────
+    b.align(1);
+    b.bold(true);
+    b.textln("THANK YOU FOR YOUR TRUST");
+    b.bold(false);
+    b.textln("We are happy to serve you");
+    b.lf(2);
     b.align(0);
     b.cutPartial(3);
     return b.build();

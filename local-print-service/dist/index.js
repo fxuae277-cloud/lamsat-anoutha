@@ -120,7 +120,8 @@ setInterval(() => {
     }
 }, 10_000).unref();
 app.post("/print/invoice", requireApiKey, async (req, res) => {
-    const { printerName, invoice } = req.body ?? {};
+    const { printerName, invoice, paperWidth: rawPaperWidth } = req.body ?? {};
+    const paperWidth = rawPaperWidth === "58mm" ? "58mm" : "80mm";
     if (!printerName || typeof printerName !== "string") {
         return res
             .status(400)
@@ -149,7 +150,7 @@ app.post("/print/invoice", requireApiKey, async (req, res) => {
     }
     const invoiceNo = String(invoice.invoiceNo ?? "");
     const dupKey = makePrintKey(invoiceNo, printerName);
-    console.log(`[Print] invoice request received invoice=${invoiceNo} printer=${printerName}`);
+    console.log(`[Print] invoice request received invoice=${invoiceNo} printer=${printerName} paperWidth=${paperWidth}`);
     if (invoiceNo && isRecentDuplicatePrint(dupKey)) {
         console.log(`[Print] duplicate ignored invoice=${invoiceNo} printer=${printerName}`);
         return res.json({ ok: true, ignoredDuplicate: true });
@@ -159,7 +160,7 @@ app.post("/print/invoice", requireApiKey, async (req, res) => {
     if (invoiceNo)
         recentPrintsByKey.set(dupKey, { at: Date.now() });
     try {
-        const bytes = buildInvoiceBytes(invoice);
+        const bytes = buildInvoiceBytes(invoice, paperWidth);
         await printRawBytes(printerName, bytes);
         if (invoiceNo)
             recentPrintsByKey.set(dupKey, { at: Date.now() });

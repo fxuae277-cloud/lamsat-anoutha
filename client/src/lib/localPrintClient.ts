@@ -15,10 +15,12 @@
  */
 
 const LOCAL_PRINT_CONFIG_KEY = "lamsa.localPrintConfig";
+const DEVICE_PROFILE_KEY = "lamsa.deviceProfile";
 export const DEFAULT_LOCAL_PRINT_URL = "http://127.0.0.1:3030";
 export const DEFAULT_LOCAL_PRINT_API_KEY = "123456";
-const DEFAULT_PRINTER = "EPSON TM-T100 Receipt";
 const REQUEST_TIMEOUT_MS = 15000;
+
+export type PaperWidth = "58mm" | "80mm";
 
 export interface LocalPrintConfig {
   baseUrl: string;
@@ -26,10 +28,22 @@ export interface LocalPrintConfig {
   enabled: boolean;
 }
 
-const DEFAULT_CONFIG: LocalPrintConfig = {
+/** Per-device print profile saved in localStorage on each cashier PC. */
+export interface DeviceProfile extends LocalPrintConfig {
+  receiptPrinterName: string;
+  labelPrinterName: string;
+  paperWidth: PaperWidth;
+  cashierDeviceName: string;
+}
+
+const DEFAULT_PROFILE: DeviceProfile = {
+  enabled: true,
   baseUrl: DEFAULT_LOCAL_PRINT_URL,
   apiKey: DEFAULT_LOCAL_PRINT_API_KEY,
-  enabled: true,
+  receiptPrinterName: "",
+  labelPrinterName: "",
+  paperWidth: "80mm",
+  cashierDeviceName: "",
 };
 
 function normalizeBaseUrl(u: string | undefined | null): string {
@@ -37,31 +51,74 @@ function normalizeBaseUrl(u: string | undefined | null): string {
   return trimmed || DEFAULT_LOCAL_PRINT_URL;
 }
 
-/** Read the cached local-print config from localStorage (with safe defaults). */
-export function getLocalPrintConfig(): LocalPrintConfig {
-  if (typeof localStorage === "undefined") return { ...DEFAULT_CONFIG };
-  try {
-    const raw = localStorage.getItem(LOCAL_PRINT_CONFIG_KEY);
-    if (!raw) return { ...DEFAULT_CONFIG };
-    const parsed = JSON.parse(raw) as Partial<LocalPrintConfig>;
-    return {
-      baseUrl: normalizeBaseUrl(parsed.baseUrl),
-      apiKey: parsed.apiKey ?? DEFAULT_CONFIG.apiKey,
-      enabled: parsed.enabled !== false,
-    };
-  } catch {
-    return { ...DEFAULT_CONFIG };
-  }
+function normalizePaperWidth(v: unknown): PaperWidth {
+  return v === "58mm" ? "58mm" : "80mm";
 }
 
-/** Persist (merge) the local-print config in localStorage. */
-export function setLocalPrintConfig(patch: Partial<LocalPrintConfig>): LocalPrintConfig {
-  const merged: LocalPrintConfig = { ...getLocalPrintConfig(), ...patch };
+/** Read the device profile from localStorage. Migrates legacy `lamsa.localPrintConfig`. */
+export function getDeviceProfile(): DeviceProfile {
+  if (typeof localStorage === "undefined") return { ...DEFAULT_PROFILE };
+  try {
+    const raw = localStorage.getItem(DEVICE_PROFILE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<DeviceProfile>;
+      return {
+        enabled: parsed.enabled !== false,
+        baseUrl: normalizeBaseUrl(parsed.baseUrl),
+        apiKey: parsed.apiKey ?? DEFAULT_PROFILE.apiKey,
+        receiptPrinterName: (parsed.receiptPrinterName ?? "").trim(),
+        labelPrinterName: (parsed.labelPrinterName ?? "").trim(),
+        paperWidth: normalizePaperWidth(parsed.paperWidth),
+        cashierDeviceName: (parsed.cashierDeviceName ?? "").trim(),
+      };
+    }
+    // Migrate legacy config (no printer/paperWidth fields).
+    const legacy = localStorage.getItem(LOCAL_PRINT_CONFIG_KEY);
+    if (legacy) {
+      const parsed = JSON.parse(legacy) as Partial<LocalPrintConfig>;
+      return {
+        ...DEFAULT_PROFILE,
+        baseUrl: normalizeBaseUrl(parsed.baseUrl),
+        apiKey: parsed.apiKey ?? DEFAULT_PROFILE.apiKey,
+        enabled: parsed.enabled !== false,
+      };
+    }
+  } catch {
+    /* fall through */
+  }
+  return { ...DEFAULT_PROFILE };
+}
+
+/** Persist (merge) the device profile in localStorage. */
+export function setDeviceProfile(patch: Partial<DeviceProfile>): DeviceProfile {
+  const merged: DeviceProfile = { ...getDeviceProfile(), ...patch };
   merged.baseUrl = normalizeBaseUrl(merged.baseUrl);
+  merged.paperWidth = normalizePaperWidth(merged.paperWidth);
   if (typeof localStorage !== "undefined") {
-    localStorage.setItem(LOCAL_PRINT_CONFIG_KEY, JSON.stringify(merged));
+    localStorage.setItem(DEVICE_PROFILE_KEY, JSON.stringify(merged));
+    // Keep legacy key in sync so any older reader still works.
+    localStorage.setItem(
+      LOCAL_PRINT_CONFIG_KEY,
+      JSON.stringify({
+        baseUrl: merged.baseUrl,
+        apiKey: merged.apiKey,
+        enabled: merged.enabled,
+      } satisfies LocalPrintConfig),
+    );
   }
   return merged;
+}
+
+/** Read the cached local-print config from localStorage (legacy shape). */
+export function getLocalPrintConfig(): LocalPrintConfig {
+  const p = getDeviceProfile();
+  return { baseUrl: p.baseUrl, apiKey: p.apiKey, enabled: p.enabled };
+}
+
+/** Persist (merge) the local-print config — kept for callers that only know the legacy shape. */
+export function setLocalPrintConfig(patch: Partial<LocalPrintConfig>): LocalPrintConfig {
+  const merged = setDeviceProfile(patch);
+  return { baseUrl: merged.baseUrl, apiKey: merged.apiKey, enabled: merged.enabled };
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -216,12 +273,11 @@ export function toLocalInvoice(receipt: ReceiptInput): LocalInvoice {
 
 function arabicError(e: unknown, status?: number): string {
   const msg = String((e as any)?.message || e || "");
-  const cfg = getLocalPrintConfig();
   if ((e as any)?.name === "AbortError" || /timeout|abort/i.test(msg)) {
-    return "انتهت مهلة الاتصال بخدمة الطباعة المحلية. تأكد من تشغيلها.";
+    return "خدمة الطباعة المحلية غير متصلة";
   }
   if (/failed to fetch|networkerror|load failed|blocked by client/i.test(msg)) {
-    return `تعذر الاتصال بخدمة الطباعة المحلية، تأكد أن الرابط هو ${cfg.baseUrl}`;
+    return "خدمة الطباعة المحلية غير متصلة";
   }
   if (status === 401) return "مفتاح x-lamsa-print-key خاطئ في خدمة الطباعة.";
   if (status === 400) return "بيانات الفاتورة ناقصة أو غير صالحة.";
@@ -295,16 +351,24 @@ export async function loadPrintersLocal(
 /** Send an invoice to the local print service. Never throws — always resolves. */
 export async function printInvoiceLocal(
   receipt: ReceiptInput,
-  printerName: string = DEFAULT_PRINTER
+  printerNameOverride?: string,
+  paperWidthOverride?: PaperWidth,
 ): Promise<PrintResult> {
-  const cfg = getLocalPrintConfig();
-  if (!cfg.enabled) {
+  const profile = getDeviceProfile();
+  if (!profile.enabled) {
     return {
       ok: false,
       error: "الطباعة المحلية معطّلة من الإعدادات. فعّلها أولاً.",
     };
   }
-  const resolvedPrinter = (printerName || "").trim() || DEFAULT_PRINTER;
+  const resolvedPrinter = (printerNameOverride ?? profile.receiptPrinterName ?? "").trim();
+  if (!resolvedPrinter) {
+    return { ok: false, error: "لم يتم اختيار طابعة الفواتير لهذا الجهاز" };
+  }
+  const resolvedPaperWidth = normalizePaperWidth(paperWidthOverride ?? profile.paperWidth);
+  if (resolvedPaperWidth !== "58mm" && resolvedPaperWidth !== "80mm") {
+    return { ok: false, error: "مقاس الورق غير محدد لهذا الجهاز" };
+  }
   let invoice: LocalInvoice;
   try {
     invoice = toLocalInvoice(receipt);
@@ -326,20 +390,26 @@ export async function printInvoiceLocal(
   }
 
   if (invoiceNo) inFlightPrints.add(invoiceNo);
-  console.log(`[Print] invoice request sending invoice=${invoiceNo} printer=${resolvedPrinter} url=${cfg.baseUrl}`);
+  console.log(
+    `[Print] invoice request sending invoice=${invoiceNo} printer=${resolvedPrinter} paperWidth=${resolvedPaperWidth} url=${profile.baseUrl}`,
+  );
 
   try {
     const res = await fetchWithTimeout(
-      `${cfg.baseUrl}/print/invoice`,
+      `${profile.baseUrl}/print/invoice`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-lamsa-print-key": cfg.apiKey,
+          "x-lamsa-print-key": profile.apiKey,
         },
-        body: JSON.stringify({ printerName: resolvedPrinter, invoice }),
+        body: JSON.stringify({
+          printerName: resolvedPrinter,
+          paperWidth: resolvedPaperWidth,
+          invoice,
+        }),
       },
-      REQUEST_TIMEOUT_MS
+      REQUEST_TIMEOUT_MS,
     );
 
     if (!res.ok) {
@@ -369,7 +439,8 @@ export async function printInvoiceLocal(
 
 /** Convenience for Settings test print — fixed sample data. */
 export async function printTestInvoiceLocal(
-  printerName: string = DEFAULT_PRINTER
+  printerName?: string,
+  paperWidth?: PaperWidth,
 ): Promise<PrintResult> {
   const sample: ReceiptInput = {
     invoiceNumber: "TEST-001",
@@ -385,5 +456,5 @@ export async function printTestInvoiceLocal(
     branchName: "Lamsa Branch",
     createdAt: new Date().toISOString(),
   };
-  return printInvoiceLocal(sample, printerName);
+  return printInvoiceLocal(sample, printerName, paperWidth);
 }

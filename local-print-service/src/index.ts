@@ -3,7 +3,7 @@ import express, { type Request, type Response, type NextFunction } from "express
 import cors from "cors";
 import { listPrinters } from "./printers.js";
 import { printText, printRawBytes } from "./rawPrint.js";
-import { buildInvoiceBytes, type Invoice } from "./printInvoice.js";
+import { buildInvoiceBytes, type Invoice, type PaperWidth } from "./printInvoice.js";
 
 const PORT = Number(process.env.PORT ?? 3030);
 const API_KEY = process.env.LOCAL_PRINT_API_KEY ?? "";
@@ -129,7 +129,8 @@ setInterval(() => {
 }, 10_000).unref();
 
 app.post("/print/invoice", requireApiKey, async (req, res) => {
-  const { printerName, invoice } = req.body ?? {};
+  const { printerName, invoice, paperWidth: rawPaperWidth } = req.body ?? {};
+  const paperWidth: PaperWidth = rawPaperWidth === "58mm" ? "58mm" : "80mm";
 
   if (!printerName || typeof printerName !== "string") {
     return res
@@ -162,7 +163,7 @@ app.post("/print/invoice", requireApiKey, async (req, res) => {
   const invoiceNo = String(invoice.invoiceNo ?? "");
   const dupKey = makePrintKey(invoiceNo, printerName);
   console.log(
-    `[Print] invoice request received invoice=${invoiceNo} printer=${printerName}`
+    `[Print] invoice request received invoice=${invoiceNo} printer=${printerName} paperWidth=${paperWidth}`
   );
 
   if (invoiceNo && isRecentDuplicatePrint(dupKey)) {
@@ -177,7 +178,7 @@ app.post("/print/invoice", requireApiKey, async (req, res) => {
   if (invoiceNo) recentPrintsByKey.set(dupKey, { at: Date.now() });
 
   try {
-    const bytes = buildInvoiceBytes(invoice as Invoice);
+    const bytes = buildInvoiceBytes(invoice as Invoice, paperWidth);
     await printRawBytes(printerName, bytes);
     if (invoiceNo) recentPrintsByKey.set(dupKey, { at: Date.now() });
     console.log(

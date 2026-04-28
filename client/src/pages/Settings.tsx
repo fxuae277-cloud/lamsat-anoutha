@@ -24,9 +24,12 @@ import {
   printTestInvoiceLocal,
   checkLocalPrintHealth,
   loadPrintersLocal,
-  setLocalPrintConfig,
+  getDeviceProfile,
+  setDeviceProfile,
   DEFAULT_LOCAL_PRINT_URL,
   DEFAULT_LOCAL_PRINT_API_KEY,
+  type DeviceProfile,
+  type PaperWidth,
 } from "@/lib/localPrintClient";
 
 type SettingsData = Record<string, string>;
@@ -109,6 +112,18 @@ export default function Settings() {
   const [loadingPrinters, setLoadingPrinters] = useState(false);
   const [discoveredPrinters, setDiscoveredPrinters] = useState<string[]>([]);
 
+  // Per-device print profile — saved to localStorage on this PC only.
+  // Each cashier PC keeps its own printer name and paper width here, so
+  // changes do not affect other devices/branches.
+  const [deviceProfile, setDeviceProfileState] = useState<DeviceProfile>(() => getDeviceProfile());
+
+  const updateProfile = useCallback((patch: Partial<DeviceProfile>) => {
+    setDeviceProfileState(prev => {
+      const next = setDeviceProfile({ ...prev, ...patch });
+      return next;
+    });
+  }, []);
+
   const { data: branchesList = [] } = useQuery<Branch[]>({ queryKey: ["/api/branches"], queryFn: getQueryFn({ on401: "throw" }) });
 
   const { data: printersData } = useQuery<{ printers: string[] }>({
@@ -149,12 +164,8 @@ export default function Settings() {
       }
       setCurrentSettings(merged);
       setSavedSettings(merged);
-      // مزامنة تكوين الطباعة المحلية مع localStorage حتى يلتقطه localPrintClient
-      setLocalPrintConfig({
-        baseUrl: merged.localPrintBaseUrl,
-        apiKey: merged.localPrintApiKey,
-        enabled: merged.localPrintEnabled === "true",
-      });
+      // ملاحظة: ملف الطباعة (baseUrl/apiKey/enabled/printer/paperWidth) يُحفظ
+      // محلياً لكل جهاز عبر `setDeviceProfile`، ولا يُسحب من إعدادات الخادم.
     }
   }, [serverSettings]);
 
@@ -187,12 +198,6 @@ export default function Settings() {
     },
     onSuccess: () => {
       setSavedSettings({ ...currentSettings });
-      // مزامنة تكوين الطباعة المحلية في localStorage فور الحفظ
-      setLocalPrintConfig({
-        baseUrl: currentSettings.localPrintBaseUrl || DEFAULT_LOCAL_PRINT_URL,
-        apiKey: currentSettings.localPrintApiKey || DEFAULT_LOCAL_PRINT_API_KEY,
-        enabled: currentSettings.localPrintEnabled === "true",
-      });
       if (langDirty) {
         setLang(pendingLang);
         setSavedLang(pendingLang);
@@ -240,18 +245,25 @@ export default function Settings() {
   }, [isDirty]);
 
   const testReceiptPrint = async () => {
-    const printer = currentSettings.receiptPrinter || DEFAULT_SETTINGS.receiptPrinter;
-    // ضمان أن العميل يستخدم الإعدادات الحالية حتى لو لم يتم الحفظ بعد
-    setLocalPrintConfig({
-      baseUrl: currentSettings.localPrintBaseUrl || DEFAULT_LOCAL_PRINT_URL,
-      apiKey: currentSettings.localPrintApiKey || DEFAULT_LOCAL_PRINT_API_KEY,
-      enabled: currentSettings.localPrintEnabled === "true",
-    });
+    if (!deviceProfile.receiptPrinterName) {
+      toast({
+        title: "خطأ في الطباعة",
+        description: "لم يتم اختيار طابعة الفواتير لهذا الجهاز",
+        variant: "destructive",
+      });
+      return;
+    }
     setTestPrinting(true);
-    const result = await printTestInvoiceLocal(printer);
+    const result = await printTestInvoiceLocal(
+      deviceProfile.receiptPrinterName,
+      deviceProfile.paperWidth,
+    );
     setTestPrinting(false);
     if (result.ok) {
-      toast({ title: "تمت الطباعة", description: printer });
+      toast({
+        title: "تمت الطباعة",
+        description: `${deviceProfile.receiptPrinterName} (${deviceProfile.paperWidth})`,
+      });
     } else {
       toast({
         title: "خطأ في طباعة الإيصال التجريبية",
@@ -262,7 +274,7 @@ export default function Settings() {
   };
 
   const handleTestConnection = async () => {
-    const baseUrl = (currentSettings.localPrintBaseUrl || DEFAULT_LOCAL_PRINT_URL).trim();
+    const baseUrl = (deviceProfile.baseUrl || DEFAULT_LOCAL_PRINT_URL).trim();
     setTestingConnection(true);
     const result = await checkLocalPrintHealth(baseUrl);
     setTestingConnection(false);
@@ -272,7 +284,7 @@ export default function Settings() {
     } else {
       setLocalPrintStatus("disconnected");
       toast({
-        title: "تعذر الاتصال بخدمة الطباعة المحلية",
+        title: "خدمة الطباعة المحلية غير متصلة",
         description: `تأكد أن الرابط هو ${DEFAULT_LOCAL_PRINT_URL}`,
         variant: "destructive",
       });
@@ -280,8 +292,8 @@ export default function Settings() {
   };
 
   const handleLoadPrinters = async () => {
-    const baseUrl = (currentSettings.localPrintBaseUrl || DEFAULT_LOCAL_PRINT_URL).trim();
-    const apiKey = currentSettings.localPrintApiKey || DEFAULT_LOCAL_PRINT_API_KEY;
+    const baseUrl = (deviceProfile.baseUrl || DEFAULT_LOCAL_PRINT_URL).trim();
+    const apiKey = deviceProfile.apiKey || DEFAULT_LOCAL_PRINT_API_KEY;
     setLoadingPrinters(true);
     const result = await loadPrintersLocal(baseUrl, apiKey);
     setLoadingPrinters(false);
@@ -295,7 +307,7 @@ export default function Settings() {
     } else {
       setLocalPrintStatus("disconnected");
       toast({
-        title: "تعذر تحميل الطابعات",
+        title: "خدمة الطباعة المحلية غير متصلة",
         description: `تأكد أن الرابط هو ${DEFAULT_LOCAL_PRINT_URL} وأن الخدمة تعمل`,
         variant: "destructive",
       });
@@ -303,7 +315,7 @@ export default function Settings() {
   };
 
   const testLabelPrint = () => {
-    const printer = currentSettings.labelPrinter || DEFAULT_SETTINGS.labelPrinter;
+    const printer = deviceProfile.labelPrinterName || currentSettings.labelPrinter || DEFAULT_SETTINGS.labelPrinter;
     const w = window.open("", "_blank", "width=300,height=400");
     if (!w) return;
     w.document.write(`<html><head><title>اختبار طابعة الملصقات</title>
@@ -718,13 +730,13 @@ export default function Settings() {
             </CardHeader>
             <CardContent className="space-y-4">
 
-              {/* خدمة الطباعة المحلية */}
+              {/* ملف الطباعة لهذا الجهاز — يُحفظ محلياً (localStorage) لكل جهاز كاشير على حدة */}
               <div className="border rounded-lg p-4 space-y-4 bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <Plug className="w-4 h-4 text-emerald-600" />
                     <span className="font-semibold text-sm text-emerald-700 dark:text-emerald-400">
-                      خدمة الطباعة المحلية
+                      ملف الطباعة لهذا الجهاز
                     </span>
                     {localPrintStatus === "connected" && (
                       <span className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40 px-2 py-0.5 rounded">
@@ -739,24 +751,39 @@ export default function Settings() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-medium">
-                      {currentSettings.localPrintEnabled === "true" ? "مفعّلة" : "معطّلة"}
+                      {deviceProfile.enabled ? "مفعّلة" : "معطّلة"}
                     </span>
                     <Switch
-                      checked={currentSettings.localPrintEnabled === "true"}
-                      onCheckedChange={v => updateSetting("localPrintEnabled", v ? "true" : "false")}
+                      checked={deviceProfile.enabled}
+                      onCheckedChange={v => updateProfile({ enabled: v })}
                       data-testid="switch-local-print-enabled"
                     />
                   </div>
                 </div>
 
+                <p className="text-xs text-muted-foreground bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded px-2 py-1.5">
+                  ⓘ هذه الإعدادات خاصة بهذا الجهاز فقط ولا تؤثر على بقية الفروع أو أجهزة الكاشير الأخرى.
+                </p>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">اسم جهاز الكاشير (اختياري)</Label>
+                  <Input
+                    value={deviceProfile.cashierDeviceName}
+                    onChange={e => updateProfile({ cashierDeviceName: e.target.value })}
+                    placeholder="مثال: كاشير 1 — فرع لوى"
+                    data-testid="input-cashier-device-name"
+                  />
+                  <p className="text-xs text-muted-foreground">يساعدك على التمييز بين أجهزة الكاشير عند مراجعة سجلات الطباعة.</p>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">رابط الخدمة المحلية</Label>
+                    <Label className="text-sm font-medium">رابط خدمة الطباعة المحلية</Label>
                     <Input
                       dir="ltr"
                       className="text-left"
-                      value={currentSettings.localPrintBaseUrl}
-                      onChange={e => updateSetting("localPrintBaseUrl", e.target.value)}
+                      value={deviceProfile.baseUrl}
+                      onChange={e => updateProfile({ baseUrl: e.target.value })}
                       placeholder={DEFAULT_LOCAL_PRINT_URL}
                       data-testid="input-local-print-url"
                     />
@@ -767,8 +794,8 @@ export default function Settings() {
                     <Input
                       dir="ltr"
                       className="text-left"
-                      value={currentSettings.localPrintApiKey}
-                      onChange={e => updateSetting("localPrintApiKey", e.target.value)}
+                      value={deviceProfile.apiKey}
+                      onChange={e => updateProfile({ apiKey: e.target.value })}
                       placeholder={DEFAULT_LOCAL_PRINT_API_KEY}
                       data-testid="input-local-print-api-key"
                     />
@@ -809,28 +836,112 @@ export default function Settings() {
 
                 {localPrintStatus === "disconnected" && (
                   <p className="text-xs text-red-600 dark:text-red-400">
-                    تعذر الاتصال بخدمة الطباعة المحلية، تأكد أن الرابط هو {DEFAULT_LOCAL_PRINT_URL}
+                    خدمة الطباعة المحلية غير متصلة — تأكد أن الرابط هو {DEFAULT_LOCAL_PRINT_URL} وأن الخدمة تعمل على هذا الجهاز.
                   </p>
                 )}
                 {localPrintStatus === "connected" && discoveredPrinters.length > 0 && (
                   <p className="text-xs text-emerald-700 dark:text-emerald-400">
-                    تم اكتشاف {discoveredPrinters.length} طابعة من الخدمة المحلية — ستظهر في قائمة طابعات الإيصال والملصقات أدناه.
+                    تم اكتشاف {discoveredPrinters.length} طابعة من خدمة الطباعة المحلية على هذا الجهاز.
                   </p>
                 )}
+
+                {/* اختيار طابعة الفواتير ومقاس الورق لهذا الجهاز */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-emerald-200 dark:border-emerald-800">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">طابعة الفواتير لهذا الجهاز</Label>
+                    <Select
+                      value={deviceProfile.receiptPrinterName || "__none__"}
+                      onValueChange={v => updateProfile({ receiptPrinterName: v === "__none__" ? "" : v })}
+                    >
+                      <SelectTrigger data-testid="select-device-receipt-printer">
+                        <SelectValue placeholder="اختر طابعة الفواتير" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">لم يتم الاختيار</SelectItem>
+                        {allPrinters.map(p => (
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!deviceProfile.receiptPrinterName && (
+                      <p className="text-xs text-red-600 dark:text-red-400">
+                        لم يتم اختيار طابعة الفواتير لهذا الجهاز
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">مقاس الورق لهذا الجهاز</Label>
+                    <Select
+                      value={deviceProfile.paperWidth}
+                      onValueChange={v => updateProfile({ paperWidth: v as PaperWidth })}
+                    >
+                      <SelectTrigger data-testid="select-device-paper-width">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="58mm">58mm (طابعة ضيقة)</SelectItem>
+                        <SelectItem value="80mm">80mm (طابعة عريضة)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {deviceProfile.paperWidth === "58mm"
+                        ? "تخطيط مضغوط مع التفاف لأسماء المنتجات"
+                        : "التخطيط الكامل لتصميم الفاتورة"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-emerald-200 dark:border-emerald-800">
+                  <Label className="text-sm font-medium">طابعة الملصقات (اختيارية لهذا الجهاز)</Label>
+                  <Select
+                    value={deviceProfile.labelPrinterName || "__none__"}
+                    onValueChange={v => updateProfile({ labelPrinterName: v === "__none__" ? "" : v })}
+                  >
+                    <SelectTrigger data-testid="select-device-label-printer">
+                      <SelectValue placeholder="بدون طابعة ملصقات" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">بدون طابعة ملصقات</SelectItem>
+                      {allPrinters.map(p => (
+                        <SelectItem key={`lbl-${p}`} value={p}>{p}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">يمكن تركها فارغة على الأجهزة التي لا تستخدم طباعة ملصقات.</p>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={testReceiptPrint}
+                    disabled={testPrinting}
+                    data-testid="button-test-receipt-print"
+                  >
+                    {testPrinting
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> جارٍ الطباعة...</>
+                      : <><Printer className="w-3.5 h-3.5" /> اختبار طباعة فاتورة</>
+                    }
+                  </Button>
+                  {deviceProfile.labelPrinterName && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={testLabelPrint}
+                      data-testid="button-test-label-print"
+                    >
+                      <Printer className="w-3.5 h-3.5" /> اختبار طباعة ملصق
+                    </Button>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t("settings.receipt_size")}</Label>
-                  <Select value={currentSettings.receiptSize} onValueChange={v => updateSetting("receiptSize", v)}>
-                    <SelectTrigger data-testid="select-receipt-size"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="58mm">{t("settings.size_58mm")}</SelectItem>
-                      <SelectItem value="80mm">{t("settings.size_80mm")}</SelectItem>
-                      <SelectItem value="A4">{t("settings.size_a4")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
                     <Label className="text-base">{t("settings.thermal_printer")}</Label>
@@ -838,82 +949,6 @@ export default function Settings() {
                   </div>
                   <Switch checked={currentSettings.thermalPrinter === "true"} onCheckedChange={v => updateSetting("thermalPrinter", v ? "true" : "false")} data-testid="switch-thermal-printer" />
                 </div>
-              </div>
-
-              {/* Printer Assignment */}
-              <div className="border rounded-lg p-4 space-y-4 bg-blue-50/40 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-                <div className="flex items-center gap-2 mb-1">
-                  <Printer className="w-4 h-4 text-blue-600" />
-                  <span className="font-semibold text-sm text-blue-700 dark:text-blue-400">{t("settings.printer_assignment")}</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Receipt Printer */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">{t("settings.receipt_printer")}</Label>
-                    <Select
-                      value={currentSettings.receiptPrinter || "__none__"}
-                      onValueChange={v => updateSetting("receiptPrinter", v === "__none__" ? "" : v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t("settings.select_printer")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">{t("settings.no_printer_selected")}</SelectItem>
-                        {allPrinters.map(p => (
-                          <SelectItem key={p} value={p}>{p}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">{t("settings.receipt_printer_desc")}</p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1 text-xs"
-                      onClick={testReceiptPrint}
-                      disabled={testPrinting}
-                    >
-                      {testPrinting
-                        ? <><Loader2 className="w-3 h-3 animate-spin" /> جارٍ الطباعة...</>
-                        : <><Printer className="w-3 h-3" /> {t("settings.test_receipt_print")}</>
-                      }
-                    </Button>
-                  </div>
-
-                  {/* Label Printer */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">{t("settings.label_printer")}</Label>
-                    <Select
-                      value={currentSettings.labelPrinter || "__none__"}
-                      onValueChange={v => updateSetting("labelPrinter", v === "__none__" ? "" : v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t("settings.select_printer")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">{t("settings.no_printer_selected")}</SelectItem>
-                        {allPrinters.map(p => (
-                          <SelectItem key={p} value={p}>{p}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">{t("settings.label_printer_desc")}</p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1 text-xs"
-                      onClick={testLabelPrint}
-                    >
-                      <Printer className="w-3 h-3" /> {t("settings.test_label_print")}
-                    </Button>
-                  </div>
-                </div>
-                {systemPrinters.length === 0 && (
-                  <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                    <Printer className="w-3 h-3" /> الطابعات الافتراضية جاهزة — يمكنك إضافة طابعات أخرى من إعدادات Windows إذا لزم الأمر
-                  </p>
-                )}
               </div>
 
               <div className="space-y-2">
