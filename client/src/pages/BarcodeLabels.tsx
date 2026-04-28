@@ -237,6 +237,34 @@ export default function BarcodeLabels() {
              ${item.size  ? `<p>Size: ${item.size}</p>`  : ""}`
           : `<p>${item.name}</p>`;
 
+        // ── Single-label (LARGE_2) layout — matches reference design ────────
+        if (single) {
+          return `
+            <div class="label single-label">
+              <div class="content">
+                <p class="brand">LAMST ANOTHA</p>
+                <div class="line-row">
+                  <span class="hr-line"></span>
+                  <span class="tagline">TOUCH OF FEMININITY</span>
+                  <span class="hr-line"></span>
+                </div>
+                <div class="heart-row"><span class="heart">&#9829;</span></div>
+                <div class="info">${productInfo}</div>
+                <div class="barcode-wrap">
+                  ${svgStr}
+                  <p class="barcode-num">${item.barcode}</p>
+                </div>
+                <div class="line-row">
+                  <span class="hr-line"></span>
+                  <span class="heart">&#9829;</span>
+                  <span class="hr-line"></span>
+                </div>
+                <p class="price">${price} <span class="ro">R.O</span></p>
+              </div>
+            </div>`;
+        }
+
+        // ── Default grid layout (small/medium/large) ────────────────────────
         return `
           <div class="label">
             <img src="${logoUrl}" class="logo" alt="logo" />
@@ -304,10 +332,104 @@ export default function BarcodeLabels() {
   .barcode-num { font-size: ${sz.font - 2}pt; letter-spacing:0.03em; margin-top:-0.3mm; text-align:center; }
   .price { font-size: ${sz.font + 4}pt; font-weight:800; letter-spacing:0.03em; line-height:1; text-align:center; }
   .ro { font-size: ${sz.font + 1}pt; font-weight:600; }
+
+  /* ── Single-label (LARGE_2) — content area 30mm × 50mm centered in 39×58mm ── */
+  .label.single-label { padding: 0; }
+  .label.single-label .content {
+    width: 30mm;
+    height: 50mm;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: space-between;
+    text-align: center;
+    font-family: 'Segoe UI', Arial, sans-serif;
+  }
+  .label.single-label .brand {
+    font-family: 'Times New Roman', 'Georgia', serif;
+    font-size: 9pt;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    white-space: nowrap;
+    margin: 0;
+  }
+  .label.single-label .line-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1mm;
+    width: 100%;
+    margin: 0.3mm 0;
+  }
+  .label.single-label .hr-line {
+    flex: 1;
+    height: 0.4pt;
+    background: #000;
+    min-width: 3mm;
+  }
+  .label.single-label .tagline {
+    font-size: 4.2pt;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+    line-height: 1;
+  }
+  .label.single-label .heart {
+    font-size: 4.5pt;
+    line-height: 1;
+    color: #000;
+  }
+  .label.single-label .heart-row { line-height: 1; margin: 0; }
+  .label.single-label .info {
+    font-size: 6.5pt;
+    font-weight: 700;
+    line-height: 1.25;
+    margin: 0;
+  }
+  .label.single-label .info p {
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .label.single-label .barcode-wrap {
+    width: 100%;
+    margin: 0;
+  }
+  .label.single-label .barcode-wrap svg {
+    width: 100% !important;
+    height: 13mm !important;
+    max-height: 13mm;
+    display: block;
+    margin: 0 auto;
+  }
+  .label.single-label .barcode-num {
+    font-size: 5.5pt;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    margin-top: -0.3mm;
+    line-height: 1;
+  }
+  .label.single-label .price {
+    font-size: 14pt;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    margin: 0;
+    white-space: nowrap;
+  }
+  .label.single-label .ro {
+    font-size: 7pt;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+
   @media print {
     @page { margin: 0; size: ${sz.mm_w}mm ${sz.mm_h}mm; }
     html, body { margin: 0; padding: 0; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-    .grid { padding: 0 !important; gap: 0 !important; ${single ? "display:flex !important; justify-content:center !important; align-items:center !important;" : ""} }
+    .grid { padding: 0 !important; gap: 0 !important; ${single ? "display:flex !important; flex-direction:column !important; justify-content:flex-start !important; align-items:center !important;" : ""} }
     ${single ? ".label:last-child { page-break-after: auto; break-after: auto; }" : ""}
   }
   .no-print { text-align:center; padding:10px; background:#f5f5f5; }
