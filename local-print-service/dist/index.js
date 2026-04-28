@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import { listPrinters } from "./printers.js";
 import { printText, printRawBytes } from "./rawPrint.js";
-import { buildInvoiceBytes } from "./printInvoice.js";
+import { buildInvoiceBytes, INVOICE_TEMPLATE_MARKER, INVOICE_TEMPLATE_FILE, } from "./printInvoice.js";
 const PORT = Number(process.env.PORT ?? 3030);
 // Default to the canonical cashier key so a missing .env doesn't break setup.
 // The matching default lives in the frontend (DEFAULT_LOCAL_PRINT_API_KEY).
@@ -196,6 +196,7 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, "127.0.0.1", () => {
     console.log(`[Lamsa Local Print] listening on http://127.0.0.1:${PORT}`);
     console.log(`[Lamsa Local Print] CORS allow-all: ${ALLOW_ALL}`);
+    console.log(`[Lamsa Local Print] ${INVOICE_TEMPLATE_MARKER} invoice template: ${INVOICE_TEMPLATE_FILE}`);
     if (!process.env.LOCAL_PRINT_API_KEY) {
         console.log("[Lamsa Local Print] using built-in default x-lamsa-print-key (123456). " +
             "Set LOCAL_PRINT_API_KEY in .env to override.");

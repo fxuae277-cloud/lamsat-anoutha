@@ -17,6 +17,13 @@
  * the working print pipeline is not destabilised.
  */
 import { EscposBuilder } from "./escpos.js";
+import { fileURLToPath } from "node:url";
+// Build/version marker — bumped on every template change so we can prove at
+// runtime which compiled file is actually loaded. If you don't see this exact
+// string in the server logs the printer is running a stale dist build.
+export const INVOICE_TEMPLATE_MARKER = "***NEW TEMPLATE ACTIVE***";
+export const INVOICE_TEMPLATE_FILE = fileURLToPath(import.meta.url);
+console.log(`[printInvoice] ${INVOICE_TEMPLATE_MARKER} loaded from: ${INVOICE_TEMPLATE_FILE}`);
 /** Column counts at default font A: 48 cols on 80mm, 32 cols on 58mm. */
 const COLS_80 = 48;
 const COLS_58 = 32;
@@ -102,6 +109,8 @@ function wrap(s, width) {
  *   - "58mm" → compact layout with shorter separators and wrapped names (32 cols)
  */
 export function buildInvoiceBytes(invoice, paperWidth = "80mm") {
+    console.log(`[printInvoice] ${INVOICE_TEMPLATE_MARKER} building invoice ` +
+        `(paperWidth=${paperWidth}, file=${INVOICE_TEMPLATE_FILE})`);
     return paperWidth === "58mm" ? build58(invoice) : build80(invoice);
 }
 // ──────────────────────────── 80mm builder ───────────────────────────────
