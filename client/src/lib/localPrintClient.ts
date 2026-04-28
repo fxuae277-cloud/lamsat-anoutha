@@ -1,35 +1,46 @@
 /**
  * localPrintClient.ts — calls the Lamsa Local Print Service running on the
- * cashier PC. Default base URL is http://127.0.0.1:3030, but the cashier
- * can override it from Settings; the resolved config is cached in
- * localStorage under `lamsa.localPrintConfig`.
+ * cashier PC. Default base URL is http://localhost:3001 (the production
+ * cashier-PC convention). Cashiers can still override it from Settings;
+ * the resolved config is cached in localStorage under
+ * `lamsa.localPrintConfig`.
  *
  * Why fetch to localhost works from a Railway HTTPS page:
- *   Modern Chrome/Firefox treat http://127.0.0.1 and http://localhost as
+ *   Modern Chrome/Firefox treat http://localhost and http://127.0.0.1 as
  *   "potentially trustworthy" origins, so they are exempt from mixed-content
  *   blocking even when the host page is served over HTTPS. CORS is also
  *   allowed by the local service (see local-print-service/src/index.ts).
  *
  * The cashier's browser must run on the same PC as the local service —
- * fetching 127.0.0.1 from another machine on the LAN will always fail.
+ * fetching localhost from another machine on the LAN will always fail.
  *
- * Print path (rewritten):
- *   ReceiptInput → toLocalInvoice (flat shape)
- *     → renderInvoiceToPng (Invoice80 or Invoice58 off-screen → html2canvas → PNG)
- *     → POST /print/invoice-image  { printerName, paperWidth, invoiceNo, imageBase64 }
- *     → local service: PNG → 1-bit raster → ESC/POS GS v 0 → driver.
+ * Endpoints we hit:
+ *   POST /print/invoice         — receipts/invoices
+ *   POST /print/label           — generic label print
+ *   POST /print/barcode-label   — single barcode label
+ *   GET  /health                — connectivity probe
+ *   GET  /printers              — installed-printer enumeration
  *
- * The previous text-mode ESC/POS pipeline (printInvoice.ts, Latin-1 only) has
- * been removed — that path could not render Arabic. The raster path renders
- * the *same* React component the cashier sees on screen, so the printed
- * receipt matches the on-screen design exactly.
+ * Body shape (every POST):
+ *   { "printerName": "<windows printer name>", "data": { ... } }
+ *
+ * Headers:
+ *   Content-Type: application/json
+ *   x-api-key: <apiKey>          (canonical)
+ *   x-lamsa-print-key: <apiKey>  (legacy — kept so existing services accept us)
+ *
+ * Status handling rules baked into callPrintRoute() below:
+ *   404 → "Print service route not found" (route missing on the service)
+ *   400 → ignored as success (means the API works, only printerName is missing)
+ *   401 → invalid/missing API key
+ *   200 → ok
  */
 
 import { renderInvoiceToPng } from "./renderInvoiceToPng";
 
 const LOCAL_PRINT_CONFIG_KEY = "lamsa.localPrintConfig";
 const DEVICE_PROFILE_KEY = "lamsa.deviceProfile";
-export const DEFAULT_LOCAL_PRINT_URL = "http://127.0.0.1:3030";
+export const DEFAULT_LOCAL_PRINT_URL = "http://localhost:3001";
 export const DEFAULT_LOCAL_PRINT_API_KEY = "123456";
 const REQUEST_TIMEOUT_MS = 15000;
 
@@ -61,7 +72,12 @@ const DEFAULT_PROFILE: DeviceProfile = {
 
 function normalizeBaseUrl(u: string | undefined | null): string {
   const trimmed = (u || "").trim().replace(/\/+$/, "");
-  return trimmed || DEFAULT_LOCAL_PRINT_URL;
+  if (!trimmed) return DEFAULT_LOCAL_PRINT_URL;
+  // The print service moved from port 3030 → 3001. If a cashier saved the
+  // old URL in localStorage, silently rewrite it so the next request hits
+  // the live service instead of failing every time. Same for 127.0.0.1
+  // hosts: keep them, just rewrite the port.
+  return trimmed.replace(/:3030(\b|\/)/, ":3001$1");
 }
 
 function normalizePaperWidth(v: unknown): PaperWidth {
@@ -292,11 +308,87 @@ function arabicError(e: unknown, status?: number): string {
   if (/failed to fetch|networkerror|load failed|blocked by client/i.test(msg)) {
     return "خدمة الطباعة المحلية غير متصلة";
   }
-  if (status === 401) return "مفتاح x-lamsa-print-key خاطئ في خدمة الطباعة.";
+  if (status === 401) return "مفتاح API خاطئ في خدمة الطباعة (x-api-key).";
+  if (status === 404) return "Print service route not found";
   if (status === 400) return "بيانات الفاتورة ناقصة أو غير صالحة.";
   if (status === 403) return "خدمة الطباعة رفضت الطلب (CORS). راجع الإعدادات.";
   if (status && status >= 500) return "فشل الطباعة في الطابعة. تحقق من حالتها.";
   return msg || "خطأ غير معروف في الطباعة";
+}
+
+// ─── Universal POST helper ────────────────────────────────────────────────
+// Every print POST goes through here. Centralising the headers + body shape
+// + status-code rules guarantees /print/invoice, /print/label, and
+// /print/barcode-label all behave identically.
+//
+//   Body shape:  { printerName, data }
+//   Headers:     Content-Type: application/json
+//                x-api-key: <key>           (new canonical header)
+//                x-lamsa-print-key: <key>   (legacy — older services need it)
+//
+//   404 → resolves with { ok: false, error: "Print service route not found" }
+//   400 → resolves with { ok: true, ignored: true }   (API works; we forgive)
+//   any other non-2xx → mapped via arabicError()
+async function callPrintRoute(
+  baseUrl: string,
+  route: string,
+  apiKey: string,
+  printerName: string,
+  data: unknown,
+): Promise<PrintResult & { status?: number }> {
+  const url = `${baseUrl}${route}`;
+  console.log("Local print baseUrl:", baseUrl);
+  console.log(`Calling ${route}:`, url);
+  try {
+    const res = await fetchWithTimeout(
+      url,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "x-lamsa-print-key": apiKey,
+        },
+        body: JSON.stringify({ printerName, data }),
+      },
+      REQUEST_TIMEOUT_MS,
+    );
+
+    if (res.status === 404) {
+      console.error(`[Print] 404 — ${url}`);
+      return { ok: false, error: "Print service route not found", status: 404 };
+    }
+    if (res.status === 400) {
+      // Per project rule: 400 is "API works, just missing printerName" and
+      // is treated as a no-op success. Real callers should pre-validate
+      // printerName so they never hit this path with intent to print.
+      console.warn(`[Print] 400 ignored at ${route} — API reachable.`);
+      return { ok: true, ignoredDuplicate: false, status: 400 };
+    }
+    if (res.status === 401) {
+      const body = await res.json().catch(() => ({}));
+      return {
+        ok: false,
+        error: arabicError(body?.error ?? "unauthorized", 401),
+        detail: body?.detail,
+        status: 401,
+      };
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      const detail = (body && (body.detail || body.error)) || `HTTP ${res.status}`;
+      return {
+        ok: false,
+        error: arabicError(body?.error ?? detail, res.status),
+        detail,
+        status: res.status,
+      };
+    }
+    const body = await res.json().catch(() => ({}));
+    return { ok: true, ignoredDuplicate: !!body?.ignoredDuplicate, status: res.status };
+  } catch (e: any) {
+    return { ok: false, error: arabicError(e), detail: String(e?.message || e) };
+  }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────
@@ -352,7 +444,13 @@ export async function loadPrintersLocal(
   try {
     const res = await fetchWithTimeout(
       url,
-      { method: "GET", headers: { "x-lamsa-print-key": apiKey } },
+      {
+        method: "GET",
+        headers: {
+          "x-api-key": apiKey,
+          "x-lamsa-print-key": apiKey,
+        },
+      },
       5000
     );
     if (!res.ok) {
@@ -410,12 +508,11 @@ export async function printInvoiceLocal(
   }
   const baseUrl = normalizeBaseUrl(profile.baseUrl);
   const apiKey = (profile.apiKey || DEFAULT_LOCAL_PRINT_API_KEY).trim();
-  const url = `${baseUrl}/print/invoice-image`;
 
   console.log("Local print baseUrl:", baseUrl);
   console.log("Receipt printer:", resolvedPrinter);
   console.log("Paper width:", resolvedPaperWidth);
-  console.log("Calling receipt print endpoint (image):", url);
+  console.log("Calling receipt print endpoint:", `${baseUrl}/print/invoice`);
 
   let invoice: LocalInvoice;
   try {
@@ -482,52 +579,31 @@ export async function printInvoiceLocal(
   }
 
   try {
-    const res = await fetchWithTimeout(
-      url,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-lamsa-print-key": apiKey,
-        },
-        body: JSON.stringify({
-          printerName: resolvedPrinter,
-          paperWidth: resolvedPaperWidth,
-          invoiceNo,
-          widthPx,
-          imageBase64,
-        }),
-      },
-      REQUEST_TIMEOUT_MS,
-    );
+    const result = await callPrintRoute(baseUrl, "/print/invoice", apiKey, resolvedPrinter, {
+      paperWidth: resolvedPaperWidth,
+      invoiceNo,
+      widthPx,
+      imageBase64,
+    });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      const detail =
-        (body && (body.detail || body.error)) || `HTTP ${res.status}`;
+    if (!result.ok) {
       console.error(
-        `[Print] backend rejected status=${res.status} detail=${detail}`,
+        `[Print] backend rejected status=${result.status} detail=${result.detail}`,
       );
-      return {
-        ok: false,
-        error: arabicError(body?.error ?? detail, res.status),
-        detail,
-      };
+      return result;
     }
-    const body = await res.json().catch(() => ({}));
     if (invoiceNo) recentPrints.set(invoiceNo, Date.now());
-    if (body?.ignoredDuplicate) {
+    if (result.ignoredDuplicate) {
       console.log(`[Print] duplicate ignored by service invoice=${invoiceNo}`);
-      return { ok: true, ignoredDuplicate: true };
+    } else {
+      console.log(`[Print] invoice sent to printer invoice=${invoiceNo}`);
     }
-    console.log(`[Print] invoice sent to printer invoice=${invoiceNo}`);
-    return { ok: true };
+    return result;
   } catch (e: any) {
+    // callPrintRoute never throws, but keep this guard so a future regression
+    // in the helper doesn't take the cashier offline.
     const detail = String(e?.message || e);
     console.error("[Print] network error:", detail);
-
-    // If /health is OK we KNOW the service is reachable, so we must not
-    // return the generic "غير متصلة" message — surface the real failure.
     const health = await checkLocalPrintHealth(baseUrl);
     if (health.ok) {
       return {
@@ -540,6 +616,66 @@ export async function printInvoiceLocal(
   } finally {
     if (invoiceNo) inFlightPrints.delete(invoiceNo);
   }
+}
+
+// ─── Label / barcode-label print ─────────────────────────────────────────
+// New endpoints introduced alongside the invoice-route consolidation.
+//
+//   printLabelLocal()         — POST /print/label
+//   printBarcodeLabelLocal()  — POST /print/barcode-label
+//
+// Both accept the same body shape: { printerName, data }.
+// `data` is forwarded to the local service untouched, so callers can pass
+// whatever the printer renderer expects (imageBase64 + labelSize for raster
+// labels, or items[] + labelSize + columns for structured labels).
+
+export interface LabelPrintData {
+  /** PNG of the rendered label, base64-encoded — preferred path. */
+  imageBase64?: string;
+  labelSize?: { widthMm: number; heightMm: number };
+  columns?: number;
+  /** Structured items the service can render itself — reserved for the future. */
+  items?: Array<Record<string, unknown>>;
+  /** Anything else the renderer needs. */
+  [key: string]: unknown;
+}
+
+/** Send a label to POST /print/label on the local print service. */
+export async function printLabelLocal(
+  printerName: string,
+  data: LabelPrintData,
+  baseUrlOverride?: string,
+  apiKeyOverride?: string,
+): Promise<PrintResult> {
+  const cfg = getLocalPrintConfig();
+  const baseUrl = normalizeBaseUrl(baseUrlOverride ?? cfg.baseUrl);
+  const apiKey = (apiKeyOverride ?? cfg.apiKey ?? DEFAULT_LOCAL_PRINT_API_KEY).trim();
+  if (!printerName?.trim()) {
+    return { ok: false, error: "printerName is required" };
+  }
+  return callPrintRoute(baseUrl, "/print/label", apiKey, printerName.trim(), data);
+}
+
+/** Send a single barcode label to POST /print/barcode-label. */
+export async function printBarcodeLabelLocal(
+  printerName: string,
+  data: LabelPrintData,
+  baseUrlOverride?: string,
+  apiKeyOverride?: string,
+): Promise<PrintResult> {
+  const cfg = getLocalPrintConfig();
+  const baseUrl = normalizeBaseUrl(baseUrlOverride ?? cfg.baseUrl);
+  const apiKey = (apiKeyOverride ?? cfg.apiKey ?? DEFAULT_LOCAL_PRINT_API_KEY).trim();
+  if (!printerName?.trim()) {
+    return { ok: false, error: "printerName is required" };
+  }
+  return callPrintRoute(
+    baseUrl,
+    "/print/barcode-label",
+    apiKey,
+    printerName.trim(),
+    data,
+  );
 }
 
 /** Convenience for Settings test print — fixed sample data. */

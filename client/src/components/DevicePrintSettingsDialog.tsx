@@ -270,7 +270,7 @@ export function DevicePrintSettingsDialog({ trigger }: Props) {
                   placeholder={DEFAULT_LOCAL_PRINT_API_KEY}
                   data-testid="input-local-print-api-key"
                 />
-                <p className="text-xs text-muted-foreground">x-lamsa-print-key الافتراضي: {DEFAULT_LOCAL_PRINT_API_KEY}</p>
+                <p className="text-xs text-muted-foreground">x-api-key الافتراضي: {DEFAULT_LOCAL_PRINT_API_KEY}</p>
               </div>
             </div>
 

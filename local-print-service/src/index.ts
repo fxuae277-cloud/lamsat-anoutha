@@ -53,7 +53,9 @@ app.use(
       cb(new Error(`origin not allowed: ${origin}`));
     },
     methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "x-lamsa-print-key"],
+    // Accept both the canonical x-api-key (new) and x-lamsa-print-key (legacy
+    // — kept so any older deployed client still authenticates).
+    allowedHeaders: ["Content-Type", "x-api-key", "x-lamsa-print-key"],
   })
 );
 
@@ -62,13 +64,34 @@ app.use(
 // API_KEY is guaranteed non-empty (defaults to 123456 above) so we can't
 // land in a "key not configured" trap that produces 500 on every print.
 function requireApiKey(req: Request, res: Response, next: NextFunction) {
-  if (req.header("x-lamsa-print-key") !== API_KEY) {
-    return res
-      .status(401)
-      .json({ ok: false, error: "invalid or missing x-lamsa-print-key" });
+  const provided =
+    req.header("x-api-key") ?? req.header("x-lamsa-print-key") ?? "";
+  if (provided !== API_KEY) {
+    return res.status(401).json({
+      ok: false,
+      error: "invalid or missing x-api-key",
+    });
   }
   next();
 }
+
+// Accept both the new `{ printerName, data: {...} }` shape and the legacy
+// flat shape. Spreading `data` on top of the body lets every existing
+// handler keep reading `req.body.printerName / paperWidth / imageBase64`
+// without changes.
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  if (
+    req.method === "POST" &&
+    req.body &&
+    typeof req.body === "object" &&
+    req.body.data &&
+    typeof req.body.data === "object" &&
+    !Array.isArray(req.body.data)
+  ) {
+    req.body = { ...req.body.data, ...req.body };
+  }
+  next();
+});
 
 // ─── Routes ────────────────────────────────────────────────────────────────
 

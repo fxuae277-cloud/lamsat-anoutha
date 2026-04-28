@@ -182,7 +182,7 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId }: {
     if (printingRef.current) return;
     printingRef.current = true;
     setPrinting(true);
-    // Direct ESC/POS path — sends bytes to 127.0.0.1:3030 which uses the
+    // Direct ESC/POS path — sends bytes to localhost:3001 which uses the
     // raw winspool driver to print on EPSON TM-T100. No browser print
     // dialog, no popup, no preview.
     const result = await printInvoiceLocal({
