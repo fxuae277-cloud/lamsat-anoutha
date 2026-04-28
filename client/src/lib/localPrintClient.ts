@@ -12,7 +12,20 @@
  *
  * The cashier's browser must run on the same PC as the local service —
  * fetching 127.0.0.1 from another machine on the LAN will always fail.
+ *
+ * Print path (rewritten):
+ *   ReceiptInput → toLocalInvoice (flat shape)
+ *     → renderInvoiceToPng (Invoice80 or Invoice58 off-screen → html2canvas → PNG)
+ *     → POST /print/invoice-image  { printerName, paperWidth, invoiceNo, imageBase64 }
+ *     → local service: PNG → 1-bit raster → ESC/POS GS v 0 → driver.
+ *
+ * The previous text-mode ESC/POS pipeline (printInvoice.ts, Latin-1 only) has
+ * been removed — that path could not render Arabic. The raster path renders
+ * the *same* React component the cashier sees on screen, so the printed
+ * receipt matches the on-screen design exactly.
  */
+
+import { renderInvoiceToPng } from "./renderInvoiceToPng";
 
 const LOCAL_PRINT_CONFIG_KEY = "lamsa.localPrintConfig";
 const DEVICE_PROFILE_KEY = "lamsa.deviceProfile";
@@ -355,6 +368,22 @@ export async function loadPrintersLocal(
   }
 }
 
+/**
+ * Split a "YYYY-MM-DD HH:MM" string (output of toLocalInvoice / fmtDate) back
+ * into two halves the new Invoice components want as separate fields.
+ */
+function splitDateTime(dt: string): { date: string; time: string } {
+  const m = dt.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
+  if (m) {
+    const [, y, mo, d, hh, mm] = m;
+    return { date: `${d}/${mo}/${y}`, time: `${hh}:${mm}` };
+  }
+  // Best-effort fallback: split on first space.
+  const idx = dt.indexOf(" ");
+  if (idx > 0) return { date: dt.slice(0, idx), time: dt.slice(idx + 1) };
+  return { date: dt, time: "" };
+}
+
 /** Send an invoice to the local print service. Never throws — always resolves. */
 export async function printInvoiceLocal(
   receipt: ReceiptInput,
@@ -381,12 +410,12 @@ export async function printInvoiceLocal(
   }
   const baseUrl = normalizeBaseUrl(profile.baseUrl);
   const apiKey = (profile.apiKey || DEFAULT_LOCAL_PRINT_API_KEY).trim();
-  const url = `${baseUrl}/print/invoice`;
+  const url = `${baseUrl}/print/invoice-image`;
 
   console.log("Local print baseUrl:", baseUrl);
   console.log("Receipt printer:", resolvedPrinter);
   console.log("Paper width:", resolvedPaperWidth);
-  console.log("Calling receipt print endpoint:", url);
+  console.log("Calling receipt print endpoint (image):", url);
 
   let invoice: LocalInvoice;
   try {
@@ -410,6 +439,48 @@ export async function printInvoiceLocal(
 
   if (invoiceNo) inFlightPrints.add(invoiceNo);
 
+  // ── Render the invoice off-screen → PNG (base64). ────────────────────────
+  let imageBase64: string;
+  let widthPx: number;
+  try {
+    const { date, time } = splitDateTime(invoice.date);
+    const renderProps = {
+      invoiceNumber: invoice.invoiceNo,
+      date,
+      time,
+      cashier: invoice.cashier,
+      branch: invoice.branch,
+      items: invoice.items.map((i) => ({
+        name: i.name,
+        qty: i.qty,
+        unitPrice: i.price,
+        total: i.total,
+      })),
+      subtotal: invoice.subtotal,
+      discount: invoice.discount,
+      vat: invoice.tax,
+      total: invoice.grandTotal,
+      paymentMethod: invoice.paymentMethod,
+      qrValue: invoice.invoiceNo,
+    };
+    const rendered = await renderInvoiceToPng(resolvedPaperWidth, renderProps);
+    imageBase64 = rendered.base64;
+    widthPx = rendered.widthPx;
+    console.log(
+      `[Print] rendered ${resolvedPaperWidth} invoice → PNG ` +
+        `${rendered.widthPx}×${rendered.heightPx}px (${imageBase64.length} b64 chars)`,
+    );
+  } catch (e: any) {
+    if (invoiceNo) inFlightPrints.delete(invoiceNo);
+    const detail = String(e?.message || e);
+    console.error("[Print] render-to-PNG failed:", detail);
+    return {
+      ok: false,
+      error: "فشل إعداد صورة الفاتورة للطباعة",
+      detail,
+    };
+  }
+
   try {
     const res = await fetchWithTimeout(
       url,
@@ -422,7 +493,9 @@ export async function printInvoiceLocal(
         body: JSON.stringify({
           printerName: resolvedPrinter,
           paperWidth: resolvedPaperWidth,
-          invoice,
+          invoiceNo,
+          widthPx,
+          imageBase64,
         }),
       },
       REQUEST_TIMEOUT_MS,

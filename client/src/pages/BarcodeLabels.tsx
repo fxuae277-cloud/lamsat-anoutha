@@ -33,7 +33,7 @@ const SIZE_DIMS = {
   small:   { w: 164, h: 113, font: 7,  bh: 32, mm_w: 43, mm_h: 30 },
   medium:  { w: 219, h: 151, font: 8,  bh: 40, mm_w: 58, mm_h: 40 },
   large:   { w: 302, h: 208, font: 10, bh: 55, mm_w: 80, mm_h: 55 },
-  LARGE_2: { w: 147, h: 219, font: 8,  bh: 38, mm_w: 39, mm_h: 58, singleLabel: true },
+  LARGE_2: { w: 219, h: 147, font: 8,  bh: 38, mm_w: 58, mm_h: 39, singleLabel: true },
 } as const;
 type SizeKey = keyof typeof SIZE_DIMS;
 type SizeDim = typeof SIZE_DIMS[SizeKey];
@@ -248,15 +248,12 @@ export default function BarcodeLabels() {
                   <span class="tagline">TOUCH OF FEMININITY</span>
                   <span class="hr-line"></span>
                 </div>
-                <div class="heart-row"><span class="heart">&#9829;</span></div>
                 <div class="info">${productInfo}</div>
                 <div class="barcode-wrap">
                   ${svgStr}
                   <p class="barcode-num">${item.barcode}</p>
                 </div>
                 <div class="line-row">
-                  <span class="hr-line"></span>
-                  <span class="heart">&#9829;</span>
                   <span class="hr-line"></span>
                 </div>
                 <p class="price">${price} <span class="ro">R.O</span></p>
@@ -333,11 +330,11 @@ export default function BarcodeLabels() {
   .price { font-size: ${sz.font + 4}pt; font-weight:800; letter-spacing:0.03em; line-height:1; text-align:center; }
   .ro { font-size: ${sz.font + 1}pt; font-weight:600; }
 
-  /* ── Single-label (LARGE_2) — content area 30mm × 50mm centered in 39×58mm ── */
+  /* ── Single-label (LARGE_2) — landscape 58×39mm، content area 50×33mm ── */
   .label.single-label { padding: 0; }
   .label.single-label .content {
-    width: 30mm;
-    height: 50mm;
+    width: 50mm;
+    height: 33mm;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
@@ -348,7 +345,7 @@ export default function BarcodeLabels() {
   }
   .label.single-label .brand {
     font-family: 'Times New Roman', 'Georgia', serif;
-    font-size: 9pt;
+    font-size: 8pt;
     font-weight: 700;
     letter-spacing: 0.04em;
     line-height: 1;
@@ -361,31 +358,25 @@ export default function BarcodeLabels() {
     justify-content: center;
     gap: 1mm;
     width: 100%;
-    margin: 0.3mm 0;
+    margin: 0.2mm 0;
   }
   .label.single-label .hr-line {
     flex: 1;
     height: 0.4pt;
     background: #000;
-    min-width: 3mm;
+    min-width: 4mm;
   }
   .label.single-label .tagline {
-    font-size: 4.2pt;
+    font-size: 4pt;
     font-weight: 400;
     letter-spacing: 0.08em;
     white-space: nowrap;
     line-height: 1;
   }
-  .label.single-label .heart {
-    font-size: 4.5pt;
-    line-height: 1;
-    color: #000;
-  }
-  .label.single-label .heart-row { line-height: 1; margin: 0; }
   .label.single-label .info {
-    font-size: 6.5pt;
+    font-size: 5.5pt;
     font-weight: 700;
-    line-height: 1.25;
+    line-height: 1.2;
     margin: 0;
   }
   .label.single-label .info p {
@@ -400,20 +391,20 @@ export default function BarcodeLabels() {
   }
   .label.single-label .barcode-wrap svg {
     width: 100% !important;
-    height: 13mm !important;
-    max-height: 13mm;
+    height: 8mm !important;
+    max-height: 8mm;
     display: block;
     margin: 0 auto;
   }
   .label.single-label .barcode-num {
-    font-size: 5.5pt;
+    font-size: 5pt;
     font-weight: 500;
     letter-spacing: 0.04em;
-    margin-top: -0.3mm;
+    margin-top: -0.2mm;
     line-height: 1;
   }
   .label.single-label .price {
-    font-size: 14pt;
+    font-size: 11pt;
     font-weight: 800;
     letter-spacing: 0.01em;
     line-height: 1;
@@ -421,7 +412,7 @@ export default function BarcodeLabels() {
     white-space: nowrap;
   }
   .label.single-label .ro {
-    font-size: 7pt;
+    font-size: 6pt;
     font-weight: 600;
     letter-spacing: 0;
   }

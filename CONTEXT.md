@@ -1,10 +1,10 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-28 (جلسة 51 — حجم ملصق "كبير 2" 58×39 مم portrait)_
+_آخر تحديث: 2026-04-28 (جلسة 51 — حجم ملصق "كبير 2" 58×39 مم landscape)_
 
 ---
 
 ## 🆕 Recent changes
-- **2026-04-28** — Updated barcode label size "كبير 2" to 58×39mm portrait (mm_w:39, mm_h:58) — single label per page, columns auto-locked to 1
+- **2026-04-28** — Updated barcode label size "كبير 2" to 58×39mm landscape (mm_w:58, mm_h:39) — single label per page, content area 50×33mm, no heart separators
 - **2026-04-28** — Cashier can now access `/barcode-labels` (read-only access via existing `products.view` permission; settings remain owner-only)
 
 ---

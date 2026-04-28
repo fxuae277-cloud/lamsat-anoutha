@@ -4,12 +4,11 @@ import cors from "cors";
 import { listPrinters } from "./printers.js";
 import { printText, printRawBytes } from "./rawPrint.js";
 import {
-  buildInvoiceBytes,
-  INVOICE_TEMPLATE_MARKER,
-  INVOICE_TEMPLATE_FILE,
-  type Invoice,
+  pngToEscposRaster,
+  RASTER_BUILD_MARKER,
+  PAPER_WIDTH_DOTS,
   type PaperWidth,
-} from "./printInvoice.js";
+} from "./escposRaster.js";
 
 const PORT = Number(process.env.PORT ?? 3030);
 // Default to the canonical cashier key so a missing .env doesn't break setup.
@@ -31,7 +30,9 @@ const ALLOWED_ORIGINS = [
 ];
 
 const app = express();
-app.use(express.json({ limit: "1mb" }));
+// PNG receipts (576px wide × ~2000px tall) base64-encoded land around 1–3 MB.
+// 8mb gives plenty of headroom without exposing us to absurd payloads.
+app.use(express.json({ limit: "8mb" }));
 
 app.use(
   cors({
@@ -66,7 +67,8 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     service: "Lamsa Local Print Service",
-    version: "1.0.0",
+    version: "2.0.0",
+    pipeline: "raster",
   });
 });
 
@@ -137,67 +139,76 @@ setInterval(() => {
   }
 }, 10_000).unref();
 
-app.post("/print/invoice", requireApiKey, async (req, res) => {
-  const { printerName, invoice, paperWidth: rawPaperWidth } = req.body ?? {};
-  const paperWidth: PaperWidth = rawPaperWidth === "58mm" ? "58mm" : "80mm";
+// ─── /print/invoice-image ──────────────────────────────────────────────────
+// New (and only) invoice path. Frontend renders Invoice80/Invoice58 React
+// components off-screen via html2canvas, base64-encodes the PNG, and posts
+// it here. We rasterise → ESC/POS GS v 0 → printer driver. This is the only
+// pipeline that supports full Arabic shaping/RTL on a thermal printer.
+app.post("/print/invoice-image", requireApiKey, async (req, res) => {
+  const {
+    printerName,
+    paperWidth: rawPaperWidth,
+    invoiceNo: rawInvoiceNo,
+    imageBase64,
+  } = req.body ?? {};
+
+  const paperWidth: PaperWidth =
+    rawPaperWidth === "58mm" ? "58mm" : "80mm";
 
   if (!printerName || typeof printerName !== "string") {
     return res
       .status(400)
       .json({ ok: false, error: "printerName is required" });
   }
-  if (!invoice || typeof invoice !== "object") {
+  if (typeof imageBase64 !== "string" || imageBase64.length < 100) {
     return res
       .status(400)
-      .json({ ok: false, error: "invoice is required" });
+      .json({ ok: false, error: "imageBase64 is required (PNG, base64)" });
   }
 
-  const required = [
-    "invoiceNo", "date", "cashier", "branch",
-    "items", "subtotal", "discount", "tax", "grandTotal", "paymentMethod",
-  ] as const;
-  for (const k of required) {
-    if (!(k in invoice)) {
-      return res
-        .status(400)
-        .json({ ok: false, error: `invoice.${k} is required` });
-    }
-  }
-  if (!Array.isArray(invoice.items) || invoice.items.length === 0) {
-    return res
-      .status(400)
-      .json({ ok: false, error: "invoice.items must be a non-empty array" });
-  }
-
-  const invoiceNo = String(invoice.invoiceNo ?? "");
+  const invoiceNo = String(rawInvoiceNo ?? "");
   const dupKey = makePrintKey(invoiceNo, printerName);
   console.log(
-    `[Print] invoice request received invoice=${invoiceNo} printer=${printerName} paperWidth=${paperWidth}`
+    `[Print] image request invoice=${invoiceNo} printer=${printerName} ` +
+      `paperWidth=${paperWidth} b64chars=${imageBase64.length}`,
   );
 
   if (invoiceNo && isRecentDuplicatePrint(dupKey)) {
     console.log(
-      `[Print] duplicate ignored invoice=${invoiceNo} printer=${printerName}`
+      `[Print] duplicate ignored invoice=${invoiceNo} printer=${printerName}`,
     );
     return res.json({ ok: true, ignoredDuplicate: true });
   }
 
-  // Reserve the slot before the (async) print so a second request that lands
-  // mid-print is also recognised as a duplicate.
+  // Reserve the slot before the (async) raster build + print so a second
+  // request that lands mid-print is recognised as a duplicate.
   if (invoiceNo) recentPrintsByKey.set(dupKey, { at: Date.now() });
 
   try {
-    const bytes = buildInvoiceBytes(invoice as Invoice, paperWidth);
-    await printRawBytes(printerName, bytes);
+    const pngBuffer = Buffer.from(imageBase64, "base64");
+    if (pngBuffer.length === 0) {
+      throw new Error("decoded PNG buffer is empty");
+    }
+    const raster = await pngToEscposRaster(pngBuffer, paperWidth);
+    console.log(
+      `[Print] rasterised ${paperWidth} ${raster.widthDots}×${raster.heightRows} ` +
+        `→ ${raster.bytes.length} bytes (${raster.blocks} GS-v-0 blocks)`,
+    );
+    await printRawBytes(printerName, raster.bytes);
     if (invoiceNo) recentPrintsByKey.set(dupKey, { at: Date.now() });
     console.log(
-      `[Print] invoice sent to printer invoice=${invoiceNo} bytes=${bytes.length}`
+      `[Print] invoice sent to printer invoice=${invoiceNo} bytes=${raster.bytes.length}`,
     );
-    res.json({ ok: true, bytesSent: bytes.length });
+    res.json({
+      ok: true,
+      bytesSent: raster.bytes.length,
+      widthDots: raster.widthDots,
+      heightRows: raster.heightRows,
+    });
   } catch (e: any) {
     // Print failed — clear the guard so the cashier can retry immediately.
     if (invoiceNo) recentPrintsByKey.delete(dupKey);
-    console.error("[print/invoice] failed:", e);
+    console.error("[print/invoice-image] failed:", e);
     res.status(500).json({
       ok: false,
       error: "invoice print failed",
@@ -222,7 +233,8 @@ app.listen(PORT, "127.0.0.1", () => {
   console.log(`[Lamsa Local Print] listening on http://127.0.0.1:${PORT}`);
   console.log(`[Lamsa Local Print] CORS allow-all: ${ALLOW_ALL}`);
   console.log(
-    `[Lamsa Local Print] ${INVOICE_TEMPLATE_MARKER} invoice template: ${INVOICE_TEMPLATE_FILE}`
+    `[Lamsa Local Print] ${RASTER_BUILD_MARKER} ` +
+      `paper widths: 80mm=${PAPER_WIDTH_DOTS["80mm"]}dots, 58mm=${PAPER_WIDTH_DOTS["58mm"]}dots`,
   );
   if (!process.env.LOCAL_PRINT_API_KEY) {
     console.log(
