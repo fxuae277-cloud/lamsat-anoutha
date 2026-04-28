@@ -33,7 +33,7 @@ const SIZE_DIMS = {
   small:   { w: 164, h: 113, font: 7,  bh: 32, mm_w: 43, mm_h: 30 },
   medium:  { w: 219, h: 151, font: 8,  bh: 40, mm_w: 58, mm_h: 40 },
   large:   { w: 302, h: 208, font: 10, bh: 55, mm_w: 80, mm_h: 55 },
-  LARGE_2: { w: 76, h: 219, font: 6,  bh: 28, mm_w: 20, mm_h: 58, singleLabel: true },
+  LARGE_2: { w: 147, h: 219, font: 8,  bh: 38, mm_w: 39, mm_h: 58, singleLabel: true },
 } as const;
 type SizeKey = keyof typeof SIZE_DIMS;
 type SizeDim = typeof SIZE_DIMS[SizeKey];
@@ -223,7 +223,7 @@ export default function BarcodeLabels() {
         div.appendChild(svg);
         try {
           JsBarcode(svg, item.barcode, {
-            format: "CODE128", width: single ? 0.9 : 1.4, height: sz.bh,
+            format: "CODE128", width: 1.4, height: sz.bh,
             displayValue: false, margin: 2,
             lineColor: "#000", background: "#fff",
           });
@@ -287,22 +287,22 @@ export default function BarcodeLabels() {
     flex-direction: column;
     align-items: center;
     justify-content: space-between;
-    padding: 1mm 0.5mm;
+    padding: 1mm 1mm;
     margin: 0 auto;
     text-align: center;
     overflow: hidden;
     ${single ? "page-break-after: always; break-after: page;" : "page-break-inside: avoid;"}
   }
-  .logo { height: ${sz.mm_h * 0.13}mm; object-fit:contain; filter: grayscale(100%) brightness(0); max-width:100%; display:block; margin:0 auto; }
-  .brand { font-size: ${sz.font + 1}pt; font-weight: 800; letter-spacing: 0.06em; text-align:center; line-height:1.1; white-space:nowrap; }
-  .tagline { font-size: ${sz.font - 2}pt; font-weight: 300; letter-spacing: 0.04em; text-align:center; line-height:1.1; white-space:nowrap; }
+  .logo { height: ${sz.mm_h * 0.16}mm; object-fit:contain; filter: grayscale(100%) brightness(0); max-width:100%; display:block; margin:0 auto; }
+  .brand { font-size: ${sz.font + 1}pt; font-weight: 800; letter-spacing: 0.10em; text-align:center; line-height:1.1; white-space:nowrap; }
+  .tagline { font-size: ${sz.font - 2}pt; font-weight: 300; letter-spacing: 0.06em; text-align:center; line-height:1.1; white-space:nowrap; }
   .divider { width:90%; height:0.3pt; background:#000; margin:0 auto; }
   .info { font-size: ${sz.font - 1}pt; font-weight:500; text-align:center; line-height:1.4; max-width:100%; }
   .info p { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0 auto; }
   .barcode-wrap { display:flex; flex-direction:column; align-items:center; width:100%; }
-  .barcode-wrap svg { width:100% !important; height:auto !important; max-width:100%; max-height:${sz.mm_h * 0.28}mm; display:block; margin:0 auto; }
-  .barcode-num { font-size: ${sz.font - 1}pt; letter-spacing:0.02em; margin-top:-0.3mm; text-align:center; }
-  .price { font-size: ${sz.font + 4}pt; font-weight:800; letter-spacing:0.02em; line-height:1; text-align:center; }
+  .barcode-wrap svg { width:100% !important; height:auto !important; max-width:100%; max-height:${sz.mm_h * 0.30}mm; display:block; margin:0 auto; }
+  .barcode-num { font-size: ${sz.font - 2}pt; letter-spacing:0.03em; margin-top:-0.3mm; text-align:center; }
+  .price { font-size: ${sz.font + 4}pt; font-weight:800; letter-spacing:0.03em; line-height:1; text-align:center; }
   .ro { font-size: ${sz.font + 1}pt; font-weight:600; }
   @media print {
     @page { margin: 0; size: ${sz.mm_w}mm ${sz.mm_h}mm; }
