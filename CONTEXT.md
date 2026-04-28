@@ -5,6 +5,7 @@ _آخر تحديث: 2026-04-28 (جلسة 51 — حجم ملصق جديد "كبي
 
 ## 🆕 Recent changes
 - **2026-04-28** — Added barcode label size "كبير 2 (58×39mm)" — single label per page, columns auto-locked to 1
+- **2026-04-28** — Cashier can now access `/barcode-labels` (read-only access via existing `products.view` permission; settings remain owner-only)
 
 ---
 

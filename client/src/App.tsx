@@ -290,9 +290,7 @@ function DesktopRouter() {
         <Route path="/opening-stock">
           <RequireOwner><OpeningStock /></RequireOwner>
         </Route>
-        <Route path="/barcode-labels">
-          <RequireOwner><BarcodeLabels /></RequireOwner>
-        </Route>
+        <Route path="/barcode-labels" component={BarcodeLabels} />
         <Route path="/payroll/employees">
           <RequireOwner><EmployeesPage /></RequireOwner>
         </Route>

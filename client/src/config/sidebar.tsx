@@ -145,11 +145,12 @@ export const EMPLOYEE_SIDEBAR: SidebarSection[] = [
       { labelKey: "nav.branchStock",  icon: Warehouse,    path: "/branch-stock" },
       { labelKey: "nav.branchSummary",     icon: PieChart,   path: "/branch-summary" },
       { labelKey: "nav.branchPerformance", icon: BarChart2,  path: "/branch-performance" },
+      { labelKey: "nav.barcodeLabels", icon: Printer,     path: "/barcode-labels" },
     ],
   },
 ];
 
-export const EMPLOYEE_ALLOWED_PATHS = ["/pos", "/orders", "/invoices", "/customers", "/branch-stock", "/branch-summary", "/branch-performance"];
+export const EMPLOYEE_ALLOWED_PATHS = ["/pos", "/orders", "/invoices", "/customers", "/branch-stock", "/branch-summary", "/branch-performance", "/barcode-labels"];
 
 export function getSidebarForRole(role: string): SidebarSection[] {
   if (role === "owner" || role === "admin") return OWNER_SIDEBAR;
