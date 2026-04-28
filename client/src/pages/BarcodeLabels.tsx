@@ -30,11 +30,15 @@ interface LabelItem {
 // ─── label size keys ──────────────────────────────────────────────────────────
 // 58mm × 40mm thermal label @ 96dpi ≈ 219px × 151px
 const SIZE_DIMS = {
-  small:  { w: 164, h: 113, font: 7,  bh: 32, mm_w: 43, mm_h: 30 },
-  medium: { w: 219, h: 151, font: 8,  bh: 40, mm_w: 58, mm_h: 40 },
-  large:  { w: 302, h: 208, font: 10, bh: 55, mm_w: 80, mm_h: 55 },
+  small:   { w: 164, h: 113, font: 7,  bh: 32, mm_w: 43, mm_h: 30 },
+  medium:  { w: 219, h: 151, font: 8,  bh: 40, mm_w: 58, mm_h: 40 },
+  large:   { w: 302, h: 208, font: 10, bh: 55, mm_w: 80, mm_h: 55 },
+  LARGE_2: { w: 219, h: 147, font: 8,  bh: 38, mm_w: 58, mm_h: 39, singleLabel: true },
 } as const;
 type SizeKey = keyof typeof SIZE_DIMS;
+type SizeDim = typeof SIZE_DIMS[SizeKey];
+const isSingleLabel = (s: SizeDim): boolean =>
+  ("singleLabel" in s) && (s as { singleLabel?: boolean }).singleLabel === true;
 
 // ─── single barcode SVG (bars only, no built-in number) ──────────────────────
 function BarcodeImg({ barcode, height, width }: { barcode: string; height: number; width: number }) {
@@ -61,14 +65,17 @@ function BarcodeImg({ barcode, height, width }: { barcode: string; height: numbe
 }
 
 // ─── label preview card — 58×40mm thermal style ───────────────────────────────
-function LabelCard({ item, size }: { item: LabelItem; size: typeof SIZE_DIMS[SizeKey] }) {
+function LabelCard({ item, size }: { item: LabelItem; size: SizeDim }) {
   const f = size.font;
   const price = parseFloat(item.price).toFixed(3);
+  const useMm = isSingleLabel(size);
+  const cardW = useMm ? `${size.mm_w}mm` : size.w;
+  const cardH = useMm ? `${size.mm_h}mm` : size.h;
 
   return (
     <div
       className="bg-white overflow-hidden shrink-0 flex flex-col items-center"
-      style={{ width: size.w, height: size.h, padding: "3px 4px", fontFamily: "'Segoe UI', Arial, sans-serif", color: "#000" }}
+      style={{ width: cardW, height: cardH, padding: "3px 4px", fontFamily: "'Segoe UI', Arial, sans-serif", color: "#000" }}
     >
       {/* Logo */}
       <img
@@ -129,10 +136,19 @@ export default function BarcodeLabels() {
   const [showPreview, setShowPreview] = useState(false);
 
   // Build SIZES with translated labels (inside component so t() is available)
-  const SIZES: Record<SizeKey, typeof SIZE_DIMS[SizeKey] & { label: string }> = {
-    small:  { ...SIZE_DIMS.small,  label: t("barcode_labels.size_small") },
-    medium: { ...SIZE_DIMS.medium, label: t("barcode_labels.size_medium") },
-    large:  { ...SIZE_DIMS.large,  label: t("barcode_labels.size_large") },
+  const SIZES: Record<SizeKey, SizeDim & { label: string }> = {
+    small:   { ...SIZE_DIMS.small,   label: t("barcode_labels.size_small") },
+    medium:  { ...SIZE_DIMS.medium,  label: t("barcode_labels.size_medium") },
+    large:   { ...SIZE_DIMS.large,   label: t("barcode_labels.size_large") },
+    LARGE_2: { ...SIZE_DIMS.LARGE_2, label: t("barcode_labels.size_large_2") },
+  };
+
+  const singleLabelMode = size === "LARGE_2";
+
+  const handleSizeChange = (v: string) => {
+    const next = v as SizeKey;
+    setSize(next);
+    if (next === "LARGE_2") setCols(1);
   };
 
   // ── settings (label printer) ───────────────────────────────────────────────
@@ -197,6 +213,7 @@ export default function BarcodeLabels() {
       });
     }
     const sz = SIZES[size];
+    const single = isSingleLabel(sz);
     const logoUrl = `${window.location.origin}/logo.png`;
 
     const labelsHtml = items.flatMap(item =>
@@ -254,8 +271,14 @@ export default function BarcodeLabels() {
 <title>${t("barcode_labels.print_win_title")}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; background:#fff; color:#000; }
-  .grid { display:flex; flex-wrap:wrap; gap:3mm; padding:5mm; justify-content:flex-start; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background:#fff; color:#000; margin:0; }
+  .grid {
+    display: ${single ? "block" : "flex"};
+    flex-wrap: wrap;
+    gap: ${single ? "0" : "3mm"};
+    padding: ${single ? "0" : "5mm"};
+    justify-content: flex-start;
+  }
   .label {
     width: ${sz.mm_w}mm;
     height: ${sz.mm_h}mm;
@@ -266,7 +289,7 @@ export default function BarcodeLabels() {
     justify-content: space-between;
     padding: 1.2mm 1.5mm;
     overflow: hidden;
-    page-break-inside: avoid;
+    ${single ? "page-break-after: always; break-after: page;" : "page-break-inside: avoid;"}
   }
   .logo { height: ${sz.mm_h * 0.18}mm; object-fit:contain; filter: grayscale(100%) brightness(0); }
   .brand { font-size: ${sz.font + 1}pt; font-weight: 800; letter-spacing: 0.12em; text-align:center; line-height:1.1; }
@@ -280,7 +303,8 @@ export default function BarcodeLabels() {
   .ro { font-size: ${sz.font + 2}pt; font-weight:600; }
   @media print {
     @page { margin: 0; size: ${sz.mm_w}mm ${sz.mm_h}mm; }
-    body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    body { margin: 0; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    ${single ? ".label:last-child { page-break-after: auto; break-after: auto; }" : ""}
   }
   .no-print { text-align:center; padding:10px; background:#f5f5f5; }
   @media print { .no-print { display:none; } }
@@ -341,7 +365,7 @@ export default function BarcodeLabels() {
             <CardContent className="space-y-3">
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">{t("barcode_labels.label_size_label")}</label>
-                <Select value={size} onValueChange={v => setSize(v as SizeKey)}>
+                <Select value={size} onValueChange={handleSizeChange}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {(Object.keys(SIZES) as SizeKey[]).map(k => (
@@ -352,14 +376,23 @@ export default function BarcodeLabels() {
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">{t("barcode_labels.cols_label")}</label>
-                <Select value={String(cols)} onValueChange={v => setCols(Number(v))}>
+                <Select
+                  value={String(cols)}
+                  onValueChange={v => setCols(Number(v))}
+                  disabled={singleLabelMode}
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {[2, 3, 4, 5, 6].map(n => (
+                    {[1, 2, 3, 4, 5, 6].map(n => (
                       <SelectItem key={n} value={String(n)}>{n} {t("barcode_labels.cols_suffix")}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {singleLabelMode && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {t("barcode_labels.single_label_hint")}
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>

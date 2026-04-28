@@ -1,5 +1,10 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-27 (جلسة 50 — طباعة صامتة كاملة: لا CMD، لا حوار طباعة)_
+_آخر تحديث: 2026-04-28 (جلسة 51 — حجم ملصق جديد "كبير 2 (58×39 مم)")_
+
+---
+
+## 🆕 Recent changes
+- **2026-04-28** — Added barcode label size "كبير 2 (58×39mm)" — single label per page, columns auto-locked to 1
 
 ---
 
