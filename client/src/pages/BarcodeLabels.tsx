@@ -33,7 +33,7 @@ const SIZE_DIMS = {
   small:   { w: 164, h: 113, font: 7,  bh: 32, mm_w: 43, mm_h: 30 },
   medium:  { w: 219, h: 151, font: 8,  bh: 40, mm_w: 58, mm_h: 40 },
   large:   { w: 302, h: 208, font: 10, bh: 55, mm_w: 80, mm_h: 55 },
-  LARGE_2: { w: 219, h: 147, font: 8,  bh: 38, mm_w: 58, mm_h: 39, singleLabel: true },
+  LARGE_2: { w: 147, h: 219, font: 8,  bh: 38, mm_w: 39, mm_h: 58, singleLabel: true },
 } as const;
 type SizeKey = keyof typeof SIZE_DIMS;
 type SizeDim = typeof SIZE_DIMS[SizeKey];
