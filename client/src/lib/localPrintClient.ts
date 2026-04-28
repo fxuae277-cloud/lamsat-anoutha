@@ -294,17 +294,21 @@ export interface HealthResult {
   error?: string;
 }
 
-/** Probe GET /health on the configured local print service (3s timeout). */
+/**
+ * Probe GET /health on the configured local print service (3s timeout).
+ * /health intentionally sends NO `x-lamsa-print-key` header — the backend
+ * leaves /health open so the POS can verify connectivity before the cashier
+ * has set or fixed their API key.
+ */
 export async function checkLocalPrintHealth(
   baseUrlOverride?: string
 ): Promise<HealthResult> {
   const baseUrl = normalizeBaseUrl(baseUrlOverride ?? getLocalPrintConfig().baseUrl);
+  const url = `${baseUrl}/health`;
+  console.log("Local print baseUrl:", baseUrl);
+  console.log("Calling health endpoint:", url);
   try {
-    const res = await fetchWithTimeout(
-      `${baseUrl}/health`,
-      { method: "GET" },
-      3000
-    );
+    const res = await fetchWithTimeout(url, { method: "GET" }, 3000);
     if (!res.ok) return { ok: false, baseUrl, error: `HTTP ${res.status}` };
     const json = await res.json().catch(() => null);
     if (json && json.ok === false) return { ok: false, baseUrl, error: "service reported not ok" };
@@ -328,10 +332,13 @@ export async function loadPrintersLocal(
 ): Promise<LoadPrintersResult> {
   const cfg = getLocalPrintConfig();
   const baseUrl = normalizeBaseUrl(baseUrlOverride ?? cfg.baseUrl);
-  const apiKey = apiKeyOverride ?? cfg.apiKey;
+  const apiKey = (apiKeyOverride ?? cfg.apiKey) || DEFAULT_LOCAL_PRINT_API_KEY;
+  const url = `${baseUrl}/printers`;
+  console.log("Local print baseUrl:", baseUrl);
+  console.log("Calling printers endpoint:", url);
   try {
     const res = await fetchWithTimeout(
-      `${baseUrl}/printers`,
+      url,
       { method: "GET", headers: { "x-lamsa-print-key": apiKey } },
       5000
     );
@@ -354,6 +361,9 @@ export async function printInvoiceLocal(
   printerNameOverride?: string,
   paperWidthOverride?: PaperWidth,
 ): Promise<PrintResult> {
+  // Always re-read the live profile from localStorage so the receipt test
+  // and every real print use the current device settings — never a cached
+  // / globally-shared snapshot.
   const profile = getDeviceProfile();
   if (!profile.enabled) {
     return {
@@ -369,6 +379,15 @@ export async function printInvoiceLocal(
   if (resolvedPaperWidth !== "58mm" && resolvedPaperWidth !== "80mm") {
     return { ok: false, error: "مقاس الورق غير محدد لهذا الجهاز" };
   }
+  const baseUrl = normalizeBaseUrl(profile.baseUrl);
+  const apiKey = (profile.apiKey || DEFAULT_LOCAL_PRINT_API_KEY).trim();
+  const url = `${baseUrl}/print/invoice`;
+
+  console.log("Local print baseUrl:", baseUrl);
+  console.log("Receipt printer:", resolvedPrinter);
+  console.log("Paper width:", resolvedPaperWidth);
+  console.log("Calling receipt print endpoint:", url);
+
   let invoice: LocalInvoice;
   try {
     invoice = toLocalInvoice(receipt);
@@ -390,18 +409,15 @@ export async function printInvoiceLocal(
   }
 
   if (invoiceNo) inFlightPrints.add(invoiceNo);
-  console.log(
-    `[Print] invoice request sending invoice=${invoiceNo} printer=${resolvedPrinter} paperWidth=${resolvedPaperWidth} url=${profile.baseUrl}`,
-  );
 
   try {
     const res = await fetchWithTimeout(
-      `${profile.baseUrl}/print/invoice`,
+      url,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-lamsa-print-key": profile.apiKey,
+          "x-lamsa-print-key": apiKey,
         },
         body: JSON.stringify({
           printerName: resolvedPrinter,
@@ -416,6 +432,9 @@ export async function printInvoiceLocal(
       const body = await res.json().catch(() => null);
       const detail =
         (body && (body.detail || body.error)) || `HTTP ${res.status}`;
+      console.error(
+        `[Print] backend rejected status=${res.status} detail=${detail}`,
+      );
       return {
         ok: false,
         error: arabicError(body?.error ?? detail, res.status),
@@ -431,7 +450,20 @@ export async function printInvoiceLocal(
     console.log(`[Print] invoice sent to printer invoice=${invoiceNo}`);
     return { ok: true };
   } catch (e: any) {
-    return { ok: false, error: arabicError(e), detail: String(e?.message || e) };
+    const detail = String(e?.message || e);
+    console.error("[Print] network error:", detail);
+
+    // If /health is OK we KNOW the service is reachable, so we must not
+    // return the generic "غير متصلة" message — surface the real failure.
+    const health = await checkLocalPrintHealth(baseUrl);
+    if (health.ok) {
+      return {
+        ok: false,
+        error: "تم الوصول للخدمة لكن فشل طلب الطباعة — راجع وحدة التحكم",
+        detail,
+      };
+    }
+    return { ok: false, error: arabicError(e), detail };
   } finally {
     if (invoiceNo) inFlightPrints.delete(invoiceNo);
   }

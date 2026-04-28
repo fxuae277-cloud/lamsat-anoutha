@@ -63,10 +63,16 @@ export function DevicePrintSettingsDialog({ trigger }: Props) {
   const allPrinters = Array.from(new Set([...FIXED_PRINTERS, ...discovered]));
 
   const handleTestConnection = async () => {
-    const baseUrl = (profile.baseUrl || DEFAULT_LOCAL_PRINT_URL).trim();
+    // Always read the latest profile from localStorage (input changes are
+    // persisted on every keystroke, but local React state can lag).
+    const live = getDeviceProfile();
+    const baseUrl = (live.baseUrl || DEFAULT_LOCAL_PRINT_URL).trim();
+    console.log("Local print baseUrl:", baseUrl);
+    console.log("Calling health endpoint:", `${baseUrl}/health`);
     setTestingConnection(true);
     const result = await checkLocalPrintHealth(baseUrl);
     setTestingConnection(false);
+    console.log("Health result:", result);
     if (result.ok) {
       setStatus("connected");
       toast({ title: "خدمة الطباعة المحلية متصلة", description: result.baseUrl });
@@ -74,18 +80,24 @@ export function DevicePrintSettingsDialog({ trigger }: Props) {
       setStatus("disconnected");
       toast({
         title: "خدمة الطباعة المحلية غير متصلة",
-        description: `تأكد أن الرابط هو ${DEFAULT_LOCAL_PRINT_URL}`,
+        description: result.error
+          ? `${baseUrl} — ${result.error}`
+          : `تأكد أن الرابط هو ${DEFAULT_LOCAL_PRINT_URL}`,
         variant: "destructive",
       });
     }
   };
 
   const handleLoadPrinters = async () => {
-    const baseUrl = (profile.baseUrl || DEFAULT_LOCAL_PRINT_URL).trim();
-    const apiKey = profile.apiKey || DEFAULT_LOCAL_PRINT_API_KEY;
+    const live = getDeviceProfile();
+    const baseUrl = (live.baseUrl || DEFAULT_LOCAL_PRINT_URL).trim();
+    const apiKey = live.apiKey || DEFAULT_LOCAL_PRINT_API_KEY;
+    console.log("Local print baseUrl:", baseUrl);
+    console.log("Calling printers endpoint:", `${baseUrl}/printers`);
     setLoadingPrinters(true);
     const result = await loadPrintersLocal(baseUrl, apiKey);
     setLoadingPrinters(false);
+    console.log("Printers result:", result);
     if (result.ok) {
       setStatus("connected");
       setDiscovered(result.printers);
@@ -97,14 +109,31 @@ export function DevicePrintSettingsDialog({ trigger }: Props) {
       setStatus("disconnected");
       toast({
         title: "خدمة الطباعة المحلية غير متصلة",
-        description: `تأكد أن الرابط هو ${DEFAULT_LOCAL_PRINT_URL} وأن الخدمة تعمل`,
+        description: result.error
+          ? `${baseUrl} — ${result.error}`
+          : `تأكد أن الرابط هو ${DEFAULT_LOCAL_PRINT_URL} وأن الخدمة تعمل`,
         variant: "destructive",
       });
     }
   };
 
   const handleTestReceipt = async () => {
-    if (!profile.receiptPrinterName) {
+    // Re-read the live profile so the receipt test uses the current device
+    // settings (baseUrl / printer / paperWidth) — never a stale snapshot.
+    const live = getDeviceProfile();
+    setProfileState(live);
+
+    const baseUrl = (live.baseUrl || DEFAULT_LOCAL_PRINT_URL).trim();
+    const receiptPrinterName = live.receiptPrinterName?.trim() ?? "";
+    const paperWidth = live.paperWidth;
+    const url = `${baseUrl}/print/invoice`;
+
+    console.log("Local print baseUrl:", baseUrl);
+    console.log("Receipt printer:", receiptPrinterName);
+    console.log("Paper width:", paperWidth);
+    console.log("Calling receipt print endpoint:", url);
+
+    if (!receiptPrinterName) {
       toast({
         title: "خطأ في الطباعة",
         description: "لم يتم اختيار طابعة الفواتير لهذا الجهاز",
@@ -112,18 +141,40 @@ export function DevicePrintSettingsDialog({ trigger }: Props) {
       });
       return;
     }
+
+    // Pre-flight /health: if the service is reachable we must NEVER show
+    // "خدمة الطباعة المحلية غير متصلة" — even when the print itself fails.
+    const health = await checkLocalPrintHealth(baseUrl);
+    console.log("Pre-print health probe:", health);
+    if (health.ok) setStatus("connected");
+
     setTestPrinting(true);
-    const result = await printTestInvoiceLocal(profile.receiptPrinterName, profile.paperWidth);
+    const result = await printTestInvoiceLocal(receiptPrinterName, paperWidth);
     setTestPrinting(false);
+    console.log("Test print result:", result);
+
     if (result.ok) {
       toast({
         title: "تمت الطباعة",
-        description: `${profile.receiptPrinterName} (${profile.paperWidth})`,
+        description: `${receiptPrinterName} (${paperWidth})`,
+      });
+      return;
+    }
+
+    // Service is up but the print attempt failed — surface the real
+    // backend error so the cashier (and we) can see what actually broke.
+    if (health.ok) {
+      toast({
+        title: "فشل الطباعة (الخدمة متصلة)",
+        description: result.detail || result.error || "خطأ غير معروف من خدمة الطباعة",
+        variant: "destructive",
       });
     } else {
       toast({
         title: "خطأ في طباعة الإيصال التجريبية",
-        description: result.error,
+        description: result.detail
+          ? `${result.error} — ${result.detail}`
+          : result.error,
         variant: "destructive",
       });
     }

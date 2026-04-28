@@ -6,8 +6,15 @@ import { printText, printRawBytes } from "./rawPrint.js";
 import { buildInvoiceBytes, type Invoice, type PaperWidth } from "./printInvoice.js";
 
 const PORT = Number(process.env.PORT ?? 3030);
-const API_KEY = process.env.LOCAL_PRINT_API_KEY ?? "";
-const ALLOW_ALL = process.env.LOCAL_PRINT_ALLOW_ALL === "true";
+// Default to the canonical cashier key so a missing .env doesn't break setup.
+// The matching default lives in the frontend (DEFAULT_LOCAL_PRINT_API_KEY).
+const API_KEY = (process.env.LOCAL_PRINT_API_KEY || "123456").trim();
+// The service is bound to 127.0.0.1 (loopback) below — no LAN host can reach
+// it — so CORS is just a paranoia layer. Default it to permissive so the
+// browser's preflight from any Lamsa origin (Railway, custom domain, dev)
+// always succeeds. Set LOCAL_PRINT_ALLOW_ALL=false to opt back into the
+// allowlist below.
+const ALLOW_ALL = process.env.LOCAL_PRINT_ALLOW_ALL !== "false";
 
 const ALLOWED_ORIGINS = [
   "http://localhost:5000",
@@ -36,13 +43,9 @@ app.use(
 
 // Auth gate for write endpoints. Read endpoints (/health, /printers) stay open
 // so the POS UI can probe the service before the user enters the key.
+// API_KEY is guaranteed non-empty (defaults to 123456 above) so we can't
+// land in a "key not configured" trap that produces 500 on every print.
 function requireApiKey(req: Request, res: Response, next: NextFunction) {
-  if (!API_KEY) {
-    return res.status(500).json({
-      ok: false,
-      error: "LOCAL_PRINT_API_KEY is not configured on the print service",
-    });
-  }
   if (req.header("x-lamsa-print-key") !== API_KEY) {
     return res
       .status(401)
@@ -212,9 +215,10 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 app.listen(PORT, "127.0.0.1", () => {
   console.log(`[Lamsa Local Print] listening on http://127.0.0.1:${PORT}`);
   console.log(`[Lamsa Local Print] CORS allow-all: ${ALLOW_ALL}`);
-  if (!API_KEY) {
-    console.warn(
-      "[Lamsa Local Print] WARNING: LOCAL_PRINT_API_KEY is empty — POST endpoints will reject every call"
+  if (!process.env.LOCAL_PRINT_API_KEY) {
+    console.log(
+      "[Lamsa Local Print] using built-in default x-lamsa-print-key (123456). " +
+      "Set LOCAL_PRINT_API_KEY in .env to override."
     );
   }
 });
