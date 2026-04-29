@@ -143,13 +143,17 @@ function LabelCard({ item, size }: { item: LabelItem; size: SizeDim }) {
       {/* Divider */}
       <div style={{ width: "85%", height: 0.5, background: "#000", marginBottom: 2 }} />
 
-      {/* Product info */}
+      {/* Product info — name + variant line ("Color: X | Size: Y") to mirror
+          the server-side TSPL renderer in tscLabel.ts. */}
       <div style={{ fontSize: f, fontWeight: 500, textAlign: "center", lineHeight: 1.45 }}>
-        {item.model && <p>Shoe Model: {item.model}</p>}
-        {item.color && <p>Color: {item.color}</p>}
-        {item.size  && <p>Size: {item.size}</p>}
-        {!item.model && !item.color && !item.size && (
-          <p style={{ maxWidth: size.w - 8 }} className="truncate">{item.name}</p>
+        <p style={{ maxWidth: size.w - 8, fontWeight: 700 }} className="truncate">{item.name}</p>
+        {(item.color || item.size) && (
+          <p style={{ fontSize: f - 1, fontWeight: 400 }}>
+            {[
+              item.color && `Color: ${item.color}`,
+              item.size  && `Size: ${item.size}`,
+            ].filter(Boolean).join(" | ")}
+          </p>
         )}
       </div>
 
@@ -306,6 +310,9 @@ export default function BarcodeLabels() {
   const setQty = (id: number, val: number) =>
     setItems(prev => prev.map(i => i.productId === id ? { ...i, qty: Math.max(1, val) } : i));
 
+  const updateItem = (id: number, patch: Partial<LabelItem>) =>
+    setItems(prev => prev.map(i => i.productId === id ? { ...i, ...patch } : i));
+
   const remove = (id: number) => setItems(prev => prev.filter(i => i.productId !== id));
 
   const totalLabels = items.reduce((s, i) => s + i.qty, 0);
@@ -357,6 +364,11 @@ export default function BarcodeLabels() {
           body: JSON.stringify({
             printerName: labelPrinter,
             productName: (item.name || "").slice(0, 50),
+            // Send color/size only when non-empty so JSON.stringify drops them
+            // and the local service treats the item as variant-less. The
+            // service composes the variant line itself ("Color: X | Size: Y").
+            color: item.color?.trim() || undefined,
+            size: item.size?.trim() || undefined,
             priceOMR: parseFloat(item.price),
             barcode: item.barcode,
             copies: Math.max(1, Math.min(100, item.qty || 1)),
@@ -686,46 +698,68 @@ export default function BarcodeLabels() {
               ) : (
                 <div className="divide-y">
                   {items.map(item => (
-                    <div key={item.productId}
-                      className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20">
-                      {/* Barcode mini preview */}
-                      <div className="w-20 shrink-0">
-                        <BarcodeImg barcode={item.barcode} height={30} width={80} />
-                      </div>
+                    <div key={item.productId} className="px-4 py-3 hover:bg-muted/20 space-y-2">
+                      <div className="flex items-center gap-3">
+                        {/* Barcode mini preview */}
+                        <div className="w-20 shrink-0">
+                          <BarcodeImg barcode={item.barcode} height={30} width={80} />
+                        </div>
 
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{item.name}</p>
-                        <p className="text-xs text-muted-foreground font-mono">{item.barcode}</p>
-                        <p className="text-xs font-bold text-primary">
-                          {parseFloat(item.price).toFixed(3)} {t("barcode_labels.currency")}
-                        </p>
-                      </div>
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{item.name}</p>
+                          <p className="text-xs text-muted-foreground font-mono">{item.barcode}</p>
+                          <p className="text-xs font-bold text-primary">
+                            {parseFloat(item.price).toFixed(3)} {t("barcode_labels.currency")}
+                          </p>
+                        </div>
 
-                      {/* Qty controls */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button variant="outline" size="icon" className="h-7 w-7"
-                          onClick={() => changeQty(item.productId, -1)}>
-                          <Minus className="h-3 w-3" />
+                        {/* Qty controls */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button variant="outline" size="icon" className="h-7 w-7"
+                            onClick={() => changeQty(item.productId, -1)}>
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <Input
+                            type="number"
+                            value={item.qty}
+                            onChange={e => setQty(item.productId, parseInt(e.target.value) || 1)}
+                            className="w-14 h-7 text-center text-sm p-1"
+                            min={1}
+                          />
+                          <Button variant="outline" size="icon" className="h-7 w-7"
+                            onClick={() => changeQty(item.productId, 1)}>
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </div>
+
+                        {/* Delete */}
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 shrink-0"
+                          onClick={() => remove(item.productId)}>
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
+                      </div>
+
+                      {/* Color / Size — optional variant fields (printed as
+                          "Color: X | Size: Y" by the local print service) */}
+                      <div className="grid grid-cols-2 gap-2 pl-[5.75rem]">
                         <Input
-                          type="number"
-                          value={item.qty}
-                          onChange={e => setQty(item.productId, parseInt(e.target.value) || 1)}
-                          className="w-14 h-7 text-center text-sm p-1"
-                          min={1}
+                          placeholder={t("barcode_labels.color_placeholder")}
+                          value={item.color || ""}
+                          onChange={e => updateItem(item.productId, { color: e.target.value })}
+                          className="h-8 text-sm"
+                          maxLength={30}
+                          data-testid={`input-color-${item.productId}`}
                         />
-                        <Button variant="outline" size="icon" className="h-7 w-7"
-                          onClick={() => changeQty(item.productId, 1)}>
-                          <Plus className="h-3 w-3" />
-                        </Button>
+                        <Input
+                          placeholder={t("barcode_labels.size_placeholder")}
+                          value={item.size || ""}
+                          onChange={e => updateItem(item.productId, { size: e.target.value })}
+                          className="h-8 text-sm"
+                          maxLength={20}
+                          data-testid={`input-size-${item.productId}`}
+                        />
                       </div>
-
-                      {/* Delete */}
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 shrink-0"
-                        onClick={() => remove(item.productId)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
                     </div>
                   ))}
                 </div>

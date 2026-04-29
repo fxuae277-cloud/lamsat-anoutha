@@ -2925,7 +2925,11 @@
     "printer_offline_503": "Label printer is offline",
     "print_timeout": "Print timed out — check the printer",
     "cols_disabled_hint": "Not available in direct printing",
-    "size_locked_hint": "Current version supports 59×39mm only"
+    "size_locked_hint": "Current version supports 59×39mm only",
+    "color_placeholder": "Color (optional)",
+    "size_placeholder": "Size (optional)",
+    "color_label": "Color",
+    "size_label": "Size"
   },
   "orders_page": {
     "title": "Orders",

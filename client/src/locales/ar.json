@@ -2925,7 +2925,11 @@
     "printer_offline_503": "طابعة الملصقات غير متصلة",
     "print_timeout": "انتهت مهلة الطباعة - تحقق من الطابعة",
     "cols_disabled_hint": "غير متاح في الطباعة المباشرة",
-    "size_locked_hint": "الإصدار الحالي يدعم 59×39mm فقط"
+    "size_locked_hint": "الإصدار الحالي يدعم 59×39mm فقط",
+    "color_placeholder": "اللون (اختياري)",
+    "size_placeholder": "المقاس (اختياري)",
+    "color_label": "اللون",
+    "size_label": "المقاس"
   },
   "orders_page": {
     "title": "الطلبات",
