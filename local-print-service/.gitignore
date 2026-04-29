@@ -1,0 +1,3 @@
+# Local artefacts — never commit
+test-output/
+*.log

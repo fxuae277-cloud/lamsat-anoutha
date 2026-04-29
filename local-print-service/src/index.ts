@@ -9,6 +9,13 @@ import {
   PAPER_WIDTH_DOTS,
   type PaperWidth,
 } from "./escposRaster.js";
+import { printLabel as printTscLabel } from "./printers/tscLabel.js";
+
+// TSC TTP-244M Pro is the only label printer wired up for now. The cashier
+// can override via env (e.g. if Windows renames the queue), but this default
+// matches every PC that ran the standard install.
+const LABEL_PRINTER_NAME =
+  (process.env.LABEL_PRINTER_NAME || "TSC TTP-244M Pro").trim();
 
 // PORT: support both 3001 (cashier-machine convention) and 3030 (legacy default).
 // Cashier PCs run `node dist/index.js` from this directory, so .env wins.
@@ -112,17 +119,32 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 
 // ─── Routes ────────────────────────────────────────────────────────────────
 
+const HEALTH_PAYLOAD = {
+  ok: true,
+  service: "Lamsa Local Print Service",
+  version: "2.2.0",
+  pipeline: "raster+tspl",
+  printers: {
+    receipt: {
+      name: "EPSON TM-T100 Receipt",
+      type: "thermal-receipt",
+      width: "80mm",
+      language: "ESC/POS",
+    },
+    label: {
+      name: LABEL_PRINTER_NAME,
+      type: "thermal-label",
+      size: "59x39mm",
+      language: "TSPL",
+      dpi: 203,
+    },
+  },
+} as const;
+
 app.get("/health", (_req, res) => {
-  res.json({
-    ok: true,
-    service: "Lamsa Local Print Service",
-    version: "2.1.0",
-    pipeline: "raster",
-  });
+  res.json(HEALTH_PAYLOAD);
 });
-app.get("/api/health", (_req, res) =>
-  res.json({ ok: true, service: "Lamsa Local Print Service", version: "2.1.0", pipeline: "raster" }),
-);
+app.get("/api/health", (_req, res) => res.json(HEALTH_PAYLOAD));
 
 app.get("/printers", async (_req, res) => {
   try {
@@ -293,7 +315,97 @@ for (const route of INVOICE_ROUTES) {
   app.post(route, requireApiKey, handleInvoicePrint);
 }
 
-// ─── Label / barcode print handler ─────────────────────────────────────────
+// ─── TSC structured-label handler (productName / priceOMR / barcode) ───────
+// New shape introduced in v2.2 — the cashier sends product data and the
+// service builds the SVG → PNG → TSPL itself. Rendered server-side so every
+// cashier prints an identical "لمسة أنوثة"-branded label without depending on
+// browser font availability or html2canvas quirks.
+const handleStructuredLabelPrint: RequestHandler = async (req, res) => {
+  const body = req.body ?? {};
+  const productName = typeof body.productName === "string" ? body.productName.trim() : "";
+  const priceOMR = typeof body.priceOMR === "number" ? body.priceOMR : NaN;
+  const barcode = typeof body.barcode === "string" ? body.barcode.trim() : "";
+  const copiesRaw = body.copies;
+  const copies =
+    typeof copiesRaw === "number" && Number.isFinite(copiesRaw)
+      ? Math.floor(copiesRaw)
+      : 1;
+  const printerName =
+    typeof body.printerName === "string" && body.printerName.trim().length > 0
+      ? body.printerName.trim()
+      : LABEL_PRINTER_NAME;
+
+  // Validation — keep the error messages aligned with the spec so the
+  // cashier UI can surface them verbatim.
+  if (!productName || productName.length > 50) {
+    res.status(400).json({ ok: false, error: "Invalid productName" });
+    return;
+  }
+  if (!Number.isFinite(priceOMR) || priceOMR <= 0 || priceOMR > 9999) {
+    res.status(400).json({ ok: false, error: "Invalid price" });
+    return;
+  }
+  if (
+    !barcode ||
+    barcode.length < 8 ||
+    barcode.length > 20 ||
+    !/^[A-Za-z0-9]+$/.test(barcode)
+  ) {
+    res.status(400).json({ ok: false, error: "Invalid barcode" });
+    return;
+  }
+  if (!Number.isFinite(copies) || copies < 1 || copies > 100) {
+    res.status(400).json({ ok: false, error: "Invalid copies (1–100)" });
+    return;
+  }
+
+  // Confirm the label printer is actually installed — the most common silent
+  // failure mode is a renamed queue.
+  let installed: { Name: string }[] = [];
+  try {
+    installed = await listPrinters();
+  } catch (e: any) {
+    console.error("[Label] failed to enumerate printers:", e);
+  }
+  if (
+    installed.length > 0 &&
+    !installed.some((p) => p.Name === printerName)
+  ) {
+    res.status(503).json({
+      ok: false,
+      error: "Label printer not found in Windows",
+      detail: `Printer '${printerName}' is not installed.`,
+      availablePrinters: installed.map((p) => p.Name),
+    });
+    return;
+  }
+
+  try {
+    await printTscLabel(printerName, { productName, priceOMR, barcode, copies });
+    console.log("[Label] success");
+    res.json({
+      ok: true,
+      printer: printerName,
+      barcode,
+      copies,
+      size: `${59}x${39}mm`,
+    });
+  } catch (e: any) {
+    if (e?.code === "ETIMEDOUT") {
+      console.error("[Label] error: timeout");
+      res.status(408).json({ ok: false, error: "Printer timeout (15s)" });
+      return;
+    }
+    console.error("[Label] error:", e);
+    res.status(500).json({
+      ok: false,
+      error: "Printer error",
+      detail: e?.message ?? String(e),
+    });
+  }
+};
+
+// ─── Label / barcode print handler (legacy + image fallback) ───────────────
 // Two payload shapes are accepted:
 //   1. { printerName, imageBase64, labelSize?: { widthMm, heightMm } }
 //      → rasterise the PNG at the requested width and send raw bytes.
@@ -305,13 +417,21 @@ for (const route of INVOICE_ROUTES) {
 // the cashier sees a real error instead of "the request was sent but nothing
 // printed."
 const handleLabelPrint: RequestHandler = async (req, res) => {
+  // New structured payload takes precedence. We detect it by the presence of
+  // BOTH productName and barcode — that combination only ever appears in the
+  // v2.2 cashier client.
+  const body = req.body ?? {};
+  if (typeof body.productName === "string" && typeof body.barcode === "string") {
+    return handleStructuredLabelPrint(req, res, () => {});
+  }
+
   const {
     printerName,
     imageBase64,
     labelSize,
     columns,
     items,
-  } = req.body ?? {};
+  } = body;
 
   if (!printerName || typeof printerName !== "string") {
     res.status(400).json({ ok: false, error: "printerName is required" });
