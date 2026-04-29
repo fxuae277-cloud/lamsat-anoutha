@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import { listPrinters } from "./printers.js";
 import { printText, printRawBytes } from "./rawPrint.js";
-import { pngToEscposRaster, RASTER_BUILD_MARKER, PAPER_WIDTH_DOTS, } from "./escposRaster.js";
+import { pngToEscposRaster, RASTER_BUILD_MARKER, PAPER_WIDTH_DOTS, DRAWER_KICK_BYTES, } from "./escposRaster.js";
 import { printLabel as printTscLabel } from "./printers/tscLabel.js";
 // TSC TTP-244M Pro is the only label printer wired up for now. The cashier
 // can override via env (e.g. if Windows renames the queue), but this default
@@ -103,8 +103,8 @@ app.use((req, _res, next) => {
 const HEALTH_PAYLOAD = {
     ok: true,
     service: "Lamsa Local Print Service",
-    version: "2.2.0",
-    pipeline: "raster+tspl",
+    version: "2.3.0",
+    pipeline: "raster+tspl+drawer",
     printers: {
         receipt: {
             name: "EPSON TM-T100 Receipt",
@@ -174,6 +174,44 @@ app.post("/print/test", requireApiKey, async (req, res) => {
         });
     }
 });
+// ─── Cash drawer kick ──────────────────────────────────────────────────────
+// Standalone endpoint for opening the drawer without printing a receipt — used
+// for manual testing and any future "cash-in / cash-out" flow that needs the
+// drawer to pop without a print job. The same DRAWER_KICK_BYTES are embedded
+// in every /print/invoice raster, so the cashier doesn't need to call this
+// endpoint as part of a normal sale.
+const DRAWER_ROUTES = ["/open-drawer", "/api/open-drawer"];
+const handleOpenDrawer = async (req, res) => {
+    const { printerName } = req.body ?? {};
+    if (!printerName || typeof printerName !== "string") {
+        res
+            .status(400)
+            .json({ ok: false, error: "printerName is required" });
+        return;
+    }
+    console.log(`[Drawer] kick request printer=${printerName}`);
+    try {
+        await printRawBytes(printerName, DRAWER_KICK_BYTES);
+        console.log(`[Drawer] kick sent printer=${printerName} bytes=${DRAWER_KICK_BYTES.length}`);
+        res.json({
+            ok: true,
+            printer: printerName,
+            bytesSent: DRAWER_KICK_BYTES.length,
+            command: "ESC p 0 25 250",
+        });
+    }
+    catch (e) {
+        console.error(`[Drawer] kick failed printer=${printerName}:`, e?.message ?? e);
+        res.status(500).json({
+            ok: false,
+            error: "drawer open failed",
+            detail: e?.message ?? String(e),
+        });
+    }
+};
+for (const route of DRAWER_ROUTES) {
+    app.post(route, requireApiKey, handleOpenDrawer);
+}
 // ─── Duplicate-print guard (server) ────────────────────────────────────────
 // Same (invoiceNo, printerName) within this window is treated as a duplicate
 // and not sent to the printer a second time. Protects against frontend
@@ -234,18 +272,23 @@ const handleInvoicePrint = async (req, res) => {
         if (pngBuffer.length === 0) {
             throw new Error("decoded PNG buffer is empty");
         }
-        const raster = await pngToEscposRaster(pngBuffer, paperWidth);
+        // Invoice prints always kick the cash drawer — the rasteriser injects the
+        // ESC/POS pulse between the feed lines and the cut so it lands in the
+        // same RAW print job as the receipt.
+        const raster = await pngToEscposRaster(pngBuffer, paperWidth, undefined, true);
         console.log(`[Print] rasterised ${paperWidth} ${raster.widthDots}×${raster.heightRows} ` +
-            `→ ${raster.bytes.length} bytes (${raster.blocks} GS-v-0 blocks)`);
+            `→ ${raster.bytes.length} bytes (${raster.blocks} GS-v-0 blocks, drawer-kick=on)`);
         await printRawBytes(printerName, raster.bytes);
         if (invoiceNo)
             recentPrintsByKey.set(dupKey, { at: Date.now() });
         console.log(`[Print] invoice sent to printer invoice=${invoiceNo} bytes=${raster.bytes.length}`);
+        console.log(`[Drawer] kick embedded in invoice print invoice=${invoiceNo} printer=${printerName}`);
         res.json({
             ok: true,
             bytesSent: raster.bytes.length,
             widthDots: raster.widthDots,
             heightRows: raster.heightRows,
+            drawerKick: true,
         });
     }
     catch (e) {
@@ -507,6 +550,7 @@ const AVAILABLE_ROUTES = [
     "POST /print/test",
     ...INVOICE_ROUTES.map((r) => `POST ${r}`),
     ...LABEL_ROUTES.map((r) => `POST ${r}`),
+    ...DRAWER_ROUTES.map((r) => `POST ${r}`),
 ];
 app.use((req, res) => {
     res.status(404).json({
@@ -535,6 +579,7 @@ app.listen(PORT, "127.0.0.1", () => {
         `paper widths: 80mm=${PAPER_WIDTH_DOTS["80mm"]}dots, 58mm=${PAPER_WIDTH_DOTS["58mm"]}dots`);
     console.log(`[Lamsa Local Print] invoice routes: ${INVOICE_ROUTES.join(", ")}`);
     console.log(`[Lamsa Local Print] label routes:   ${LABEL_ROUTES.join(", ")}`);
+    console.log(`[Lamsa Local Print] drawer routes:  ${DRAWER_ROUTES.join(", ")}`);
     if (!process.env.LOCAL_PRINT_API_KEY) {
         console.log("[Lamsa Local Print] using built-in default x-lamsa-print-key (123456). " +
             "Set LOCAL_PRINT_API_KEY in .env to override.");

@@ -43,14 +43,30 @@ export interface RasterizeResult {
 }
 
 /**
+ * ESC p 0 25 250 — fire pin 2 (cash drawer #1) with a 50ms pulse.
+ *   0x1B 0x70 0x00 0x19 0xFA
+ *   ESC  p    m    t1   t2
+ *   m=0  → drawer #1 (pin 2 on the DK port)
+ *   t1=25, t2=250 → on-time=25×2ms=50ms, off-time=250×2ms=500ms
+ * Exported so /open-drawer endpoint can reuse the same constant.
+ */
+export const DRAWER_KICK_BYTES = Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]);
+
+/**
  * Convert a PNG buffer (as decoded from base64) into ESC/POS raster bytes
  * for the given paper width. The returned bytes are everything the printer
- * needs: init, alignment, raster image, line feeds, and a partial cut at end.
+ * needs: init, alignment, raster image, line feeds, optional cash-drawer kick,
+ * and a partial cut at end.
+ *
+ * `openDrawer` injects the drawer-kick command AFTER the feed lines and
+ * BEFORE the cut — some EPSON firmwares ignore the kick if it arrives while
+ * the print engine is still flushing rows, so the feed must finish first.
  */
 export async function pngToEscposRaster(
   pngBuffer: Buffer,
   paperWidth: PaperWidth,
   feedLinesAfter = 4,
+  openDrawer = false,
 ): Promise<RasterizeResult> {
   const widthDots = PAPER_WIDTH_DOTS[paperWidth];
 
@@ -117,8 +133,15 @@ export async function pngToEscposRaster(
     blocks++;
   }
 
-  // Feed and cut.
+  // Feed → (optional) drawer kick → cut.
+  // Order matters: the drawer-kick MUST land after the feed bytes (otherwise
+  // some EPSON firmwares ignore it because the engine is still busy advancing
+  // paper) and before the cut so the receipt and the open drawer hit the
+  // cashier at the same moment.
   for (let i = 0; i < feedLinesAfter; i++) out.push(Buffer.from([LF]));
+  if (openDrawer) {
+    out.push(DRAWER_KICK_BYTES);
+  }
   // GS V 1 — partial cut
   out.push(Buffer.from([GS, 0x56, 0x01]));
 

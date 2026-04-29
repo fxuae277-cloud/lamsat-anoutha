@@ -280,3 +280,82 @@ Phase 3 will add label printing (`POST /print/label` with TSPL for TSC
 TTP-244M Pro) and cash drawer kick (`POST /drawer/open`). Arabic code page
 selection will land in the same phase once we verify the right page on the
 TM-T100 firmware in your shop.
+
+## Cash drawer (v2.3.0)
+
+The cash drawer wired to **pin 2** of the EPSON TM-T100's DK port pops open
+automatically after every successful invoice print, and can also be opened
+on demand via a dedicated endpoint.
+
+### How it works
+
+The rasteriser (`pngToEscposRaster`) injects a single ESC/POS pulse command
+**after** the trailing feed lines and **before** the partial-cut command:
+
+```
+[ raster image ] → [ feed × 4 ] → [ ESC p 0 25 250 ] → [ GS V 1 cut ]
+```
+
+Bytes: `0x1B 0x70 0x00 0x19 0xFA`
+
+| Byte | Meaning |
+|------|---------|
+| `0x1B 0x70` | `ESC p` — generate drawer kick-out pulse |
+| `0x00` | `m=0` → drawer #1 (pin 2 on the DK connector) |
+| `0x19` | `t1=25` → on-time = 25 × 2ms = **50 ms** |
+| `0xFA` | `t2=250` → off-time = 250 × 2ms = 500 ms |
+
+Why the order matters: some EPSON firmwares ignore the kick if it arrives
+while the print engine is still flushing rows, so the feed lines must
+finish first. Putting the kick before the cut ensures the receipt drops
+and the drawer opens at the same moment.
+
+The kick is embedded in the same RAW print job as the receipt — there is
+no second `printRawBytes` round-trip and no extra PowerShell process per
+sale. Labels are not affected (`/print/label` does not pass `openDrawer`).
+
+### Manual test endpoint: `POST /open-drawer`
+
+Used to confirm the drawer cabling and pin number after install, without
+having to print a real invoice. Same auth (`x-api-key`) as the print
+endpoints.
+
+```powershell
+Invoke-RestMethod -Uri http://127.0.0.1:3001/open-drawer `
+  -Method POST `
+  -Headers @{ "x-api-key" = "<KEY>" } `
+  -ContentType "application/json" `
+  -Body '{"printerName":"EPSON TM-T100 Receipt"}'
+```
+
+Successful response:
+
+```json
+{
+  "ok": true,
+  "printer": "EPSON TM-T100 Receipt",
+  "bytesSent": 5,
+  "command": "ESC p 0 25 250"
+}
+```
+
+Both `/open-drawer` and `/api/open-drawer` are accepted.
+
+### Logs
+
+The service writes one of these to `print-service.log` per drawer event:
+
+```
+[Drawer] kick request printer=EPSON TM-T100 Receipt
+[Drawer] kick sent printer=EPSON TM-T100 Receipt bytes=5
+[Drawer] kick embedded in invoice print invoice=INV-1234 printer=EPSON TM-T100 Receipt
+[Drawer] kick failed printer=EPSON TM-T100 Receipt: <reason>
+```
+
+### Troubleshooting drawer
+
+| Symptom | Likely cause / fix |
+|---------|-------------------|
+| Receipt prints, drawer stays shut | Drawer cable on the wrong DK pin. The default kick targets pin 2 (drawer #1). If your cable is on pin 5 (drawer #2), swap `m=0x00` to `m=0x01` in `DRAWER_KICK_BYTES`. |
+| `/open-drawer` returns 200 but nothing happens | Solenoid disconnected at the drawer side, or 24V supply weak. Try a longer pulse: `t1=0x32` (100 ms). |
+| `/open-drawer` returns 500 | Same as `/print/invoice` 500 — printer queue paused / offline / wrong name. Check `/printers` first. |
