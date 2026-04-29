@@ -22,7 +22,11 @@ import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { fmtOMR, fmtDateTime, fmtDate } from "@/lib/formatters";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
+import { BarcodeIndicator, type BarcodeIndicatorState } from "@/components/BarcodeIndicator";
 import { DevicePrintSettingsDialog } from "@/components/DevicePrintSettingsDialog";
+import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
+import { useScannerSettings } from "@/hooks/useScannerSettings";
+import { beepSuccess, beepError } from "@/lib/scannerBeep";
 import type { Branch, Shift } from "@shared/schema";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -873,6 +877,9 @@ export default function POS() {
   const [confirmClear, setConfirmClear]   = useState(false);
   const [showCloseShift, setShowCloseShift] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [scannerState, setScannerState] = useState<BarcodeIndicatorState>("idle");
+  const scannerStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { settings: scannerSettings } = useScannerSettings();
   const searchRef = useRef<HTMLInputElement>(null);
 
   // ── Fullscreen toggle (cashier kiosk-style) ──────────────────────────
@@ -994,6 +1001,77 @@ export default function POS() {
   };
 
   const removeItem = (uid: string) => setCart(prev => prev.filter(i => i.uid !== uid));
+
+  // ── Barcode scanner ──────────────────────────────────────────────────
+  const flashScanner = useCallback((next: "success" | "error", barcode?: string) => {
+    setScannerState(next);
+    if (scannerStateTimerRef.current) clearTimeout(scannerStateTimerRef.current);
+    scannerStateTimerRef.current = setTimeout(() => setScannerState("idle"), 600);
+    if (scannerSettings.soundEnabled) {
+      try { (next === "success" ? beepSuccess : beepError)(); } catch {}
+    }
+    try { window.dispatchEvent(new CustomEvent("scanner-flash", { detail: { state: next, barcode } })); } catch {}
+  }, [scannerSettings.soundEnabled]);
+
+  useEffect(() => () => { if (scannerStateTimerRef.current) clearTimeout(scannerStateTimerRef.current); }, []);
+
+  const handleScannedBarcode = useCallback(async (barcode: string) => {
+    // 1. Try the products list already loaded for this branch (instant).
+    const local = (products as POSProduct[]).find(p => p.barcode === barcode);
+    if (local) {
+      if (local.stockQty <= 0) {
+        flashScanner("error", barcode);
+        toast({ title: "نفد المخزون", description: local.name, variant: "destructive" });
+        return;
+      }
+      addToCart(local);
+      flashScanner("success", barcode);
+      return;
+    }
+
+    // 2. Fallback: hit the API in case the local list is stale.
+    try {
+      const res = await fetch(`/api/products/by-barcode/${encodeURIComponent(barcode)}`, { credentials: "include" });
+      if (res.status === 404) {
+        flashScanner("error", barcode);
+        toast({ title: "المنتج غير موجود", description: barcode, variant: "destructive" });
+        return;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const stock = Number(data.stockQuantity ?? data.stockQty ?? data.stock ?? 0);
+      if (stock <= 0) {
+        flashScanner("error", barcode);
+        toast({ title: "نفد المخزون", description: data.name || barcode, variant: "destructive" });
+        return;
+      }
+      addToCart({
+        id: data.id,
+        name: data.name,
+        barcode: data.barcode,
+        price: data.price,
+        avgCost: data.avgCost ?? "0",
+        image: data.image,
+        categoryId: data.categoryId,
+        stockQty: stock,
+      });
+      flashScanner("success", barcode);
+      qc.invalidateQueries({ queryKey: ["/api/products"] });
+    } catch (err) {
+      flashScanner("error", barcode);
+      toast({ title: "خطأ في الاتصال", description: barcode, variant: "destructive" });
+    }
+  }, [products, addToCart, flashScanner, toast, qc]);
+
+  const { lastScanned } = useBarcodeScanner({
+    enabled:   scannerSettings.enabled && !!shift,
+    threshold: scannerSettings.threshold,
+    onScan:    handleScannedBarcode,
+    onInvalid: (raw) => {
+      flashScanner("error", raw);
+      toast({ title: "باركود غير صالح", description: `يحتوي على رموز غير مسموحة: ${raw}`, variant: "destructive" });
+    },
+  });
 
   const clearCart = () => {
     setCart([]); setCustomer(null); setDiscount(""); setAmountPaid(""); setPayRef(""); setConfirmClear(false);
@@ -1375,6 +1453,12 @@ export default function POS() {
                   }
                 </Button>
               )}
+              <BarcodeIndicator
+                state={scannerState}
+                lastScanned={lastScanned}
+                enabled={scannerSettings.enabled}
+                variant="onDark"
+              />
               <DevicePrintSettingsDialog />
               <Button size="sm" variant="ghost"
                 className="h-7 text-xs gap-1 text-orange-200 hover:text-white hover:bg-white/20 px-2 border border-orange-300/40"
