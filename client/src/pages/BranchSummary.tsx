@@ -186,7 +186,7 @@ function ShiftRow({ s, omr, t }: { s: ShiftDetail; omr: string; t: (k: string) =
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-right hover:bg-muted/30 transition-colors"
+        className="w-full flex items-center gap-3 px-4 py-3 text-start hover:bg-muted/30 transition-colors"
       >
         <div className={`w-2 h-2 rounded-full shrink-0 ${s.status === "open" ? "bg-green-500 animate-pulse" : "bg-gray-400"}`} />
         <div className="flex-1 grid grid-cols-2 sm:grid-cols-5 gap-2 text-sm">
@@ -210,7 +210,7 @@ function ShiftRow({ s, omr, t }: { s: ShiftDetail; omr: string; t: (k: string) =
                 ? <span> ← <span className="text-emerald-700">{fmt(s.actualCash)}</span></span>
                 : <span className="text-muted-foreground"> ← مفتوح</span>
               }
-              <span className="text-muted-foreground mr-0.5"> {omr}</span>
+              <span className="text-muted-foreground me-0.5"> {omr}</span>
             </p>
           </div>
           <div>
@@ -423,7 +423,7 @@ export default function BranchSummary() {
           <p className="text-muted-foreground text-sm mt-0.5">
             {data?.branchName ?? "جارٍ التحميل..."}
             {lastRefresh && (
-              <span className="mr-2 text-xs opacity-60">
+              <span className="me-2 text-xs opacity-60">
                 {t("branch_summary.last_refresh")} {lastRefresh}
               </span>
             )}
@@ -669,7 +669,7 @@ export default function BranchSummary() {
                   {fmtTime(openShift.startedAt)}
                 </p>
               </div>
-              <div className="text-right">
+              <div className="text-start">
                 <p className="text-xs text-muted-foreground">{t("branch_summary.sales_shift")}</p>
                 <p className="font-bold text-emerald-600">{fmt(openShift.totalSales)} {omr}</p>
               </div>
@@ -708,7 +708,7 @@ export default function BranchSummary() {
                     <p className="text-sm text-muted-foreground font-medium">إجمالي النقد بعهدة الموظف</p>
                     <p className="text-3xl font-bold text-emerald-700 leading-none mt-0.5">
                       {fmt(data?.custody?.totalEmployeeCashCustody ?? 0)}
-                      <span className="text-lg font-medium text-emerald-600 mr-1">{omr}</span>
+                      <span className="text-lg font-medium text-emerald-600 me-1">{omr}</span>
                     </p>
                     <p className="text-xs text-muted-foreground mt-1.5">
                       يشمل نقد الدرج + النقد المرحّل/المحتفظ به خارج الصندوق
@@ -725,7 +725,7 @@ export default function BranchSummary() {
                     </div>
                     <p className="text-2xl font-bold text-blue-700">
                       {fmt(data?.custody?.drawerCash ?? 0)}
-                      <span className="text-sm font-medium text-blue-600 mr-1">{omr}</span>
+                      <span className="text-sm font-medium text-blue-600 me-1">{omr}</span>
                     </p>
                     {(data?.custody?.currentShiftId ?? null) === null && (
                       <p className="text-xs text-muted-foreground mt-1">لا توجد وردية مفتوحة</p>
@@ -738,7 +738,7 @@ export default function BranchSummary() {
                     </div>
                     <p className="text-2xl font-bold text-amber-700">
                       {fmt(data?.custody?.outsideDrawerCash ?? 0)}
-                      <span className="text-sm font-medium text-amber-600 mr-1">{omr}</span>
+                      <span className="text-sm font-medium text-amber-600 me-1">{omr}</span>
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">عُهدة بحوزة الموظف خارج الدرج</p>
                   </div>

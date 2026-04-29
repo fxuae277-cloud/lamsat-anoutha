@@ -481,7 +481,7 @@ export default function Settings() {
 
               <div className="space-y-2">
                 <Label>{t("settings.tax_reg_number")}</Label>
-                <Input value={currentSettings.taxRegistrationNumber} onChange={e => updateSetting("taxRegistrationNumber", e.target.value)} placeholder={t("settings.tax_reg_placeholder")} dir="ltr" className="text-left" data-testid="input-tax-reg-number" />
+                <Input value={currentSettings.taxRegistrationNumber} onChange={e => updateSetting("taxRegistrationNumber", e.target.value)} placeholder={t("settings.tax_reg_placeholder")} dir="ltr" className="text-end" data-testid="input-tax-reg-number" />
               </div>
             </CardContent>
           </Card>
@@ -517,7 +517,7 @@ export default function Settings() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>{t("settings.invoice_prefix")}</Label>
-                  <Input value={currentSettings.invoicePrefix} onChange={e => updateSetting("invoicePrefix", e.target.value)} placeholder="LO" dir="ltr" className="text-left" data-testid="input-invoice-prefix" />
+                  <Input value={currentSettings.invoicePrefix} onChange={e => updateSetting("invoicePrefix", e.target.value)} placeholder="LO" dir="ltr" className="text-end" data-testid="input-invoice-prefix" />
                   <p className="text-xs text-muted-foreground">{t("settings.invoice_prefix_example")} {currentSettings.invoicePrefix}-{"0".repeat(parseInt(currentSettings.invoiceNumberDigits || "5") - 1)}1</p>
                 </div>
                 <div className="space-y-2">
@@ -603,7 +603,7 @@ export default function Settings() {
 
               <div className="space-y-2">
                 <Label>{t("settings.business_logo")}</Label>
-                <Input value={currentSettings.businessLogo} onChange={e => updateSetting("businessLogo", e.target.value)} placeholder="https://example.com/logo.png" dir="ltr" className="text-left" data-testid="input-business-logo" />
+                <Input value={currentSettings.businessLogo} onChange={e => updateSetting("businessLogo", e.target.value)} placeholder="https://example.com/logo.png" dir="ltr" className="text-end" data-testid="input-business-logo" />
                 <p className="text-xs text-muted-foreground">{t("settings.business_logo_desc")}</p>
               </div>
             </CardContent>

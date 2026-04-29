@@ -188,7 +188,7 @@ export default function AuditLog() {
                 placeholder={t("audit_log.search_placeholder")}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="pr-9 bg-background"
+                className="pe-9 bg-background"
                 data-testid="input-search-audit"
               />
             </div>

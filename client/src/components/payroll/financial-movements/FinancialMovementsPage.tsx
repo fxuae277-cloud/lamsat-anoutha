@@ -202,7 +202,7 @@ function AddMovementDialog({ open, initialType, onClose }: AddDialogProps) {
               placeholder="0.000"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="text-right"
+              className="text-start"
             />
           </div>
 
@@ -247,7 +247,7 @@ function AddMovementDialog({ open, initialType, onClose }: AddDialogProps) {
               placeholder="أدخل سبب الحركة المالية..."
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              className="text-right resize-none"
+              className="text-start resize-none"
               rows={3}
             />
           </div>
@@ -447,7 +447,7 @@ export default function FinancialMovementsPage() {
                   placeholder="البحث بالاسم أو السبب..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="pr-9 text-right"
+                  className="pe-9 text-start"
                 />
               </div>
 
@@ -519,7 +519,7 @@ export default function FinancialMovementsPage() {
           <CardHeader className="px-4 py-3 border-b">
             <CardTitle className="text-base font-semibold">
               سجل الحركات
-              <span className="text-muted-foreground font-normal text-sm mr-2">
+              <span className="text-muted-foreground font-normal text-sm me-2">
                 ({filtered.length})
               </span>
             </CardTitle>
@@ -527,14 +527,14 @@ export default function FinancialMovementsPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40">
-                <TableHead className="text-right font-semibold">الموظف</TableHead>
-                <TableHead className="text-right font-semibold">النوع</TableHead>
-                <TableHead className="text-right font-semibold">المبلغ</TableHead>
-                <TableHead className="text-right font-semibold hidden sm:table-cell">الشهر / السنة</TableHead>
-                <TableHead className="text-right font-semibold hidden md:table-cell">الملاحظة</TableHead>
-                <TableHead className="text-right font-semibold">الحالة</TableHead>
-                <TableHead className="text-right font-semibold hidden lg:table-cell">تاريخ الإضافة</TableHead>
-                <TableHead className="text-right font-semibold w-20">إجراء</TableHead>
+                <TableHead className="text-start font-semibold">الموظف</TableHead>
+                <TableHead className="text-start font-semibold">النوع</TableHead>
+                <TableHead className="text-start font-semibold">المبلغ</TableHead>
+                <TableHead className="text-start font-semibold hidden sm:table-cell">الشهر / السنة</TableHead>
+                <TableHead className="text-start font-semibold hidden md:table-cell">الملاحظة</TableHead>
+                <TableHead className="text-start font-semibold">الحالة</TableHead>
+                <TableHead className="text-start font-semibold hidden lg:table-cell">تاريخ الإضافة</TableHead>
+                <TableHead className="text-start font-semibold w-20">إجراء</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -624,10 +624,10 @@ export default function FinancialMovementsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/40">
-                        <TableHead className="text-right font-semibold">الإجراء</TableHead>
-                        <TableHead className="text-right font-semibold">الموظف</TableHead>
-                        <TableHead className="text-right font-semibold">المبلغ</TableHead>
-                        <TableHead className="text-right font-semibold">التوقيت</TableHead>
+                        <TableHead className="text-start font-semibold">الإجراء</TableHead>
+                        <TableHead className="text-start font-semibold">الموظف</TableHead>
+                        <TableHead className="text-start font-semibold">المبلغ</TableHead>
+                        <TableHead className="text-start font-semibold">التوقيت</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

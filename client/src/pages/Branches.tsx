@@ -104,10 +104,10 @@ export default function Branches() {
             <TableRow>
               <TableHead className="w-10">#</TableHead>
               <TableHead>اسم الفرع</TableHead>
-              <TableHead><MapPin className="w-3 h-3 inline ml-1" />عنوان الفرع</TableHead>
-              <TableHead><Phone className="w-3 h-3 inline ml-1" />هاتف الفرع</TableHead>
+              <TableHead><MapPin className="w-3 h-3 inline ms-1" />عنوان الفرع</TableHead>
+              <TableHead><Phone className="w-3 h-3 inline ms-1" />هاتف الفرع</TableHead>
               <TableHead className="w-20">النوع</TableHead>
-              {isOwnerOrAdmin && <TableHead className="text-right w-16">الإجراءات</TableHead>}
+              {isOwnerOrAdmin && <TableHead className="text-start w-16">الإجراءات</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -131,7 +131,7 @@ export default function Branches() {
                   }
                 </TableCell>
                 {isOwnerOrAdmin && (
-                  <TableCell className="text-right">
+                  <TableCell className="text-start">
                     <div className="flex items-center justify-end gap-1">
                       <Button variant="ghost" size="icon" className="h-8 w-8" title="تعديل" onClick={() => openEdit(b)}>
                         <Edit2 className="w-4 h-4" />

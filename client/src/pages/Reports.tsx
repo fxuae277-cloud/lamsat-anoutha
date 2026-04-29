@@ -335,13 +335,13 @@ export default function Reports() {
                   <Table>
                     <TableHeader className="bg-muted/50">
                       <TableRow>
-                        <TableHead className="text-right">رقم الفاتورة</TableHead>
-                        <TableHead className="text-right">الفرع</TableHead>
-                        <TableHead className="text-right">طريقة الدفع</TableHead>
-                        <TableHead className="text-right">الرقم المرجعي</TableHead>
-                        <TableHead className="text-right">المبلغ</TableHead>
-                        <TableHead className="text-right">الكاشير</TableHead>
-                        <TableHead className="text-right">التاريخ</TableHead>
+                        <TableHead className="text-start">رقم الفاتورة</TableHead>
+                        <TableHead className="text-start">الفرع</TableHead>
+                        <TableHead className="text-start">طريقة الدفع</TableHead>
+                        <TableHead className="text-start">الرقم المرجعي</TableHead>
+                        <TableHead className="text-start">المبلغ</TableHead>
+                        <TableHead className="text-start">الكاشير</TableHead>
+                        <TableHead className="text-start">التاريخ</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -375,13 +375,13 @@ export default function Reports() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead className="text-right">#</TableHead>
-                  <TableHead className="text-right">المنتج</TableHead>
-                  <TableHead className="text-right">الكمية</TableHead>
-                  <TableHead className="text-right">إجمالي المبيعات</TableHead>
-                  <TableHead className="text-right">التكلفة</TableHead>
-                  <TableHead className="text-right">إجمالي الربح</TableHead>
-                  <TableHead className="text-right">الهامش</TableHead>
+                  <TableHead className="text-start">#</TableHead>
+                  <TableHead className="text-start">المنتج</TableHead>
+                  <TableHead className="text-start">الكمية</TableHead>
+                  <TableHead className="text-start">إجمالي المبيعات</TableHead>
+                  <TableHead className="text-start">التكلفة</TableHead>
+                  <TableHead className="text-start">إجمالي الربح</TableHead>
+                  <TableHead className="text-start">الهامش</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -536,9 +536,9 @@ export default function Reports() {
                       <TableHead>الشهر</TableHead>
                       <TableHead className="text-center">عدد الطلبات</TableHead>
                       <TableHead className="text-center">الكمية</TableHead>
-                      <TableHead className="text-right">إجمالي المبيعات</TableHead>
-                      <TableHead className="text-right">التكلفة</TableHead>
-                      <TableHead className="text-right">إجمالي الربح</TableHead>
+                      <TableHead className="text-start">إجمالي المبيعات</TableHead>
+                      <TableHead className="text-start">التكلفة</TableHead>
+                      <TableHead className="text-start">إجمالي الربح</TableHead>
                       <TableHead className="text-center">الهامش%</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -559,9 +559,9 @@ export default function Reports() {
                           <TableCell className="font-medium">{MONTH_AR[mm] || mm} {m.month?.slice(0, 4)}</TableCell>
                           <TableCell className="text-center">{m.order_count}</TableCell>
                           <TableCell className="text-center">{m.total_qty}</TableCell>
-                          <TableCell className="text-right text-green-600 font-medium">{fmtOMR(m.total_revenue)}</TableCell>
-                          <TableCell className="text-right text-orange-600">{fmtOMR(m.total_cogs)}</TableCell>
-                          <TableCell className="text-right text-blue-600 font-medium">{fmtOMR(m.gross_profit)}</TableCell>
+                          <TableCell className="text-start text-green-600 font-medium">{fmtOMR(m.total_revenue)}</TableCell>
+                          <TableCell className="text-start text-orange-600">{fmtOMR(m.total_cogs)}</TableCell>
+                          <TableCell className="text-start text-blue-600 font-medium">{fmtOMR(m.gross_profit)}</TableCell>
                           <TableCell className="text-center">
                             <Badge className={`text-xs ${parseFloat(margin) >= 30 ? "bg-green-100 text-green-800" : parseFloat(margin) >= 15 ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}>
                               {margin}%
@@ -628,7 +628,7 @@ export default function Reports() {
                         <TableHead>الشهر</TableHead>
                         <TableHead>الفئة</TableHead>
                         <TableHead className="text-center">الكمية</TableHead>
-                        <TableHead className="text-right">المبيعات</TableHead>
+                        <TableHead className="text-start">المبيعات</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -641,7 +641,7 @@ export default function Reports() {
                             <TableCell className="text-sm text-muted-foreground">{MONTH_AR[mm] || mm}</TableCell>
                             <TableCell className="font-medium">{row.category_name}</TableCell>
                             <TableCell className="text-center">{row.total_qty}</TableCell>
-                            <TableCell className="text-right text-green-600 font-medium">{fmtOMR(row.total_revenue)}</TableCell>
+                            <TableCell className="text-start text-green-600 font-medium">{fmtOMR(row.total_revenue)}</TableCell>
                           </TableRow>
                         );
                       })}
@@ -701,7 +701,7 @@ export default function Reports() {
                         <TableHead>الشهر</TableHead>
                         <TableHead>المنتج</TableHead>
                         <TableHead className="text-center">الكمية</TableHead>
-                        <TableHead className="text-right">المبيعات</TableHead>
+                        <TableHead className="text-start">المبيعات</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -714,7 +714,7 @@ export default function Reports() {
                             <TableCell className="text-sm text-muted-foreground">{MONTH_AR[mm] || mm}</TableCell>
                             <TableCell className="font-medium">{row.product_name}</TableCell>
                             <TableCell className="text-center">{row.total_qty}</TableCell>
-                            <TableCell className="text-right text-green-600 font-medium">{fmtOMR(row.total_revenue)}</TableCell>
+                            <TableCell className="text-start text-green-600 font-medium">{fmtOMR(row.total_revenue)}</TableCell>
                           </TableRow>
                         );
                       })}
@@ -732,7 +732,7 @@ export default function Reports() {
             <div className="flex justify-between items-center">
               <h2 className="font-bold text-lg flex items-center gap-2"><GitBranch className="h-5 w-5 text-primary" />مقارنة الفروع</h2>
               <Button size="sm" variant="outline" onClick={exportBranchComp}>
-                <Download className="h-4 w-4 ml-1" /> تصدير CSV
+                <Download className="h-4 w-4 ms-1" /> تصدير CSV
               </Button>
             </div>
 
@@ -797,13 +797,13 @@ export default function Reports() {
                   <Table>
                     <TableHeader className="bg-muted/50">
                       <TableRow>
-                        <TableHead className="text-right">الفرع</TableHead>
-                        <TableHead className="text-right">المبيعات</TableHead>
-                        <TableHead className="text-right">التكلفة</TableHead>
-                        <TableHead className="text-right">إجمالي الربح</TableHead>
-                        <TableHead className="text-right">المصروفات</TableHead>
-                        <TableHead className="text-right">صافي الربح</TableHead>
-                        <TableHead className="text-right">الهامش</TableHead>
+                        <TableHead className="text-start">الفرع</TableHead>
+                        <TableHead className="text-start">المبيعات</TableHead>
+                        <TableHead className="text-start">التكلفة</TableHead>
+                        <TableHead className="text-start">إجمالي الربح</TableHead>
+                        <TableHead className="text-start">المصروفات</TableHead>
+                        <TableHead className="text-start">صافي الربح</TableHead>
+                        <TableHead className="text-start">الهامش</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

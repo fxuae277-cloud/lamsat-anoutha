@@ -145,7 +145,7 @@ export default function EmployeesPage() {
             <div className="flex flex-wrap gap-3">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <Input placeholder="البحث بالاسم..." value={search} onChange={(e) => setSearch(e.target.value)} className="pr-9 text-right" />
+                <Input placeholder="البحث بالاسم..." value={search} onChange={(e) => setSearch(e.target.value)} className="pe-9 text-start" />
               </div>
               <Select value={branchFilter} onValueChange={setBranchFilter}>
                 <SelectTrigger className="w-[180px]"><SelectValue placeholder="الفرع" /></SelectTrigger>
@@ -196,22 +196,22 @@ export default function EmployeesPage() {
           <CardHeader className="px-4 py-3 border-b">
             <CardTitle className="text-base font-semibold">
               قائمة الموظفين
-              <span className="text-muted-foreground font-normal text-sm mr-2">({filtered.length})</span>
+              <span className="text-muted-foreground font-normal text-sm me-2">({filtered.length})</span>
             </CardTitle>
           </CardHeader>
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40">
-                <TableHead className="w-10 text-right">
+                <TableHead className="w-10 text-start">
                   <Checkbox checked={allSelected} onCheckedChange={(v) => toggleAll(!!v)} />
                 </TableHead>
-                <TableHead className="text-right font-semibold">الاسم</TableHead>
-                <TableHead className="text-right font-semibold">الفرع</TableHead>
-                <TableHead className="text-right font-semibold">المنصب</TableHead>
-                <TableHead className="text-right font-semibold">الحالة</TableHead>
-                <TableHead className="text-right font-semibold">الراتب الشهري</TableHead>
-                <TableHead className="text-right font-semibold">حالة الراتب</TableHead>
-                <TableHead className="text-right font-semibold w-20">إجراءات</TableHead>
+                <TableHead className="text-start font-semibold">الاسم</TableHead>
+                <TableHead className="text-start font-semibold">الفرع</TableHead>
+                <TableHead className="text-start font-semibold">المنصب</TableHead>
+                <TableHead className="text-start font-semibold">الحالة</TableHead>
+                <TableHead className="text-start font-semibold">الراتب الشهري</TableHead>
+                <TableHead className="text-start font-semibold">حالة الراتب</TableHead>
+                <TableHead className="text-start font-semibold w-20">إجراءات</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

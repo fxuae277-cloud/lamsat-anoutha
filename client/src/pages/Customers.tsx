@@ -296,11 +296,11 @@ table{width:100%;border-collapse:collapse;margin:15px 0;font-size:12px}th,td{bor
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder={t("customers.search_name")} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="pr-10" data-testid="input-search-name" />
+          <Input placeholder={t("customers.search_name")} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="pe-10" data-testid="input-search-name" />
         </div>
         <div className="relative w-44">
           <Phone className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder={t("customers.search_phone")} value={phoneSearch} onChange={e => { setPhoneSearch(e.target.value); setPage(1); }} className="pr-10" data-testid="input-search-phone" />
+          <Input placeholder={t("customers.search_phone")} value={phoneSearch} onChange={e => { setPhoneSearch(e.target.value); setPage(1); }} className="pe-10" data-testid="input-search-phone" />
         </div>
         <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
           <SelectTrigger className="w-40" data-testid="select-status-filter"><SelectValue /></SelectTrigger>
@@ -349,7 +349,7 @@ table{width:100%;border-collapse:collapse;margin:15px 0;font-size:12px}th,td{bor
                   return (
                     <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openDetail(c.id)} data-testid={`row-customer-${c.id}`}>
                       <TableCell className="font-medium">{c.name || "---"}</TableCell>
-                      <TableCell dir="ltr" className="text-right font-mono text-sm">{c.phone || "---"}</TableCell>
+                      <TableCell dir="ltr" className="text-start font-mono text-sm">{c.phone || "---"}</TableCell>
                       <TableCell className="hidden md:table-cell">{c.invoiceCount || 0}</TableCell>
                       <TableCell className="hidden md:table-cell">{c.visits || 0}</TableCell>
                       <TableCell className="font-semibold">{f3(spent)}</TableCell>
@@ -362,12 +362,12 @@ table{width:100%;border-collapse:collapse;margin:15px 0;font-size:12px}th,td{bor
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" data-testid={`button-actions-${c.id}`}><MoreHorizontal className="w-4 h-4" /></Button></DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openDetail(c.id)}><Eye className="w-4 h-4 ml-2" />{t("customers.view_details")}</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openEdit(c)}><Edit2 className="w-4 h-4 ml-2" />{t("customers.edit")}</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openDetail(c.id)}><Eye className="w-4 h-4 ms-2" />{t("customers.view_details")}</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openEdit(c)}><Edit2 className="w-4 h-4 ms-2" />{t("customers.edit")}</DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => openStatement(c.id)}><FileText className="w-4 h-4 ml-2" />{t("customers.statement")}</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openStatement(c.id)}><FileText className="w-4 h-4 ms-2" />{t("customers.statement")}</DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            {isOwner && <DropdownMenuItem className="text-destructive" onClick={() => setDeleteConfirm(c.id)}><Trash2 className="w-4 h-4 ml-2" />{t("customers.delete")}</DropdownMenuItem>}
+                            {isOwner && <DropdownMenuItem className="text-destructive" onClick={() => setDeleteConfirm(c.id)}><Trash2 className="w-4 h-4 ms-2" />{t("customers.delete")}</DropdownMenuItem>}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -565,7 +565,7 @@ table{width:100%;border-collapse:collapse;margin:15px 0;font-size:12px}th,td{bor
           <DialogHeader><DialogTitle className="flex items-center gap-2"><UserPlus className="w-5 h-5" />{t("customers.add_customer")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div><Label>{t("customers.name")} *</Label><Input value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))} data-testid="input-add-name" /></div>
-            <div><Label>{t("customers.phone")} *</Label><Input value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))} dir="ltr" className="text-right" data-testid="input-add-phone" /></div>
+            <div><Label>{t("customers.phone")} *</Label><Input value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))} dir="ltr" className="text-start" data-testid="input-add-phone" /></div>
             <div><Label>{t("customers.notes")}</Label><Textarea value={addForm.notes} onChange={e => setAddForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></div>
             <div><Label>{t("customers.default_branch")}</Label>
               <Select value={addForm.branchId} onValueChange={v => setAddForm(f => ({ ...f, branchId: v }))}>
@@ -590,7 +590,7 @@ table{width:100%;border-collapse:collapse;margin:15px 0;font-size:12px}th,td{bor
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Edit2 className="w-5 h-5" />{t("customers.edit_customer")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div><Label>{t("customers.name")} *</Label><Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} data-testid="input-edit-name" /></div>
-            <div><Label>{t("customers.phone")} *</Label><Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} dir="ltr" className="text-right" data-testid="input-edit-phone" /></div>
+            <div><Label>{t("customers.phone")} *</Label><Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} dir="ltr" className="text-start" data-testid="input-edit-phone" /></div>
             <div><Label>{t("customers.notes")}</Label><Textarea value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></div>
             <div><Label>{t("customers.default_branch")}</Label>
               <Select value={editForm.branchId} onValueChange={v => setEditForm(f => ({ ...f, branchId: v }))}>

@@ -247,10 +247,10 @@ function StocktakesTab({ branchesList }: { branchesList: any[] }) {
               <ClipboardCheck className="w-5 h-5 text-primary" />
               {t("stock_control.stocktake_details_title")}
               {selectedSt?.status === "draft" && (
-                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs mr-2">{t("common.open")}</Badge>
+                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs me-2">{t("common.open")}</Badge>
               )}
               {selectedSt?.status === "completed" && (
-                <Badge className="bg-green-100 text-green-700 border-green-200 text-xs mr-2">{t("common.completed")}</Badge>
+                <Badge className="bg-green-100 text-green-700 border-green-200 text-xs me-2">{t("common.completed")}</Badge>
               )}
             </DialogTitle>
             <DialogDescription>{selectedSt?.branch_name}</DialogDescription>
@@ -280,7 +280,7 @@ function StocktakesTab({ branchesList }: { branchesList: any[] }) {
           <div className="flex items-center gap-3">
             <div className="relative flex-1">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder={t("stock_control.search_items_placeholder")} className="pr-9" value={itemSearch} onChange={e => setItemSearch(e.target.value)} data-testid="input-st-item-search" />
+              <Input placeholder={t("stock_control.search_items_placeholder")} className="pe-9" value={itemSearch} onChange={e => setItemSearch(e.target.value)} data-testid="input-st-item-search" />
             </div>
             <BarcodeScanButton onScan={(barcode) => setItemSearch(barcode)} />
             {selectedSt?.status === "draft" && (

@@ -129,7 +129,7 @@ export default function MobileStocktake() {
               </Select>
             </div>
             <Button className="w-full h-14 text-lg" disabled={!locationId} onClick={() => setStarted(true)} data-testid="button-start-stocktake">
-              <ClipboardCheck className="w-5 h-5 ml-2" />
+              <ClipboardCheck className="w-5 h-5 ms-2" />
               {t("mobile.start_stocktake")}
             </Button>
           </CardContent>

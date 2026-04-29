@@ -161,13 +161,13 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">صافي الراتب</label>
-                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium tabular-nums text-right">
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium tabular-nums text-start">
                   {omr(liveRow.netSalary)}
                 </div>
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">المدفوع مسبقاً</label>
-                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium tabular-nums text-right">
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium tabular-nums text-start">
                   {liveRow.amountPaid > 0 ? omr(liveRow.amountPaid) : "—"}
                 </div>
               </div>
@@ -179,7 +179,7 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
             <label className="text-sm font-medium">
               المبلغ الآن (ر.ع)
               {remaining > 0 && (
-                <span className="text-xs text-muted-foreground font-normal mr-2">
+                <span className="text-xs text-muted-foreground font-normal me-2">
                   المتبقي: {omr(remaining)}
                 </span>
               )}
@@ -188,7 +188,7 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
               type="number" min="0.001" step="0.001"
               value={amount}
               onChange={(e) => { setAmount(e.target.value); setError(""); }}
-              className="text-right tabular-nums"
+              className="text-start tabular-nums"
               placeholder="0.000"
             />
           </div>
@@ -213,7 +213,7 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
               placeholder="ملاحظات إضافية..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="text-right resize-none" rows={2}
+              className="text-start resize-none" rows={2}
             />
           </div>
 
@@ -358,7 +358,7 @@ function BulkPartialDialog({ open, unpaidRows, month, year, onClose }: BulkParti
                 max={mode === "percentage" ? "100" : undefined}
                 value={value}
                 onChange={(e) => { setValue(e.target.value); setError(""); }}
-                className="text-right tabular-nums flex-1"
+                className="text-start tabular-nums flex-1"
               />
               <span className="flex items-center text-sm text-muted-foreground px-2">
                 {mode === "percentage" ? "%" : "ر.ع"}
@@ -628,7 +628,7 @@ export default function SalaryPaymentsPage() {
                   placeholder="البحث باسم الموظف..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="pr-9 text-right"
+                  className="pe-9 text-start"
                 />
               </div>
               <Select value={statusFilt} onValueChange={setStatusFilt}>
@@ -649,7 +649,7 @@ export default function SalaryPaymentsPage() {
           <div className="px-4 py-3 border-b flex items-center justify-between">
             <h2 className="font-semibold text-base">
               سجل الرواتب
-              <span className="text-muted-foreground font-normal text-sm mr-2">
+              <span className="text-muted-foreground font-normal text-sm me-2">
                 ({filtered.length})
               </span>
             </h2>
@@ -658,14 +658,14 @@ export default function SalaryPaymentsPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40">
-                  <TableHead className="text-right font-semibold min-w-[160px]">الموظف</TableHead>
-                  <TableHead className="text-right font-semibold">الفرع</TableHead>
-                  <TableHead className="text-right font-semibold">الصافي</TableHead>
-                  <TableHead className="text-right font-semibold text-blue-600">المدفوع</TableHead>
-                  <TableHead className="text-right font-semibold text-red-600">المتبقي</TableHead>
-                  <TableHead className="text-right font-semibold min-w-[120px]">نسبة الدفع</TableHead>
-                  <TableHead className="text-right font-semibold">الحالة</TableHead>
-                  <TableHead className="text-right font-semibold w-20">إجراء</TableHead>
+                  <TableHead className="text-start font-semibold min-w-[160px]">الموظف</TableHead>
+                  <TableHead className="text-start font-semibold">الفرع</TableHead>
+                  <TableHead className="text-start font-semibold">الصافي</TableHead>
+                  <TableHead className="text-start font-semibold text-blue-600">المدفوع</TableHead>
+                  <TableHead className="text-start font-semibold text-red-600">المتبقي</TableHead>
+                  <TableHead className="text-start font-semibold min-w-[120px]">نسبة الدفع</TableHead>
+                  <TableHead className="text-start font-semibold">الحالة</TableHead>
+                  <TableHead className="text-start font-semibold w-20">إجراء</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

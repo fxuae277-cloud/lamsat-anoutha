@@ -277,7 +277,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
                 <p className="text-xs text-muted-foreground">{t("common.date")}</p>
                 <p className="font-bold mt-1">
                   {detail.createdAt ? fmtDate(detail.createdAt) : "—"}
-                  <span className="text-xs font-normal text-muted-foreground mr-1">
+                  <span className="text-xs font-normal text-muted-foreground me-1">
                     {detail.createdAt ? fmtTime(detail.createdAt) : ""}
                   </span>
                 </p>
@@ -531,7 +531,7 @@ export default function Invoices() {
               placeholder="بحث برقم الفاتورة أو اسم العميلة أو الهاتف أو الرقم المرجعي..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pr-10 h-9 text-sm"
+              className="pe-10 h-9 text-sm"
             />
             {search && (
               <button onClick={() => setSearch("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">

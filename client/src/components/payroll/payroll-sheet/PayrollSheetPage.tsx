@@ -119,13 +119,13 @@ function PayDialog({ row, month, year, onClose }: PayDialogProps) {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">صافي الراتب</label>
-                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium tabular-nums text-right">
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium tabular-nums text-start">
                   {omr(row.netSalary)}
                 </div>
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">المبلغ المطلوب</label>
-                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium tabular-nums text-right">
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium tabular-nums text-start">
                   {omr(remaining)}
                 </div>
               </div>
@@ -140,7 +140,7 @@ function PayDialog({ row, month, year, onClose }: PayDialogProps) {
                 step="0.001"
                 value={amount}
                 onChange={(e) => { setAmount(e.target.value); setError(""); }}
-                className="text-right tabular-nums"
+                className="text-start tabular-nums"
               />
             </div>
 
@@ -164,7 +164,7 @@ function PayDialog({ row, month, year, onClose }: PayDialogProps) {
                 placeholder="ملاحظات إضافية..."
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                className="text-right resize-none"
+                className="text-start resize-none"
                 rows={2}
               />
             </div>
@@ -354,16 +354,16 @@ export default function PayrollSheetPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/40">
-                    <TableHead className="text-right font-semibold min-w-[160px]">الموظف</TableHead>
-                    <TableHead className="text-right font-semibold">الراتب الأساسي</TableHead>
-                    <TableHead className="text-right font-semibold">المستحقات</TableHead>
-                    <TableHead className="text-right font-semibold">الخصومات</TableHead>
-                    <TableHead className="text-right font-semibold" style={{ color: PINK }}>
+                    <TableHead className="text-start font-semibold min-w-[160px]">الموظف</TableHead>
+                    <TableHead className="text-start font-semibold">الراتب الأساسي</TableHead>
+                    <TableHead className="text-start font-semibold">المستحقات</TableHead>
+                    <TableHead className="text-start font-semibold">الخصومات</TableHead>
+                    <TableHead className="text-start font-semibold" style={{ color: PINK }}>
                       صافي الراتب
                     </TableHead>
-                    <TableHead className="text-right font-semibold">حالة الدفع</TableHead>
-                    <TableHead className="text-right font-semibold">المبلغ المدفوع</TableHead>
-                    <TableHead className="text-right font-semibold w-20 no-print">إجراءات</TableHead>
+                    <TableHead className="text-start font-semibold">حالة الدفع</TableHead>
+                    <TableHead className="text-start font-semibold">المبلغ المدفوع</TableHead>
+                    <TableHead className="text-start font-semibold w-20 no-print">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
 
@@ -444,9 +444,9 @@ export default function PayrollSheetPage() {
                 {payrollRows.length > 0 && (
                   <tfoot>
                     <tr className="border-t-2 bg-muted/50 font-bold text-sm">
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-start">
                         الإجمالي
-                        <span className="text-xs font-normal text-muted-foreground mr-1">
+                        <span className="text-xs font-normal text-muted-foreground me-1">
                           ({payrollRows.length} موظف)
                         </span>
                       </td>

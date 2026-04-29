@@ -49,7 +49,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
                 placeholder={t("app.search_placeholder")} 
-                className="pr-10 bg-muted/50 border-transparent focus-visible:bg-background"
+                className="pe-10 bg-muted/50 border-transparent focus-visible:bg-background"
               />
             </div>
           </div>

@@ -252,7 +252,7 @@ export function DevicePrintSettingsDialog({ trigger }: Props) {
                 <Label className="text-sm font-medium">رابط خدمة الطباعة المحلية</Label>
                 <Input
                   dir="ltr"
-                  className="text-left"
+                  className="text-end"
                   value={profile.baseUrl}
                   onChange={e => updateProfile({ baseUrl: e.target.value })}
                   placeholder={DEFAULT_LOCAL_PRINT_URL}
@@ -264,7 +264,7 @@ export function DevicePrintSettingsDialog({ trigger }: Props) {
                 <Label className="text-sm font-medium">مفتاح API</Label>
                 <Input
                   dir="ltr"
-                  className="text-left"
+                  className="text-end"
                   value={profile.apiKey}
                   onChange={e => updateProfile({ apiKey: e.target.value })}
                   placeholder={DEFAULT_LOCAL_PRINT_API_KEY}

@@ -46,7 +46,7 @@ function TransferRow({ tr }: { tr: any }) {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-right hover:bg-muted/30 transition-colors"
+        className="w-full flex items-center gap-3 px-4 py-3 text-start hover:bg-muted/30 transition-colors"
       >
         <div className="flex-1 grid grid-cols-2 sm:grid-cols-5 gap-2 text-sm">
           <div>
@@ -306,7 +306,7 @@ export default function BranchStock() {
                     placeholder={t("branch_stock.search_placeholder")}
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    className="pr-9"
+                    className="pe-9"
                     data-testid="input-search-stock"
                   />
                 </div>
@@ -323,7 +323,7 @@ export default function BranchStock() {
                       {parent.name}
                     </SelectItem>,
                     ...categories.filter((c: any) => c.parentId === parent.id).map((child: any) => (
-                      <SelectItem key={child.id} value={String(child.id)} className="pr-6 text-muted-foreground">
+                      <SelectItem key={child.id} value={String(child.id)} className="pe-6 text-muted-foreground">
                         ↳ {child.name}
                       </SelectItem>
                     )),
@@ -435,7 +435,7 @@ export default function BranchStock() {
                 placeholder="بحث برقم التحويل أو اسم المنتج أو الباركود..."
                 value={transferSearch}
                 onChange={e => setTransferSearch(e.target.value)}
-                className="pr-9"
+                className="pe-9"
               />
             </div>
 

@@ -446,7 +446,7 @@ export default function Products() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              className="pl-9"
+              className="ps-9"
               placeholder={t("products.search_placeholder")}
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -464,7 +464,7 @@ export default function Products() {
                 {parent.name}
               </SelectItem>,
               ...categories.filter((c: any) => c.parentId === parent.id).map((child: any) => (
-                <SelectItem key={child.id} value={child.id.toString()} className="pr-6 text-muted-foreground">
+                <SelectItem key={child.id} value={child.id.toString()} className="pe-6 text-muted-foreground">
                   ↳ {child.name}
                 </SelectItem>
               ))
@@ -526,7 +526,7 @@ export default function Products() {
                 الكمية{sortIcon("stock")}
               </TableHead>
               <TableHead>{t("products.table_status")}</TableHead>
-              <TableHead className="text-right">{t("products.table_actions")}</TableHead>
+              <TableHead className="text-start">{t("products.table_actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -592,7 +592,7 @@ export default function Products() {
                     </Badge>
                   )}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-start">
                   <div className="flex justify-end gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8" title="التفاصيل" onClick={() => setDetailProductId(p.id)} data-testid={`button-detail-product-${p.id}`}>
                       <Eye className="w-4 h-4" />
@@ -637,7 +637,7 @@ export default function Products() {
                   <label className="text-sm font-medium">{t("products.category")}</label>
                   {!showAddCategory && (
                     <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs text-primary" onClick={() => setShowAddCategory(true)} data-testid="button-show-add-category">
-                      <Plus className="w-3 h-3 mr-1" />{t("products.add_category")}
+                      <Plus className="w-3 h-3 me-1" />{t("products.add_category")}
                     </Button>
                   )}
                 </div>
@@ -658,7 +658,7 @@ export default function Products() {
                       {categories.filter((c: any) => !c.parentId).map((parent: any) => [
                         <SelectItem key={parent.id} value={parent.id.toString()} className="font-semibold">{parent.name}</SelectItem>,
                         ...categories.filter((c: any) => c.parentId === parent.id).map((child: any) => (
-                          <SelectItem key={child.id} value={child.id.toString()} className="pr-6 text-muted-foreground">↳ {child.name}</SelectItem>
+                          <SelectItem key={child.id} value={child.id.toString()} className="pe-6 text-muted-foreground">↳ {child.name}</SelectItem>
                         ))
                       ])}
                     </SelectContent>
@@ -860,7 +860,7 @@ export default function Products() {
               <>
                 <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b pb-1 pt-1">
                   {t("products.tab_variants")}
-                  <Button size="sm" className="gap-1 mr-3 h-6 text-xs" onClick={() => openVariantDialog()} data-testid="button-add-variant">
+                  <Button size="sm" className="gap-1 me-3 h-6 text-xs" onClick={() => openVariantDialog()} data-testid="button-add-variant">
                     <Plus className="w-3 h-3" />{t("products.add_variant")}
                   </Button>
                 </p>
@@ -871,7 +871,7 @@ export default function Products() {
                       <TableHead>{t("products.variant_color")}</TableHead>
                       <TableHead>{t("products.variant_size")}</TableHead>
                       <TableHead>{t("products.variant_price")}</TableHead>
-                      <TableHead className="text-right">{t("common.actions")}</TableHead>
+                      <TableHead className="text-start">{t("common.actions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -883,7 +883,7 @@ export default function Products() {
                         <TableCell>{v.color || "—"}</TableCell>
                         <TableCell>{v.size || "—"}</TableCell>
                         <TableCell>{parseFloat(v.price).toFixed(3)}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-start">
                           <div className="flex justify-end gap-1">
                             <Button variant="ghost" size="icon" onClick={() => openVariantDialog(v)} data-testid={`button-edit-variant-${v.id}`}><Edit2 className="w-4 h-4" /></Button>
                             <Button variant="ghost" size="icon" onClick={() => deleteVariantMutation.mutate(v.id)} data-testid={`button-delete-variant-${v.id}`}><Trash2 className="w-4 h-4 text-destructive" /></Button>
@@ -965,7 +965,7 @@ export default function Products() {
                         <TableHead>الباركود</TableHead>
                         <TableHead>السعر</TableHead>
                         <TableHead>المخزون</TableHead>
-                        <TableHead className="text-right">إجراء</TableHead>
+                        <TableHead className="text-start">إجراء</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -977,7 +977,7 @@ export default function Products() {
                           <TableCell>
                             <Badge variant={p.totalStock === 0 ? "destructive" : "outline"}>{p.totalStock ?? 0}</Badge>
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-start">
                             <div className="flex justify-end gap-1">
                               <Button variant="ghost" size="icon" onClick={() => { setDuplicatesOpen(false); openEdit(p); }}>
                                 <Edit2 className="w-3 h-3" />
@@ -1069,7 +1069,7 @@ export default function Products() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead><MapPin className="w-3 h-3 inline ml-1" />{t("products.location_name")}</TableHead>
+                        <TableHead><MapPin className="w-3 h-3 inline ms-1" />{t("products.location_name")}</TableHead>
                         <TableHead>{t("products.branch")}</TableHead>
                         <TableHead>{t("products.qty_on_hand")}</TableHead>
                         <TableHead>{t("products.reorder_level")}</TableHead>
@@ -1288,7 +1288,7 @@ export default function Products() {
                 }
               }}
             >
-              {batchLoading ? <RefreshCw className="w-4 h-4 animate-spin ml-2" /> : null}
+              {batchLoading ? <RefreshCw className="w-4 h-4 animate-spin ms-2" /> : null}
               تحديث الأسعار
             </Button>
           </DialogFooter>

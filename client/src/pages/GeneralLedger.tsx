@@ -200,9 +200,9 @@ export default function GeneralLedger() {
                     <TableHead>{t("ledger.date")}</TableHead>
                     <TableHead>{t("ledger.entry_number")}</TableHead>
                     <TableHead>{t("ledger.description")}</TableHead>
-                    <TableHead className="text-right">{t("ledger.debit")}</TableHead>
-                    <TableHead className="text-right">{t("ledger.credit")}</TableHead>
-                    <TableHead className="text-right">{t("ledger.running_balance")}</TableHead>
+                    <TableHead className="text-start">{t("ledger.debit")}</TableHead>
+                    <TableHead className="text-start">{t("ledger.credit")}</TableHead>
+                    <TableHead className="text-start">{t("ledger.running_balance")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -219,16 +219,16 @@ export default function GeneralLedger() {
                           <TableCell className="whitespace-nowrap">{fD(entry.date)}</TableCell>
                           <TableCell className="font-mono text-xs">{entry.entry_number}</TableCell>
                           <TableCell className="max-w-xs truncate" title={entry.description}>{entry.description}</TableCell>
-                          <TableCell className="text-right font-mono">{f3(entry.debit)}</TableCell>
-                          <TableCell className="text-right font-mono">{f3(entry.credit)}</TableCell>
-                          <TableCell className="text-right font-mono font-semibold">{f3(entry.running_balance)}</TableCell>
+                          <TableCell className="text-start font-mono">{f3(entry.debit)}</TableCell>
+                          <TableCell className="text-start font-mono">{f3(entry.credit)}</TableCell>
+                          <TableCell className="text-start font-mono font-semibold">{f3(entry.running_balance)}</TableCell>
                         </TableRow>
                       ))}
                       <TableRow className="bg-muted/50 font-bold">
-                        <TableCell colSpan={3} className="text-left">{t("common.total")}</TableCell>
-                        <TableCell className="text-right font-mono">{f3(glTotals.debit)}</TableCell>
-                        <TableCell className="text-right font-mono">{f3(glTotals.credit)}</TableCell>
-                        <TableCell className="text-right font-mono text-primary">
+                        <TableCell colSpan={3} className="text-end">{t("common.total")}</TableCell>
+                        <TableCell className="text-start font-mono">{f3(glTotals.debit)}</TableCell>
+                        <TableCell className="text-start font-mono">{f3(glTotals.credit)}</TableCell>
+                        <TableCell className="text-start font-mono text-primary">
                           {glWithRunningBalance.length > 0 ? f3(glWithRunningBalance[glWithRunningBalance.length - 1].running_balance) : "0.000"}
                         </TableCell>
                       </TableRow>
@@ -273,9 +273,9 @@ export default function GeneralLedger() {
                   <TableRow>
                     <TableHead>{t("ledger.account_code")}</TableHead>
                     <TableHead>{t("ledger.account_name")}</TableHead>
-                    <TableHead className="text-right">{t("ledger.total_debits")}</TableHead>
-                    <TableHead className="text-right">{t("ledger.total_credits")}</TableHead>
-                    <TableHead className="text-right">{t("ledger.balance")}</TableHead>
+                    <TableHead className="text-start">{t("ledger.total_debits")}</TableHead>
+                    <TableHead className="text-start">{t("ledger.total_credits")}</TableHead>
+                    <TableHead className="text-start">{t("ledger.balance")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -297,19 +297,19 @@ export default function GeneralLedger() {
                               <TableRow key={entry.account_id} data-testid={`row-tb-entry-${entry.account_id}`}>
                                 <TableCell className="font-mono text-xs">{entry.account_code}</TableCell>
                                 <TableCell>{lang === "ar" ? entry.account_name : (entry.account_name_en || entry.account_name)}</TableCell>
-                                <TableCell className="text-right font-mono">{f3(entry.total_debit)}</TableCell>
-                                <TableCell className="text-right font-mono">{f3(entry.total_credit)}</TableCell>
-                                <TableCell className="text-right font-mono font-semibold">{f3(entry.balance)}</TableCell>
+                                <TableCell className="text-start font-mono">{f3(entry.total_debit)}</TableCell>
+                                <TableCell className="text-start font-mono">{f3(entry.total_credit)}</TableCell>
+                                <TableCell className="text-start font-mono font-semibold">{f3(entry.balance)}</TableCell>
                               </TableRow>
                             ))}
                           </div>
                         )
                       ))}
                       <TableRow className="bg-primary/10 font-bold border-t-2">
-                        <TableCell colSpan={2} className="text-left uppercase">{t("common.total")}</TableCell>
-                        <TableCell className="text-right font-mono text-lg">{f3(tbTotals.debit)}</TableCell>
-                        <TableCell className="text-right font-mono text-lg">{f3(tbTotals.credit)}</TableCell>
-                        <TableCell className="text-right font-mono text-lg">
+                        <TableCell colSpan={2} className="text-end uppercase">{t("common.total")}</TableCell>
+                        <TableCell className="text-start font-mono text-lg">{f3(tbTotals.debit)}</TableCell>
+                        <TableCell className="text-start font-mono text-lg">{f3(tbTotals.credit)}</TableCell>
+                        <TableCell className="text-start font-mono text-lg">
                           {f3(tbTotals.debit - tbTotals.credit)}
                         </TableCell>
                       </TableRow>

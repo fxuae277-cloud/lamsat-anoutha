@@ -96,7 +96,7 @@ export default function InventoryAlerts() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead><Package className="w-4 h-4 inline ml-1" />{t("products.table_name")}</TableHead>
+              <TableHead><Package className="w-4 h-4 inline ms-1" />{t("products.table_name")}</TableHead>
               <TableHead>{t("products.qty_on_hand")}</TableHead>
               <TableHead>{t("products.reorder_level")}</TableHead>
               <TableHead>{t("products.table_status")}</TableHead>

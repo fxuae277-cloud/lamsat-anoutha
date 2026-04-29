@@ -234,7 +234,7 @@ export default function Executive() {
               {q.label}
             </Button>
           ))}
-          <div className="flex items-center gap-2 ltr:ml-auto rtl:mr-auto flex-wrap sm:flex-nowrap w-full sm:w-auto mt-1 sm:mt-0">
+          <div className="flex items-center gap-2 ltr:ms-auto rtl:me-auto flex-wrap sm:flex-nowrap w-full sm:w-auto mt-1 sm:mt-0">
             <div className="relative flex items-center">
               <Input
                 type="text"
@@ -247,7 +247,7 @@ export default function Executive() {
                   const iso = displayToIso(e.target.value);
                   if (iso) { setFromDate(iso); setActivePeriod(""); }
                 }}
-                className="w-32 h-8 text-xs pr-7"
+                className="w-32 h-8 text-xs pe-7"
                 data-testid="input-exec-from"
               />
               <button
@@ -283,7 +283,7 @@ export default function Executive() {
                   const iso = displayToIso(e.target.value);
                   if (iso) { setToDate(iso); setActivePeriod(""); }
                 }}
-                className="w-32 h-8 text-xs pr-7"
+                className="w-32 h-8 text-xs pe-7"
                 data-testid="input-exec-to"
               />
               <button

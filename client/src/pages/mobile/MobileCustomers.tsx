@@ -125,7 +125,7 @@ export default function MobileCustomers() {
       <div className="relative">
         <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input placeholder={t("customers.search_placeholder")} value={search} onChange={e => setSearch(e.target.value)}
-          className="pr-10 h-12 text-base" data-testid="input-search" />
+          className="pe-10 h-12 text-base" data-testid="input-search" />
       </div>
 
       <div className="space-y-2">
@@ -162,12 +162,12 @@ export default function MobileCustomers() {
                       <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0"><MoreVertical className="w-5 h-5" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openDetail(c.id)}><Eye className="w-4 h-4 ml-2" />{t("customers.view_details")}</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => openEdit(c)}><Edit2 className="w-4 h-4 ml-2" />{t("customers.edit")}</DropdownMenuItem>
-                      {c.phone && <DropdownMenuItem onClick={() => window.open(`https://wa.me/${c.phone?.startsWith("968") ? c.phone : `968${c.phone}`}`, "_blank")}><MessageSquare className="w-4 h-4 ml-2" />{t("customers.whatsapp")}</DropdownMenuItem>}
+                      <DropdownMenuItem onClick={() => openDetail(c.id)}><Eye className="w-4 h-4 ms-2" />{t("customers.view_details")}</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openEdit(c)}><Edit2 className="w-4 h-4 ms-2" />{t("customers.edit")}</DropdownMenuItem>
+                      {c.phone && <DropdownMenuItem onClick={() => window.open(`https://wa.me/${c.phone?.startsWith("968") ? c.phone : `968${c.phone}`}`, "_blank")}><MessageSquare className="w-4 h-4 ms-2" />{t("customers.whatsapp")}</DropdownMenuItem>}
                       {isOwner && <>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-destructive" onClick={() => setDeleteConfirm(c.id)}><Trash2 className="w-4 h-4 ml-2" />{t("customers.delete")}</DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive" onClick={() => setDeleteConfirm(c.id)}><Trash2 className="w-4 h-4 ms-2" />{t("customers.delete")}</DropdownMenuItem>
                       </>}
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -215,7 +215,7 @@ export default function MobileCustomers() {
                             <span className="font-mono font-bold text-sm">#{inv.invoice_number}</span>
                             <p className="text-xs text-muted-foreground">{fD(inv.created_at)} - {inv.branch_name}</p>
                           </div>
-                          <div className="text-left">
+                          <div className="text-end">
                             <span className="font-bold text-primary">{f3(inv.total)}</span>
                             <p className="text-xs text-muted-foreground">
                               {inv.payment_method === "cash" ? t("customers.cash") : inv.payment_method === "card" ? t("customers.card") : t("customers.bank_transfer")}
@@ -254,7 +254,7 @@ export default function MobileCustomers() {
           <DialogHeader><DialogTitle className="flex items-center gap-2 text-base"><UserPlus className="w-4 h-4" />{t("customers.add_customer")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div><Label>{t("customers.name")} *</Label><Input value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))} className="h-12 text-base" data-testid="input-add-name" /></div>
-            <div><Label>{t("customers.phone")} *</Label><Input value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))} dir="ltr" className="h-12 text-base text-right" data-testid="input-add-phone" inputMode="tel" /></div>
+            <div><Label>{t("customers.phone")} *</Label><Input value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))} dir="ltr" className="h-12 text-base text-start" data-testid="input-add-phone" inputMode="tel" /></div>
             <div><Label>{t("customers.notes")}</Label><Textarea value={addForm.notes} onChange={e => setAddForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="text-base" /></div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
@@ -273,7 +273,7 @@ export default function MobileCustomers() {
           <DialogHeader><DialogTitle className="flex items-center gap-2 text-base"><Edit2 className="w-4 h-4" />{t("customers.edit_customer")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div><Label>{t("customers.name")} *</Label><Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} className="h-12 text-base" /></div>
-            <div><Label>{t("customers.phone")} *</Label><Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} dir="ltr" className="h-12 text-base text-right" inputMode="tel" /></div>
+            <div><Label>{t("customers.phone")} *</Label><Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} dir="ltr" className="h-12 text-base text-start" inputMode="tel" /></div>
             <div><Label>{t("customers.notes")}</Label><Textarea value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="text-base" /></div>
             <div className="flex items-center gap-3">
               <Label>{t("customers.status")}</Label>

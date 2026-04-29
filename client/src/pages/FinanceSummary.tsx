@@ -80,10 +80,10 @@ function PlRow({ label, value, sub, bold, color, indent }: {
   bold?: boolean; color?: string; indent?: boolean;
 }) {
   return (
-    <div className={`flex justify-between items-center py-2 border-b last:border-0 ${indent ? "pr-4" : ""}`}>
+    <div className={`flex justify-between items-center py-2 border-b last:border-0 ${indent ? "pe-4" : ""}`}>
       <span className={`text-sm ${bold ? "font-semibold" : "text-muted-foreground"} ${color ?? ""}`}>
         {label}
-        {sub && <span className="text-xs text-muted-foreground mr-1">({sub})</span>}
+        {sub && <span className="text-xs text-muted-foreground me-1">({sub})</span>}
       </span>
       <span className={`text-sm font-mono ${bold ? "font-bold" : ""} ${color ?? ""}`} dir="ltr">
         {value}
@@ -184,7 +184,7 @@ export default function FinanceSummary() {
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => refetchPl()} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 ml-1.5 ${isLoading ? "animate-spin" : ""}`} />
+          <RefreshCw className={`h-4 w-4 ms-1.5 ${isLoading ? "animate-spin" : ""}`} />
           {t("finance_summary.refresh")}
         </Button>
       </div>
@@ -277,7 +277,7 @@ export default function FinanceSummary() {
             <div className="flex justify-between items-center py-2.5 border-b bg-green-50 rounded px-2 my-1">
               <span className="text-sm font-semibold text-green-700">
                 {t("finance_summary.pl_gross_profit")}
-                <span className="text-xs text-muted-foreground mr-1.5">
+                <span className="text-xs text-muted-foreground me-1.5">
                   ({pct(grossProfit, netRevenue)}%)
                 </span>
               </span>
@@ -291,7 +291,7 @@ export default function FinanceSummary() {
             <div className={`flex justify-between items-center py-3 px-2 rounded mt-1 ${netProfit >= 0 ? "bg-primary/10" : "bg-red-50"}`}>
               <span className={`text-base font-bold ${netProfit >= 0 ? "text-primary" : "text-red-700"}`}>
                 {t("finance_summary.pl_net_profit")}
-                <span className="text-xs font-normal text-muted-foreground mr-1.5">
+                <span className="text-xs font-normal text-muted-foreground me-1.5">
                   ({netMargin}%)
                 </span>
               </span>

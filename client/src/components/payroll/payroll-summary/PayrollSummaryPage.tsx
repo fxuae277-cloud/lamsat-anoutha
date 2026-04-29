@@ -162,7 +162,7 @@ export default function PayrollSummaryPage() {
               placeholder="البحث باسم الموظف..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pr-9 text-right"
+              className="pe-9 text-start"
             />
           </div>
 
@@ -172,18 +172,18 @@ export default function PayrollSummaryPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/40">
-                    <TableHead className="text-right font-semibold min-w-[150px]">الموظف</TableHead>
-                    <TableHead className="text-right font-semibold min-w-[140px]">الفرع / الدور</TableHead>
-                    <TableHead className="text-right font-semibold">الراتب الأساسي</TableHead>
-                    <TableHead className="text-right font-semibold text-green-700">المستحقات</TableHead>
-                    <TableHead className="text-right font-semibold text-green-700">العمولات</TableHead>
-                    <TableHead className="text-right font-semibold text-orange-600">الخصومات</TableHead>
-                    <TableHead className="text-right font-semibold text-orange-600">السلف</TableHead>
-                    <TableHead className="text-right font-semibold text-green-700 min-w-[110px]">الصافي</TableHead>
-                    <TableHead className="text-right font-semibold text-blue-600">المدفوع</TableHead>
-                    <TableHead className="text-right font-semibold text-red-600 min-w-[100px]">المتبقي</TableHead>
-                    <TableHead className="text-right font-semibold">الحالة</TableHead>
-                    <TableHead className="text-right font-semibold w-16 no-print">طباعة</TableHead>
+                    <TableHead className="text-start font-semibold min-w-[150px]">الموظف</TableHead>
+                    <TableHead className="text-start font-semibold min-w-[140px]">الفرع / الدور</TableHead>
+                    <TableHead className="text-start font-semibold">الراتب الأساسي</TableHead>
+                    <TableHead className="text-start font-semibold text-green-700">المستحقات</TableHead>
+                    <TableHead className="text-start font-semibold text-green-700">العمولات</TableHead>
+                    <TableHead className="text-start font-semibold text-orange-600">الخصومات</TableHead>
+                    <TableHead className="text-start font-semibold text-orange-600">السلف</TableHead>
+                    <TableHead className="text-start font-semibold text-green-700 min-w-[110px]">الصافي</TableHead>
+                    <TableHead className="text-start font-semibold text-blue-600">المدفوع</TableHead>
+                    <TableHead className="text-start font-semibold text-red-600 min-w-[100px]">المتبقي</TableHead>
+                    <TableHead className="text-start font-semibold">الحالة</TableHead>
+                    <TableHead className="text-start font-semibold w-16 no-print">طباعة</TableHead>
                   </TableRow>
                 </TableHeader>
 
@@ -280,9 +280,9 @@ export default function PayrollSummaryPage() {
                 {filtered.length > 0 && (
                   <tfoot>
                     <tr className="border-t-2 bg-muted/50 font-bold text-sm">
-                      <td className="px-4 py-3 text-right" colSpan={2}>
+                      <td className="px-4 py-3 text-start" colSpan={2}>
                         الإجمالي
-                        <span className="text-xs font-normal text-muted-foreground mr-1">
+                        <span className="text-xs font-normal text-muted-foreground me-1">
                           ({filtered.length} من {payrollRows.length} موظف)
                         </span>
                       </td>

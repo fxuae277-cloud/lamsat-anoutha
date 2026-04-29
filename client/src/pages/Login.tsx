@@ -65,7 +65,7 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={t("login.password_placeholder")}
-                className="pl-10"
+                className="ps-10"
                 data-testid="input-password"
               />
               <button

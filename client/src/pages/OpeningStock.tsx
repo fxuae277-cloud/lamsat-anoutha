@@ -123,7 +123,7 @@ function ProductSearch({ onSelect, placeholder }: {
           {results.map(p => (
             <button key={p.id} type="button"
               onClick={() => { onSelect(p); setQ(""); setResults([]); setOpen(false); }}
-              className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-muted transition-colors text-right gap-2"
+              className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-muted transition-colors text-start gap-2"
             >
               <div className="min-w-0">
                 <p className="font-medium truncate">{p.name}</p>
@@ -232,7 +232,7 @@ function VariantPickerDialog({
           <div className="overflow-x-auto">
             <table className="w-full text-sm border rounded-lg overflow-hidden">
               <thead>
-                <tr className="bg-muted/40 text-right border-b">
+                <tr className="bg-muted/40 text-start border-b">
                   <th className="px-3 py-2 font-medium">اللون</th>
                   <th className="px-3 py-2 font-medium">المقاس</th>
                   <th className="px-3 py-2 font-medium">باركود</th>
@@ -574,7 +574,7 @@ export default function OpeningStock() {
         {statusList.map(s => (
           <button key={s.branchId} type="button"
             onClick={() => { setSelectedBranchId(s.branchId); setItems([]); }}
-            className={`text-right p-4 border-2 rounded-xl transition-all ${
+            className={`text-start p-4 border-2 rounded-xl transition-all ${
               selectedBranchId === s.branchId
                 ? "border-primary bg-primary/5"
                 : "border-transparent bg-muted/40 hover:border-muted"
@@ -671,14 +671,14 @@ export default function OpeningStock() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b bg-muted/30 text-right">
+                      <tr className="border-b bg-muted/30 text-start">
                         <th className="px-4 py-2 font-medium">{t("opening_stock.product")}</th>
                         <th className="px-3 py-2 font-medium">اللون</th>
                         <th className="px-3 py-2 font-medium">المقاس</th>
                         <th className="px-4 py-2 font-medium text-xs text-muted-foreground">باركود</th>
                         <th className="px-4 py-2 font-medium w-28 text-center">{t("opening_stock.quantity")}</th>
                         <th className="px-4 py-2 font-medium w-32 text-center">{t("opening_stock.unit_cost")}</th>
-                        <th className="px-4 py-2 font-medium w-32 text-left">{t("opening_stock.subtotal")}</th>
+                        <th className="px-4 py-2 font-medium w-32 text-end">{t("opening_stock.subtotal")}</th>
                         {!isCommitted && <th className="w-10" />}
                       </tr>
                     </thead>
@@ -722,7 +722,7 @@ export default function OpeningStock() {
                                 inputMode="decimal" dir="ltr" />
                             )}
                           </td>
-                          <td className="px-4 py-2 text-left font-medium">
+                          <td className="px-4 py-2 text-end font-medium">
                             {fmt(item.quantity * item.unitCost)} {t("branch_summary.omr")}
                           </td>
                           {!isCommitted && (
@@ -738,10 +738,10 @@ export default function OpeningStock() {
                     </tbody>
                     <tfoot>
                       <tr className="border-t bg-muted/20 font-semibold">
-                        <td colSpan={6} className="px-4 py-2 text-right">
+                        <td colSpan={6} className="px-4 py-2 text-start">
                           {t("opening_stock.total")}
                         </td>
-                        <td className="px-4 py-2 text-left text-primary">
+                        <td className="px-4 py-2 text-end text-primary">
                           {fmt(isCommitted ? entry!.totalValue : totalValue)} {t("branch_summary.omr")}
                         </td>
                         {!isCommitted && <td />}

@@ -391,7 +391,7 @@ export default function BranchPerformance() {
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     placeholder="بحث: رقم فاتورة، عميل، جوال، مرجع..."
-                    className="h-8 text-xs pr-8 pl-3"
+                    className="h-8 text-xs pe-8 ps-3"
                   />
                 </div>
 
@@ -491,7 +491,7 @@ export default function BranchPerformance() {
                           </TableCell>
                           <TableCell className="text-center font-mono font-bold text-base">
                             {omr(s.total)}
-                            <span className="text-[10px] font-normal text-muted-foreground mr-0.5">ر.ع</span>
+                            <span className="text-[10px] font-normal text-muted-foreground me-0.5">ر.ع</span>
                           </TableCell>
                           <TableCell className="text-center text-xs text-muted-foreground">
                             {fmtDate(s.createdAt)}

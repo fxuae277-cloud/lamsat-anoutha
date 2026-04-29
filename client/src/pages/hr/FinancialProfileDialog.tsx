@@ -88,7 +88,7 @@ export default function FinancialProfileDialog({ open, onOpenChange, employeeId,
             <TabsTrigger value="statement" className="text-[10px] md:text-xs py-2">{t("hr.profile_tab_statement")}</TabsTrigger>
           </TabsList>
 
-          <div className="flex-1 overflow-y-auto mt-4 pr-1">
+          <div className="flex-1 overflow-y-auto mt-4 pe-1">
             <TabsContent value="summary" className="m-0 space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <Card>

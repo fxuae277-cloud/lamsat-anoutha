@@ -286,7 +286,7 @@ export default function UsersManagement() {
             placeholder={t("users_mgmt.search_placeholder")}
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="pr-9 rounded-xl"
+            className="pe-9 rounded-xl"
           />
         </div>
         <Select value={filterRole} onValueChange={setFilterRole}>
@@ -320,14 +320,14 @@ export default function UsersManagement() {
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead className="text-right w-10">#</TableHead>
-              <TableHead className="text-right">{t("users_mgmt.col_name")}</TableHead>
-              <TableHead className="text-right">{t("users_mgmt.col_username")}</TableHead>
-              <TableHead className="text-right">{t("users_mgmt.col_role")}</TableHead>
-              <TableHead className="text-right">{t("users_mgmt.col_branch")}</TableHead>
-              <TableHead className="text-right">{t("users_mgmt.col_status")}</TableHead>
-              <TableHead className="text-right">{t("users_mgmt.col_last_login")}</TableHead>
-              <TableHead className="text-right w-32">{t("users_mgmt.col_actions")}</TableHead>
+              <TableHead className="text-start w-10">#</TableHead>
+              <TableHead className="text-start">{t("users_mgmt.col_name")}</TableHead>
+              <TableHead className="text-start">{t("users_mgmt.col_username")}</TableHead>
+              <TableHead className="text-start">{t("users_mgmt.col_role")}</TableHead>
+              <TableHead className="text-start">{t("users_mgmt.col_branch")}</TableHead>
+              <TableHead className="text-start">{t("users_mgmt.col_status")}</TableHead>
+              <TableHead className="text-start">{t("users_mgmt.col_last_login")}</TableHead>
+              <TableHead className="text-start w-32">{t("users_mgmt.col_actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -410,7 +410,7 @@ export default function UsersManagement() {
               <div>
                 <Label>{t("users_mgmt.field_password")} <span className="text-red-500">*</span></Label>
                 <div className="relative mt-1">
-                  <Input type={showPass ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} className="pl-9" dir="ltr" />
+                  <Input type={showPass ? "text" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} className="ps-9" dir="ltr" />
                   <button type="button" className="absolute left-2 top-2.5 text-muted-foreground" onClick={() => setShowPass(p => !p)}>
                     {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -419,7 +419,7 @@ export default function UsersManagement() {
               <div>
                 <Label>{t("users_mgmt.field_confirm_password")} <span className="text-red-500">*</span></Label>
                 <div className="relative mt-1">
-                  <Input type={showConfirm ? "text" : "password"} value={form.confirmPassword} onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))} className="pl-9" dir="ltr" />
+                  <Input type={showConfirm ? "text" : "password"} value={form.confirmPassword} onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))} className="ps-9" dir="ltr" />
                   <button type="button" className="absolute left-2 top-2.5 text-muted-foreground" onClick={() => setShowConfirm(p => !p)}>
                     {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -564,7 +564,7 @@ export default function UsersManagement() {
           <div>
             <Label>{t("users_mgmt.field_new_password")}</Label>
             <div className="relative mt-1">
-              <Input type={showNewPw ? "text" : "password"} value={newPw} onChange={e => setNewPw(e.target.value)} className="pl-9" dir="ltr" />
+              <Input type={showNewPw ? "text" : "password"} value={newPw} onChange={e => setNewPw(e.target.value)} className="ps-9" dir="ltr" />
               <button type="button" className="absolute left-2 top-2.5 text-muted-foreground" onClick={() => setShowNewPw(p => !p)}>
                 {showNewPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
