@@ -8,7 +8,7 @@ import {
   Banknote, LogOut, User as UserIcon, XCircle, Clock, Printer,
   ArrowRight, Receipt, ShoppingCart, MessageSquare, Pause, Play,
   Tag, Package, Percent, CreditCard, Wallet, RotateCcw, ChevronDown,
-  Phone, AlertTriangle, ZapOff, Maximize2, Minimize2,
+  Phone, AlertTriangle, ZapOff, Maximize2, Minimize2, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -174,7 +174,15 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId }: {
   const paid   = n(sale.amountPaid ?? sale.amount_paid ?? total);
   const change = n(sale.changeAmount ?? sale.change_amount ?? 0);
   const [printing, setPrinting] = useState(false);
+  const [printSuccess, setPrintSuccess] = useState(false);
   const printingRef = useRef(false);
+  const closeTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    };
+  }, []);
 
   const handlePrint = async () => {
     // Re-entrancy guard — `printing` state may not have flushed yet on a
@@ -182,41 +190,51 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId }: {
     if (printingRef.current) return;
     printingRef.current = true;
     setPrinting(true);
-    // Direct ESC/POS path — sends bytes to localhost:3001 which uses the
-    // raw winspool driver to print on EPSON TM-T100. No browser print
-    // dialog, no popup, no preview.
-    const result = await printInvoiceLocal({
-      invoiceNumber: sale.invoiceNumber || sale.invoice_number || "",
-      createdAt:     sale.createdAt     || sale.created_at,
-      cashierName:   cashierName,
-      branchName:    branchName,
-      customerName:  sale.customerName ?? null,
-      items: (sale.items || []).map((i: any) => ({
-        productName: i.productName || i.product_name || "",
-        quantity:    i.quantity,
-        unitPrice:   n(i.unitPrice ?? i.unit_price),
-        color:       i.color,
-        size:        i.size,
-      })),
-      subtotal:      n(sale.subtotal),
-      discount:      n(sale.discount),
-      vat:           n(sale.vat),
-      total:         n(sale.total),
-      amountPaid:    n(sale.amountPaid ?? sale.amount_paid ?? sale.total),
-      changeAmount:  n(sale.changeAmount ?? sale.change_amount ?? 0),
-      paymentMethod: sale.paymentMethod || sale.payment_method || "cash",
-    });
-    setPrinting(false);
-    printingRef.current = false;
-    if (result.ok) {
-      // Silent on ignoredDuplicate — duplicate suppression is an internal
-      // safeguard, the cashier should not see it. The console logs
-      // ([Print] duplicate ignored …) are enough for diagnosis.
-      if (!result.ignoredDuplicate) {
-        toast({ title: "تمت الطباعة بنجاح" });
+    try {
+      // Direct ESC/POS path — sends bytes to localhost:3001 which uses the
+      // raw winspool driver to print on EPSON TM-T100. No browser print
+      // dialog, no popup, no preview.
+      const result = await printInvoiceLocal({
+        invoiceNumber: sale.invoiceNumber || sale.invoice_number || "",
+        createdAt:     sale.createdAt     || sale.created_at,
+        cashierName:   cashierName,
+        branchName:    branchName,
+        customerName:  sale.customerName ?? null,
+        items: (sale.items || []).map((i: any) => ({
+          productName: i.productName || i.product_name || "",
+          quantity:    i.quantity,
+          unitPrice:   n(i.unitPrice ?? i.unit_price),
+          color:       i.color,
+          size:        i.size,
+        })),
+        subtotal:      n(sale.subtotal),
+        discount:      n(sale.discount),
+        vat:           n(sale.vat),
+        total:         n(sale.total),
+        amountPaid:    n(sale.amountPaid ?? sale.amount_paid ?? sale.total),
+        changeAmount:  n(sale.changeAmount ?? sale.change_amount ?? 0),
+        paymentMethod: sale.paymentMethod || sale.payment_method || "cash",
+      });
+      if (result.ok) {
+        // Silent on ignoredDuplicate — duplicate suppression is an internal
+        // safeguard, the cashier should not see it. The console logs
+        // ([Print] duplicate ignored …) are enough for diagnosis.
+        if (!result.ignoredDuplicate) {
+          toast({ title: "تمت الطباعة بنجاح" });
+        }
+        setPrintSuccess(true);
+        // Brief "تمت الطباعة ✓" confirmation, then auto-close so the cashier
+        // jumps straight to the next customer (cart was already cleared by
+        // the sale mutation; onClose() also focuses the search/barcode input).
+        closeTimerRef.current = window.setTimeout(() => {
+          onClose();
+        }, 800);
+      } else {
+        toast({ title: "فشلت الطباعة - حاول مرة أخرى", description: result.error, variant: "destructive" });
       }
-    } else {
-      toast({ title: "خطأ في الطباعة", description: result.error, variant: "destructive" });
+    } finally {
+      setPrinting(false);
+      printingRef.current = false;
     }
   };
 
@@ -316,11 +334,14 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId }: {
         </div>
 
         <DialogFooter className="flex gap-2 sm:justify-start">
-          <Button size="sm" onClick={handlePrint} disabled={printing} className="bg-pink-600 hover:bg-pink-700 gap-1">
-            {printing
-              ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> جارٍ الطباعة...</>
-              : <><Printer className="w-3.5 h-3.5" /> طباعة</>
-            }
+          <Button size="sm" onClick={handlePrint} disabled={printing || printSuccess} className="bg-pink-600 hover:bg-pink-700 gap-1">
+            {printing ? (
+              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> جارٍ الطباعة...</>
+            ) : printSuccess ? (
+              <><CheckCircle2 className="w-3.5 h-3.5" /> تمت الطباعة ✓</>
+            ) : (
+              <><Printer className="w-3.5 h-3.5" /> طباعة</>
+            )}
           </Button>
           <Button size="sm" variant="outline" onClick={handleWhatsApp} className="gap-1 border-emerald-500 text-emerald-700 hover:bg-emerald-50">
             <MessageSquare className="w-3.5 h-3.5" /> واتساب
