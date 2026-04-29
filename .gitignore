@@ -10,6 +10,11 @@ vite.config.ts.*
 *.tar.gz
 logs/*.log
 
+# Backup artefacts produced by local-print-service/scripts/backup.ps1.
+# Defaults to <repo>/BACKUPS — never commit zips/manifests.
+/BACKUPS/
+/local-print-service/BACKUPS/
+
 # Secrets — NEVER commit
 .env
 .env.*
