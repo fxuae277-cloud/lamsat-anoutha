@@ -2916,7 +2916,16 @@
     "btn_refresh_printers": "تحديث الطابعات",
     "selected_printer_label": "الطابعة المختارة:",
     "no_printer_selected": "لا توجد طابعة مختارة",
-    "label_printer_auto_picked": "تم اختيار الطابعة تلقائياً من الخدمة المحلية"
+    "label_printer_auto_picked": "تم اختيار الطابعة تلقائياً من الخدمة المحلية",
+    "printing_progress": "جاري الطباعة",
+    "print_success": "تم طباعة {count} ملصق بنجاح",
+    "print_partial": "نجح {success} وفشل {fail}",
+    "print_all_failed": "فشل طباعة كل الملصقات",
+    "service_offline": "خدمة الطباعة المحلية غير متصلة",
+    "printer_offline_503": "طابعة الملصقات غير متصلة",
+    "print_timeout": "انتهت مهلة الطباعة - تحقق من الطابعة",
+    "cols_disabled_hint": "غير متاح في الطباعة المباشرة",
+    "size_locked_hint": "الإصدار الحالي يدعم 59×39mm فقط"
   },
   "orders_page": {
     "title": "الطلبات",

@@ -10,7 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Printer, Search, Plus, Minus, Trash2, Tag, Package, X, Eye, RefreshCw,
+  Printer, Search, Plus, Minus, Trash2, Tag, Package, X, Eye, RefreshCw, Loader2,
 } from "lucide-react";
 import JsBarcode from "jsbarcode";
 import { useI18n } from "@/lib/i18n";
@@ -18,6 +18,8 @@ import {
   getDeviceProfile,
   setDeviceProfile,
   loadPrintersLocal,
+  DEFAULT_LOCAL_PRINT_URL,
+  DEFAULT_LOCAL_PRINT_API_KEY,
 } from "@/lib/localPrintClient";
 
 // ─── types ────────────────────────────────────────────────────────────────────
@@ -178,6 +180,9 @@ export default function BarcodeLabels() {
   const [size, setSize]           = useState<SizeKey>("medium");
   const [cols, setCols]           = useState(4);
   const [showPreview, setShowPreview] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [printProgress, setPrintProgress] =
+    useState<{ current: number; total: number } | null>(null);
 
   // Build SIZES with translated labels (inside component so t() is available)
   const SIZES: Record<SizeKey, SizeDim & { label: string }> = {
@@ -186,8 +191,6 @@ export default function BarcodeLabels() {
     large:   { ...SIZE_DIMS.large,   label: t("barcode_labels.size_large") },
     LARGE_2: { ...SIZE_DIMS.LARGE_2, label: t("barcode_labels.size_large_2") },
   };
-
-  const singleLabelMode = size === "LARGE_2";
 
   const handleSizeChange = (v: string) => {
     const next = v as SizeKey;
@@ -307,252 +310,118 @@ export default function BarcodeLabels() {
 
   const totalLabels = items.reduce((s, i) => s + i.qty, 0);
 
-  // ── print ──────────────────────────────────────────────────────────────────
-  // Only warn when there is no label printer at all — neither in the device
-  // profile, nor in legacy LS, nor in app settings, nor auto-picked from the
-  // local print service. Receipt-printer state is irrelevant here: label
-  // printing must NEVER require a receipt printer to be configured.
-  const handlePrint = () => {
-    const haveLabelPrinter = !!labelPrinter;
-    if (!haveLabelPrinter) {
+  // ── print via local print service ──────────────────────────────────────────
+  // POST one request per item to http://127.0.0.1:3001/print/barcode-label
+  // with a flat payload that v2.2 of the local service detects (productName +
+  // barcode at top-level → handleStructuredLabelPrint, server-side TSPL render
+  // at 59×39mm). Each item carries its own `copies` count so we never spam
+  // the printer buffer with one request per copy.
+  const handlePrint = async () => {
+    if (!labelPrinter) {
       toast({
         title: t("barcode_labels.no_label_printer"),
         description: t("barcode_labels.no_label_printer_desc"),
         variant: "destructive",
       });
-      // Continue to preview window so the cashier can still see the labels
-      // — but the print button inside the preview shows the warning banner.
+      return;
     }
-    const sz = SIZES[size];
-    const single = isSingleLabel(sz);
-    const logoUrl = `${window.location.origin}/logo.png`;
+    if (items.length === 0) return;
 
-    const labelsHtml = items.flatMap(item =>
-      Array(item.qty).fill(null).map(() => {
-        const div = document.createElement("div");
-        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        div.appendChild(svg);
-        try {
-          JsBarcode(svg, item.barcode, {
-            format: "CODE128", width: 1.4, height: sz.bh,
-            displayValue: false, margin: 2,
-            lineColor: "#000", background: "#fff",
-          });
-        } catch { /* skip */ }
-        const svgStr = svg.outerHTML;
-        const price  = parseFloat(item.price).toFixed(3);
+    setIsPrinting(true);
+    setPrintProgress({ current: 0, total: items.length });
 
-        const productInfo = (item.model || item.color || item.size)
-          ? `${item.model ? `<p>Shoe Model: ${item.model}</p>` : ""}
-             ${item.color ? `<p>Color: ${item.color}</p>` : ""}
-             ${item.size  ? `<p>Size: ${item.size}</p>`  : ""}`
-          : `<p>${item.name}</p>`;
+    const profile = getDeviceProfile();
+    const baseUrl = (profile.baseUrl || DEFAULT_LOCAL_PRINT_URL).replace(/\/+$/, "");
+    const apiKey = (profile.apiKey || DEFAULT_LOCAL_PRINT_API_KEY).trim();
+    const printUrl = `${baseUrl}/print/barcode-label`;
 
-        // ── Single-label (LARGE_2) layout — matches reference design ────────
-        if (single) {
-          return `
-            <div class="label single-label">
-              <div class="content">
-                <p class="brand">LAMST ANOTHA</p>
-                <div class="line-row">
-                  <span class="hr-line"></span>
-                  <span class="tagline">TOUCH OF FEMININITY</span>
-                  <span class="hr-line"></span>
-                </div>
-                <div class="info">${productInfo}</div>
-                <div class="barcode-wrap">
-                  ${svgStr}
-                  <p class="barcode-num">${item.barcode}</p>
-                </div>
-                <div class="line-row">
-                  <span class="hr-line"></span>
-                </div>
-                <p class="price">${price} <span class="ro">R.O</span></p>
-              </div>
-            </div>`;
+    let successCount = 0;
+    let failCount = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      setPrintProgress({ current: i + 1, total: items.length });
+
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 20000);
+
+      try {
+        const response = await fetch(printUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "x-lamsa-print-key": apiKey,
+          },
+          body: JSON.stringify({
+            printerName: labelPrinter,
+            productName: (item.name || "").slice(0, 50),
+            priceOMR: parseFloat(item.price),
+            barcode: item.barcode,
+            copies: Math.max(1, Math.min(100, item.qty || 1)),
+          }),
+          signal: ctrl.signal,
+        });
+
+        if (response.ok) {
+          successCount++;
+        } else {
+          failCount++;
+          const errBody = await response.json().catch(() => ({} as any));
+          let msg: string;
+          if (response.status === 503) {
+            msg = t("barcode_labels.printer_offline_503");
+          } else if (response.status === 408) {
+            msg = t("barcode_labels.print_timeout");
+          } else {
+            msg = errBody?.error || errBody?.detail || `HTTP ${response.status}`;
+          }
+          errors.push(`${item.name}: ${msg}`);
         }
+      } catch (err: any) {
+        failCount++;
+        const isAbort = err?.name === "AbortError";
+        const isNetwork = /failed to fetch|networkerror|load failed/i.test(String(err?.message || ""));
+        const msg = isAbort
+          ? t("barcode_labels.print_timeout")
+          : isNetwork
+            ? t("barcode_labels.service_offline")
+            : String(err?.message || err);
+        errors.push(`${item.name}: ${msg}`);
+      } finally {
+        clearTimeout(timer);
+      }
 
-        // ── Default grid layout (small/medium/large) ────────────────────────
-        return `
-          <div class="label">
-            <img src="${logoUrl}" class="logo" alt="logo" />
-            <p class="brand">LAMST ANOTHA</p>
-            <p class="tagline">TOUCH OF FEMININITY</p>
-            <div class="divider"></div>
-            <div class="info">${productInfo}</div>
-            <div class="barcode-wrap">
-              ${svgStr}
-              <p class="barcode-num">${item.barcode}</p>
-            </div>
-            <div class="divider"></div>
-            <p class="price">${price} <span class="ro">R.O</span></p>
-          </div>`;
-      })
-    ).join("");
+      // Brief gap between requests so the printer's spool buffer doesn't
+      // overflow when many products are queued back-to-back.
+      if (i < items.length - 1) {
+        await new Promise<void>(resolve => setTimeout(resolve, 300));
+      }
+    }
 
-    const win = window.open("", "_blank", "width=900,height=700");
-    if (!win) return;
-    const printerBanner = labelPrinter
-      ? `<div style="background:#fff3cd;padding:6px 14px;font-size:12px;display:inline-block;border-radius:4px;margin-right:12px;">
-           🖨️ اختر الطابعة: <strong>${labelPrinter}</strong>
-         </div>`
-      : `<div style="background:#f8d7da;padding:6px 14px;font-size:12px;display:inline-block;border-radius:4px;margin-right:12px;">
-           ⚠️ لم يتم تحديد طابعة الملصقات — راجع الإعدادات
-         </div>`;
+    if (failCount === 0) {
+      toast({
+        title: t("barcode_labels.print_success").replace("{count}", String(successCount)),
+      });
+    } else if (successCount === 0) {
+      toast({
+        title: t("barcode_labels.print_all_failed"),
+        description: errors[0],
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: t("barcode_labels.print_partial")
+          .replace("{success}", String(successCount))
+          .replace("{fail}", String(failCount)),
+        description: errors[0],
+        variant: "destructive",
+      });
+    }
 
-    win.document.write(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"/>
-<title>${t("barcode_labels.print_win_title")}</title>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; background:#fff; color:#000; margin:0; }
-  .grid {
-    display: ${single ? "block" : "flex"};
-    flex-wrap: wrap;
-    gap: ${single ? "0" : "3mm"};
-    padding: ${single ? "0" : "5mm"};
-    justify-content: flex-start;
-  }
-  .label {
-    width: ${sz.mm_w}mm;
-    height: ${sz.mm_h}mm;
-    background: #fff;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1mm 1mm;
-    margin: 0 auto;
-    text-align: center;
-    overflow: hidden;
-    ${single ? "page-break-after: always; break-after: page;" : "page-break-inside: avoid;"}
-  }
-  .logo { height: ${sz.mm_h * 0.16}mm; object-fit:contain; filter: grayscale(100%) brightness(0); max-width:100%; display:block; margin:0 auto; }
-  .brand { font-size: ${sz.font + 1}pt; font-weight: 800; letter-spacing: 0.10em; text-align:center; line-height:1.1; white-space:nowrap; }
-  .tagline { font-size: ${sz.font - 2}pt; font-weight: 300; letter-spacing: 0.06em; text-align:center; line-height:1.1; white-space:nowrap; }
-  .divider { width:90%; height:0.3pt; background:#000; margin:0 auto; }
-  .info { font-size: ${sz.font - 1}pt; font-weight:500; text-align:center; line-height:1.4; max-width:100%; }
-  .info p { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0 auto; }
-  .barcode-wrap { display:flex; flex-direction:column; align-items:center; width:100%; }
-  .barcode-wrap svg { width:100% !important; height:auto !important; max-width:100%; max-height:${sz.mm_h * 0.30}mm; display:block; margin:0 auto; }
-  .barcode-num { font-size: ${sz.font - 2}pt; letter-spacing:0.03em; margin-top:-0.3mm; text-align:center; }
-  .price { font-size: ${sz.font + 4}pt; font-weight:800; letter-spacing:0.03em; line-height:1; text-align:center; }
-  .ro { font-size: ${sz.font + 1}pt; font-weight:600; }
-
-  /* ── Single-label (LARGE_2) — portrait 39×58mm، content area 33×52mm ── */
-  .label.single-label { padding: 0; }
-  .label.single-label .content {
-    width: 33mm;
-    height: 52mm;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: space-between;
-    text-align: center;
-    font-family: 'Segoe UI', Arial, sans-serif;
-  }
-  .label.single-label .brand {
-    font-family: 'Times New Roman', 'Georgia', serif;
-    font-size: 8pt;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    line-height: 1;
-    white-space: nowrap;
-    margin: 0;
-  }
-  .label.single-label .line-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 1mm;
-    width: 100%;
-    margin: 0.2mm 0;
-  }
-  .label.single-label .hr-line {
-    flex: 1;
-    height: 0.4pt;
-    background: #000;
-    min-width: 4mm;
-  }
-  .label.single-label .tagline {
-    font-size: 4pt;
-    font-weight: 400;
-    letter-spacing: 0.08em;
-    white-space: nowrap;
-    line-height: 1;
-  }
-  .label.single-label .info {
-    font-size: 5.5pt;
-    font-weight: 700;
-    line-height: 1.2;
-    margin: 0;
-  }
-  .label.single-label .info p {
-    margin: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .label.single-label .barcode-wrap {
-    width: 100%;
-    margin: 0;
-  }
-  .label.single-label .barcode-wrap svg {
-    width: 100% !important;
-    height: 8mm !important;
-    max-height: 8mm;
-    display: block;
-    margin: 0 auto;
-  }
-  .label.single-label .barcode-num {
-    font-size: 5pt;
-    font-weight: 500;
-    letter-spacing: 0.04em;
-    margin-top: -0.2mm;
-    line-height: 1;
-  }
-  .label.single-label .price {
-    font-size: 11pt;
-    font-weight: 800;
-    letter-spacing: 0.01em;
-    line-height: 1;
-    margin: 0;
-    white-space: nowrap;
-  }
-  .label.single-label .ro {
-    font-size: 6pt;
-    font-weight: 600;
-    letter-spacing: 0;
-  }
-
-  @media print {
-    @page { margin: 0; size: ${sz.mm_w}mm ${sz.mm_h}mm; }
-    html, body { margin: 0; padding: 0; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-    .grid { padding: 0 !important; gap: 0 !important; ${single ? "display:flex !important; flex-direction:column !important; justify-content:flex-start !important; align-items:center !important;" : ""} }
-    ${single ? ".label:last-child { page-break-after: auto; break-after: auto; }" : ""}
-  }
-  .no-print { text-align:center; padding:10px; background:#f5f5f5; }
-  @media print { .no-print { display:none; } }
-</style>
-</head>
-<body>
-<div class="no-print">
-  <button onclick="window.print()" style="padding:8px 24px;background:#222;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;margin:4px;">
-    🖨️ ${t("barcode_labels.print_btn")}
-  </button>
-  <button onclick="window.close()" style="padding:8px 24px;background:#666;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;margin:4px;">
-    ✕ ${t("barcode_labels.print_close")}
-  </button>
-  <span style="font-size:13px;color:#555;">${totalLabels} ${t("barcode_labels.print_info_stickers")} — ${sz.mm_w}×${sz.mm_h}mm</span>
-  ${printerBanner}
-</div>
-<div class="grid">${labelsHtml}</div>
-<script>setTimeout(()=>window.print(),500);</script>
-</body></html>`);
-    win.document.close();
+    setIsPrinting(false);
+    setPrintProgress(null);
   };
 
   const sz = SIZES[size];
@@ -575,13 +444,24 @@ export default function BarcodeLabels() {
               {showPreview ? t("barcode_labels.btn_hide_preview") : t("barcode_labels.btn_preview")}
             </Button>
             <Button
-              onClick={handlePrint}
-              disabled={items.length === 0}
+              onClick={() => void handlePrint()}
+              disabled={items.length === 0 || isPrinting}
               className="gap-2"
               data-testid="button-print-labels"
             >
-              <Printer className="h-4 w-4" />
-              {t("barcode_labels.btn_print")} {totalLabels > 0 && `(${totalLabels} ${t("barcode_labels.label_stickers")})`}
+              {isPrinting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {printProgress
+                    ? `${t("barcode_labels.printing_progress")} ${printProgress.current}/${printProgress.total}`
+                    : t("barcode_labels.printing_progress")}
+                </>
+              ) : (
+                <>
+                  <Printer className="h-4 w-4" />
+                  {t("barcode_labels.btn_print")} {totalLabels > 0 && `(${totalLabels} ${t("barcode_labels.label_stickers")})`}
+                </>
+              )}
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground" data-testid="text-selected-label-printer">
@@ -606,34 +486,39 @@ export default function BarcodeLabels() {
             <CardContent className="space-y-3">
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">{t("barcode_labels.label_size_label")}</label>
-                <Select value={size} onValueChange={handleSizeChange}>
-                  <SelectTrigger data-testid="select-label-size"><SelectValue /></SelectTrigger>
+                <Select value={size} onValueChange={handleSizeChange} disabled>
+                  <SelectTrigger data-testid="select-label-size" title={t("barcode_labels.size_locked_hint")}>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {(Object.keys(SIZES) as SizeKey[]).map(k => (
                       <SelectItem key={k} value={k}>{SIZES[k].label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {t("barcode_labels.size_locked_hint")}
+                </p>
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">{t("barcode_labels.cols_label")}</label>
                 <Select
                   value={String(cols)}
                   onValueChange={v => setCols(Number(v))}
-                  disabled={singleLabelMode}
+                  disabled
                 >
-                  <SelectTrigger data-testid="select-label-cols"><SelectValue /></SelectTrigger>
+                  <SelectTrigger data-testid="select-label-cols" title={t("barcode_labels.cols_disabled_hint")}>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {[1, 2, 3, 4, 5, 6].map(n => (
                       <SelectItem key={n} value={String(n)}>{n} {t("barcode_labels.cols_suffix")}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {singleLabelMode && (
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    {t("barcode_labels.single_label_hint")}
-                  </p>
-                )}
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {t("barcode_labels.cols_disabled_hint")}
+                </p>
               </div>
 
               {/* ── Label printer selector ─────────────────────────────────── */}

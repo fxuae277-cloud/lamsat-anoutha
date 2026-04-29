@@ -2916,7 +2916,16 @@
     "btn_refresh_printers": "Refresh printers",
     "selected_printer_label": "Selected printer:",
     "no_printer_selected": "No printer selected",
-    "label_printer_auto_picked": "Auto-selected from local print service"
+    "label_printer_auto_picked": "Auto-selected from local print service",
+    "printing_progress": "Printing",
+    "print_success": "Successfully printed {count} labels",
+    "print_partial": "{success} succeeded, {fail} failed",
+    "print_all_failed": "Failed to print any labels",
+    "service_offline": "Local print service is offline",
+    "printer_offline_503": "Label printer is offline",
+    "print_timeout": "Print timed out — check the printer",
+    "cols_disabled_hint": "Not available in direct printing",
+    "size_locked_hint": "Current version supports 59×39mm only"
   },
   "orders_page": {
     "title": "Orders",
