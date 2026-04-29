@@ -18,8 +18,10 @@ import {
   KeyRound, ShieldCheck, Eye, EyeOff, Lock, UserCircle,
   Settings2, Save, X, Loader2, AlertTriangle, Globe,
   Banknote, Receipt, FileText, Printer, Database, Download, Percent,
-  Plug
+  Plug, ScanLine, Volume2
 } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { useScannerSettings, DEFAULT_SCANNER_SETTINGS } from "@/hooks/useScannerSettings";
 // Per-device print profile (printer name, paper width, baseUrl, …) lives
 // in localStorage and is configured from the POS page itself — see
 // `DevicePrintSettingsDialog`. The owner Settings page only keeps the
@@ -69,6 +71,83 @@ function isSettingsDirty(current: SettingsData, saved: SettingsData): boolean {
     if ((current[key] ?? "") !== (saved[key] ?? "")) return true;
   }
   return false;
+}
+
+function ScannerSettingsTab() {
+  const { settings, update } = useScannerSettings();
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <ScanLine className="w-5 h-5 text-pink-600" />
+            ماسح الباركود
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center justify-between gap-4 p-4 rounded-lg border bg-muted/30">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-bold">تفعيل ماسح الباركود</Label>
+              <p className="text-xs text-muted-foreground">
+                عند التفعيل، يلتقط النظام مدخلات السكانر USB تلقائيًا في صفحة نقطة البيع.
+              </p>
+            </div>
+            <Switch
+              checked={settings.enabled}
+              onCheckedChange={(v) => update({ enabled: v })}
+              data-testid="switch-scanner-enabled"
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4 p-4 rounded-lg border bg-muted/30">
+            <div className="space-y-0.5 flex items-start gap-2">
+              <Volume2 className="w-4 h-4 text-muted-foreground mt-0.5" />
+              <div>
+                <Label className="text-sm font-bold">صوت التأكيد</Label>
+                <p className="text-xs text-muted-foreground">
+                  نغمة قصيرة عند نجاح المسح (800Hz) أو فشله (400Hz).
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={settings.soundEnabled}
+              onCheckedChange={(v) => update({ soundEnabled: v })}
+              data-testid="switch-scanner-sound"
+            />
+          </div>
+
+          <div className="p-4 rounded-lg border bg-muted/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-bold">حساسية الزمن (Threshold)</Label>
+              <span className="text-sm font-mono font-bold text-pink-600" data-testid="text-threshold-value">
+                {settings.threshold} ms
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              إذا الفجوة الزمنية بين حرفين أقل من هذا الرقم، يُعتبر الإدخال من السكانر.
+              السكانرات الحديثة عادةً &lt; 10ms — اتركه على {DEFAULT_SCANNER_SETTINGS.threshold}ms ما لم تواجه مشاكل.
+            </p>
+            <Slider
+              value={[settings.threshold]}
+              min={10}
+              max={100}
+              step={5}
+              onValueChange={([v]) => update({ threshold: v })}
+              data-testid="slider-scanner-threshold"
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>10ms (سريع جدًا)</span>
+              <span>100ms (متساهل)</span>
+            </div>
+          </div>
+
+          <div className="text-xs text-muted-foreground p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            💡 الإعدادات تُحفظ على هذا الجهاز فقط (localStorage). لكل جهاز كاشير إعداداته الخاصة.
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 export default function Settings() {
@@ -310,6 +389,10 @@ export default function Settings() {
             <Settings2 className="w-4 h-4" />
             {t("settings.tab_general")}
           </TabsTrigger>
+          <TabsTrigger value="scanner" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-scanner">
+            <ScanLine className="w-4 h-4" />
+            ماسح الباركود
+          </TabsTrigger>
         </TabsList>
 
         {/* ─── Account Tab ─── */}
@@ -481,7 +564,7 @@ export default function Settings() {
 
               <div className="space-y-2">
                 <Label>{t("settings.tax_reg_number")}</Label>
-                <Input value={currentSettings.taxRegistrationNumber} onChange={e => updateSetting("taxRegistrationNumber", e.target.value)} placeholder={t("settings.tax_reg_placeholder")} dir="ltr" className="text-left" data-testid="input-tax-reg-number" />
+                <Input value={currentSettings.taxRegistrationNumber} onChange={e => updateSetting("taxRegistrationNumber", e.target.value)} placeholder={t("settings.tax_reg_placeholder")} dir="ltr" className="text-end" data-testid="input-tax-reg-number" />
               </div>
             </CardContent>
           </Card>
@@ -517,7 +600,7 @@ export default function Settings() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>{t("settings.invoice_prefix")}</Label>
-                  <Input value={currentSettings.invoicePrefix} onChange={e => updateSetting("invoicePrefix", e.target.value)} placeholder="LO" dir="ltr" className="text-left" data-testid="input-invoice-prefix" />
+                  <Input value={currentSettings.invoicePrefix} onChange={e => updateSetting("invoicePrefix", e.target.value)} placeholder="LO" dir="ltr" className="text-end" data-testid="input-invoice-prefix" />
                   <p className="text-xs text-muted-foreground">{t("settings.invoice_prefix_example")} {currentSettings.invoicePrefix}-{"0".repeat(parseInt(currentSettings.invoiceNumberDigits || "5") - 1)}1</p>
                 </div>
                 <div className="space-y-2">
@@ -603,7 +686,7 @@ export default function Settings() {
 
               <div className="space-y-2">
                 <Label>{t("settings.business_logo")}</Label>
-                <Input value={currentSettings.businessLogo} onChange={e => updateSetting("businessLogo", e.target.value)} placeholder="https://example.com/logo.png" dir="ltr" className="text-left" data-testid="input-business-logo" />
+                <Input value={currentSettings.businessLogo} onChange={e => updateSetting("businessLogo", e.target.value)} placeholder="https://example.com/logo.png" dir="ltr" className="text-end" data-testid="input-business-logo" />
                 <p className="text-xs text-muted-foreground">{t("settings.business_logo_desc")}</p>
               </div>
             </CardContent>
@@ -744,6 +827,11 @@ export default function Settings() {
             </CardContent>
           </Card>
 
+        </TabsContent>
+
+        {/* ─── Scanner Tab ─── */}
+        <TabsContent value="scanner" className="space-y-6">
+          <ScannerSettingsTab />
         </TabsContent>
 
       </Tabs>

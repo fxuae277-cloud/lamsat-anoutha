@@ -1236,27 +1236,42 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/products/barcode/:code", requireAuth, requirePermission("products.view"), async (req, res) => {
+  // Shared handler for barcode lookups. Two routes are registered below — keep
+  // them in sync via this single function so behaviour never diverges.
+  async function handleProductBarcodeLookup(req: any, res: any, source: "legacy" | "by-barcode") {
     try {
-      const code = req.params.code;
+      const code = source === "legacy" ? req.params.code : req.params.barcode;
+      console.log(`[Products] barcode lookup via /${source === "legacy" ? "barcode/:code" : "by-barcode/:barcode"}: ${code}`);
       const product = await storage.getProductByBarcode(code);
-      
+
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
       }
 
-      // Return requested fields: id, name, price, stock, image
       res.json({
         id: product.id,
+        barcode: product.barcode,
         name: product.name,
+        description: product.description,
         price: product.price,
+        avgCost: product.avgCost,
+        stockQuantity: product.totalStock,
+        stockQty: product.totalStock,
         stock: product.totalStock,
-        image: product.image
+        image: product.image,
+        categoryId: product.categoryId,
       });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
-  });
+  }
+
+  // TODO: deprecate /barcode/:code in v3.0.0 — kept for backwards compatibility.
+  app.get("/api/products/barcode/:code", requireAuth, requirePermission("products.view"), (req, res) =>
+    handleProductBarcodeLookup(req, res, "legacy"));
+
+  app.get("/api/products/by-barcode/:barcode", requireAuth, requirePermission("products.view"), (req, res) =>
+    handleProductBarcodeLookup(req, res, "by-barcode"));
 
   app.post("/api/products", requireAuth, requirePermission("products.create"), async (req, res) => {
     try {
