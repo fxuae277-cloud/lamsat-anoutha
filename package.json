@@ -9,6 +9,8 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "lint:i18n": "node scripts/check-arabic-jsx.mjs",
+    "lint:i18n:strict": "node scripts/check-arabic-jsx.mjs --strict",
     "db:push": "drizzle-kit push",
     "test": "vitest",
     "test:run": "vitest run",
