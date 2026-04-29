@@ -330,6 +330,13 @@ const handleStructuredLabelPrint: RequestHandler = async (req, res) => {
     typeof copiesRaw === "number" && Number.isFinite(copiesRaw)
       ? Math.floor(copiesRaw)
       : 1;
+  // v2.3: optional variant fields. `productVariant` (pre-built string) wins
+  // over the structured `color`/`size` pair. Any combination is fine — the
+  // renderer composes the final variant line itself.
+  const productVariant =
+    typeof body.productVariant === "string" ? body.productVariant.trim() : "";
+  const color = typeof body.color === "string" ? body.color.trim() : "";
+  const size = typeof body.size === "string" ? body.size.trim() : "";
   const printerName =
     typeof body.printerName === "string" && body.printerName.trim().length > 0
       ? body.printerName.trim()
@@ -358,6 +365,21 @@ const handleStructuredLabelPrint: RequestHandler = async (req, res) => {
     res.status(400).json({ ok: false, error: "Invalid copies (1–100)" });
     return;
   }
+  // Soft validation on variant fields — keep them roomy enough that a real
+  // SKU like "Color: Midnight Navy | Size: 42" still fits, but reject
+  // multi-line / overlong abuse so the label layout stays predictable.
+  if (productVariant.length > 60) {
+    res.status(400).json({ ok: false, error: "Invalid productVariant (max 60 chars)" });
+    return;
+  }
+  if (color.length > 30) {
+    res.status(400).json({ ok: false, error: "Invalid color (max 30 chars)" });
+    return;
+  }
+  if (size.length > 20) {
+    res.status(400).json({ ok: false, error: "Invalid size (max 20 chars)" });
+    return;
+  }
 
   // Confirm the label printer is actually installed — the most common silent
   // failure mode is a renamed queue.
@@ -381,7 +403,15 @@ const handleStructuredLabelPrint: RequestHandler = async (req, res) => {
   }
 
   try {
-    await printTscLabel(printerName, { productName, priceOMR, barcode, copies });
+    await printTscLabel(printerName, {
+      productName,
+      priceOMR,
+      barcode,
+      copies,
+      productVariant: productVariant || undefined,
+      color: color || undefined,
+      size: size || undefined,
+    });
     console.log("[Label] success");
     res.json({
       ok: true,

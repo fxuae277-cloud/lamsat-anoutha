@@ -39,7 +39,10 @@ const __dirname = dirname(__filename);
 const LOGO_PATH = resolve(__dirname, "..", "..", "assets", "logo.png");
 
 // Logo block dimensions (px) inside the label canvas.
-const LOGO_BLOCK = { x: 126, y: 6, width: 220, height: 60 } as const;
+// Centred horizontally: x = (472 − 240) / 2 = 116.
+// y=8 leaves an 8-px top margin so the logo never clips on the top edge of
+// the physical sticker (the printer's home position rounds down by ~6 dots).
+const LOGO_BLOCK = { x: 116, y: 8, width: 240, height: 55 } as const;
 
 // Cache the logo once per process to avoid hitting disk on every label.
 // We pre-resize it to the exact target slot, flatten transparency on white,
@@ -50,11 +53,16 @@ async function loadLogoBuffer(): Promise<Buffer | null> {
   if (cachedLogo) return cachedLogo.png;
   try {
     const raw = await readFile(LOGO_PATH);
+    // `fit:contain` + `position:centre` is sharp's xMidYMid-meet equivalent —
+    // the logo is letterboxed inside the 240×55 slot with even white padding,
+    // so its aspect ratio is preserved and the top of the image never gets
+    // sliced off by the printer's home-position rounding.
     const prepared = await sharp(raw)
       .resize({
         width: LOGO_BLOCK.width,
         height: LOGO_BLOCK.height,
         fit: "contain",
+        position: "centre",
         background: { r: 255, g: 255, b: 255, alpha: 1 },
       })
       .flatten({ background: "#ffffff" })
@@ -75,12 +83,32 @@ export interface LabelInput {
   priceOMR: number;
   barcode: string;
   copies?: number;
+  /** Pre-built variant line, e.g. "Color: Black | Size: 37". Wins over color/size. */
+  productVariant?: string;
+  /** Convenience alternative to productVariant — composed at render time. */
+  color?: string;
+  size?: string;
 }
 
 export interface LabelRenderResult {
   svg: string;
   png: Buffer;
   tspl: Buffer;
+}
+
+/**
+ * Compose the variant line shown under the product name. Empty fields are
+ * skipped — if both color and size are absent, returns `""` and the variant
+ * line is not rendered at all (the layout below intentionally leaves the
+ * coordinate fixed so the rest of the label doesn't shift).
+ */
+export function buildVariantString(color?: string, size?: string): string {
+  const parts: string[] = [];
+  const c = (color ?? "").trim();
+  const s = (size ?? "").trim();
+  if (c) parts.push(`Color: ${c}`);
+  if (s) parts.push(`Size: ${s}`);
+  return parts.join(" | ");
 }
 
 // ─── SVG template ──────────────────────────────────────────────────────────
@@ -119,6 +147,8 @@ export async function buildLabelSvg(
   hasLogo: boolean,
 ): Promise<string> {
   const { productName, priceOMR, barcode } = input;
+  const variantLine = (input.productVariant ?? "").trim()
+    || buildVariantString(input.color, input.size);
   const barcodeSvg = await renderBarcodeSvg(barcode);
 
   // The barcode SVG comes with its own viewBox; we wrap it in a <g> with a
@@ -131,19 +161,23 @@ export async function buildLabelSvg(
     );
 
   const productSafe = escapeXml(productName);
+  const variantSafe = escapeXml(variantLine);
   const priceSafe = escapeXml(formatPrice(priceOMR));
   const barcodeSafe = escapeXml(barcode);
 
   // Layout (y-coordinates in px, label is 312 px tall):
-  //   logo:               y =   6  → 66   (60 px tall)
-  //   divider 1 (♥):      y =  76
-  //   product name:       y = 100
-  //   barcode:            y = 128 → 178   (50 px tall)
-  //   barcode digits:     y = 196
-  //   divider 2 (♥):      y = 218
-  //   price:              y = 260
+  //   logo:               y =   8  → 63   (55 px tall, 8-px top margin)
+  //   divider 1 (♥):      y =  70
+  //   product name:       y =  98   (font 22, baseline)
+  //   product variant:    y = 120   (optional — only rendered if non-empty)
+  //   barcode:            y = 140 → 190 (50 px tall)
+  //   barcode digits:     y = 200
+  //   divider 2 (♥):      y = 220
+  //   price:              y = 265
   //
   // 10 px side padding everywhere; black text on white background.
+  // Variant slot is fixed: when empty, the gap is left intentionally so the
+  // bottom of the label stays put across SKUs.
   const cx = LABEL_WIDTH_PX / 2; // 236
 
   // When we have a logo file we leave the slot empty here and composite the
@@ -156,6 +190,13 @@ export async function buildLabelSvg(
          TOUCH OF FEMININITY
        </text>`;
 
+  const variantBlock = variantSafe
+    ? `<text x="${cx}" y="120" font-family="Inter, Helvetica, Arial, sans-serif"
+              font-size="18" font-weight="normal" text-anchor="middle" fill="#000">
+         ${variantSafe}
+       </text>`
+    : "";
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg"
      xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -166,38 +207,41 @@ export async function buildLabelSvg(
   ${logoBlock}
 
   <!-- divider 1 with heart -->
-  <line x1="40" y1="76" x2="200" y2="76" stroke="#000" stroke-width="1"/>
-  <text x="${cx}" y="81" font-family="Arial, sans-serif" font-size="14"
+  <line x1="40" y1="70" x2="200" y2="70" stroke="#000" stroke-width="1"/>
+  <text x="${cx}" y="75" font-family="Arial, sans-serif" font-size="14"
         text-anchor="middle" fill="#000">&#9829;</text>
-  <line x1="272" y1="76" x2="432" y2="76" stroke="#000" stroke-width="1"/>
+  <line x1="272" y1="70" x2="432" y2="70" stroke="#000" stroke-width="1"/>
 
   <!-- product name -->
-  <text x="${cx}" y="105" font-family="Playfair Display, 'Times New Roman', serif"
-        font-size="26" font-weight="bold" text-anchor="middle" fill="#000">
+  <text x="${cx}" y="98" font-family="Playfair Display, 'Times New Roman', serif"
+        font-size="22" font-weight="bold" text-anchor="middle" fill="#000">
     ${productSafe}
   </text>
 
+  <!-- product variant (optional) -->
+  ${variantBlock}
+
   <!-- barcode (Code 128, vector) -->
-  <svg x="86" y="128" width="300" height="50" viewBox="0 0 300 50"
+  <svg x="86" y="140" width="300" height="50" viewBox="0 0 300 50"
        preserveAspectRatio="none">
     ${stripOuterSvg(barcodeWrapped)}
   </svg>
 
   <!-- barcode digits -->
-  <text x="${cx}" y="196" font-family="Inter, Helvetica, Arial, sans-serif"
+  <text x="${cx}" y="200" font-family="Inter, Helvetica, Arial, sans-serif"
         font-size="14" letter-spacing="1.5" text-anchor="middle" fill="#000">
     ${barcodeSafe}
   </text>
 
   <!-- divider 2 with heart -->
-  <line x1="40" y1="218" x2="200" y2="218" stroke="#000" stroke-width="1"/>
-  <text x="${cx}" y="223" font-family="Arial, sans-serif" font-size="14"
+  <line x1="40" y1="220" x2="200" y2="220" stroke="#000" stroke-width="1"/>
+  <text x="${cx}" y="225" font-family="Arial, sans-serif" font-size="14"
         text-anchor="middle" fill="#000">&#9829;</text>
-  <line x1="272" y1="218" x2="432" y2="218" stroke="#000" stroke-width="1"/>
+  <line x1="272" y1="220" x2="432" y2="220" stroke="#000" stroke-width="1"/>
 
   <!-- price -->
-  <text x="${cx}" y="270" font-family="Playfair Display, 'Times New Roman', serif"
-        font-size="36" font-weight="bold" text-anchor="middle" fill="#000">
+  <text x="${cx}" y="265" font-family="Playfair Display, 'Times New Roman', serif"
+        font-size="38" font-weight="bold" text-anchor="middle" fill="#000">
     ${priceSafe}  R.O
   </text>
 </svg>`;
@@ -248,6 +292,15 @@ export async function pngToTspl(
   pngBuffer: Buffer,
   copies: number,
 ): Promise<Buffer> {
+  // Pipeline tuned to eliminate the grey halo we were getting around the
+  // barcode bars on the production sticker:
+  //   1. grayscale  — collapse all channels to luminance
+  //   2. normalise  — stretch the contrast to use the full 0–255 range
+  //   3. threshold(140) — binarise; anything ≥140 becomes white, the rest
+  //      black. 140 (vs the default 128) is biased towards black so the
+  //      thin Code-128 bars survive transport jitter.
+  // The output is still 1-channel raw bytes (0 or 255), and the byte-packing
+  // loop below treats `gray < 128` as "print", which lines up perfectly.
   const { data, info } = await sharp(pngBuffer)
     .resize({
       width: LABEL_WIDTH_PX,
@@ -257,6 +310,8 @@ export async function pngToTspl(
     })
     .flatten({ background: "#ffffff" })
     .grayscale()
+    .normalise()
+    .threshold(140)
     .raw()
     .toBuffer({ resolveWithObject: true });
 
@@ -329,8 +384,13 @@ export async function printLabel(
   printerName: string,
   input: LabelInput,
 ): Promise<{ pngBytes: number; tsplBytes: number }> {
+  const variantPreview =
+    (input.productVariant ?? "").trim()
+    || buildVariantString(input.color, input.size)
+    || "(none)";
   console.log(
     `[Label] request productName="${input.productName}" ` +
+      `variant="${variantPreview}" ` +
       `barcode="${input.barcode}" copies=${input.copies ?? 1}`,
   );
   const logo = await loadLogoBuffer();
