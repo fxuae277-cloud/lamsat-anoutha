@@ -16,6 +16,7 @@ import type {
   MovementType,
   AuditLog,
 } from "@/lib/payroll-types";
+import { useI18n } from "@/lib/i18n";
 
 import { Button }           from "@/components/ui/button";
 import { Input }            from "@/components/ui/input";
@@ -41,13 +42,11 @@ import { MovementTypeBadge, MovementStatusBadge } from "@/components/payroll/sha
 import { usePayrollToast }  from "@/components/payroll/shared/usePayrollToast";
 import { MONTHS_AR, YEARS, formatOMR } from "@/components/payroll/shared/payrollUtils";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const MOVEMENT_META: Record<MovementType, { label: string; color: string; bg: string; icon: ReactNode }> = {
-  bonus:     { label: "مستحق",  color: "#4CAF50", bg: "#e8f5e9", icon: <TrendingUp  className="h-4 w-4" /> },
-  overtime:  { label: "عمولة",  color: "#2196F3", bg: "#e3f2fd", icon: <Star        className="h-4 w-4" /> },
-  deduction: { label: "خصم",    color: "#FF9800", bg: "#fff3e0", icon: <TrendingDown className="h-4 w-4" /> },
-  advance:   { label: "سلفة",   color: "#F44336", bg: "#ffebee", icon: <Banknote    className="h-4 w-4" /> },
+const MOVEMENT_META_BASE: Record<MovementType, { color: string; bg: string; icon: ReactNode; metaKey: string }> = {
+  bonus:     { color: "#4CAF50", bg: "#e8f5e9", icon: <TrendingUp  className="h-4 w-4" />, metaKey: "metaBonus" },
+  overtime:  { color: "#2196F3", bg: "#e3f2fd", icon: <Star        className="h-4 w-4" />, metaKey: "metaOvertime" },
+  deduction: { color: "#FF9800", bg: "#fff3e0", icon: <TrendingDown className="h-4 w-4" />, metaKey: "metaDeduction" },
+  advance:   { color: "#F44336", bg: "#ffebee", icon: <Banknote    className="h-4 w-4" />, metaKey: "metaAdvance" },
 };
 
 function formatDate(iso: string) {
@@ -70,8 +69,6 @@ function formatDateTime(iso: string) {
   return `${day}/${month}/${d.getFullYear()} ${hours}:${mins}`;
 }
 
-// ─── Add Movement Dialog ──────────────────────────────────────────────────────
-
 interface AddDialogProps {
   open: boolean;
   initialType: MovementType;
@@ -81,6 +78,9 @@ interface AddDialogProps {
 function AddMovementDialog({ open, initialType, onClose }: AddDialogProps) {
   const { employees, addMovement, selectedMonth, selectedYear } = usePayroll();
   const toast = usePayrollToast();
+  const { t } = useI18n();
+  const NS = "payroll:movements";
+  const NS_EMP = "payroll:employees";
 
   const [employeeId,    setEmployeeId]    = useState<string>("");
   const [type,          setType]          = useState<MovementType>(initialType);
@@ -108,13 +108,13 @@ function AddMovementDialog({ open, initialType, onClose }: AddDialogProps) {
   }
 
   function handleSubmit() {
-    if (!employeeId) { setError("يرجى اختيار الموظف"); return; }
+    if (!employeeId) { setError(t(`${NS}.errorSelectEmployee`)); return; }
     const parsedAmount = parseFloat(amount);
     if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
-      setError("يرجى إدخال مبلغ صحيح أكبر من صفر");
+      setError(t(`${NS}.errorPositiveAmount`));
       return;
     }
-    if (!reason.trim()) { setError("يرجى إدخال ملاحظة أو سبب"); return; }
+    if (!reason.trim()) { setError(t(`${NS}.errorReason`)); return; }
 
     setIsSubmitting(true);
     const m   = parseInt(month);
@@ -129,7 +129,7 @@ function AddMovementDialog({ open, initialType, onClose }: AddDialogProps) {
       amount: parsedAmount,
       reason: reason.trim(),
       date: day,
-      createdBy: "المستخدم الحالي",
+      createdBy: t(`${NS_EMP}.currentUserLabel`),
     });
 
     toast.successAdd(emp?.name);
@@ -137,11 +137,12 @@ function AddMovementDialog({ open, initialType, onClose }: AddDialogProps) {
     handleClose();
   }
 
-  const meta = MOVEMENT_META[type];
+  const meta = MOVEMENT_META_BASE[type];
+  const typeLabel = t(`${NS}.${meta.metaKey}`);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="sm:max-w-[480px]" dir="rtl">
+      <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <span
@@ -150,20 +151,19 @@ function AddMovementDialog({ open, initialType, onClose }: AddDialogProps) {
             >
               {meta.icon}
             </span>
-            إضافة {meta.label}
+            {t(`${NS}.addPrefix`, { type: typeLabel })}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            ستُضاف الحركة وتُحسب تلقائياً في صافي راتب الموظف
+            {t(`${NS}.dialogDesc`)}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Employee */}
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">الموظف</label>
+            <label className="text-sm font-medium">{t(`${NS}.employeeLabel`)}</label>
             <Select value={employeeId} onValueChange={setEmployeeId}>
               <SelectTrigger>
-                <SelectValue placeholder="اختر موظفاً..." />
+                <SelectValue placeholder={t(`${NS}.selectEmployee`)} />
               </SelectTrigger>
               <SelectContent>
                 {employees.map((e) => (
@@ -175,41 +175,38 @@ function AddMovementDialog({ open, initialType, onClose }: AddDialogProps) {
             </Select>
           </div>
 
-          {/* Type */}
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">النوع</label>
+            <label className="text-sm font-medium">{t(`${NS}.typeLabel`)}</label>
             <Select value={type} onValueChange={(v) => setType(v as MovementType)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(Object.keys(MOVEMENT_META) as MovementType[]).map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {MOVEMENT_META[t].label}
+                {(Object.keys(MOVEMENT_META_BASE) as MovementType[]).map((mt) => (
+                  <SelectItem key={mt} value={mt}>
+                    {t(`${NS}.${MOVEMENT_META_BASE[mt].metaKey}`)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Amount */}
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">المبلغ (ر.ع)</label>
+            <label className="text-sm font-medium">{t(`${NS}.amountLabel`)}</label>
             <Input
               type="number"
               min="0"
               step="0.001"
-              placeholder="0.000"
+              placeholder={t(`${NS}.amountPlaceholder`)}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               className="text-start"
             />
           </div>
 
-          {/* Month + Year */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">الشهر</label>
+              <label className="text-sm font-medium">{t(`${NS}.monthLabel`)}</label>
               <Select value={month} onValueChange={setMonth}>
                 <SelectTrigger>
                   <SelectValue />
@@ -224,7 +221,7 @@ function AddMovementDialog({ open, initialType, onClose }: AddDialogProps) {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">السنة</label>
+              <label className="text-sm font-medium">{t(`${NS}.yearLabel`)}</label>
               <Select value={year} onValueChange={setYear}>
                 <SelectTrigger>
                   <SelectValue />
@@ -240,11 +237,10 @@ function AddMovementDialog({ open, initialType, onClose }: AddDialogProps) {
             </div>
           </div>
 
-          {/* Reason */}
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">الملاحظة / السبب</label>
+            <label className="text-sm font-medium">{t(`${NS}.reasonLabel`)}</label>
             <Textarea
-              placeholder="أدخل سبب الحركة المالية..."
+              placeholder={t(`${NS}.reasonPlaceholder`)}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               className="text-start resize-none"
@@ -252,7 +248,6 @@ function AddMovementDialog({ open, initialType, onClose }: AddDialogProps) {
             />
           </div>
 
-          {/* Error */}
           {error && (
             <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
               {error}
@@ -267,10 +262,10 @@ function AddMovementDialog({ open, initialType, onClose }: AddDialogProps) {
             className="text-white"
             style={{ backgroundColor: meta.color }}
           >
-            {isSubmitting ? "جاري الإضافة..." : "إضافة"}
+            {isSubmitting ? t(`${NS}.submitting`) : t(`${NS}.submit`)}
           </Button>
           <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
-            إلغاء
+            {t(`${NS}.dialogCancel`)}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -278,22 +273,24 @@ function AddMovementDialog({ open, initialType, onClose }: AddDialogProps) {
   );
 }
 
-// ─── Audit Log Row ────────────────────────────────────────────────────────────
-
 function AuditLogRow({ log, employeeName }: { log: AuditLog; employeeName: string }) {
-  const actionLabel: Record<string, string> = {
-    add_movement:    "إضافة حركة",
-    cancel_movement: "إلغاء حركة",
-    add_payment:     "تسجيل دفعة",
-    bulk_pay:        "دفع جماعي",
+  const { t } = useI18n();
+  const NS = "payroll:movements";
+
+  const actionLabelKeys: Record<string, string> = {
+    add_movement:    "auditAddMovement",
+    cancel_movement: "auditCancelMovement",
+    add_payment:     "auditAddPayment",
+    bulk_pay:        "auditBulkPay",
   };
 
   const amount = (log.newValue?.amount ?? log.oldValue?.amount) as number | undefined;
+  const labelKey = actionLabelKeys[log.action];
 
   return (
     <TableRow className="text-sm">
       <TableCell className="font-medium">
-        {actionLabel[log.action] ?? log.action}
+        {labelKey ? t(`${NS}.${labelKey}`) : log.action}
       </TableCell>
       <TableCell className="text-muted-foreground">{employeeName}</TableCell>
       <TableCell className="tabular-nums">
@@ -305,8 +302,6 @@ function AuditLogRow({ log, employeeName }: { log: AuditLog; employeeName: strin
     </TableRow>
   );
 }
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function FinancialMovementsPage() {
   const {
@@ -320,18 +315,18 @@ export default function FinancialMovementsPage() {
     cancelMovement,
   } = usePayroll();
   const toast = usePayrollToast();
+  const { t } = useI18n();
+  const NS = "payroll:movements";
+  const NS_EMP = "payroll:employees";
 
-  // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogType, setDialogType] = useState<MovementType>("bonus");
   const [dialogKey,  setDialogKey]  = useState(0);
 
-  // Filters
   const [search,     setSearch]     = useState("");
   const [empFilter,  setEmpFilter]  = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
 
-  // Audit log
   const [auditOpen, setAuditOpen] = useState(false);
 
   function openDialog(type: MovementType) {
@@ -389,30 +384,29 @@ export default function FinancialMovementsPage() {
   function handleCancel(id: number) {
     const m   = movements.find((mv) => mv.id === id);
     const emp = m ? empMap.get(m.employeeId) : undefined;
-    cancelMovement(id, "المستخدم الحالي");
+    cancelMovement(id, t(`${NS_EMP}.currentUserLabel`));
     toast.successCancel(emp?.name);
   }
 
   return (
-    <div dir="rtl" className="font-sans min-h-screen bg-background">
+    <div className="font-sans min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
         <PageHeader
-          title="الحركات المالية"
-          subtitle="إدارة المستحقات والعمولات والخصومات والسلف"
+          title={t(`${NS}.title`)}
+          subtitle={t(`${NS}.subtitle`)}
         />
 
-        {/* ── Action Buttons ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {(
             [
-              { type: "bonus",     label: "تسجيل مستحق" },
-              { type: "overtime",  label: "عمولة"        },
-              { type: "deduction", label: "خصم"          },
-              { type: "advance",   label: "سلفة"         },
-            ] as { type: MovementType; label: string }[]
-          ).map(({ type, label }) => {
-            const m = MOVEMENT_META[type];
+              { type: "bonus",     labelKey: "registerBonus" },
+              { type: "overtime",  labelKey: "bonusBtn"      },
+              { type: "deduction", labelKey: "deductionBtn"  },
+              { type: "advance",   labelKey: "advanceBtn"    },
+            ] as { type: MovementType; labelKey: string }[]
+          ).map(({ type, labelKey }) => {
+            const m = MOVEMENT_META_BASE[type];
             return (
               <Button
                 key={type}
@@ -423,28 +417,26 @@ export default function FinancialMovementsPage() {
                 <span className="flex items-center justify-center w-6 h-6 bg-white/20 rounded-full">
                   {m.icon}
                 </span>
-                <span>{label}</span>
+                <span>{t(`${NS}.${labelKey}`)}</span>
               </Button>
             );
           })}
         </div>
 
-        {/* ── Stats ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="إجمالي المستحقات" value={formatOMR(stats.bonus)}     color="green"  icon={<TrendingUp  className="h-4 w-4" />} />
-          <StatCard title="إجمالي العمولات"  value={formatOMR(stats.overtime)}  color="blue"   icon={<Star        className="h-4 w-4" />} />
-          <StatCard title="إجمالي الخصومات" value={formatOMR(stats.deduction)} color="orange" icon={<TrendingDown className="h-4 w-4" />} />
-          <StatCard title="إجمالي السلف"     value={formatOMR(stats.advance)}   color="red"    icon={<Banknote    className="h-4 w-4" />} />
+          <StatCard title={t(`${NS}.statBonus`)}     value={formatOMR(stats.bonus)}     color="green"  icon={<TrendingUp  className="h-4 w-4" />} />
+          <StatCard title={t(`${NS}.statOvertime`)}  value={formatOMR(stats.overtime)}  color="blue"   icon={<Star        className="h-4 w-4" />} />
+          <StatCard title={t(`${NS}.statDeduction`)} value={formatOMR(stats.deduction)} color="orange" icon={<TrendingDown className="h-4 w-4" />} />
+          <StatCard title={t(`${NS}.statAdvance`)}   value={formatOMR(stats.advance)}   color="red"    icon={<Banknote    className="h-4 w-4" />} />
         </div>
 
-        {/* ── Filters ── */}
         <Card className="shadow-sm">
           <CardContent className="p-4">
             <div className="flex flex-wrap gap-3">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <Input
-                  placeholder="البحث بالاسم أو السبب..."
+                  placeholder={t(`${NS}.searchPlaceholder`)}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pe-9 text-start"
@@ -453,10 +445,10 @@ export default function FinancialMovementsPage() {
 
               <Select value={empFilter} onValueChange={setEmpFilter}>
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="الموظف" />
+                  <SelectValue placeholder={t(`${NS}.employeeFilter`)} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">كل الموظفين</SelectItem>
+                  <SelectItem value="all">{t(`${NS}.allEmployees`)}</SelectItem>
                   {employees.map((e) => (
                     <SelectItem key={e.id} value={String(e.id)}>
                       {e.name}
@@ -467,13 +459,13 @@ export default function FinancialMovementsPage() {
 
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="النوع" />
+                  <SelectValue placeholder={t(`${NS}.typeFilter`)} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">كل الأنواع</SelectItem>
-                  {(Object.keys(MOVEMENT_META) as MovementType[]).map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {MOVEMENT_META[t].label}
+                  <SelectItem value="all">{t(`${NS}.allTypes`)}</SelectItem>
+                  {(Object.keys(MOVEMENT_META_BASE) as MovementType[]).map((mt) => (
+                    <SelectItem key={mt} value={mt}>
+                      {t(`${NS}.${MOVEMENT_META_BASE[mt].metaKey}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -514,11 +506,10 @@ export default function FinancialMovementsPage() {
           </CardContent>
         </Card>
 
-        {/* ── Movements Table ── */}
         <Card className="shadow-sm">
           <CardHeader className="px-4 py-3 border-b">
             <CardTitle className="text-base font-semibold">
-              سجل الحركات
+              {t(`${NS}.listTitle`)}
               <span className="text-muted-foreground font-normal text-sm me-2">
                 ({filtered.length})
               </span>
@@ -527,21 +518,21 @@ export default function FinancialMovementsPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40">
-                <TableHead className="text-start font-semibold">الموظف</TableHead>
-                <TableHead className="text-start font-semibold">النوع</TableHead>
-                <TableHead className="text-start font-semibold">المبلغ</TableHead>
-                <TableHead className="text-start font-semibold hidden sm:table-cell">الشهر / السنة</TableHead>
-                <TableHead className="text-start font-semibold hidden md:table-cell">الملاحظة</TableHead>
-                <TableHead className="text-start font-semibold">الحالة</TableHead>
-                <TableHead className="text-start font-semibold hidden lg:table-cell">تاريخ الإضافة</TableHead>
-                <TableHead className="text-start font-semibold w-20">إجراء</TableHead>
+                <TableHead className="text-start font-semibold">{t(`${NS}.thEmployee`)}</TableHead>
+                <TableHead className="text-start font-semibold">{t(`${NS}.thType`)}</TableHead>
+                <TableHead className="text-start font-semibold">{t(`${NS}.thAmount`)}</TableHead>
+                <TableHead className="text-start font-semibold hidden sm:table-cell">{t(`${NS}.thMonth`)}</TableHead>
+                <TableHead className="text-start font-semibold hidden md:table-cell">{t(`${NS}.thNote`)}</TableHead>
+                <TableHead className="text-start font-semibold">{t(`${NS}.thStatus`)}</TableHead>
+                <TableHead className="text-start font-semibold hidden lg:table-cell">{t(`${NS}.thAdded`)}</TableHead>
+                <TableHead className="text-start font-semibold w-20">{t(`${NS}.thAction`)}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8}>
-                    <EmptyState message="لا توجد حركات مالية لهذه الفترة" />
+                    <EmptyState message={t(`${NS}.empty`)} />
                   </TableCell>
                 </TableRow>
               ) : (
@@ -553,7 +544,7 @@ export default function FinancialMovementsPage() {
                     <TableRow key={m.id} className="hover:bg-muted/30">
                       <TableCell>
                         <div>
-                          <p className="font-medium text-sm">{emp?.name ?? `موظف #${m.employeeId}`}</p>
+                          <p className="font-medium text-sm">{emp?.name ?? t(`${NS}.employeeFallback`, { id: m.employeeId })}</p>
                           <p className="text-xs text-muted-foreground">{emp?.position}</p>
                         </div>
                       </TableCell>
@@ -584,7 +575,7 @@ export default function FinancialMovementsPage() {
                           onClick={() => handleCancel(m.id)}
                         >
                           <Ban className="h-3.5 w-3.5" />
-                          إلغاء
+                          {t(`${NS}.cancel`)}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -595,7 +586,6 @@ export default function FinancialMovementsPage() {
           </Table>
         </Card>
 
-        {/* ── Audit Log (Collapsible) ── */}
         <Collapsible open={auditOpen} onOpenChange={setAuditOpen}>
           <Card className="shadow-sm">
             <CollapsibleTrigger asChild>
@@ -603,7 +593,7 @@ export default function FinancialMovementsPage() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold flex items-center gap-2">
                     <History className="h-4 w-4 text-muted-foreground" />
-                    سجل المراجعة
+                    {t(`${NS}.auditTitle`)}
                     <span className="text-muted-foreground font-normal text-sm">
                       ({movementAuditLogs.length})
                     </span>
@@ -619,15 +609,15 @@ export default function FinancialMovementsPage() {
             <CollapsibleContent>
               <div className="border-t">
                 {movementAuditLogs.length === 0 ? (
-                  <EmptyState message="لا توجد سجلات مراجعة بعد" />
+                  <EmptyState message={t(`${NS}.emptyAudit`)} />
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/40">
-                        <TableHead className="text-start font-semibold">الإجراء</TableHead>
-                        <TableHead className="text-start font-semibold">الموظف</TableHead>
-                        <TableHead className="text-start font-semibold">المبلغ</TableHead>
-                        <TableHead className="text-start font-semibold">التوقيت</TableHead>
+                        <TableHead className="text-start font-semibold">{t(`${NS}.thAuditAction`)}</TableHead>
+                        <TableHead className="text-start font-semibold">{t(`${NS}.thAuditEmployee`)}</TableHead>
+                        <TableHead className="text-start font-semibold">{t(`${NS}.thAuditAmount`)}</TableHead>
+                        <TableHead className="text-start font-semibold">{t(`${NS}.thAuditTime`)}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -652,7 +642,6 @@ export default function FinancialMovementsPage() {
 
       </div>
 
-      {/* ── Add Movement Dialog ── */}
       <AddMovementDialog
         key={dialogKey}
         open={dialogOpen}
