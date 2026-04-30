@@ -290,5 +290,8 @@
     "type_main_desc": "Main branch — appears as the system base",
     "type_regular_desc": "Regular branch",
     "deleted": "Branch deleted successfully"
-  }
+  },
+  "printer_per_device_title": "Per-Device Printer Settings",
+  "printer_per_device_desc": "Printer selection, paper size, and local print service connection are now in the POS page — open POS on the cashier device and press the \"{btn}\" button in the pink top bar. Each device saves its settings locally without affecting other branches or cashier devices.",
+  "print_btn_ref": "Print"
 }

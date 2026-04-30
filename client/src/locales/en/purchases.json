@@ -206,7 +206,8 @@
     "delete_invoice_final": "Invoice will be permanently deleted. This action cannot be undone.",
     "delete_btn": "Delete",
     "upload_failed_file": "Failed to upload {{filename}}",
-    "upload_success_count": "{{count}} attachment(s) uploaded ✓"
+    "upload_success_count": "{{count}} attachment(s) uploaded ✓",
+    "select_variant_label": "Select variant (color / size / type)"
   },
   "purchases_v2": {
     "quick_create": "Quick Create",

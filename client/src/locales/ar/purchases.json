@@ -206,7 +206,8 @@
     "delete_invoice_final": "سيتم حذف الفاتورة نهائياً. لا يمكن التراجع عن هذا الإجراء.",
     "delete_btn": "حذف",
     "upload_failed_file": "فشل رفع {{filename}}",
-    "upload_success_count": "تم رفع {{count}} مرفق ✓"
+    "upload_success_count": "تم رفع {{count}} مرفق ✓",
+    "select_variant_label": "اختر المتغير (لون / مقاس / نوع)"
   },
   "purchases_v2": {
     "quick_create": "إنشاء سريع",

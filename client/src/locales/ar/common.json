@@ -252,5 +252,9 @@
     "admin": "مدير",
     "employee": "موظف",
     "logout": "تسجيل الخروج"
-  }
+  },
+  "barcode_placeholder": "الباركود...",
+  "pick_date": "اختر تاريخ",
+  "page_load_error": "خطأ في تحميل الصفحة",
+  "retry": "إعادة المحاولة"
 }
