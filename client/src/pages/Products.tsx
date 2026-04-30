@@ -143,7 +143,7 @@ export default function Products() {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       setDeleteConfirmId(null);
     },
-    onError: (e: Error) => toast({ title: "لا يمكن الحذف", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("products.cannot_delete"), description: e.message, variant: "destructive" }),
   });
 
   const toggleActiveMutation = useMutation({
@@ -179,8 +179,8 @@ export default function Products() {
       setVariantDialogOpen(false);
     },
     onError: (e: Error) => {
-      if (e.message.includes("باركود") || e.message.includes("barcode")) toast({ title: "الباركود مكرر", description: e.message, variant: "destructive" });
-      else if (e.message.includes("SKU") || e.message.includes("sku")) toast({ title: "رمز SKU مكرر", description: e.message, variant: "destructive" });
+      if (e.message.includes("باركود") || e.message.includes("barcode")) toast({ title: t("products.barcode_duplicate"), description: e.message, variant: "destructive" });
+      else if (e.message.includes("SKU") || e.message.includes("sku")) toast({ title: t("products.sku_duplicate"), description: e.message, variant: "destructive" });
       else toast({ title: t("common.error"), description: e.message, variant: "destructive" });
     },
   });
@@ -192,7 +192,7 @@ export default function Products() {
       queryClient.invalidateQueries({ queryKey: [`/api/products/${formProduct?.id}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
     },
-    onError: (e: Error) => toast({ title: "لا يمكن حذف المتغير", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("products.cannot_delete_variant"), description: e.message, variant: "destructive" }),
   });
 
   // ── helpers ───────────────────────────────────────────────────────────
@@ -365,7 +365,7 @@ export default function Products() {
 
   // ── export CSV ────────────────────────────────────────────────────────
   function exportCSV() {
-    const headers = ["#", "الاسم", "الفئة", "الباركود", "السعر", "المخزون", "الحالة"];
+    const headers = ["#", t("products.product_name"), t("products.category"), t("products.barcode"), t("products.table_price"), t("products.table_qty"), t("products.product_status")];
     const rows = filteredProducts.map((p, i) => [
       i + 1,
       `"${p.name}"`,
@@ -373,7 +373,7 @@ export default function Products() {
       p.barcode || "",
       parseFloat(p.price).toFixed(3),
       p.totalStock ?? 0,
-      p.active ? "نشط" : "غير نشط",
+      p.active ? t("products.active") : t("products.inactive"),
     ]);
     const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
@@ -385,7 +385,7 @@ export default function Products() {
   // ── copy barcode ──────────────────────────────────────────────────────
   function copyBarcode(code: string) {
     navigator.clipboard.writeText(code).then(() =>
-      toast({ title: "تم النسخ", description: code })
+      toast({ title: t("products.copied_title"), description: code })
     );
   }
 
@@ -405,13 +405,13 @@ export default function Products() {
             const dupCount = Object.values(nameCount).filter(c => c > 1).length;
             return dupCount > 0 ? (
               <Button variant="outline" className="gap-2 border-orange-400 text-orange-600 hover:bg-orange-50" onClick={() => setDuplicatesOpen(true)}>
-                <AlertCircle className="w-4 h-4" /> {dupCount} أسماء مكررة
+                <AlertCircle className="w-4 h-4" /> {dupCount} {t("products.duplicate_names")}
               </Button>
             ) : null;
           })()}
           {isOwnerOrAdmin && (
             <Button variant="outline" className="gap-2" onClick={() => setBatchOpen(true)}>
-              <Percent className="w-4 h-4" /> تحديث الأسعار
+              <Percent className="w-4 h-4" /> {t("products.update_prices")}
             </Button>
           )}
           <Button onClick={openAdd} className="gap-2" data-testid="button-add-product">
@@ -424,19 +424,19 @@ export default function Products() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-card border rounded-lg p-3 text-center">
           <p className="text-2xl font-bold">{stats.total}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">إجمالي المنتجات</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("products.total_products_stat")}</p>
         </div>
         <div className="bg-card border rounded-lg p-3 text-center cursor-pointer hover:border-destructive/50 transition-colors" onClick={() => setFilterStock("zero")}>
           <p className="text-2xl font-bold text-destructive">{stats.outStock}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">نفد المخزون</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("products.out_of_stock")}</p>
         </div>
         <div className="bg-card border rounded-lg p-3 text-center cursor-pointer hover:border-orange-400/50 transition-colors" onClick={() => setFilterStock("low")}>
           <p className="text-2xl font-bold text-orange-500">{stats.low}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">مخزون منخفض</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("products.low_stock_stat")}</p>
         </div>
         <div className="bg-card border rounded-lg p-3 text-center cursor-pointer hover:border-muted-foreground/50 transition-colors" onClick={() => setFilterStatus("inactive")}>
           <p className="text-2xl font-bold text-muted-foreground">{stats.inactive}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">غير نشط</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("products.inactive_stat")}</p>
         </div>
       </div>
 
@@ -482,26 +482,26 @@ export default function Products() {
         <Select value={filterStatus} onValueChange={v => setFilterStatus(v as any)}>
           <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">كل الحالات</SelectItem>
-            <SelectItem value="active">النشطة فقط</SelectItem>
-            <SelectItem value="inactive">غير النشطة</SelectItem>
+            <SelectItem value="all">{t("products.all_statuses")}</SelectItem>
+            <SelectItem value="active">{t("products.active_only")}</SelectItem>
+            <SelectItem value="inactive">{t("products.inactive_only")}</SelectItem>
           </SelectContent>
         </Select>
         <Select value={filterStock} onValueChange={v => setFilterStock(v as any)}>
           <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">كل المخزون</SelectItem>
-            <SelectItem value="zero">نفد المخزون</SelectItem>
-            <SelectItem value="low">مخزون منخفض</SelectItem>
+            <SelectItem value="all">{t("products.all_stock")}</SelectItem>
+            <SelectItem value="zero">{t("products.zero_stock")}</SelectItem>
+            <SelectItem value="low">{t("products.low_stock_filter")}</SelectItem>
           </SelectContent>
         </Select>
         {(filterStatus !== "all" || filterStock !== "all") && (
           <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => { setFilterStatus("all"); setFilterStock("all"); }}>
-            مسح الفلاتر ✕
+            {t("products.clear_filters")} ✕
           </Button>
         )}
         <Button variant="outline" size="sm" className="gap-1.5 ms-auto" onClick={exportCSV}>
-          <Download className="w-4 h-4" /> تصدير CSV
+          <Download className="w-4 h-4" /> {t("products.export_csv")}
         </Button>
       </div>
 
@@ -515,15 +515,15 @@ export default function Products() {
               <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("name")}>
                 {t("products.table_name")}{sortIcon("name")}
               </TableHead>
-              <TableHead>الفئة</TableHead>
+              <TableHead>{t("products.table_category")}</TableHead>
               <TableHead>{t("products.code")}</TableHead>
-              <TableHead>رقم الموديل</TableHead>
+              <TableHead>{t("products.table_model_number")}</TableHead>
               <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("price")}>
                 {t("products.default_price")}{sortIcon("price")}
               </TableHead>
-              <TableHead className="text-center">هامش الربح</TableHead>
+              <TableHead className="text-center">{t("products.table_profit_margin")}</TableHead>
               <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("stock")}>
-                الكمية{sortIcon("stock")}
+                {t("products.table_qty")}{sortIcon("stock")}
               </TableHead>
               <TableHead>{t("products.table_status")}</TableHead>
               <TableHead className="text-start">{t("products.table_actions")}</TableHead>
@@ -542,7 +542,7 @@ export default function Products() {
                   <div
                     className={`w-9 h-9 rounded-lg bg-muted flex items-center justify-center overflow-hidden ${p.image ? "cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all" : ""}`}
                     onClick={() => p.image && setPreviewImage(p.image)}
-                    title={p.image ? "اضغط للمعاينة" : undefined}
+                    title={p.image ? t("products.preview_image") : undefined}
                   >
                     {p.image
                       ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
@@ -553,7 +553,7 @@ export default function Products() {
                 <TableCell><Badge variant="outline" className="text-xs">{catName}</Badge></TableCell>
                 <TableCell
                   className={`font-mono text-xs ${p.barcode ? "text-foreground cursor-pointer hover:text-primary transition-colors group" : "text-muted-foreground"}`}
-                  title={p.barcode ? "اضغط لنسخ الباركود" : undefined}
+                  title={p.barcode ? t("products.copy_barcode") : undefined}
                   onClick={() => p.barcode && copyBarcode(p.barcode)}
                 >
                   {p.barcode
@@ -594,13 +594,13 @@ export default function Products() {
                 </TableCell>
                 <TableCell className="text-start">
                   <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="التفاصيل" onClick={() => setDetailProductId(p.id)} data-testid={`button-detail-product-${p.id}`}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title={t("products.tab_basic")} onClick={() => setDetailProductId(p.id)} data-testid={`button-detail-product-${p.id}`}>
                       <Eye className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="تعديل" onClick={() => openEdit(p)} data-testid={`button-edit-product-${p.id}`}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title={t("products.edit_product")} onClick={() => openEdit(p)} data-testid={`button-edit-product-${p.id}`}>
                       <Edit2 className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="حذف" onClick={() => setDeleteConfirmId(p.id)} data-testid={`button-delete-product-${p.id}`}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title={t("common.delete")} onClick={() => setDeleteConfirmId(p.id)} data-testid={`button-delete-product-${p.id}`}>
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>
@@ -622,7 +622,7 @@ export default function Products() {
           <div className="space-y-4 pt-2">
 
             {/* ── المعلومات الأساسية ── */}
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b pb-1">المعلومات الأساسية</p>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b pb-1">{t("products.basic_info_section")}</p>
 
             <div className="grid grid-cols-2 gap-3">
               {/* اسم المنتج */}
@@ -684,7 +684,7 @@ export default function Products() {
                   <label className="text-sm font-medium">{t("products.code")}</label>
                   {!formProduct && (
                     <span className="text-xs text-muted-foreground">
-                      {formData.categoryId ? "تلقائي حسب الفئة" : "اختر فئة لتوليد الباركود"}
+                      {formData.categoryId ? t("products.barcode_auto") : t("products.barcode_select_category")}
                     </span>
                   )}
                 </div>
@@ -692,7 +692,7 @@ export default function Products() {
                   <Input
                     value={formData.barcode}
                     onChange={e => setFormData(f => ({ ...f, barcode: e.target.value }))}
-                    placeholder={barcodeLoading ? "جاري التوليد..." : t("products.optional")}
+                    placeholder={barcodeLoading ? t("products.barcode_loading") : t("products.optional")}
                     className="font-mono"
                     data-testid="input-product-barcode"
                   />
@@ -703,7 +703,7 @@ export default function Products() {
                       size="icon"
                       onClick={() => fetchNextBarcode(formData.categoryId)}
                       disabled={barcodeLoading}
-                      title="توليد باركود جديد"
+                      title={t("products.generate_barcode")}
                     >
                       <RefreshCw className={`w-4 h-4 ${barcodeLoading ? "animate-spin" : ""}`} />
                     </Button>
@@ -715,11 +715,11 @@ export default function Products() {
 
               {/* رقم الموديل */}
               <div className="space-y-1">
-                <label className="text-sm font-medium">رقم الموديل</label>
+                <label className="text-sm font-medium">{t("products.model_number_label")}</label>
                 <Input
                   value={formData.modelNumber}
                   onChange={e => setFormData(f => ({ ...f, modelNumber: e.target.value }))}
-                  placeholder="مثال: AB-1234 (اختياري)"
+                  placeholder={t("products.model_number_placeholder")}
                   className="font-mono"
                   data-testid="input-product-model"
                 />
@@ -727,13 +727,13 @@ export default function Products() {
             </div>
 
             {/* ── التسعير ── */}
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b pb-1 pt-1">التسعير</p>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b pb-1 pt-1">{t("products.pricing_section")}</p>
             <div className="grid grid-cols-2 gap-3">
 
               {/* التكلفة */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium">التكلفة (ر.ع)</label>
+                  <label className="text-sm font-medium">{t("products.cost_label")}</label>
                   <div className="flex gap-1">
                     <button type="button"
                       onClick={() => {
@@ -742,11 +742,11 @@ export default function Products() {
                         if (lp > 0) setFormData(f => ({ ...f, costDefault: lp.toFixed(3) }));
                       }}
                       className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${costMode === "auto" ? "bg-blue-50 border-blue-300 text-blue-700" : "bg-muted border-border text-muted-foreground hover:bg-accent"}`}
-                    >تلقائي</button>
+                    >{t("products.auto")}</button>
                     <button type="button"
                       onClick={() => setCostMode("manual")}
                       className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${costMode === "manual" ? "bg-amber-50 border-amber-300 text-amber-700" : "bg-muted border-border text-muted-foreground hover:bg-accent"}`}
-                    >يدوي</button>
+                    >{t("products.manual")}</button>
                   </div>
                 </div>
                 <Input
@@ -757,8 +757,8 @@ export default function Products() {
                 />
                 <p className="text-xs text-muted-foreground">
                   {costMode === "auto"
-                    ? `من آخر فاتورة شراء: ${parseFloat(formProduct?.lastPurchasePrice || editProductDetail?.lastPurchasePrice || "0").toFixed(3)} ر.ع`
-                    : "تكلفة مدخلة يدوياً"}
+                    ? t("products.from_last_purchase", { price: parseFloat(formProduct?.lastPurchasePrice || editProductDetail?.lastPurchasePrice || "0").toFixed(3) })
+                    : t("products.manual_cost")}
                 </p>
               </div>
 
@@ -776,7 +776,7 @@ export default function Products() {
 
               {/* هامش الربح — عرض فقط */}
               <div className="space-y-1">
-                <label className="text-sm font-medium flex items-center gap-1"><Percent className="w-3.5 h-3.5" /> هامش الربح</label>
+                <label className="text-sm font-medium flex items-center gap-1"><Percent className="w-3.5 h-3.5" /> {t("products.profit_margin")}</label>
                 {(() => {
                   const cost = parseFloat(formData.costDefault || "0");
                   const price = parseFloat(formData.price || "0");
@@ -794,9 +794,9 @@ export default function Products() {
 
               {/* حد التنبيه */}
               <div className="space-y-1">
-                <label className="text-sm font-medium">حد التنبيه للمخزون</label>
+                <label className="text-sm font-medium">{t("products.stock_alert_label")}</label>
                 <Input type="number" min="0" value={formData.minQty} onChange={e => setFormData(f => ({ ...f, minQty: e.target.value }))} placeholder="5" />
-                <p className="text-xs text-muted-foreground">تنبيه عند وصول المخزون لهذا الرقم</p>
+                <p className="text-xs text-muted-foreground">{t("products.stock_alert_hint")}</p>
               </div>
 
               {/* معلومات إضافية عند التعديل */}
@@ -815,7 +815,7 @@ export default function Products() {
             </div>
 
             {/* ── الصورة والوصف ── */}
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b pb-1 pt-1">الصورة والوصف</p>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b pb-1 pt-1">{t("products.image_desc_section")}</p>
             <input type="file" accept="image/*" className="hidden" id="product-image-input"
               onChange={e => { const file = e.target.files?.[0]; if (!file) return; processImageFile(file); e.target.value = ""; }}
             />
@@ -823,8 +823,8 @@ export default function Products() {
               <div className="relative w-full h-36 rounded-lg border overflow-hidden group">
                 <img src={formData.image} alt="" className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                  <Button type="button" size="sm" variant="outline" className="bg-white/90 text-black" onClick={() => document.getElementById("product-image-input")?.click()}>تغيير</Button>
-                  <Button type="button" size="sm" variant="destructive" onClick={() => setFormData(f => ({ ...f, image: "" }))}>حذف</Button>
+                  <Button type="button" size="sm" variant="outline" className="bg-white/90 text-black" onClick={() => document.getElementById("product-image-input")?.click()}>{t("products.change_image")}</Button>
+                  <Button type="button" size="sm" variant="destructive" onClick={() => setFormData(f => ({ ...f, image: "" }))}>{t("products.delete_image")}</Button>
                 </div>
               </div>
             ) : (
@@ -835,12 +835,12 @@ export default function Products() {
                 onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove("border-primary", "bg-primary/5"); const file = e.dataTransfer.files?.[0]; if (file?.type.startsWith("image/")) processImageFile(file); }}
               >
                 <Package className="w-6 h-6 text-muted-foreground/50" />
-                <p className="text-xs text-muted-foreground">اسحب الصورة هنا أو اضغط للاختيار</p>
+                <p className="text-xs text-muted-foreground">{t("products.drag_image")}</p>
               </div>
             )}
             <div className="space-y-1">
-              <label className="text-sm font-medium">الوصف</label>
-              <textarea value={formData.description} onChange={e => setFormData(f => ({ ...f, description: e.target.value }))} placeholder="وصف تفصيلي للمنتج (اختياري)..." rows={2}
+              <label className="text-sm font-medium">{t("products.description_label")}</label>
+              <textarea value={formData.description} onChange={e => setFormData(f => ({ ...f, description: e.target.value }))} placeholder={t("products.description_placeholder")} rows={2}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
 
@@ -940,10 +940,10 @@ export default function Products() {
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-orange-600">
-              <AlertCircle className="w-5 h-5" /> المنتجات ذات الأسماء المكررة
+              <AlertCircle className="w-5 h-5" /> {t("products.duplicate_names_title")}
             </DialogTitle>
             <DialogDescription>
-              هذه المنتجات لها نفس الاسم — راجعها وادمجها أو احذف المكرر
+              {t("products.duplicate_names_desc")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">
@@ -957,15 +957,15 @@ export default function Products() {
               const dups = Object.entries(groups).filter(([, arr]) => arr.length > 1);
               return dups.map(([name, items]) => (
                 <div key={name} className="border rounded-lg p-3 space-y-2">
-                  <p className="font-semibold text-sm text-orange-700">{name} <Badge variant="secondary">{items.length} نسخ</Badge></p>
+                  <p className="font-semibold text-sm text-orange-700">{name} <Badge variant="secondary">{t("products.copies_count", { count: items.length })}</Badge></p>
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>ID</TableHead>
-                        <TableHead>الباركود</TableHead>
-                        <TableHead>السعر</TableHead>
-                        <TableHead>المخزون</TableHead>
-                        <TableHead className="text-start">إجراء</TableHead>
+                        <TableHead>{t("products.barcode")}</TableHead>
+                        <TableHead>{t("products.default_price")}</TableHead>
+                        <TableHead>{t("products.table_qty")}</TableHead>
+                        <TableHead className="text-start">{t("common.edit")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -996,7 +996,7 @@ export default function Products() {
             })()}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDuplicatesOpen(false)}>إغلاق</Button>
+            <Button variant="outline" onClick={() => setDuplicatesOpen(false)}>{t("common.close")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1116,10 +1116,10 @@ export default function Products() {
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium">{t("products.variant_sku")}</label>
                 {!editingVariant && variantForm.sku && (
-                  <span className="text-xs text-green-600 font-mono bg-green-50 px-2 py-0.5 rounded-full border border-green-200">تلقائي</span>
+                  <span className="text-xs text-green-600 font-mono bg-green-50 px-2 py-0.5 rounded-full border border-green-200">{t("products.auto_badge")}</span>
                 )}
               </div>
-              <Input value={variantForm.sku} onChange={e => setVariantForm(f => ({ ...f, sku: e.target.value }))} placeholder="يتولد تلقائياً" className="font-mono" data-testid="input-variant-sku" />
+              <Input value={variantForm.sku} onChange={e => setVariantForm(f => ({ ...f, sku: e.target.value }))} placeholder={t("products.sku_auto_placeholder")} className="font-mono" data-testid="input-variant-sku" />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("products.variant_color")}</label>
@@ -1177,17 +1177,17 @@ export default function Products() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-destructive flex items-center gap-2">
-              <Trash2 className="w-5 h-5" /> تأكيد الحذف
+              <Trash2 className="w-5 h-5" /> {t("products.delete_confirm_title")}
             </DialogTitle>
             <DialogDescription asChild>
               <div className="space-y-1 pt-1">
-                <p>هل أنت متأكد من حذف المنتج <strong>"{deleteConfirmProduct?.name}"</strong>؟</p>
-                <p className="text-muted-foreground text-sm">لا يمكن التراجع عن هذا الإجراء.</p>
+                <p>{t("products.delete_confirm_text", { name: deleteConfirmProduct?.name || "" })}</p>
+                <p className="text-muted-foreground text-sm">{t("products.delete_no_undo")}</p>
               </div>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>إلغاء</Button>
+            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>{t("common.cancel")}</Button>
             <Button
               variant="destructive"
               disabled={deleteProductMutation.isPending}
@@ -1198,7 +1198,7 @@ export default function Products() {
                 }
               }}
             >
-              {deleteProductMutation.isPending ? "جارٍ الحذف..." : "نعم، احذف"}
+              {deleteProductMutation.isPending ? t("products.deleting") : t("products.confirm_delete")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1209,21 +1209,21 @@ export default function Products() {
         <DialogContent className="max-w-md" dir="rtl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Percent className="w-5 h-5" /> تحديث الأسعار بالجملة
+              <Percent className="w-5 h-5" /> {t("products.batch_price_title")}
             </DialogTitle>
             <DialogDescription>
-              يحدّث سعر البيع لكل منتج بناءً على متوسط تكلفته ونسبة الربح المحددة
+              {t("products.batch_price_desc")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">الفئة</label>
+              <label className="text-sm font-medium">{t("products.category")}</label>
               <Select value={batchCatId} onValueChange={setBatchCatId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="كل الفئات" />
+                  <SelectValue placeholder={t("products.all_categories_batch")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">كل الفئات</SelectItem>
+                  <SelectItem value="all">{t("products.all_categories_batch")}</SelectItem>
                   {(categories as any[]).map((c: any) => (
                     <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
                   ))}
@@ -1231,7 +1231,7 @@ export default function Products() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">نسبة الربح %</label>
+              <label className="text-sm font-medium">{t("products.profit_pct_label")}</label>
               <div className="flex gap-2 items-center">
                 <Input
                   type="text" inputMode="decimal"
@@ -1241,25 +1241,22 @@ export default function Products() {
                   placeholder="50"
                 />
                 <span className="text-sm text-muted-foreground">
-                  = سعر البيع × {(1 + parseFloat(batchMargin || "0") / 100).toFixed(2)}
+                  {t("products.price_formula", { multiplier: (1 + parseFloat(batchMargin || "0") / 100).toFixed(2) })}
                 </span>
               </div>
-              <p className="text-xs text-muted-foreground">مثال: تكلفة 1.000 + 50% ربح = سعر 1.500</p>
+              <p className="text-xs text-muted-foreground">{t("products.price_example")}</p>
             </div>
-            {/* معاينة عدد المنتجات */}
             <div className="p-3 bg-muted rounded-lg text-sm">
-              سيتم تحديث أسعار{" "}
-              <strong>
-                {(products as any[]).filter((p: any) =>
+              {t("products.will_update_count", {
+                count: (products as any[]).filter((p: any) =>
                   (batchCatId === "all" || String(p.categoryId) === batchCatId) &&
                   parseFloat(p.avgCost || p.costDefault || "0") > 0
-                ).length}
-              </strong>
-              {" "}منتج (لديها تكلفة مسجّلة)
+                ).length
+              })}
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setBatchOpen(false)}>إلغاء</Button>
+            <Button variant="outline" onClick={() => setBatchOpen(false)}>{t("common.cancel")}</Button>
             <Button
               disabled={batchLoading || !batchMargin}
               onClick={async () => {
@@ -1279,17 +1276,17 @@ export default function Products() {
                     updated++;
                   }
                   await queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-                  toast({ title: `تم تحديث ${updated} منتج بنسبة ربح ${margin}% ✓` });
+                  toast({ title: t("products.batch_success", { count: updated, pct: margin }) });
                   setBatchOpen(false);
                 } catch (e: any) {
-                  toast({ title: "خطأ", description: e.message, variant: "destructive" });
+                  toast({ title: t("common.error"), description: e.message, variant: "destructive" });
                 } finally {
                   setBatchLoading(false);
                 }
               }}
             >
               {batchLoading ? <RefreshCw className="w-4 h-4 animate-spin ms-2" /> : null}
-              تحديث الأسعار
+              {t("products.batch_update_btn")}
             </Button>
           </DialogFooter>
         </DialogContent>
