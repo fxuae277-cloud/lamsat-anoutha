@@ -70,7 +70,10 @@
     "limited_access": "صلاحية محدودة",
     "no_details": "لا توجد تفاصيل",
     "open": "مفتوح",
-    "save_changes": "حفظ التغييرات"
+    "save_changes": "حفظ التغييرات",
+    "by": "بواسطة:",
+    "apply": "تطبيق",
+    "whatsapp": "واتساب"
   },
   "app": {
     "loading": "جارٍ التحميل...",
@@ -249,5 +252,9 @@
     "admin": "مدير",
     "employee": "موظف",
     "logout": "تسجيل الخروج"
-  }
+  },
+  "barcode_placeholder": "الباركود...",
+  "pick_date": "اختر تاريخ",
+  "page_load_error": "خطأ في تحميل الصفحة",
+  "retry": "إعادة المحاولة"
 }

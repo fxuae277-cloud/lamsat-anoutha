@@ -35,6 +35,8 @@ const ARABIC = /[؀-ۿ]/;
 const JSX_TEXT = />\s*([^<>{}\n]*[؀-ۿ][^<>{}\n]*?)\s*</g;
 const STRING_PROP = /\b(placeholder|title|label|aria-label|alt|description)\s*=\s*"([^"]*[؀-ۿ][^"]*)"/g;
 const CONSOLE_OR_COMMENT_LINE = /^\s*(\/\/|\/\*|\*|console\.)/;
+const IGNORE_BLOCK_START = /i18n-ignore-block-start/;
+const IGNORE_BLOCK_END = /i18n-ignore-block-end/;
 
 function* walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -56,8 +58,12 @@ for (const file of walk(clientSrc)) {
   scannedFiles++;
   const text = fs.readFileSync(file, "utf8");
   const lines = text.split("\n");
+  let inIgnoreBlock = false;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    if (IGNORE_BLOCK_START.test(line)) { inIgnoreBlock = true; continue; }
+    if (IGNORE_BLOCK_END.test(line)) { inIgnoreBlock = false; continue; }
+    if (inIgnoreBlock) continue;
     if (!ARABIC.test(line)) continue;
     if (CONSOLE_OR_COMMENT_LINE.test(line)) continue;
     let m;

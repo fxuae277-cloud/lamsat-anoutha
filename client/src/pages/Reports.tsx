@@ -87,12 +87,7 @@ function CustomTooltip({ active, payload, label }: any) {
   );
 }
 
-// ─── COGS Categories Arabic Labels ────────────────────────────────────────────
-const CAT_LABELS: Record<string, string> = {
-  supplies: "مستلزمات", rent: "إيجار", salary: "رواتب", transport: "مواصلات",
-  maintenance: "صيانة", electricity: "كهرباء ومياه", phone: "اتصالات",
-  marketing: "تسويق", shipping: "شحن", taxes: "ضرائب", other: "أخرى",
-};
+// CAT_LABELS built inside component using t() — see component body
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Main Component
@@ -100,8 +95,23 @@ const CAT_LABELS: Record<string, string> = {
 export default function Reports() {
   const { data: authData } = useAuth();
   const user = authData?.user;
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const isAdmin = user?.role === "owner" || user?.role === "admin";
+
+  const CAT_LABELS: Record<string, string> = {
+    supplies: t("expenses.categories.supplies"), rent: t("expenses.categories.rent"),
+    salary: t("expenses.categories.salary"), transport: t("expenses.categories.transport"),
+    maintenance: t("expenses.categories.maintenance"), electricity: t("expenses.categories.electricity"),
+    phone: t("expenses.categories.phone"), marketing: t("expenses.categories.marketing"),
+    shipping: t("expenses.categories.shipping"), taxes: t("expenses.categories.taxes"),
+    other: t("expenses.categories.other"),
+  };
+
+  const getMonthName = (mm: string) => {
+    const monthIndex = parseInt(mm, 10) - 1;
+    const date = new Date(2000, monthIndex, 1);
+    return date.toLocaleString(lang === "ar" ? "ar-SA" : "en-US", { month: "long" });
+  };
 
   const [from, setFrom]           = useState(startOfMonthStr());
   const [to,   setTo]             = useState(todayStr());
@@ -138,7 +148,7 @@ export default function Reports() {
 
   const branchLabel = (id: number) => {
     const b = branches.find(b => b.id === id);
-    return b ? branchCityLabel(b) : `فرع ${id}`;
+    return b ? branchCityLabel(b) : `${t("reports.branch_prefix")} ${id}`;
   };
 
   // ── payments helpers — API returns { methods: [...], transactions: [...], grandTotal } ──
@@ -149,9 +159,9 @@ export default function Reports() {
 
   // ── payments pie data ─────────────────────────────────────────────────────
   const paymentPieData = payments ? [
-    { name: "نقدي",        value: pmtMethod("cash")          },
-    { name: "بطاقة",       value: pmtMethod("card")          },
-    { name: "تحويل بنكي",  value: pmtMethod("bank_transfer") },
+    { name: t("reports.badge_cash"),     value: pmtMethod("cash")          },
+    { name: t("reports.badge_card"),     value: pmtMethod("card")          },
+    { name: t("reports.kpi_bank_transfer"), value: pmtMethod("bank_transfer") },
   ].filter(d => d.value > 0) : [];
 
   // ── expenses pie data ─────────────────────────────────────────────────────
@@ -163,21 +173,21 @@ export default function Reports() {
   // ── branch comparison bar data ────────────────────────────────────────────
   const bcData = (branchComp?.branches || []).map((b: any) => ({
     name:     b.branchName?.split(" - ")[0] || b.branchName,
-    مبيعات:  parseFloat(b.totalSales),
-    تكلفة:   parseFloat(b.cogsTotal),
-    ربح:     parseFloat(b.netProfit),
-    مصروفات: parseFloat(b.totalExpenses),
+    sales:    parseFloat(b.totalSales),
+    cost:     parseFloat(b.cogsTotal),
+    profit:   parseFloat(b.netProfit),
+    expenses: parseFloat(b.totalExpenses),
   }));
 
   // ── CSV export helpers ────────────────────────────────────────────────────
   function exportBranchComp() {
     if (!branchComp?.branches) return;
-    const headers = ["الفرع", "المبيعات", "التكلفة", "إجمالي الربح", "المصروفات", "صافي الربح", "الهامش%"];
+    const headers = [t("reports.table_branch"), t("reports.br_total_sales"), t("reports.th_cost"), t("reports.br_gross_profit"), t("reports.br_expenses"), t("reports.br_net_profit"), t("reports.th_margin_pct")];
     const rows = branchComp.branches.map((b: any) => [
       b.branchName, omr(b.totalSales), omr(b.cogsTotal),
       omr(b.grossProfit), omr(b.totalExpenses), omr(b.netProfit), b.margin + "%",
     ]);
-    downloadCSV(`مقارنة_الفروع_${from}_${to}.csv`, [headers, ...rows]);
+    downloadCSV(`branch_comparison_${from}_${to}.csv`, [headers, ...rows]);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -192,10 +202,10 @@ export default function Reports() {
       {isAdmin && (
         <Select value={branch} onValueChange={setBranch}>
           <SelectTrigger className="w-52">
-            <SelectValue placeholder="كل الفروع" />
+            <SelectValue placeholder={t("reports.all_branches")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">كل الفروع</SelectItem>
+            <SelectItem value="all">{t("reports.all_branches")}</SelectItem>
             {branches.map(b => (
               <SelectItem key={b.id} value={String(b.id)}>
                 {(() => {
@@ -218,9 +228,9 @@ export default function Reports() {
       {/* Header */}
       <div className="text-center mb-4">
         <h1 className="text-2xl font-bold text-primary flex items-center justify-center gap-2">
-          <BarChart3 className="h-6 w-6" /> التقارير المالية
+          <BarChart3 className="h-6 w-6" /> {t("reports.title")}
         </h1>
-        <p className="text-sm text-muted-foreground">لمسة أنوثة — {from} إلى {to}</p>
+        <p className="text-sm text-muted-foreground">{from} — {to}</p>
       </div>
 
       {filterBar}
@@ -228,13 +238,13 @@ export default function Reports() {
       <Tabs defaultValue="overview" className="w-full" dir="rtl">
         <div className="overflow-x-auto">
           <TabsList className="flex w-max min-w-full md:w-full justify-start md:justify-center gap-1 mb-2">
-            <TabsTrigger value="overview"      className="gap-1 whitespace-nowrap"><TrendingUp className="h-4 w-4" />نظرة عامة</TabsTrigger>
-            <TabsTrigger value="payments"      className="gap-1 whitespace-nowrap"><CreditCard className="h-4 w-4" />المدفوعات</TabsTrigger>
-            <TabsTrigger value="products"      className="gap-1 whitespace-nowrap"><Package className="h-4 w-4" />المنتجات</TabsTrigger>
-            <TabsTrigger value="orders-report" className="gap-1 whitespace-nowrap"><Users className="h-4 w-4" />تقرير الطلبات</TabsTrigger>
-            {isAdmin && <TabsTrigger value="branches"      className="gap-1 whitespace-nowrap"><GitBranch className="h-4 w-4" />مقارنة الفروع</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="cashflow"      className="gap-1 whitespace-nowrap"><Banknote className="h-4 w-4" />التدفقات النقدية</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="balance-sheet" className="gap-1 whitespace-nowrap"><Scale className="h-4 w-4" />الميزانية العمومية</TabsTrigger>}
+            <TabsTrigger value="overview"      className="gap-1 whitespace-nowrap"><TrendingUp className="h-4 w-4" />{t("reports.tab_overview")}</TabsTrigger>
+            <TabsTrigger value="payments"      className="gap-1 whitespace-nowrap"><CreditCard className="h-4 w-4" />{t("reports.tab_payments")}</TabsTrigger>
+            <TabsTrigger value="products"      className="gap-1 whitespace-nowrap"><Package className="h-4 w-4" />{t("reports.tab_products")}</TabsTrigger>
+            <TabsTrigger value="orders-report" className="gap-1 whitespace-nowrap"><Users className="h-4 w-4" />{t("reports.tab_orders")}</TabsTrigger>
+            {isAdmin && <TabsTrigger value="branches"      className="gap-1 whitespace-nowrap"><GitBranch className="h-4 w-4" />{t("reports.tab_branches")}</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="cashflow"      className="gap-1 whitespace-nowrap"><Banknote className="h-4 w-4" />{t("reports.tab_cashflow")}</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="balance-sheet" className="gap-1 whitespace-nowrap"><Scale className="h-4 w-4" />{t("reports.tab_balance_sheet")}</TabsTrigger>}
           </TabsList>
         </div>
 
@@ -243,23 +253,23 @@ export default function Reports() {
           {income && (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <KpiCard title="إجمالي المبيعات"        value={fmtOMR(income.revenue?.total)}    icon={TrendingUp}   color="text-green-600" />
-                <KpiCard title="تكلفة البضاعة المباعة"  value={fmtOMR(income.cogs?.total)}       icon={Package}      color="text-orange-600" />
-                <KpiCard title="إجمالي الربح التجاري"   value={fmtOMR(income.grossProfit)}       icon={DollarSign}   color="text-blue-600"   sub={`هامش ${income.grossMargin}%`} />
-                <KpiCard title="صافي الربح"             value={fmtOMR(income.netProfit)}         icon={TrendingUp}   color="text-primary"    sub={`هامش ${income.netMargin}%`} trend={parseFloat(income.netProfit) >= 0 ? "up" : "down"} />
+                <KpiCard title={t("reports.kpi_total_sales")}   value={fmtOMR(income.revenue?.total)}    icon={TrendingUp}   color="text-green-600" />
+                <KpiCard title={t("reports.kpi_cogs")}          value={fmtOMR(income.cogs?.total)}       icon={Package}      color="text-orange-600" />
+                <KpiCard title={t("reports.kpi_gross_profit")}  value={fmtOMR(income.grossProfit)}       icon={DollarSign}   color="text-blue-600"   sub={`${t("reports.margin_label")} ${income.grossMargin}%`} />
+                <KpiCard title={t("reports.kpi_net_profit")}    value={fmtOMR(income.netProfit)}         icon={TrendingUp}   color="text-primary"    sub={`${t("reports.margin_label")} ${income.netMargin}%`} trend={parseFloat(income.netProfit) >= 0 ? "up" : "down"} />
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <KpiCard title="مبيعات نقدية"    value={fmtOMR(income.revenue?.cashSales)} icon={Banknote}    color="text-green-700" />
-                <KpiCard title="مبيعات بطاقة"    value={fmtOMR(income.revenue?.cardSales)} icon={CreditCard}  color="text-purple-600" />
-                <KpiCard title="مبيعات تحويل"    value={fmtOMR(income.revenue?.bankSales)} icon={Building2}   color="text-indigo-600" />
-                <KpiCard title="المصروفات التشغيلية" value={fmtOMR(income.expenses?.total)} icon={TrendingDown} color="text-red-600" />
+                <KpiCard title={t("reports.kpi_cash_sales")}     value={fmtOMR(income.revenue?.cashSales)} icon={Banknote}    color="text-green-700" />
+                <KpiCard title={t("reports.kpi_card_sales")}     value={fmtOMR(income.revenue?.cardSales)} icon={CreditCard}  color="text-purple-600" />
+                <KpiCard title={t("reports.kpi_transfer_sales")} value={fmtOMR(income.revenue?.bankSales)} icon={Building2}   color="text-indigo-600" />
+                <KpiCard title={t("reports.kpi_expenses")}       value={fmtOMR(income.expenses?.total)} icon={TrendingDown} color="text-red-600" />
               </div>
 
               {/* Charts Row */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {/* Payments Pie */}
                 <Card className="rounded-2xl">
-                  <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><PieIcon className="h-4 w-4 text-primary" />طرق الدفع</CardTitle></CardHeader>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><PieIcon className="h-4 w-4 text-primary" />{t("reports.payment_methods_title")}</CardTitle></CardHeader>
                   <CardContent>
                     {paymentPieData.length > 0 ? (
                       <ResponsiveContainer width="100%" height={220}>
@@ -270,13 +280,13 @@ export default function Reports() {
                           <Tooltip formatter={(v: any) => [parseFloat(v).toFixed(3) + " ر.ع", ""]} />
                         </PieChart>
                       </ResponsiveContainer>
-                    ) : <p className="text-center text-muted-foreground py-12 text-sm">لا توجد بيانات</p>}
+                    ) : <p className="text-center text-muted-foreground py-12 text-sm">{t("reports.no_data_label")}</p>}
                   </CardContent>
                 </Card>
 
                 {/* Expenses Pie */}
                 <Card className="rounded-2xl">
-                  <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><PieIcon className="h-4 w-4 text-red-500" />توزيع المصروفات</CardTitle></CardHeader>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><PieIcon className="h-4 w-4 text-red-500" />{t("reports.expenses_dist_title")}</CardTitle></CardHeader>
                   <CardContent>
                     {expPieData.length > 0 ? (
                       <ResponsiveContainer width="100%" height={220}>
@@ -287,7 +297,7 @@ export default function Reports() {
                           <Tooltip formatter={(v: any) => [parseFloat(v).toFixed(3) + " ر.ع", ""]} />
                         </PieChart>
                       </ResponsiveContainer>
-                    ) : <p className="text-center text-muted-foreground py-12 text-sm">لا توجد بيانات</p>}
+                    ) : <p className="text-center text-muted-foreground py-12 text-sm">{t("reports.no_data_label")}</p>}
                   </CardContent>
                 </Card>
               </div>
@@ -301,15 +311,15 @@ export default function Reports() {
             <div className="space-y-4">
               {/* KPI cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <KpiCard title="مبيعات نقدية"    value={fmtOMR(pmtMethod("cash"))}          icon={Banknote}   color="text-green-600"  sub={`${pmtMethodCount("cash")} فاتورة`} />
-                <KpiCard title="مبيعات بطاقة"    value={fmtOMR(pmtMethod("card"))}          icon={CreditCard} color="text-purple-600" sub={`${pmtMethodCount("card")} فاتورة`} />
-                <KpiCard title="تحويل بنكي"       value={fmtOMR(pmtMethod("bank_transfer"))} icon={Building2}  color="text-indigo-600" sub={`${pmtMethodCount("bank_transfer")} فاتورة`} />
-                <KpiCard title="الإجمالي"         value={fmtOMR(payments.grandTotal)}        icon={DollarSign} color="text-primary" />
+                <KpiCard title={t("reports.kpi_cash_sales")}    value={fmtOMR(pmtMethod("cash"))}          icon={Banknote}   color="text-green-600"  sub={`${pmtMethodCount("cash")} ${t("reports.invoice_suffix")}`} />
+                <KpiCard title={t("reports.kpi_card_sales")}    value={fmtOMR(pmtMethod("card"))}          icon={CreditCard} color="text-purple-600" sub={`${pmtMethodCount("card")} ${t("reports.invoice_suffix")}`} />
+                <KpiCard title={t("reports.kpi_bank_transfer")} value={fmtOMR(pmtMethod("bank_transfer"))} icon={Building2}  color="text-indigo-600" sub={`${pmtMethodCount("bank_transfer")} ${t("reports.invoice_suffix")}`} />
+                <KpiCard title={t("reports.kpi_total")}         value={fmtOMR(payments.grandTotal)}        icon={DollarSign} color="text-primary" />
               </div>
 
               {/* Pie chart */}
               <Card className="rounded-2xl">
-                <CardHeader className="pb-2"><CardTitle className="text-sm">توزيع طرق الدفع</CardTitle></CardHeader>
+                <CardHeader className="pb-2"><CardTitle className="text-sm">{t("reports.payment_dist_title")}</CardTitle></CardHeader>
                 <CardContent>
                   {paymentPieData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={260}>
@@ -322,7 +332,7 @@ export default function Reports() {
                         <Legend />
                       </PieChart>
                     </ResponsiveContainer>
-                  ) : <EmptyState icon={PieIcon} label="لا توجد بيانات" />}
+                  ) : <EmptyState icon={PieIcon} label={t("reports.no_data_label")} />}
                 </CardContent>
               </Card>
 
@@ -330,18 +340,18 @@ export default function Reports() {
               {(payments.transactions || []).length > 0 && (
                 <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
                   <div className="px-4 py-3 border-b font-semibold text-sm bg-muted/30">
-                    آخر {payments.transactions.length} عملية دفع
+                    {t("reports.last_n_transactions", { n: payments.transactions.length })}
                   </div>
                   <Table>
                     <TableHeader className="bg-muted/50">
                       <TableRow>
-                        <TableHead className="text-start">رقم الفاتورة</TableHead>
-                        <TableHead className="text-start">الفرع</TableHead>
-                        <TableHead className="text-start">طريقة الدفع</TableHead>
-                        <TableHead className="text-start">الرقم المرجعي</TableHead>
-                        <TableHead className="text-start">المبلغ</TableHead>
-                        <TableHead className="text-start">الكاشير</TableHead>
-                        <TableHead className="text-start">التاريخ</TableHead>
+                        <TableHead className="text-start">{t("reports.th_invoice_num")}</TableHead>
+                        <TableHead className="text-start">{t("reports.table_branch")}</TableHead>
+                        <TableHead className="text-start">{t("reports.th_payment_method")}</TableHead>
+                        <TableHead className="text-start">{t("reports.th_reference")}</TableHead>
+                        <TableHead className="text-start">{t("reports.th_amount")}</TableHead>
+                        <TableHead className="text-start">{t("reports.table_cashier")}</TableHead>
+                        <TableHead className="text-start">{t("common.date")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -351,7 +361,7 @@ export default function Reports() {
                           <TableCell className="text-xs">{tx.branchName}</TableCell>
                           <TableCell>
                             <Badge className={`text-xs ${tx.method === "cash" ? "bg-green-100 text-green-800" : tx.method === "card" ? "bg-purple-100 text-purple-800" : "bg-indigo-100 text-indigo-800"}`}>
-                              {tx.method === "cash" ? "نقدي" : tx.method === "card" ? "بطاقة" : "تحويل"}
+                              {tx.method === "cash" ? t("reports.badge_cash") : tx.method === "card" ? t("reports.badge_card") : t("reports.badge_transfer")}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-xs font-mono">{tx.bankTxnId || "—"}</TableCell>
@@ -365,28 +375,28 @@ export default function Reports() {
                 </div>
               )}
             </div>
-          ) : <EmptyState icon={CreditCard} label="اختر نطاق تاريخ لعرض تقرير المدفوعات" />}
+          ) : <EmptyState icon={CreditCard} label={t("reports.select_date_range_payments")} />}
         </TabsContent>
 
         {/* ══ المنتجات ══════════════════════════════════════════════════════ */}
         <TabsContent value="products" className="space-y-4">
-          <h2 className="font-bold text-lg flex items-center gap-2"><Package className="h-5 w-5 text-primary" />ربحية المنتجات</h2>
+          <h2 className="font-bold text-lg flex items-center gap-2"><Package className="h-5 w-5 text-primary" />{t("reports.products_profitability")}</h2>
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead className="text-start">#</TableHead>
-                  <TableHead className="text-start">المنتج</TableHead>
-                  <TableHead className="text-start">الكمية</TableHead>
-                  <TableHead className="text-start">إجمالي المبيعات</TableHead>
-                  <TableHead className="text-start">التكلفة</TableHead>
-                  <TableHead className="text-start">إجمالي الربح</TableHead>
-                  <TableHead className="text-start">الهامش</TableHead>
+                  <TableHead className="text-start">{t("reports.th_num")}</TableHead>
+                  <TableHead className="text-start">{t("reports.th_product")}</TableHead>
+                  <TableHead className="text-start">{t("reports.th_qty")}</TableHead>
+                  <TableHead className="text-start">{t("reports.th_total_sales_col")}</TableHead>
+                  <TableHead className="text-start">{t("reports.th_cost")}</TableHead>
+                  <TableHead className="text-start">{t("reports.th_gross_profit_col")}</TableHead>
+                  <TableHead className="text-start">{t("reports.th_margin")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {productsRpt.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-10 text-muted-foreground">لا توجد بيانات</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-10 text-muted-foreground">{t("reports.no_data_label")}</TableCell></TableRow>
                 ) : productsRpt.map((p, i) => {
                   const margin = parseFloat(p.total_revenue || 0) > 0
                     ? ((parseFloat(p.gross_profit || 0) / parseFloat(p.total_revenue || 0)) * 100).toFixed(1)
@@ -412,15 +422,15 @@ export default function Reports() {
           </div>
           {productsRpt.length > 0 && (
             <Card className="rounded-2xl">
-              <CardHeader className="pb-2"><CardTitle className="text-sm">أعلى 10 منتجات ربحية</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">{t("reports.top_10_products")}</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={productsRpt.slice(0, 10).map(p => ({ name: p.product_name?.slice(0, 12) || "؟", ربح: parseFloat(p.gross_profit || 0) }))}>
+                  <BarChart data={productsRpt.slice(0, 10).map(p => ({ name: p.product_name?.slice(0, 12) || "؟", profit: parseFloat(p.gross_profit || 0) }))}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="name" tick={{ fontSize: 11, fontFamily: "Cairo" }} />
                     <YAxis tick={{ fontSize: 11 }} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="ربح" fill={PINK} radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="profit" name={t("reports.chart_profit")} fill={PINK} radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -433,7 +443,7 @@ export default function Reports() {
           {/* شريط الإعدادات */}
           <div className="flex flex-wrap gap-3 items-center justify-between">
             <h2 className="font-bold text-lg flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />تقرير الطلبات الشهري
+              <Users className="h-5 w-5 text-primary" />{t("reports.monthly_orders_title")}
             </h2>
             <div className="flex gap-2 items-center">
               <select
@@ -450,11 +460,11 @@ export default function Reports() {
                 <button
                   className={`px-3 py-1.5 transition-colors ${ordersView === "category" ? "bg-primary text-white" : "hover:bg-muted"}`}
                   onClick={() => setOrdersView("category")}
-                >حسب الفئة</button>
+                >{t("reports.by_category")}</button>
                 <button
                   className={`px-3 py-1.5 transition-colors ${ordersView === "product" ? "bg-primary text-white" : "hover:bg-muted"}`}
                   onClick={() => setOrdersView("product")}
-                >حسب المنتج</button>
+                >{t("reports.by_product")}</button>
               </div>
             </div>
           </div>
@@ -462,14 +472,13 @@ export default function Reports() {
           {/* بطاقات حالات الطلبات */}
           {(ordersMonthly?.statuses || []).length > 0 && (() => {
             const sts = ordersMonthly.statuses as any[];
-            const find = (s: string) => sts.find(x => x.status === s);
             const statusMap: Record<string, { label: string; cls: string }> = {
-              new:       { label: "جديد",      cls: "bg-blue-100 text-blue-800" },
-              confirmed: { label: "مؤكد",      cls: "bg-indigo-100 text-indigo-800" },
-              preparing: { label: "قيد التجهيز", cls: "bg-yellow-100 text-yellow-800" },
-              ready:     { label: "جاهز",      cls: "bg-purple-100 text-purple-800" },
-              delivered: { label: "مُسلَّم",   cls: "bg-green-100 text-green-800" },
-              cancelled: { label: "ملغي",      cls: "bg-red-100 text-red-800" },
+              new:       { label: t("reports.status_new"),       cls: "bg-blue-100 text-blue-800" },
+              confirmed: { label: t("reports.status_confirmed"), cls: "bg-indigo-100 text-indigo-800" },
+              preparing: { label: t("reports.status_preparing"), cls: "bg-yellow-100 text-yellow-800" },
+              ready:     { label: t("reports.status_ready"),     cls: "bg-purple-100 text-purple-800" },
+              delivered: { label: t("reports.status_delivered"), cls: "bg-green-100 text-green-800" },
+              cancelled: { label: t("reports.status_cancelled"), cls: "bg-red-100 text-red-800" },
             };
             return (
               <div className="flex flex-wrap gap-2">
@@ -491,29 +500,22 @@ export default function Reports() {
           {(ordersMonthly?.monthly || []).length > 0 && (
             <Card className="rounded-2xl">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">إجمالي الطلبات الشهرية — {ordersYear}</CardTitle>
+                <CardTitle className="text-sm">{t("reports.monthly_chart_title", { year: ordersYear })}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={(ordersMonthly?.monthly || []).map((m: any) => ({
-                    name: (() => {
-                      const MONTH_AR: Record<string, string> = {
-                        "01":"يناير","02":"فبراير","03":"مارس","04":"أبريل",
-                        "05":"مايو","06":"يونيو","07":"يوليو","08":"أغسطس",
-                        "09":"سبتمبر","10":"أكتوبر","11":"نوفمبر","12":"ديسمبر",
-                      };
-                      return MONTH_AR[m.month?.slice(5)] || m.month?.slice(5);
-                    })(),
-                    طلبات:  parseFloat(m.total_revenue || 0),
-                    ربح:    parseFloat(m.gross_profit || 0),
+                    name: getMonthName(m.month?.slice(5)),
+                    orders: parseFloat(m.total_revenue || 0),
+                    profit: parseFloat(m.gross_profit || 0),
                   }))}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="name" tick={{ fontSize: 11, fontFamily: "Cairo" }} />
                     <YAxis tick={{ fontSize: 11 }} />
                     <Tooltip content={<CustomTooltip />} />
                     <Legend />
-                    <Bar dataKey="طلبات" fill={PINK}      radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="ربح"   fill="#9C27B0"   radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="orders" name={t("reports.chart_orders")} fill={PINK}    radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="profit" name={t("reports.chart_profit")} fill="#9C27B0" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -522,31 +524,26 @@ export default function Reports() {
 
           {/* جدول الملخص الشهري */}
           {(() => {
-            const MONTH_AR: Record<string, string> = {
-              "01":"يناير","02":"فبراير","03":"مارس","04":"أبريل",
-              "05":"مايو","06":"يونيو","07":"يوليو","08":"أغسطس",
-              "09":"سبتمبر","10":"أكتوبر","11":"نوفمبر","12":"ديسمبر",
-            };
             const rows = ordersMonthly?.monthly || [];
             return (
               <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
                 <Table>
                   <TableHeader className="bg-muted/50">
                     <TableRow>
-                      <TableHead>الشهر</TableHead>
-                      <TableHead className="text-center">عدد الطلبات</TableHead>
-                      <TableHead className="text-center">الكمية</TableHead>
-                      <TableHead className="text-start">إجمالي المبيعات</TableHead>
-                      <TableHead className="text-start">التكلفة</TableHead>
-                      <TableHead className="text-start">إجمالي الربح</TableHead>
-                      <TableHead className="text-center">الهامش%</TableHead>
+                      <TableHead>{t("reports.th_month")}</TableHead>
+                      <TableHead className="text-center">{t("reports.th_order_count")}</TableHead>
+                      <TableHead className="text-center">{t("reports.th_qty")}</TableHead>
+                      <TableHead className="text-start">{t("reports.th_total_sales_col")}</TableHead>
+                      <TableHead className="text-start">{t("reports.th_cost")}</TableHead>
+                      <TableHead className="text-start">{t("reports.th_gross_profit_col")}</TableHead>
+                      <TableHead className="text-center">{t("reports.th_margin")}%</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {rows.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
-                          لا توجد طلبات في سنة {ordersYear}
+                          {t("reports.no_orders_year", { year: ordersYear })}
                         </TableCell>
                       </TableRow>
                     ) : rows.map((m: any) => {
@@ -556,7 +553,7 @@ export default function Reports() {
                       const mm = m.month?.slice(5);
                       return (
                         <TableRow key={m.month} className="hover:bg-pink-50/30">
-                          <TableCell className="font-medium">{MONTH_AR[mm] || mm} {m.month?.slice(0, 4)}</TableCell>
+                          <TableCell className="font-medium">{getMonthName(mm)} {m.month?.slice(0, 4)}</TableCell>
                           <TableCell className="text-center">{m.order_count}</TableCell>
                           <TableCell className="text-center">{m.total_qty}</TableCell>
                           <TableCell className="text-start text-green-600 font-medium">{fmtOMR(m.total_revenue)}</TableCell>
@@ -578,11 +575,6 @@ export default function Reports() {
 
           {/* تفصيل حسب الفئة */}
           {ordersView === "category" && (() => {
-            const MONTH_AR: Record<string, string> = {
-              "01":"يناير","02":"فبراير","03":"مارس","04":"أبريل",
-              "05":"مايو","06":"يونيو","07":"يوليو","08":"أغسطس",
-              "09":"سبتمبر","10":"أكتوبر","11":"نوفمبر","12":"ديسمبر",
-            };
             const rows = ordersMonthly?.by_category || [];
 
             // رسم بياني: مجموع الفئات على مدار السنة
@@ -601,7 +593,7 @@ export default function Reports() {
                   <Card className="rounded-2xl">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm flex items-center gap-2">
-                        <PieIcon className="h-4 w-4 text-primary" />توزيع مبيعات الفئات — {ordersYear}
+                        <PieIcon className="h-4 w-4 text-primary" />{t("reports.category_dist_title", { year: ordersYear })}
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -620,25 +612,25 @@ export default function Reports() {
                 )}
                 <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
                   <div className="px-4 py-3 border-b font-semibold text-sm bg-muted/30">
-                    مبيعات أعلى 8 فئات — شهرياً
+                    {t("reports.top_8_categories_title")}
                   </div>
                   <Table>
                     <TableHeader className="bg-muted/50">
                       <TableRow>
-                        <TableHead>الشهر</TableHead>
-                        <TableHead>الفئة</TableHead>
-                        <TableHead className="text-center">الكمية</TableHead>
-                        <TableHead className="text-start">المبيعات</TableHead>
+                        <TableHead>{t("reports.th_month")}</TableHead>
+                        <TableHead>{t("reports.th_category")}</TableHead>
+                        <TableHead className="text-center">{t("reports.th_qty")}</TableHead>
+                        <TableHead className="text-start">{t("reports.chart_sales")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {rows.length === 0 ? (
-                        <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">لا توجد بيانات</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">{t("reports.no_data_label")}</TableCell></TableRow>
                       ) : rows.map((row: any, i: number) => {
                         const mm = row.month?.slice(5);
                         return (
                           <TableRow key={i} className="hover:bg-pink-50/30">
-                            <TableCell className="text-sm text-muted-foreground">{MONTH_AR[mm] || mm}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{getMonthName(mm)}</TableCell>
                             <TableCell className="font-medium">{row.category_name}</TableCell>
                             <TableCell className="text-center">{row.total_qty}</TableCell>
                             <TableCell className="text-start text-green-600 font-medium">{fmtOMR(row.total_revenue)}</TableCell>
@@ -654,14 +646,8 @@ export default function Reports() {
 
           {/* تفصيل حسب المنتج */}
           {ordersView === "product" && (() => {
-            const MONTH_AR: Record<string, string> = {
-              "01":"يناير","02":"فبراير","03":"مارس","04":"أبريل",
-              "05":"مايو","06":"يونيو","07":"يوليو","08":"أغسطس",
-              "09":"سبتمبر","10":"أكتوبر","11":"نوفمبر","12":"ديسمبر",
-            };
             const rows = ordersMonthly?.by_product || [];
 
-            // أعلى 10 منتجات للرسم البياني
             const prodTotals: Record<string, number> = {};
             rows.forEach((r: any) => {
               prodTotals[r.product_name] = (prodTotals[r.product_name] || 0) + parseFloat(r.total_revenue || 0);
@@ -676,7 +662,7 @@ export default function Reports() {
                 {top10.length > 0 && (
                   <Card className="rounded-2xl">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">أعلى 10 منتجات — إجمالي {ordersYear}</CardTitle>
+                      <CardTitle className="text-sm">{t("reports.top_10_products_total", { year: ordersYear })}</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <ResponsiveContainer width="100%" height={240}>
@@ -685,7 +671,7 @@ export default function Reports() {
                           <XAxis dataKey="name" tick={{ fontSize: 10, fontFamily: "Cairo" }} />
                           <YAxis tick={{ fontSize: 11 }} />
                           <Tooltip content={<CustomTooltip />} />
-                          <Bar dataKey="value" name="مبيعات" fill={PINK} radius={[6, 6, 0, 0]} />
+                          <Bar dataKey="value" name={t("reports.chart_sales")} fill={PINK} radius={[6, 6, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     </CardContent>
@@ -693,25 +679,25 @@ export default function Reports() {
                 )}
                 <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
                   <div className="px-4 py-3 border-b font-semibold text-sm bg-muted/30">
-                    مبيعات أعلى 15 منتجاً — شهرياً
+                    {t("reports.top_15_products_monthly")}
                   </div>
                   <Table>
                     <TableHeader className="bg-muted/50">
                       <TableRow>
-                        <TableHead>الشهر</TableHead>
-                        <TableHead>المنتج</TableHead>
-                        <TableHead className="text-center">الكمية</TableHead>
-                        <TableHead className="text-start">المبيعات</TableHead>
+                        <TableHead>{t("reports.th_month")}</TableHead>
+                        <TableHead>{t("reports.th_product")}</TableHead>
+                        <TableHead className="text-center">{t("reports.th_qty")}</TableHead>
+                        <TableHead className="text-start">{t("reports.chart_sales")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {rows.length === 0 ? (
-                        <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">لا توجد بيانات</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">{t("reports.no_data_label")}</TableCell></TableRow>
                       ) : rows.map((row: any, i: number) => {
                         const mm = row.month?.slice(5);
                         return (
                           <TableRow key={i} className="hover:bg-pink-50/30">
-                            <TableCell className="text-sm text-muted-foreground">{MONTH_AR[mm] || mm}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{getMonthName(mm)}</TableCell>
                             <TableCell className="font-medium">{row.product_name}</TableCell>
                             <TableCell className="text-center">{row.total_qty}</TableCell>
                             <TableCell className="text-start text-green-600 font-medium">{fmtOMR(row.total_revenue)}</TableCell>
@@ -730,9 +716,9 @@ export default function Reports() {
         {isAdmin && (
           <TabsContent value="branches" className="space-y-4">
             <div className="flex justify-between items-center">
-              <h2 className="font-bold text-lg flex items-center gap-2"><GitBranch className="h-5 w-5 text-primary" />مقارنة الفروع</h2>
+              <h2 className="font-bold text-lg flex items-center gap-2"><GitBranch className="h-5 w-5 text-primary" />{t("reports.branch_comparison_title")}</h2>
               <Button size="sm" variant="outline" onClick={exportBranchComp}>
-                <Download className="h-4 w-4 ms-1" /> تصدير CSV
+                <Download className="h-4 w-4 ms-1" /> {t("reports.export_csv")} CSV
               </Button>
             </div>
 
@@ -740,7 +726,7 @@ export default function Reports() {
               <div className="space-y-5">
                 {/* Bar Chart */}
                 <Card className="rounded-2xl">
-                  <CardHeader className="pb-2"><CardTitle className="text-sm">مقارنة المبيعات والربح</CardTitle></CardHeader>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">{t("reports.sales_profit_chart")}</CardTitle></CardHeader>
                   <CardContent>
                     <ResponsiveContainer width="100%" height={260}>
                       <BarChart data={bcData}>
@@ -749,10 +735,10 @@ export default function Reports() {
                         <YAxis tick={{ fontSize: 11 }} />
                         <Tooltip content={<CustomTooltip />} />
                         <Legend />
-                        <Bar dataKey="مبيعات"  fill={PINK}    radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="تكلفة"   fill="#FF9800" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="ربح"     fill="#4CAF50" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="مصروفات" fill="#F44336" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="sales"    name={t("reports.chart_sales")}          fill={PINK}    radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="cost"     name={t("reports.th_cost")}              fill="#FF9800" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="profit"   name={t("reports.chart_profit")}         fill="#4CAF50" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="expenses" name={t("reports.br_expenses")}          fill="#F44336" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -770,18 +756,18 @@ export default function Reports() {
                       </CardHeader>
                       <CardContent className="pt-3">
                         <div className="space-y-2 text-sm">
-                          <BranchRow label="إجمالي المبيعات"    value={omr(b.totalSales)}    color="text-green-600" />
-                          <BranchRow label="تكلفة البضاعة"       value={omr(b.cogsTotal)}     color="text-orange-600" />
-                          <BranchRow label="إجمالي الربح التجاري" value={omr(b.grossProfit)}  color="text-blue-600" />
-                          <BranchRow label="المصروفات"            value={omr(b.totalExpenses)} color="text-red-600" />
+                          <BranchRow label={t("reports.br_total_sales")}  value={omr(b.totalSales)}    color="text-green-600" />
+                          <BranchRow label={t("reports.br_cogs")}         value={omr(b.cogsTotal)}     color="text-orange-600" />
+                          <BranchRow label={t("reports.br_gross_profit")} value={omr(b.grossProfit)}   color="text-blue-600" />
+                          <BranchRow label={t("reports.br_expenses")}     value={omr(b.totalExpenses)} color="text-red-600" />
                           <div className="border-t pt-2 flex justify-between font-bold">
-                            <span>صافي الربح</span>
+                            <span>{t("reports.br_net_profit")}</span>
                             <span className={parseFloat(b.netProfit) >= 0 ? "text-green-700" : "text-red-700"}>
                               {omr(b.netProfit)} ر.ع
                             </span>
                           </div>
                           <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>هامش الربح</span>
+                            <span>{t("reports.br_margin")}</span>
                             <Badge className={`text-xs ${parseFloat(b.margin) >= 20 ? "bg-green-100 text-green-800" : parseFloat(b.margin) >= 10 ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}>
                               {b.margin}%
                             </Badge>
@@ -797,13 +783,13 @@ export default function Reports() {
                   <Table>
                     <TableHeader className="bg-muted/50">
                       <TableRow>
-                        <TableHead className="text-start">الفرع</TableHead>
-                        <TableHead className="text-start">المبيعات</TableHead>
-                        <TableHead className="text-start">التكلفة</TableHead>
-                        <TableHead className="text-start">إجمالي الربح</TableHead>
-                        <TableHead className="text-start">المصروفات</TableHead>
-                        <TableHead className="text-start">صافي الربح</TableHead>
-                        <TableHead className="text-start">الهامش</TableHead>
+                        <TableHead className="text-start">{t("reports.table_branch")}</TableHead>
+                        <TableHead className="text-start">{t("reports.br_total_sales")}</TableHead>
+                        <TableHead className="text-start">{t("reports.th_cost")}</TableHead>
+                        <TableHead className="text-start">{t("reports.br_gross_profit")}</TableHead>
+                        <TableHead className="text-start">{t("reports.br_expenses")}</TableHead>
+                        <TableHead className="text-start">{t("reports.th_net_profit")}</TableHead>
+                        <TableHead className="text-start">{t("reports.th_margin_pct")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -826,26 +812,26 @@ export default function Reports() {
                   </Table>
                 </div>
               </div>
-            ) : <EmptyState icon={GitBranch} label="اختر نطاق تاريخ لعرض مقارنة الفروع" />}
+            ) : <EmptyState icon={GitBranch} label={t("reports.select_date_range_branches")} />}
           </TabsContent>
         )}
 
         {/* ══ التدفقات النقدية ══════════════════════════════════════════════ */}
         {isAdmin && (
           <TabsContent value="cashflow" className="space-y-4">
-            <h2 className="font-bold text-lg flex items-center gap-2"><Banknote className="h-5 w-5 text-primary" />قائمة التدفقات النقدية</h2>
+            <h2 className="font-bold text-lg flex items-center gap-2"><Banknote className="h-5 w-5 text-primary" />{t("reports.cashflow_title")}</h2>
             {cashFlow ? (
               <div className="space-y-4">
                 {/* Operating */}
                 <Card className="rounded-2xl border-green-100">
                   <CardHeader className="pb-2 bg-green-50 rounded-t-2xl">
-                    <CardTitle className="text-sm text-green-800">أولاً: التدفقات التشغيلية</CardTitle>
+                    <CardTitle className="text-sm text-green-800">{t("reports.operating_section")}</CardTitle>
                   </CardHeader>
                   <CardContent className="pt-3 space-y-2 text-sm">
-                    <CashFlowRow label="إيرادات من المبيعات" value={cashFlow.operating?.fromSales} color="text-green-600" />
-                    <CashFlowRow label="مدفوعات المصروفات"    value={`(${omr(cashFlow.operating?.toExpenses)})`} color="text-red-600" />
+                    <CashFlowRow label={t("reports.operating_sales")}    value={cashFlow.operating?.fromSales} color="text-green-600" />
+                    <CashFlowRow label={t("reports.operating_expenses")} value={`(${omr(cashFlow.operating?.toExpenses)})`} color="text-red-600" />
                     <div className="border-t pt-2 flex justify-between font-bold">
-                      <span>صافي التدفق التشغيلي</span>
+                      <span>{t("reports.net_operating")}</span>
                       <span className={parseFloat(cashFlow.operating?.netOperating) >= 0 ? "text-green-700" : "text-red-700"}>
                         {omr(cashFlow.operating?.netOperating)} ر.ع
                       </span>
@@ -856,13 +842,13 @@ export default function Reports() {
                 {/* Financing */}
                 <Card className="rounded-2xl border-blue-100">
                   <CardHeader className="pb-2 bg-blue-50 rounded-t-2xl">
-                    <CardTitle className="text-sm text-blue-800">ثانياً: التدفقات التمويلية</CardTitle>
+                    <CardTitle className="text-sm text-blue-800">{t("reports.financing_section")}</CardTitle>
                   </CardHeader>
                   <CardContent className="pt-3 space-y-2 text-sm">
-                    <CashFlowRow label="إيداعات" value={cashFlow.financing?.depositsIn}     color="text-green-600" />
-                    <CashFlowRow label="سحوبات"  value={`(${omr(cashFlow.financing?.withdrawalsOut)})`} color="text-red-600" />
+                    <CashFlowRow label={t("reports.financing_deposits")}    value={cashFlow.financing?.depositsIn}     color="text-green-600" />
+                    <CashFlowRow label={t("reports.financing_withdrawals")} value={`(${omr(cashFlow.financing?.withdrawalsOut)})`} color="text-red-600" />
                     <div className="border-t pt-2 flex justify-between font-bold">
-                      <span>صافي التمويلي</span>
+                      <span>{t("reports.net_financing")}</span>
                       <span className={parseFloat(cashFlow.financing?.netFinancing) >= 0 ? "text-green-700" : "text-red-700"}>
                         {omr(cashFlow.financing?.netFinancing)} ر.ع
                       </span>
@@ -873,13 +859,13 @@ export default function Reports() {
                 {/* Bank */}
                 <Card className="rounded-2xl border-purple-100">
                   <CardHeader className="pb-2 bg-purple-50 rounded-t-2xl">
-                    <CardTitle className="text-sm text-purple-800">ثالثاً: حركة البنك</CardTitle>
+                    <CardTitle className="text-sm text-purple-800">{t("reports.bank_section")}</CardTitle>
                   </CardHeader>
                   <CardContent className="pt-3 space-y-2 text-sm">
-                    <CashFlowRow label="إجمالي الوارد"  value={cashFlow.bank?.totalIn}  color="text-green-600" />
-                    <CashFlowRow label="إجمالي الصادر"  value={`(${omr(cashFlow.bank?.totalOut)})`} color="text-red-600" />
+                    <CashFlowRow label={t("reports.bank_in")}  value={cashFlow.bank?.totalIn}  color="text-green-600" />
+                    <CashFlowRow label={t("reports.bank_out")} value={`(${omr(cashFlow.bank?.totalOut)})`} color="text-red-600" />
                     <div className="border-t pt-2 flex justify-between font-bold">
-                      <span>صافي حركة البنك</span>
+                      <span>{t("reports.net_bank")}</span>
                       <span className={parseFloat(cashFlow.bank?.netChange) >= 0 ? "text-green-700" : "text-red-700"}>
                         {omr(cashFlow.bank?.netChange)} ر.ع
                       </span>
@@ -890,14 +876,14 @@ export default function Reports() {
                 {/* Net */}
                 <Card className={`rounded-2xl border-2 ${parseFloat(cashFlow.totalNetChange) >= 0 ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}`}>
                   <CardContent className="p-5 flex justify-between items-center">
-                    <span className="font-extrabold text-lg">صافي التغير في النقدية</span>
+                    <span className="font-extrabold text-lg">{t("reports.total_net_change")}</span>
                     <span className={`font-extrabold text-2xl ${parseFloat(cashFlow.totalNetChange) >= 0 ? "text-green-700" : "text-red-700"}`}>
                       {omr(cashFlow.totalNetChange)} ر.ع
                     </span>
                   </CardContent>
                 </Card>
               </div>
-            ) : <EmptyState icon={Banknote} label="اختر نطاق تاريخ لعرض التدفقات النقدية" />}
+            ) : <EmptyState icon={Banknote} label={t("reports.select_date_range_cashflow")} />}
           </TabsContent>
         )}
 
@@ -905,16 +891,16 @@ export default function Reports() {
         {isAdmin && (
           <TabsContent value="balance-sheet" className="space-y-4">
             <div className="text-center text-sm text-muted-foreground mb-2">
-              الميزانية العمومية بتاريخ: <span className="font-semibold text-foreground">{to}</span>
+              {t("reports.bs_as_of")} <span className="font-semibold text-foreground">{to}</span>
             </div>
             {balanceSheet ? (
               <>
                 {/* KPI row */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <KpiCard title="إجمالي الأصول"          value={fmtOMR(balanceSheet.totals?.assets)}                    icon={Package}    color="text-blue-600" />
-                  <KpiCard title="إجمالي الخصوم"          value={fmtOMR(balanceSheet.totals?.liabilities)}               icon={TrendingDown} color="text-red-600" />
-                  <KpiCard title="حقوق الملكية"           value={fmtOMR(balanceSheet.totals?.equity)}                    icon={Users}      color="text-purple-600" />
-                  <KpiCard title="أرباح/خسائر الفترة"     value={fmtOMR(balanceSheet.totals?.currentPeriodProfit)}       icon={TrendingUp} color={parseFloat(balanceSheet.totals?.currentPeriodProfit) >= 0 ? "text-green-600" : "text-red-600"} />
+                  <KpiCard title={t("reports.bs_kpi_assets")}      value={fmtOMR(balanceSheet.totals?.assets)}              icon={Package}    color="text-blue-600" />
+                  <KpiCard title={t("reports.bs_kpi_liabilities")} value={fmtOMR(balanceSheet.totals?.liabilities)}         icon={TrendingDown} color="text-red-600" />
+                  <KpiCard title={t("reports.bs_kpi_equity")}      value={fmtOMR(balanceSheet.totals?.equity)}              icon={Users}      color="text-purple-600" />
+                  <KpiCard title={t("reports.bs_kpi_profit")}      value={fmtOMR(balanceSheet.totals?.currentPeriodProfit)} icon={TrendingUp} color={parseFloat(balanceSheet.totals?.currentPeriodProfit) >= 0 ? "text-green-600" : "text-red-600"} />
                 </div>
 
                 {/* توازن الميزانية */}
@@ -924,8 +910,8 @@ export default function Reports() {
                     <div className={`flex items-center justify-center gap-3 py-2 px-4 rounded-xl text-sm font-medium ${diff < 0.01 ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
                       <Scale className="h-4 w-4" />
                       {diff < 0.01
-                        ? "✅ الميزانية متوازنة — الأصول = الخصوم + حقوق الملكية"
-                        : `⚠️ فارق في الميزانية: ${diff.toFixed(3)} ر.ع`}
+                        ? t("reports.bs_balanced")
+                        : t("reports.bs_diff", { diff: diff.toFixed(3) })}
                     </div>
                   );
                 })()}
@@ -936,18 +922,18 @@ export default function Reports() {
                   <Card className="rounded-2xl border-blue-100">
                     <CardHeader className="pb-2 bg-blue-50 rounded-t-2xl">
                       <CardTitle className="text-sm text-blue-800 flex justify-between">
-                        <span>أولاً: الأصول</span>
+                        <span>{t("reports.bs_assets_section")}</span>
                         <span className="font-mono">{fmtOMR(balanceSheet.totals?.assets)}</span>
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-2 p-0">
                       {(balanceSheet.assets || []).length === 0
-                        ? <p className="text-sm text-muted-foreground text-center py-4">لا توجد بيانات</p>
+                        ? <p className="text-sm text-muted-foreground text-center py-4">{t("reports.no_data_label")}</p>
                         : (balanceSheet.assets || []).map((a: any) => (
                           <BsRow key={a.code} code={a.code} name={a.name} balance={a.balance} level={a.level} />
                         ))}
                       <div className="flex justify-between items-center px-4 py-3 bg-blue-50/60 border-t font-bold text-sm">
-                        <span>إجمالي الأصول</span>
+                        <span>{t("reports.bs_total_assets")}</span>
                         <span className="font-mono text-blue-700">{fmtOMR(balanceSheet.totals?.assets)}</span>
                       </div>
                     </CardContent>
@@ -958,18 +944,18 @@ export default function Reports() {
                     <Card className="rounded-2xl border-red-100">
                       <CardHeader className="pb-2 bg-red-50 rounded-t-2xl">
                         <CardTitle className="text-sm text-red-800 flex justify-between">
-                          <span>ثانياً: الخصوم</span>
+                          <span>{t("reports.bs_liabilities_section")}</span>
                           <span className="font-mono">{fmtOMR(balanceSheet.totals?.liabilities)}</span>
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="pt-2 p-0">
                         {(balanceSheet.liabilities || []).length === 0
-                          ? <p className="text-sm text-muted-foreground text-center py-4">لا توجد بيانات</p>
+                          ? <p className="text-sm text-muted-foreground text-center py-4">{t("reports.no_data_label")}</p>
                           : (balanceSheet.liabilities || []).map((a: any) => (
                             <BsRow key={a.code} code={a.code} name={a.name} balance={a.balance} level={a.level} />
                           ))}
                         <div className="flex justify-between items-center px-4 py-3 bg-red-50/60 border-t font-bold text-sm">
-                          <span>إجمالي الخصوم</span>
+                          <span>{t("reports.bs_total_liabilities")}</span>
                           <span className="font-mono text-red-700">{fmtOMR(balanceSheet.totals?.liabilities)}</span>
                         </div>
                       </CardContent>
@@ -978,7 +964,7 @@ export default function Reports() {
                     <Card className="rounded-2xl border-purple-100">
                       <CardHeader className="pb-2 bg-purple-50 rounded-t-2xl">
                         <CardTitle className="text-sm text-purple-800 flex justify-between">
-                          <span>ثالثاً: حقوق الملكية</span>
+                          <span>{t("reports.bs_equity_section")}</span>
                           <span className="font-mono">{fmtOMR((parseFloat(balanceSheet.totals?.equity || "0") + parseFloat(balanceSheet.totals?.currentPeriodProfit || "0")).toFixed(3))}</span>
                         </CardTitle>
                       </CardHeader>
@@ -986,10 +972,10 @@ export default function Reports() {
                         {(balanceSheet.equity || []).map((a: any) => (
                           <BsRow key={a.code} code={a.code} name={a.name} balance={a.balance} level={a.level} />
                         ))}
-                        <BsRow code="" name="أرباح/خسائر الفترة الحالية" balance={balanceSheet.totals?.currentPeriodProfit} level={2}
+                        <BsRow code="" name={t("reports.bs_current_profit")} balance={balanceSheet.totals?.currentPeriodProfit} level={2}
                           valueClass={parseFloat(balanceSheet.totals?.currentPeriodProfit) >= 0 ? "text-green-700" : "text-red-700"} />
                         <div className="flex justify-between items-center px-4 py-3 bg-purple-50/60 border-t font-bold text-sm">
-                          <span>إجمالي حقوق الملكية</span>
+                          <span>{t("reports.bs_total_equity")}</span>
                           <span className="font-mono text-purple-700">
                             {fmtOMR((parseFloat(balanceSheet.totals?.equity || "0") + parseFloat(balanceSheet.totals?.currentPeriodProfit || "0")).toFixed(3))}
                           </span>
@@ -1000,7 +986,7 @@ export default function Reports() {
                     {/* مجموع الجانب الأيسر */}
                     <Card className="rounded-2xl border-2 border-gray-300 bg-gray-50">
                       <CardContent className="px-4 py-3 flex justify-between items-center">
-                        <span className="font-extrabold text-sm">إجمالي الخصوم + حقوق الملكية</span>
+                        <span className="font-extrabold text-sm">{t("reports.bs_total_combined")}</span>
                         <span className="font-mono font-extrabold text-base">
                           {fmtOMR(balanceSheet.totals?.totalLiabilitiesAndEquity)}
                         </span>
@@ -1013,23 +999,23 @@ export default function Reports() {
                 <div className="flex justify-end">
                   <Button variant="outline" size="sm" className="gap-2" onClick={() => {
                     const rows: any[][] = [
-                      ["نوع", "كود الحساب", "اسم الحساب", "الرصيد (ر.ع)"],
-                      ...((balanceSheet.assets || []).map((a: any) => ["أصول", a.code, a.name, omr(a.balance)])),
-                      ["إجمالي الأصول", "", "", omr(balanceSheet.totals?.assets)],
-                      ...((balanceSheet.liabilities || []).map((a: any) => ["خصوم", a.code, a.name, omr(a.balance)])),
-                      ["إجمالي الخصوم", "", "", omr(balanceSheet.totals?.liabilities)],
-                      ...((balanceSheet.equity || []).map((a: any) => ["حقوق الملكية", a.code, a.name, omr(a.balance)])),
-                      ["أرباح/خسائر الفترة", "", "", omr(balanceSheet.totals?.currentPeriodProfit)],
-                      ["إجمالي الخصوم + ح.الملكية", "", "", omr(balanceSheet.totals?.totalLiabilitiesAndEquity)],
+                      [t("reports.bs_kpi_assets").replace("Total ", "Type"), "Code", "Name", `Amount (${t("common.omr")})`],
+                      ...((balanceSheet.assets || []).map((a: any) => [t("reports.bs_assets_section"), a.code, a.name, omr(a.balance)])),
+                      [t("reports.bs_total_assets"), "", "", omr(balanceSheet.totals?.assets)],
+                      ...((balanceSheet.liabilities || []).map((a: any) => [t("reports.bs_liabilities_section"), a.code, a.name, omr(a.balance)])),
+                      [t("reports.bs_total_liabilities"), "", "", omr(balanceSheet.totals?.liabilities)],
+                      ...((balanceSheet.equity || []).map((a: any) => [t("reports.bs_equity_section"), a.code, a.name, omr(a.balance)])),
+                      [t("reports.bs_current_profit"), "", "", omr(balanceSheet.totals?.currentPeriodProfit)],
+                      [t("reports.bs_total_combined"), "", "", omr(balanceSheet.totals?.totalLiabilitiesAndEquity)],
                     ];
-                    downloadCSV(`الميزانية_العمومية_${to}.csv`, rows);
+                    downloadCSV(`balance_sheet_${to}.csv`, rows);
                   }}>
                     <Download className="h-4 w-4" />
-                    تصدير CSV
+                    {t("reports.export_csv")} CSV
                   </Button>
                 </div>
               </>
-            ) : <EmptyState icon={Scale} label="اختر تاريخ لعرض الميزانية العمومية" />}
+            ) : <EmptyState icon={Scale} label={t("reports.bs_select_date")} />}
           </TabsContent>
         )}
       </Tabs>

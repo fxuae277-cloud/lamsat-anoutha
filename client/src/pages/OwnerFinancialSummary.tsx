@@ -140,14 +140,14 @@ export default function OwnerFinancialSummary() {
       qc.invalidateQueries({ queryKey: ["/api/owner/transactions"] });
       setShowDialog(false);
       setForm({ date: new Date().toISOString().slice(0, 10), type: "BRANCH_CASH_TRANSFER_TO_OWNER", branchId: "", amount: "", paymentMethod: "cash", referenceNo: "", note: "" });
-      toast({ title: "تم تسجيل المعاملة بنجاح" });
+      toast({ title: t("finance:ownerFinancial.txn_saved") });
     },
-    onError: (e: any) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: t("finance:ownerFinancial.error"), description: e.message, variant: "destructive" }),
   });
 
   const handleSubmit = () => {
     if (!form.amount || parseFloat(form.amount) <= 0) {
-      toast({ title: "خطأ", description: "أدخل مبلغاً صحيحاً", variant: "destructive" }); return;
+      toast({ title: t("finance:ownerFinancial.error"), description: t("finance:ownerFinancial.invalid_amount"), variant: "destructive" }); return;
     }
     createTxn.mutate({
       date: form.date, type: form.type,
@@ -168,24 +168,24 @@ export default function OwnerFinancialSummary() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <BarChart2 className="w-6 h-6 text-primary" />
-            الملخص المالي للمالك
+            {t("finance:ownerFinancial.page_title")}
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">نظرة شاملة على المركز المالي للشركة</p>
+          <p className="text-muted-foreground text-sm mt-1">{t("finance:ownerFinancial.page_subtitle")}</p>
         </div>
         <Button onClick={() => setShowDialog(true)} className="gap-2">
-          <Plus className="w-4 h-4" /> تسجيل معاملة مالية
+          <Plus className="w-4 h-4" /> {t("finance:ownerFinancial.record_txn_btn")}
         </Button>
       </div>
 
       {isLoading ? (
-        <div className="text-center py-20 text-muted-foreground">جاري التحميل...</div>
+        <div className="text-center py-20 text-muted-foreground">{t("finance:ownerFinancial.loading")}</div>
       ) : (
         <Tabs defaultValue="overview">
           <TabsList className="mb-4 flex-wrap h-auto gap-1">
-            <TabsTrigger value="overview">نظرة عامة</TabsTrigger>
-            <TabsTrigger value="branches">أرصدة الفروع</TabsTrigger>
-            <TabsTrigger value="inventory">قيمة المخزون</TabsTrigger>
-            <TabsTrigger value="ledger">سجل المعاملات</TabsTrigger>
+            <TabsTrigger value="overview">{t("finance:ownerFinancial.tab_overview")}</TabsTrigger>
+            <TabsTrigger value="branches">{t("finance:ownerFinancial.tab_branches")}</TabsTrigger>
+            <TabsTrigger value="inventory">{t("finance:ownerFinancial.tab_inventory")}</TabsTrigger>
+            <TabsTrigger value="ledger">{t("finance:ownerFinancial.tab_ledger")}</TabsTrigger>
           </TabsList>
 
           {/* ── Overview ──────────────────────────────────────────────── */}
@@ -193,53 +193,53 @@ export default function OwnerFinancialSummary() {
 
             {/* Row 1: Cash side */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">💵 الجانب النقدي</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">💵 {t("finance:ownerFinancial.cash_side")}</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <KpiCard title="نقد الفروع"          value={fmtOMR((summary?.branches ?? []).reduce((s: number, b: any) => s + Math.max(0, parseFloat(b.currentCash)), 0))}
-                  icon={Banknote}   color="text-green-600" sub="مجموع أرصدة الفروع النقدية" />
-                <KpiCard title="نقد المالك (بيده)"   value={fmtOMR(s?.ownerCash)}
+                <KpiCard title={t("finance:ownerFinancial.kpi_branch_cash")} value={fmtOMR((summary?.branches ?? []).reduce((s: number, b: any) => s + Math.max(0, parseFloat(b.currentCash)), 0))}
+                  icon={Banknote}   color="text-green-600" sub={t("finance:ownerFinancial.kpi_branch_cash_sub")} />
+                <KpiCard title={t("finance:ownerFinancial.kpi_owner_cash")} value={fmtOMR(s?.ownerCash)}
                   icon={Wallet}     color="text-emerald-600"
-                  sub={s?.receivedFromBranches !== "0.000" ? `استلم من الفروع ${fmtOMR(s?.receivedFromBranches)}` : "لم يستلم كاش من الفروع"} />
-                <KpiCard title="إجمالي المصروفات"   value={fmtOMR(s?.totalExpenses)}
-                  icon={ArrowUpFromLine} color="text-red-500" sub="جميع الفروع - جميع طرق الدفع" />
-                <KpiCard title="إجمالي السحوبات"    value={fmtOMR(s?.totalWithdrawals)}
-                  icon={ArrowUpFromLine} color="text-orange-500" sub="سحوبات شخصية للمالك" />
+                  sub={s?.receivedFromBranches !== "0.000" ? `${t("finance:ownerFinancial.kpi_owner_cash_received")} ${fmtOMR(s?.receivedFromBranches)}` : t("finance:ownerFinancial.kpi_owner_cash_none")} />
+                <KpiCard title={t("finance:ownerFinancial.kpi_total_expenses")} value={fmtOMR(s?.totalExpenses)}
+                  icon={ArrowUpFromLine} color="text-red-500" sub={t("finance:ownerFinancial.kpi_total_expenses_sub")} />
+                <KpiCard title={t("finance:ownerFinancial.kpi_total_withdrawals")} value={fmtOMR(s?.totalWithdrawals)}
+                  icon={ArrowUpFromLine} color="text-orange-500" sub={t("finance:ownerFinancial.kpi_total_withdrawals_sub")} />
               </div>
             </div>
 
             {/* Row 2: Bank side */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">🏦 الجانب البنكي</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">🏦 {t("finance:ownerFinancial.bank_side")}</p>
               <Card className="border-blue-200 dark:border-blue-800">
                 <CardContent className="pt-4 pb-4">
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <p className="text-sm text-muted-foreground">الرصيد البنكي للمالك</p>
+                      <p className="text-sm text-muted-foreground">{t("finance:ownerFinancial.bank_balance_label")}</p>
                       <p className="text-2xl font-bold text-blue-600">{fmtOMR(s?.ownerBankBalance)}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">مبيعات البطاقة + التحويلات البنكية + الإيداعات اليدوية</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{t("finance:ownerFinancial.bank_balance_sub")}</p>
                     </div>
                     <Building2 className="w-10 h-10 text-blue-400" />
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 border-t pt-3">
                     <div className="text-center">
-                      <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><CreditCard className="w-3 h-3" />مبيعات البطاقة</p>
+                      <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><CreditCard className="w-3 h-3" />{t("finance:ownerFinancial.bank_card_sales")}</p>
                       <p className="font-bold text-purple-600 text-sm">{fmtOMR(s?.bankFromCard)}</p>
-                      <p className="text-xs text-green-600">↑ للبنك مباشرة</p>
+                      <p className="text-xs text-green-600">{t("finance:ownerFinancial.bank_direct_in")}</p>
                     </div>
                     <div className="text-center border-r">
-                      <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><Building2 className="w-3 h-3" />تحويلات بنكية</p>
+                      <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><Building2 className="w-3 h-3" />{t("finance:ownerFinancial.bank_transfers")}</p>
                       <p className="font-bold text-indigo-600 text-sm">{fmtOMR(s?.bankFromTransfer)}</p>
-                      <p className="text-xs text-green-600">↑ للبنك مباشرة</p>
+                      <p className="text-xs text-green-600">{t("finance:ownerFinancial.bank_direct_in")}</p>
                     </div>
                     <div className="text-center border-r">
-                      <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><ArrowDownToLine className="w-3 h-3" />إيداعات الفروع</p>
+                      <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><ArrowDownToLine className="w-3 h-3" />{t("finance:ownerFinancial.bank_branch_deposits")}</p>
                       <p className="font-bold text-blue-600 text-sm">{fmtOMR(s?.bankFromDeposits)}</p>
-                      <p className="text-xs text-green-600">↑ الفرع أودع في البنك</p>
+                      <p className="text-xs text-green-600">{t("finance:ownerFinancial.bank_branch_deposited")}</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><ArrowUpFromLine className="w-3 h-3" />محوَّل للفروع</p>
+                      <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><ArrowUpFromLine className="w-3 h-3" />{t("finance:ownerFinancial.bank_sent_to_branches")}</p>
                       <p className="font-bold text-red-500 text-sm">{fmtOMR(s?.bankSentToBranches)}</p>
-                      <p className="text-xs text-red-500">↓ المالك حوَّل للفرع</p>
+                      <p className="text-xs text-red-500">{t("finance:ownerFinancial.bank_owner_sent")}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -251,16 +251,16 @@ export default function OwnerFinancialSummary() {
               <CardContent className="pt-4 pb-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">الرصيد الكلي للشركة</p>
+                    <p className="text-sm text-muted-foreground">{t("finance:ownerFinancial.total_company_balance")}</p>
                     <p className="text-3xl font-bold text-primary">{fmtOMR(s?.totalAvailable)}</p>
                   </div>
                   <DollarSign className="w-10 h-10 text-primary/50" />
                 </div>
                 <div className="mt-3 text-xs text-muted-foreground">
-                  <span className="text-green-700 font-medium">نقد ({fmtOMR(s?.totalCashOnHand)})</span>
-                  {" + "}<span className="text-blue-700 font-medium">بنك ({fmtOMR(s?.ownerBankBalance)})</span>
-                  {" − "}<span className="text-red-700 font-medium">مصروفات ({fmtOMR(s?.totalExpenses)})</span>
-                  {" − "}<span className="text-orange-700 font-medium">سحوبات ({fmtOMR(s?.totalWithdrawals)})</span>
+                  <span className="text-green-700 font-medium">{t("finance:ownerFinancial.formula_cash")} ({fmtOMR(s?.totalCashOnHand)})</span>
+                  {" + "}<span className="text-blue-700 font-medium">{t("finance:ownerFinancial.formula_bank")} ({fmtOMR(s?.ownerBankBalance)})</span>
+                  {" − "}<span className="text-red-700 font-medium">{t("finance:ownerFinancial.formula_expenses")} ({fmtOMR(s?.totalExpenses)})</span>
+                  {" − "}<span className="text-orange-700 font-medium">{t("finance:ownerFinancial.formula_withdrawals")} ({fmtOMR(s?.totalWithdrawals)})</span>
                   {" = "}<span className="text-primary font-bold">{fmtOMR(s?.totalAvailable)}</span>
                 </div>
               </CardContent>
@@ -271,36 +271,36 @@ export default function OwnerFinancialSummary() {
               <CardHeader className="pb-2 pt-4">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4" />
-                  حساب المالك النقدي
+                  {t("finance:ownerFinancial.owner_cash_account")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm mb-3">
                   <div className="bg-green-50 dark:bg-green-950/30 rounded p-3">
-                    <p className="text-muted-foreground text-xs">↑ استلم كاش من الفروع</p>
+                    <p className="text-muted-foreground text-xs">↑ {t("finance:ownerFinancial.owner_received_cash")}</p>
                     <p className="font-bold text-green-600 text-base">{fmtOMR(s?.receivedFromBranches)}</p>
-                    <p className="text-xs text-muted-foreground mt-1">يُسجَّل تلقائياً من ملخص الفرع</p>
+                    <p className="text-xs text-muted-foreground mt-1">{t("finance:ownerFinancial.owner_received_cash_note")}</p>
                   </div>
                   <div className="bg-orange-50 dark:bg-orange-950/30 rounded p-3">
-                    <p className="text-muted-foreground text-xs">↓ أرسل كاش للفروع</p>
+                    <p className="text-muted-foreground text-xs">↓ {t("finance:ownerFinancial.owner_sent_cash")}</p>
                     <p className="font-bold text-orange-600 text-base">{fmtOMR(s?.cashSentToBranches)}</p>
-                    <p className="text-xs text-muted-foreground mt-1">عند تسجيل "المالك أرسل كاش"</p>
+                    <p className="text-xs text-muted-foreground mt-1">{t("finance:ownerFinancial.owner_sent_cash_note")}</p>
                   </div>
                   <div className="bg-blue-50 dark:bg-blue-950/30 rounded p-3">
-                    <p className="text-muted-foreground text-xs">↓ أودع في البنك</p>
+                    <p className="text-muted-foreground text-xs">↓ {t("finance:ownerFinancial.owner_deposited_bank")}</p>
                     <p className="font-bold text-blue-600 text-base">{fmtOMR(s?.depositedToBank)}</p>
-                    <p className="text-xs text-muted-foreground mt-1">عند تسجيل "إيداع بنكي" من الفرع</p>
+                    <p className="text-xs text-muted-foreground mt-1">{t("finance:ownerFinancial.owner_deposited_bank_note")}</p>
                   </div>
                   <div className="bg-red-50 dark:bg-red-950/30 rounded p-3">
-                    <p className="text-muted-foreground text-xs">↓ سحوبات شخصية</p>
+                    <p className="text-muted-foreground text-xs">↓ {t("finance:ownerFinancial.owner_personal_withdrawals")}</p>
                     <p className="font-bold text-red-600 text-base">{fmtOMR(s?.totalWithdrawals)}</p>
-                    <p className="text-xs text-muted-foreground mt-1">سحب المالك</p>
+                    <p className="text-xs text-muted-foreground mt-1">{t("finance:ownerFinancial.owner_withdrawal_note")}</p>
                   </div>
                   <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded p-3 md:col-span-2">
-                    <p className="text-muted-foreground text-xs">= نقد بيد المالك الآن</p>
+                    <p className="text-muted-foreground text-xs">= {t("finance:ownerFinancial.owner_cash_on_hand")}</p>
                     <p className="font-bold text-emerald-700 text-xl">{fmtOMR(s?.ownerCash)}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      استلم ({fmtOMR(s?.receivedFromBranches)}) − أرسل ({fmtOMR(s?.cashSentToBranches)}) − أودع ({fmtOMR(s?.depositedToBank)}) − سحب ({fmtOMR(s?.totalWithdrawals)})
+                      {t("finance:ownerFinancial.formula_received")} ({fmtOMR(s?.receivedFromBranches)}) − {t("finance:ownerFinancial.formula_sent")} ({fmtOMR(s?.cashSentToBranches)}) − {t("finance:ownerFinancial.formula_deposited")} ({fmtOMR(s?.depositedToBank)}) − {t("finance:ownerFinancial.formula_withdrawn")} ({fmtOMR(s?.totalWithdrawals)})
                     </p>
                   </div>
                 </div>
@@ -320,45 +320,45 @@ export default function OwnerFinancialSummary() {
                         <span>{branchLabel(b.name, b.address)}</span>
                         <Badge variant={current >= 0 ? "outline" : "destructive"}
                           className={current >= 0 ? "text-green-700 border-green-400" : ""}>
-                          الرصيد: {fmtOMR(b.currentCash)}
+                          {t("finance:ownerFinancial.balance_label")}: {fmtOMR(b.currentCash)}
                         </Badge>
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
                         <div className="bg-blue-50 dark:bg-blue-950/30 rounded p-2">
-                          <p className="text-muted-foreground text-xs">رصيد الافتتاح</p>
+                          <p className="text-muted-foreground text-xs">{t("finance:ownerFinancial.branch_opening")}</p>
                           <p className="font-bold">{fmtOMR(b.openingCash)}</p>
                         </div>
                         <div className="bg-green-50 dark:bg-green-950/30 rounded p-2">
-                          <p className="text-muted-foreground text-xs">مبيعات نقدية</p>
+                          <p className="text-muted-foreground text-xs">{t("finance:ownerFinancial.branch_cash_sales")}</p>
                           <p className="font-bold text-green-700">{fmtOMR(b.cashSales)}</p>
                         </div>
                         <div className="bg-red-50 dark:bg-red-950/30 rounded p-2">
-                          <p className="text-muted-foreground text-xs">مصروفات نقدية</p>
+                          <p className="text-muted-foreground text-xs">{t("finance:ownerFinancial.branch_cash_expenses")}</p>
                           <p className="font-bold text-red-600">{fmtOMR(b.cashExpenses)}</p>
                         </div>
                         <div className="bg-orange-50 dark:bg-orange-950/30 rounded p-2">
-                          <p className="text-muted-foreground text-xs">حُوِّل للمالك</p>
+                          <p className="text-muted-foreground text-xs">{t("finance:ownerFinancial.branch_transferred_to_owner")}</p>
                           <p className="font-bold text-orange-600">{fmtOMR(b.transferredToOwner)}</p>
                         </div>
                         <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded p-2">
-                          <p className="text-muted-foreground text-xs">الرصيد الحالي</p>
+                          <p className="text-muted-foreground text-xs">{t("finance:ownerFinancial.branch_current_balance")}</p>
                           <p className={`font-bold ${current >= 0 ? "text-emerald-700" : "text-red-600"}`}>{fmtOMR(b.currentCash)}</p>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-sm mt-2">
                         <div className="bg-purple-50 dark:bg-purple-950/30 rounded p-2">
-                          <p className="text-muted-foreground text-xs">مبيعات بطاقة</p>
+                          <p className="text-muted-foreground text-xs">{t("finance:ownerFinancial.branch_card_sales")}</p>
                           <p className="font-bold text-purple-700">{fmtOMR(b.cardSales)}</p>
                         </div>
                         <div className="bg-indigo-50 dark:bg-indigo-950/30 rounded p-2">
-                          <p className="text-muted-foreground text-xs">مبيعات تحويل بنكي</p>
+                          <p className="text-muted-foreground text-xs">{t("finance:ownerFinancial.branch_bank_transfer_sales")}</p>
                           <p className="font-bold text-indigo-700">{fmtOMR(b.bankTransferSales)}</p>
                         </div>
                       </div>
                       <p className="text-xs text-muted-foreground mt-2">
-                        المعادلة: الافتتاح ({fmtOMR(b.openingCash)}) + نقد ({fmtOMR(b.cashSales)}) − مصروفات ({fmtOMR(b.cashExpenses)}) − محول ({fmtOMR(b.transferredToOwner)}) = <strong>{fmtOMR(b.currentCash)}</strong>
+                        {t("finance:ownerFinancial.branch_formula")}: {t("finance:ownerFinancial.formula_opening")} ({fmtOMR(b.openingCash)}) + {t("finance:ownerFinancial.formula_cash")} ({fmtOMR(b.cashSales)}) − {t("finance:ownerFinancial.formula_expenses")} ({fmtOMR(b.cashExpenses)}) − {t("finance:ownerFinancial.formula_transferred")} ({fmtOMR(b.transferredToOwner)}) = <strong>{fmtOMR(b.currentCash)}</strong>
                       </p>
                     </CardContent>
                   </Card>
@@ -371,26 +371,26 @@ export default function OwnerFinancialSummary() {
           <TabsContent value="inventory" className="space-y-4">
             {/* Top summary */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <KpiCard title="إجمالي الكميات"         value={fmtNum(summary?.inventory?.totalQty)} icon={Package} color="text-blue-600" />
-              <KpiCard title="قيمة التكلفة الكلية"    value={fmtOMR(summary?.inventory?.totalCost)} icon={Banknote} color="text-orange-600" />
-              <KpiCard title="قيمة البيع الكلية"      value={fmtOMR(summary?.inventory?.totalSelling)} icon={TrendingUp} color="text-green-600" />
-              <KpiCard title="ربح متوقع من المخزون"   value={fmtOMR(summary?.inventory?.expectedProfit)} icon={DollarSign} color="text-primary"
-                sub={`هامش ${summary?.inventory?.profitMargin ?? 0}%`} />
+              <KpiCard title={t("finance:ownerFinancial.inv_total_qty")} value={fmtNum(summary?.inventory?.totalQty)} icon={Package} color="text-blue-600" />
+              <KpiCard title={t("finance:ownerFinancial.inv_total_cost")} value={fmtOMR(summary?.inventory?.totalCost)} icon={Banknote} color="text-orange-600" />
+              <KpiCard title={t("finance:ownerFinancial.inv_total_selling")} value={fmtOMR(summary?.inventory?.totalSelling)} icon={TrendingUp} color="text-green-600" />
+              <KpiCard title={t("finance:ownerFinancial.inv_expected_profit")} value={fmtOMR(summary?.inventory?.expectedProfit)} icon={DollarSign} color="text-primary"
+                sub={`${t("finance:ownerFinancial.inv_margin")} ${summary?.inventory?.profitMargin ?? 0}%`} />
             </div>
 
             {/* By branch */}
             <Card>
-              <CardHeader className="pb-2 pt-4"><CardTitle className="text-sm">قيمة المخزون حسب الفرع</CardTitle></CardHeader>
+              <CardHeader className="pb-2 pt-4"><CardTitle className="text-sm">{t("finance:ownerFinancial.inv_by_branch_title")}</CardTitle></CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>الفرع</TableHead>
-                      <TableHead className="text-center">الكمية</TableHead>
-                      <TableHead className="text-center">قيمة التكلفة</TableHead>
-                      <TableHead className="text-center">قيمة البيع</TableHead>
-                      <TableHead className="text-center">الربح المتوقع</TableHead>
-                      <TableHead className="text-center">الهامش</TableHead>
+                      <TableHead>{t("finance:ownerFinancial.col_branch")}</TableHead>
+                      <TableHead className="text-center">{t("finance:ownerFinancial.col_qty")}</TableHead>
+                      <TableHead className="text-center">{t("finance:ownerFinancial.col_cost_value")}</TableHead>
+                      <TableHead className="text-center">{t("finance:ownerFinancial.col_selling_value")}</TableHead>
+                      <TableHead className="text-center">{t("finance:ownerFinancial.col_expected_profit")}</TableHead>
+                      <TableHead className="text-center">{t("finance:ownerFinancial.col_margin")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -423,13 +423,13 @@ export default function OwnerFinancialSummary() {
             {/* Filters */}
             <div className="flex flex-wrap gap-3 items-end">
               <div>
-                <Label className="text-xs">الفرع</Label>
+                <Label className="text-xs">{t("finance:ownerFinancial.filter_branch")}</Label>
                 <Select value={txnBranch} onValueChange={setTxnBranch}>
                   <SelectTrigger className="w-44">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">جميع الفروع</SelectItem>
+                    <SelectItem value="all">{t("finance:ownerFinancial.filter_all_branches")}</SelectItem>
                     {branches.map((b: any) => (
                       <SelectItem key={b.id} value={String(b.id)}>{branchLabel(b.name, b.address)}</SelectItem>
                     ))}
@@ -437,11 +437,11 @@ export default function OwnerFinancialSummary() {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">من</Label>
+                <Label className="text-xs">{t("finance:ownerFinancial.filter_from")}</Label>
                 <Input type="date" value={txnFrom} onChange={e => setTxnFrom(e.target.value)} className="w-36" />
               </div>
               <div>
-                <Label className="text-xs">إلى</Label>
+                <Label className="text-xs">{t("finance:ownerFinancial.filter_to")}</Label>
                 <Input type="date" value={txnTo} onChange={e => setTxnTo(e.target.value)} className="w-36" />
               </div>
               <Button variant="outline" size="sm" onClick={() => { setTxnBranch("all"); setTxnFrom(""); setTxnTo(""); }}>
@@ -454,23 +454,23 @@ export default function OwnerFinancialSummary() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>التاريخ</TableHead>
-                      <TableHead>النوع</TableHead>
-                      <TableHead>الفرع</TableHead>
-                      <TableHead>طريقة الدفع</TableHead>
-                      <TableHead>من</TableHead>
-                      <TableHead>إلى</TableHead>
-                      <TableHead className="text-center">المبلغ</TableHead>
-                      <TableHead>المرجع</TableHead>
-                      <TableHead>الملاحظات</TableHead>
-                      <TableHead>المستخدم</TableHead>
+                      <TableHead>{t("finance:ownerFinancial.col_date")}</TableHead>
+                      <TableHead>{t("finance:ownerFinancial.col_type")}</TableHead>
+                      <TableHead>{t("finance:ownerFinancial.col_branch")}</TableHead>
+                      <TableHead>{t("finance:ownerFinancial.col_payment_method")}</TableHead>
+                      <TableHead>{t("finance:ownerFinancial.col_from")}</TableHead>
+                      <TableHead>{t("finance:ownerFinancial.col_to")}</TableHead>
+                      <TableHead className="text-center">{t("finance:ownerFinancial.col_amount")}</TableHead>
+                      <TableHead>{t("finance:ownerFinancial.col_reference")}</TableHead>
+                      <TableHead>{t("finance:ownerFinancial.col_notes")}</TableHead>
+                      <TableHead>{t("finance:ownerFinancial.col_user")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {txnLoading ? (
-                      <TableRow><TableCell colSpan={10} className="text-center py-10 text-muted-foreground">جاري التحميل...</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={10} className="text-center py-10 text-muted-foreground">{t("finance:ownerFinancial.loading")}</TableCell></TableRow>
                     ) : transactions.length === 0 ? (
-                      <TableRow><TableCell colSpan={10} className="text-center py-10 text-muted-foreground">لا توجد معاملات مسجلة</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={10} className="text-center py-10 text-muted-foreground">{t("finance:ownerFinancial.no_transactions")}</TableCell></TableRow>
                     ) : transactions.map((tx: any) => {
                       const meta = TXN_TYPES[tx.type] ?? { color: "bg-gray-100 text-gray-800", icon: AlertTriangle };
                       const Icon = meta.icon;
@@ -485,9 +485,9 @@ export default function OwnerFinancialSummary() {
                           </TableCell>
                           <TableCell className="text-sm">{tx.branch_name ?? "—"}</TableCell>
                           <TableCell className="text-sm">{
-                            tx.payment_method === "cash" ? "نقدي" :
-                            tx.payment_method === "card" ? "بطاقة" :
-                            tx.payment_method === "bank_transfer" ? "تحويل بنكي" : tx.payment_method
+                            tx.payment_method === "cash" ? t("finance:ownerFinancial.method_cash") :
+                            tx.payment_method === "card" ? t("finance:ownerFinancial.method_card") :
+                            tx.payment_method === "bank_transfer" ? t("finance:ownerFinancial.method_bank_transfer") : tx.payment_method
                           }</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{tx.from_account ?? "—"}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{tx.to_account ?? "—"}</TableCell>
@@ -510,16 +510,16 @@ export default function OwnerFinancialSummary() {
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>تسجيل معاملة مالية جديدة</DialogTitle>
+            <DialogTitle>{t("finance:ownerFinancial.dialog_title")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>التاريخ</Label>
+                <Label>{t("finance:ownerFinancial.field_date")}</Label>
                 <Input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
               </div>
               <div>
-                <Label>نوع المعاملة</Label>
+                <Label>{t("finance:ownerFinancial.field_txn_type")}</Label>
                 <Select value={form.type} onValueChange={v => setForm(f => ({ ...f, type: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -533,9 +533,9 @@ export default function OwnerFinancialSummary() {
 
             {(form.type === "BRANCH_CASH_TRANSFER_TO_OWNER") && (
               <div>
-                <Label>الفرع</Label>
+                <Label>{t("finance:ownerFinancial.field_branch")}</Label>
                 <Select value={form.branchId} onValueChange={v => setForm(f => ({ ...f, branchId: v }))}>
-                  <SelectTrigger><SelectValue placeholder="اختر الفرع" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t("finance:ownerFinancial.select_branch_placeholder")} /></SelectTrigger>
                   <SelectContent>
                     {branches.map((b: any) => (
                       <SelectItem key={b.id} value={String(b.id)}>{branchLabel(b.name, b.address)}</SelectItem>
@@ -547,61 +547,61 @@ export default function OwnerFinancialSummary() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>المبلغ (ر.ع)</Label>
+                <Label>{t("finance:ownerFinancial.field_amount")}</Label>
                 <Input type="number" step="0.001" min="0" placeholder="0.000"
                   value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
               </div>
               <div>
-                <Label>طريقة الدفع</Label>
+                <Label>{t("finance:ownerFinancial.field_payment_method")}</Label>
                 <Select value={form.paymentMethod} onValueChange={v => setForm(f => ({ ...f, paymentMethod: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="cash">نقدي</SelectItem>
-                    <SelectItem value="card">بطاقة</SelectItem>
-                    <SelectItem value="bank_transfer">تحويل بنكي</SelectItem>
+                    <SelectItem value="cash">{t("finance:ownerFinancial.method_cash")}</SelectItem>
+                    <SelectItem value="card">{t("finance:ownerFinancial.method_card")}</SelectItem>
+                    <SelectItem value="bank_transfer">{t("finance:ownerFinancial.method_bank_transfer")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div>
-              <Label>الرقم المرجعي (اختياري)</Label>
-              <Input placeholder="رقم الإيصال أو التحويل..."
+              <Label>{t("finance:ownerFinancial.field_reference")}</Label>
+              <Input placeholder={t("finance:ownerFinancial.reference_placeholder")}
                 value={form.referenceNo} onChange={e => setForm(f => ({ ...f, referenceNo: e.target.value }))} />
             </div>
             <div>
-              <Label>ملاحظات (اختياري)</Label>
-              <Input placeholder="أي ملاحظات..."
+              <Label>{t("finance:ownerFinancial.field_notes")}</Label>
+              <Input placeholder={t("finance:ownerFinancial.notes_placeholder")}
                 value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} />
             </div>
 
             {/* Preview of what will happen */}
             {form.type === "BRANCH_CASH_TRANSFER_TO_OWNER" && form.amount && (
               <div className="rounded-lg bg-green-50 dark:bg-green-950/30 p-3 text-sm space-y-1">
-                <p className="font-medium text-green-800">ما سيحدث:</p>
-                <p className="text-green-700">✓ يُخصم {fmtOMR(form.amount)} من رصيد الفرع النقدي</p>
-                <p className="text-green-700">✓ يُضاف {fmtOMR(form.amount)} إلى نقد المالك</p>
-                <p className="text-green-700">✓ يُسجَّل في سجل المعاملات</p>
+                <p className="font-medium text-green-800">{t("finance:ownerFinancial.preview_what_happens")}</p>
+                <p className="text-green-700">✓ {t("finance:ownerFinancial.preview_branch_deduct", { amount: fmtOMR(form.amount) })}</p>
+                <p className="text-green-700">✓ {t("finance:ownerFinancial.preview_owner_add", { amount: fmtOMR(form.amount) })}</p>
+                <p className="text-green-700">✓ {t("finance:ownerFinancial.preview_recorded")}</p>
               </div>
             )}
             {form.type === "OWNER_DEPOSIT_TO_BANK" && form.amount && (
               <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 p-3 text-sm space-y-1">
-                <p className="font-medium text-blue-800">ما سيحدث:</p>
-                <p className="text-blue-700">✓ يُخصم {fmtOMR(form.amount)} من نقد المالك</p>
-                <p className="text-blue-700">✓ يُضاف {fmtOMR(form.amount)} إلى الرصيد البنكي</p>
+                <p className="font-medium text-blue-800">{t("finance:ownerFinancial.preview_what_happens")}</p>
+                <p className="text-blue-700">✓ {t("finance:ownerFinancial.preview_owner_deduct", { amount: fmtOMR(form.amount) })}</p>
+                <p className="text-blue-700">✓ {t("finance:ownerFinancial.preview_bank_add", { amount: fmtOMR(form.amount) })}</p>
               </div>
             )}
             {form.type === "OWNER_WITHDRAWAL" && form.amount && (
               <div className="rounded-lg bg-red-50 dark:bg-red-950/30 p-3 text-sm space-y-1">
-                <p className="font-medium text-red-800">ما سيحدث:</p>
-                <p className="text-red-700">✓ يُخصم {fmtOMR(form.amount)} من رصيد المالك (سحب شخصي)</p>
+                <p className="font-medium text-red-800">{t("finance:ownerFinancial.preview_what_happens")}</p>
+                <p className="text-red-700">✓ {t("finance:ownerFinancial.preview_withdrawal_deduct", { amount: fmtOMR(form.amount) })}</p>
               </div>
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>إلغاء</Button>
+            <Button variant="outline" onClick={() => setShowDialog(false)}>{t("finance:ownerFinancial.cancel_btn")}</Button>
             <Button onClick={handleSubmit} disabled={createTxn.isPending}>
-              {createTxn.isPending ? "جاري الحفظ..." : "حفظ المعاملة"}
+              {createTxn.isPending ? t("finance:ownerFinancial.saving") : t("finance:ownerFinancial.save_txn_btn")}
             </Button>
           </DialogFooter>
         </DialogContent>

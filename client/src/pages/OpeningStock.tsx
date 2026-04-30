@@ -75,6 +75,7 @@ async function apiFetch(url: string, opts?: RequestInit) {
 function ProductSearch({ onSelect, placeholder }: {
   onSelect: (p: ProductHit) => void; placeholder: string;
 }) {
+  const { t } = useI18n();
   const [q, setQ]           = useState("");
   const [results, setResults] = useState<ProductHit[]>([]);
   const [loading, setLoading] = useState(false);
@@ -128,7 +129,7 @@ function ProductSearch({ onSelect, placeholder }: {
               <div className="min-w-0">
                 <p className="font-medium truncate">{p.name}</p>
                 {p.modelNumber && (
-                  <p className="text-[11px] text-muted-foreground">موديل: {p.modelNumber}</p>
+                  <p className="text-[11px] text-muted-foreground">{t("opening_stock.model_label")} {p.modelNumber}</p>
                 )}
               </div>
               <span className="text-muted-foreground text-xs shrink-0 font-mono">{p.barcode}</span>
@@ -154,6 +155,7 @@ function VariantPickerDialog({
   const [variants, setVariants]   = useState<ProductVariant[]>([]);
   const [loading, setLoading]     = useState(false);
   // qty/cost per variant id
+  const { t } = useI18n();
   const [qtys, setQtys]   = useState<Record<number, number>>({});
   const [costs, setCosts] = useState<Record<number, number>>({});
 
@@ -216,7 +218,7 @@ function VariantPickerDialog({
             {product?.name}
           </DialogTitle>
           <DialogDescription>
-            أدخل الكمية والتكلفة لكل مقاس / لون تريد إضافته
+            {t("opening_stock.variant_picker_desc")}
           </DialogDescription>
         </DialogHeader>
 
@@ -226,18 +228,18 @@ function VariantPickerDialog({
           </div>
         ) : variants.length === 0 ? (
           <p className="text-center text-muted-foreground py-6 text-sm">
-            لا توجد متغيرات لهذا المنتج — سيُضاف كمنتج بسيط
+            {t("opening_stock.no_variants")}
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm border rounded-lg overflow-hidden">
               <thead>
                 <tr className="bg-muted/40 text-start border-b">
-                  <th className="px-3 py-2 font-medium">اللون</th>
-                  <th className="px-3 py-2 font-medium">المقاس</th>
-                  <th className="px-3 py-2 font-medium">باركود</th>
-                  <th className="px-3 py-2 font-medium w-28 text-center">الكمية</th>
-                  <th className="px-3 py-2 font-medium w-32 text-center">التكلفة</th>
+                  <th className="px-3 py-2 font-medium">{t("opening_stock.color")}</th>
+                  <th className="px-3 py-2 font-medium">{t("opening_stock.size")}</th>
+                  <th className="px-3 py-2 font-medium">{t("opening_stock.barcode")}</th>
+                  <th className="px-3 py-2 font-medium w-28 text-center">{t("opening_stock.quantity")}</th>
+                  <th className="px-3 py-2 font-medium w-32 text-center">{t("opening_stock.cost")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -290,9 +292,9 @@ function VariantPickerDialog({
             className="gap-1"
           >
             <Plus className="h-4 w-4" />
-            إضافة ({totalQty} وحدة)
+            {t("opening_stock.add_units_btn", { count: totalQty })}
           </Button>
-          <Button variant="outline" onClick={onClose}>إلغاء</Button>
+          <Button variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -305,6 +307,7 @@ function SimpleProductDialog({ product, open, onClose, onAdd }: {
   product: ProductHit | null; open: boolean;
   onClose: () => void; onAdd: (row: ItemRow) => void;
 }) {
+  const { t } = useI18n();
   const [qty,  setQty]  = useState(1);
   const [cost, setCost] = useState(0);
 
@@ -328,17 +331,17 @@ function SimpleProductDialog({ product, open, onClose, onAdd }: {
       <DialogContent dir="rtl" className="max-w-sm">
         <DialogHeader>
           <DialogTitle>{product?.name}</DialogTitle>
-          <DialogDescription>أدخل الكمية والتكلفة</DialogDescription>
+          <DialogDescription>{t("opening_stock.simple_product_desc")}</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">الكمية</label>
+            <label className="text-xs text-muted-foreground block mb-1">{t("opening_stock.quantity")}</label>
             <Input type="number" min={1} step={1} value={qty}
               onChange={e => setQty(parseFloat(e.target.value) || 1)}
               className="text-center" inputMode="numeric" dir="ltr" />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">التكلفة</label>
+            <label className="text-xs text-muted-foreground block mb-1">{t("opening_stock.cost")}</label>
             <Input type="number" min={0} step={0.001} value={cost}
               onChange={e => setCost(parseFloat(e.target.value) || 0)}
               className="text-center" inputMode="decimal" dir="ltr" />
@@ -346,10 +349,10 @@ function SimpleProductDialog({ product, open, onClose, onAdd }: {
         </div>
         <DialogFooter className="gap-2 flex-row-reverse">
           <Button onClick={handleAdd} className="gap-1">
-            <Plus className="h-4 w-4" /> إضافة
+            <Plus className="h-4 w-4" /> {t("common.add")}
           </Button>
           <Button variant="outline" onClick={() => { onClose(); setQty(1); setCost(0); }}>
-            إلغاء
+            {t("common.cancel")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -503,7 +506,7 @@ export default function OpeningStock() {
         const dupKey = `${row.productId}:${row.variantId ?? "null"}`;
         const exists = next.some(i => `${i.productId}:${i.variantId ?? "null"}` === dupKey);
         if (exists) {
-          toast({ title: "الصنف موجود مسبقاً", variant: "destructive" });
+          toast({ title: t("opening_stock.item_already_exists"), variant: "destructive" });
           continue;
         }
         next = [...next, row];
@@ -626,10 +629,10 @@ export default function OpeningStock() {
             <div className="flex flex-wrap items-center gap-2">
               {/* Section label */}
               <div className="w-full text-xs text-muted-foreground font-medium mb-1">
-                ابحث عن منتج موجود في النظام وأضفه:
+                {t("opening_stock.search_instruction")}
               </div>
               <div className="flex-1 min-w-[260px]">
-                <ProductSearch onSelect={handleProductSelect} placeholder="ابحث بالاسم أو الموديل أو الباركود…" />
+                <ProductSearch onSelect={handleProductSelect} placeholder={t("opening_stock.search_by_model_barcode")} />
               </div>
               <input ref={fileInputRef} type="file" accept=".csv,text/csv"
                 className="hidden" onChange={handleFileUpload} />
@@ -649,7 +652,7 @@ export default function OpeningStock() {
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">
-                  المنتجات ({items.length} {t("opening_stock.items_count")})
+                  {t("opening_stock.products_section")} ({items.length} {t("opening_stock.items_count")})
                 </CardTitle>
                 {entry?.status === "draft" && entry && !items.length && (
                   <Button variant="ghost" size="sm" className="text-xs"
@@ -673,9 +676,9 @@ export default function OpeningStock() {
                     <thead>
                       <tr className="border-b bg-muted/30 text-start">
                         <th className="px-4 py-2 font-medium">{t("opening_stock.product")}</th>
-                        <th className="px-3 py-2 font-medium">اللون</th>
-                        <th className="px-3 py-2 font-medium">المقاس</th>
-                        <th className="px-4 py-2 font-medium text-xs text-muted-foreground">باركود</th>
+                        <th className="px-3 py-2 font-medium">{t("opening_stock.color")}</th>
+                        <th className="px-3 py-2 font-medium">{t("opening_stock.size")}</th>
+                        <th className="px-4 py-2 font-medium text-xs text-muted-foreground">{t("opening_stock.barcode")}</th>
                         <th className="px-4 py-2 font-medium w-28 text-center">{t("opening_stock.quantity")}</th>
                         <th className="px-4 py-2 font-medium w-32 text-center">{t("opening_stock.unit_cost")}</th>
                         <th className="px-4 py-2 font-medium w-32 text-end">{t("opening_stock.subtotal")}</th>

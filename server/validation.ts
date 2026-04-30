@@ -40,13 +40,78 @@ const FIELD_NAMES_AR: Record<string, string> = {
   sortOrder:          "الترتيب",
 };
 
-// ── Arabic error formatter ────────────────────────────────────────────────────
-export function formatZodError(error: z.ZodError): string {
+// ── English field name map ────────────────────────────────────────────────────
+const FIELD_NAMES_EN: Record<string, string> = {
+  name:               "Name",
+  username:           "Username",
+  password:           "Password",
+  newPassword:        "New password",
+  role:               "Role",
+  branchId:           "Branch",
+  phone:              "Phone",
+  pin:                "PIN",
+  salary:             "Salary",
+  price:              "Price",
+  unitPrice:          "Unit price",
+  costDefault:        "Default cost",
+  barcode:            "Barcode",
+  sku:                "SKU",
+  productId:          "Product",
+  productName:        "Product name",
+  quantity:           "Quantity",
+  total:              "Total",
+  amount:             "Amount",
+  categoryId:         "Category",
+  orderNumber:        "Order number",
+  customerName:       "Customer name",
+  customerPhone:      "Customer phone",
+  status:             "Status",
+  terminalName:       "Terminal name",
+  productType:        "Product type",
+  unitOfMeasure:      "Unit of measure",
+  isComposite:        "Composite product",
+  unitCostBase:       "Base unit cost",
+  supplierId:         "Supplier",
+  invoiceDate:        "Invoice date",
+  description:        "Description",
+  image:              "Image",
+  isActive:           "Status",
+  parentId:           "Parent category",
+  sortOrder:          "Sort order",
+};
+
+// ── Bilingual error formatter ─────────────────────────────────────────────────
+export function formatZodError(error: z.ZodError, lang: "ar" | "en" = "ar"): string {
   const first = error.errors[0];
   const fieldKey = first.path.at(-1) as string | undefined;
+
+  if (lang === "en") {
+    const fieldEn = fieldKey ? (FIELD_NAMES_EN[fieldKey] ?? fieldKey) : "";
+    const prefix = fieldEn ? `${fieldEn}: ` : "";
+    switch (first.code) {
+      case "too_small":
+        if (first.type === "string")
+          return `${prefix}must be at least ${first.minimum} character(s)`;
+        return `${prefix}must be at least ${first.minimum}`;
+      case "too_big":
+        if (first.type === "string")
+          return `${prefix}must be at most ${first.maximum} character(s)`;
+        return `${prefix}must be at most ${first.maximum}`;
+      case "invalid_type":
+        if (first.received === "undefined") return `${prefix}this field is required`;
+        return `${prefix}invalid data type`;
+      case "invalid_enum_value":
+        return first.message;
+      case "invalid_string":
+        return `${prefix}invalid format`;
+      default:
+        return first.message || `${prefix}invalid value`;
+    }
+  }
+
+  // Arabic (default)
   const fieldAr = fieldKey ? (FIELD_NAMES_AR[fieldKey] ?? fieldKey) : "";
   const prefix = fieldAr ? `${fieldAr}: ` : "";
-
   switch (first.code) {
     case "too_small":
       if (first.type === "string")

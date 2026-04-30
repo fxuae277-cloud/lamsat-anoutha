@@ -56,7 +56,7 @@ export default function Branches() {
       return (await apiRequest("DELETE", `/api/branches/${id}`)).json();
     },
     onSuccess: () => {
-      toast({ title: "تم حذف الفرع بنجاح" });
+      toast({ title: t("branches.deleted") });
       queryClient.invalidateQueries({ queryKey: ["/api/branches"] });
       setDeletingBranch(null);
     },
@@ -86,13 +86,13 @@ export default function Branches() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <GitBranch className="w-6 h-6" /> الفروع
+            <GitBranch className="w-6 h-6" /> {t("branches.title")}
           </h1>
-          <p className="text-muted-foreground">إدارة الفروع والمواقع</p>
+          <p className="text-muted-foreground">{t("branches.subtitle")}</p>
         </div>
         {isOwnerOrAdmin && (
           <Button onClick={openAdd} className="gap-2">
-            <Plus className="w-4 h-4" /> إضافة فرع
+            <Plus className="w-4 h-4" /> {t("branches.add_btn")}
           </Button>
         )}
       </div>
@@ -103,11 +103,11 @@ export default function Branches() {
           <TableHeader className="bg-muted/50">
             <TableRow>
               <TableHead className="w-10">#</TableHead>
-              <TableHead>اسم الفرع</TableHead>
-              <TableHead><MapPin className="w-3 h-3 inline ms-1" />عنوان الفرع</TableHead>
-              <TableHead><Phone className="w-3 h-3 inline ms-1" />هاتف الفرع</TableHead>
-              <TableHead className="w-20">النوع</TableHead>
-              {isOwnerOrAdmin && <TableHead className="text-start w-16">الإجراءات</TableHead>}
+              <TableHead>{t("branches.col_name")}</TableHead>
+              <TableHead><MapPin className="w-3 h-3 inline ms-1" />{t("branches.col_address")}</TableHead>
+              <TableHead><Phone className="w-3 h-3 inline ms-1" />{t("branches.col_phone")}</TableHead>
+              <TableHead className="w-20">{t("branches.col_type")}</TableHead>
+              {isOwnerOrAdmin && <TableHead className="text-start w-16">{t("common.actions")}</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -115,7 +115,7 @@ export default function Branches() {
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                   <GitBranch className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p>لا توجد فروع مضافة</p>
+                  <p>{t("branches.empty")}</p>
                 </TableCell>
               </TableRow>
             ) : branches.map((b, i) => (
@@ -126,17 +126,17 @@ export default function Branches() {
                 <TableCell className="text-sm font-mono">{b.phone || <span className="text-muted-foreground">—</span>}</TableCell>
                 <TableCell>
                   {b.isMain
-                    ? <Badge className="gap-1 bg-primary/10 text-primary border-primary/30"><Star className="w-3 h-3" />رئيسي</Badge>
-                    : <Badge variant="outline" className="text-xs">فرع</Badge>
+                    ? <Badge className="gap-1 bg-primary/10 text-primary border-primary/30"><Star className="w-3 h-3" />{t("branches.badge_main")}</Badge>
+                    : <Badge variant="outline" className="text-xs">{t("branches.badge_branch")}</Badge>
                   }
                 </TableCell>
                 {isOwnerOrAdmin && (
                   <TableCell className="text-start">
                     <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" title="تعديل" onClick={() => openEdit(b)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" title={t("common.edit")} onClick={() => openEdit(b)}>
                         <Edit2 className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" title="حذف" onClick={() => setDeletingBranch(b)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" title={t("common.delete")} onClick={() => setDeletingBranch(b)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
@@ -153,20 +153,20 @@ export default function Branches() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
-              <Trash2 className="w-5 h-5" /> حذف الفرع
+              <Trash2 className="w-5 h-5" /> {t("branches.delete_title")}
             </DialogTitle>
             <DialogDescription>
-              هل أنت متأكد من حذف <strong>{deletingBranch?.name}</strong>؟ لا يمكن التراجع عن هذا الإجراء.
+              {t("common.confirm")} <strong>{deletingBranch?.name}</strong>? {t("common.no_results")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeletingBranch(null)}>إلغاء</Button>
+            <Button variant="outline" onClick={() => setDeletingBranch(null)}>{t("common.cancel")}</Button>
             <Button
               variant="destructive"
               onClick={() => deletingBranch && deleteMutation.mutate(deletingBranch.id)}
               disabled={deleteMutation.isPending}
             >
-              {deleteMutation.isPending ? "جاري الحذف..." : "حذف"}
+              {deleteMutation.isPending ? t("branches.deleting") : t("common.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -178,36 +178,36 @@ export default function Branches() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <GitBranch className="w-5 h-5" />
-              {editingBranch ? "تعديل الفرع" : "إضافة فرع جديد"}
+              {editingBranch ? t("branches.dialog_edit_title") : t("branches.dialog_add_title")}
             </DialogTitle>
-            <DialogDescription>أدخل بيانات الفرع ثم اضغط حفظ</DialogDescription>
+            <DialogDescription>{t("branches.dialog_desc")}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-1">
-              <label className="text-sm font-medium">اسم الفرع <span className="text-destructive">*</span></label>
+              <label className="text-sm font-medium">{t("branches.field_name")} <span className="text-destructive">*</span></label>
               <Input
                 value={formData.name}
                 onChange={e => setFormData(f => ({ ...f, name: e.target.value }))}
-                placeholder="مثال: لمسة أنوثة - شناص"
+                placeholder={t("branches.name_placeholder")}
                 autoFocus
               />
             </div>
 
             <div className="space-y-1">
               <label className="text-sm font-medium flex items-center gap-1">
-                <MapPin className="w-3 h-3" /> عنوان الفرع
+                <MapPin className="w-3 h-3" /> {t("branches.field_address")}
               </label>
               <Input
                 value={formData.address}
                 onChange={e => setFormData(f => ({ ...f, address: e.target.value }))}
-                placeholder="المدينة / المنطقة / الشارع"
+                placeholder={t("branches.address_placeholder")}
               />
             </div>
 
             <div className="space-y-1">
               <label className="text-sm font-medium flex items-center gap-1">
-                <Phone className="w-3 h-3" /> هاتف الفرع
+                <Phone className="w-3 h-3" /> {t("branches.field_phone")}
               </label>
               <Input
                 value={formData.phone}
@@ -221,10 +221,10 @@ export default function Branches() {
             <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
               <div className="space-y-0.5">
                 <label className="text-sm font-medium flex items-center gap-1">
-                  <Star className="w-3 h-3 text-primary" /> نوع الفرع
+                  <Star className="w-3 h-3 text-primary" /> {t("branches.field_type")}
                 </label>
                 <p className="text-xs text-muted-foreground">
-                  {formData.isMain ? "مركز رئيسي — يظهر كأساس للنظام" : "فرع عادي"}
+                  {formData.isMain ? t("branches.type_main_desc") : t("branches.type_regular_desc")}
                 </p>
               </div>
               <Switch
@@ -235,12 +235,12 @@ export default function Branches() {
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setFormOpen(false)}>إلغاء</Button>
+            <Button variant="outline" onClick={() => setFormOpen(false)}>{t("common.cancel")}</Button>
             <Button
               onClick={() => saveMutation.mutate(formData)}
               disabled={!formData.name.trim() || saveMutation.isPending}
             >
-              {saveMutation.isPending ? "جاري الحفظ..." : t("common.save")}
+              {saveMutation.isPending ? t("common.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

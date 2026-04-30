@@ -203,12 +203,12 @@ function ShiftRow({ s, omr, t }: { s: ShiftDetail; omr: string; t: (k: string) =
           </div>
           {/* نقد الافتتاح ← الاختتام */}
           <div>
-            <p className="text-muted-foreground text-xs">بداية ← نهاية الصندوق</p>
+            <p className="text-muted-foreground text-xs">{t("branchSummary.shift_start_end")}</p>
             <p className="font-semibold text-blue-700 text-xs leading-snug">
               {fmt(s.openingCash)}
               {s.actualCash != null
                 ? <span> ← <span className="text-emerald-700">{fmt(s.actualCash)}</span></span>
-                : <span className="text-muted-foreground"> ← مفتوح</span>
+                : <span className="text-muted-foreground"> {t("branchSummary.shift_still_open")}</span>
               }
               <span className="text-muted-foreground me-0.5"> {omr}</span>
             </p>
@@ -238,13 +238,13 @@ function ShiftRow({ s, omr, t }: { s: ShiftDetail; omr: string; t: (k: string) =
           {/* حركة الصندوق النقدي */}
           <div className="flex items-center gap-3 rounded-xl bg-white border px-4 py-3">
             <div className="text-center">
-              <p className="text-xs text-muted-foreground mb-0.5">بداية الصندوق</p>
+              <p className="text-xs text-muted-foreground mb-0.5">{t("branchSummary.drawer_start")}</p>
               <p className="text-base font-bold text-blue-700">{fmt(s.openingCash)}</p>
               <p className="text-xs text-muted-foreground">{omr}</p>
             </div>
             <div className="flex-1 text-center text-muted-foreground text-lg">→</div>
             <div className="text-center">
-              <p className="text-xs text-muted-foreground mb-0.5">نهاية الصندوق</p>
+              <p className="text-xs text-muted-foreground mb-0.5">{t("branchSummary.drawer_end")}</p>
               {s.actualCash != null ? (
                 <>
                   <p className="text-base font-bold text-emerald-700">{fmt(s.actualCash)}</p>
@@ -261,7 +261,7 @@ function ShiftRow({ s, omr, t }: { s: ShiftDetail; omr: string; t: (k: string) =
                   <p className="text-xs text-muted-foreground mb-0.5">{t("branch_summary.shift_diff")}</p>
                   <p className={`text-base font-bold ${diffColor}`}>
                     {Math.abs(s.difference) < 0.001
-                      ? "✓ مطابق"
+                      ? t("branchSummary.diff_matched")
                       : `${s.difference > 0 ? "+" : "−"}${fmt(Math.abs(s.difference))}`}
                   </p>
                   {Math.abs(s.difference) >= 0.001 && <p className="text-xs text-muted-foreground">{omr}</p>}
@@ -311,7 +311,7 @@ export default function BranchSummary() {
   const closeShiftMutation = useMutation({
     mutationFn: async (shiftId: number) => {
       if (!closeActualCash || parseFloat(closeActualCash) < 0)
-        throw new Error("أدخل المبلغ النقدي الفعلي");
+        throw new Error(t("branchSummary.close_shift_error_amount"));
       const res = await fetch(`/api/shifts/${shiftId}/close`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -322,7 +322,7 @@ export default function BranchSummary() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "تم إغلاق الوردية بنجاح" });
+      toast({ title: t("branchSummary.close_shift_success") });
       setCloseOpen(false); setCloseActualCash(""); setCloseError(null);
       queryClient.invalidateQueries({ queryKey: ["branch-summary"] });
       queryClient.invalidateQueries({ queryKey: ["shifts"] });
@@ -354,12 +354,12 @@ export default function BranchSummary() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "تم تسجيل الحركة" });
+      toast({ title: t("branchSummary.movement_recorded") });
       setMovOpen(false); setMovAmount(""); setMovNote("");
       queryClient.invalidateQueries({ queryKey: ["branch-summary"] });
       queryClient.invalidateQueries({ queryKey: ["cash-movements"] });
     },
-    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("branchSummary.error_label"), description: e.message, variant: "destructive" }),
   });
 
   const { data: branches = [] } = useQuery<Branch[]>({
@@ -378,7 +378,7 @@ export default function BranchSummary() {
       const p = new URLSearchParams({ date });
       if (effectiveBranchId) p.set("branchId", effectiveBranchId);
       const r = await fetch(`/api/branch-summary?${p}`, { credentials: "include" });
-      if (!r.ok) throw new Error("فشل جلب البيانات");
+      if (!r.ok) throw new Error(t("branchSummary.fetch_error"));
       return r.json();
     },
     enabled: !!effectiveBranchId || !isOwnerOrAdmin,
@@ -421,7 +421,7 @@ export default function BranchSummary() {
         <div>
           <h1 className="text-2xl font-bold">{t("branch_summary.title")}</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            {data?.branchName ?? "جارٍ التحميل..."}
+            {data?.branchName ?? t("branchSummary.loading")}
             {lastRefresh && (
               <span className="me-2 text-xs opacity-60">
                 {t("branch_summary.last_refresh")} {lastRefresh}
@@ -469,12 +469,12 @@ export default function BranchSummary() {
               }}
             >
               <XCircle className="h-3.5 w-3.5" />
-              إغلاق الوردية
+              {t("branchSummary.close_shift_btn")}
             </Button>
           )}
           <Button size="sm" className="gap-1 bg-pink-600 hover:bg-pink-700" onClick={() => setMovOpen(true)}>
             <PlusCircle className="h-3.5 w-3.5" />
-            تسجيل حركة نقدية
+            {t("branchSummary.record_movement_btn")}
           </Button>
         </div>
       </div>
@@ -484,7 +484,7 @@ export default function BranchSummary() {
         <DialogContent className="max-w-sm" dir="rtl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-700">
-              <XCircle className="w-4 h-4" /> إغلاق الوردية
+              <XCircle className="w-4 h-4" /> {t("branchSummary.close_shift_dialog_title")}
             </DialogTitle>
           </DialogHeader>
           {openShift && (
@@ -492,19 +492,19 @@ export default function BranchSummary() {
               {/* معلومات الوردية */}
               <div className="rounded-xl border bg-muted/30 px-4 py-3 space-y-1 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">الكاشير</span>
+                  <span className="text-muted-foreground">{t("branchSummary.close_shift_cashier_label")}</span>
                   <span className="font-medium">{openShift.cashierName}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">بدأت</span>
+                  <span className="text-muted-foreground">{t("branchSummary.close_shift_started_label")}</span>
                   <span className="font-medium">{fmtTime(openShift.startedAt)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">مبيعات الوردية</span>
+                  <span className="text-muted-foreground">{t("branchSummary.close_shift_sales_label")}</span>
                   <span className="font-bold text-emerald-600">{fmt(openShift.totalSales)} {omr}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">الكاش المحسوب في الصندوق</span>
+                  <span className="text-muted-foreground">{t("branchSummary.close_shift_drawer_label")}</span>
                   <span className="font-bold text-blue-600">
                     {today?.actualCashInDrawer != null
                       ? `${fmt(today.actualCashInDrawer)} ${omr}`
@@ -523,9 +523,9 @@ export default function BranchSummary() {
               {/* المبلغ الفعلي */}
               <div className="space-y-1">
                 <label className="text-sm font-medium">
-                  المبلغ النقدي الفعلي في الصندوق (ر.ع)
+                  {t("branchSummary.close_shift_amount_label")}
                 </label>
-                <p className="text-xs text-muted-foreground">أدخل المبلغ الذي عددته فعلياً في الصندوق</p>
+                <p className="text-xs text-muted-foreground">{t("branchSummary.close_shift_amount_hint")}</p>
                 <Input
                   type="number"
                   step="0.001"
@@ -545,8 +545,8 @@ export default function BranchSummary() {
                   }`}>
                     {(() => {
                       const diff = parseFloat(closeActualCash) - today.actualCashInDrawer;
-                      if (Math.abs(diff) < 0.001) return "مطابق للمحسوب";
-                      return `فرق عن المحسوب: ${diff > 0 ? "+" : ""}${fmt(diff)} ${omr}`;
+                      if (Math.abs(diff) < 0.001) return t("branchSummary.close_shift_matched");
+                      return `${t("branchSummary.close_shift_diff_prefix")} ${diff > 0 ? "+" : ""}${fmt(diff)} ${omr}`;
                     })()}
                   </p>
                 )}
@@ -557,7 +557,7 @@ export default function BranchSummary() {
                 onClick={() => closeShiftMutation.mutate(openShift.id)}
                 disabled={!closeActualCash || parseFloat(closeActualCash) < 0 || closeShiftMutation.isPending}
               >
-                {closeShiftMutation.isPending ? "جارٍ الإغلاق..." : "تأكيد إغلاق الوردية"}
+                {closeShiftMutation.isPending ? t("branchSummary.close_shift_submitting") : t("branchSummary.close_shift_confirm")}
               </Button>
             </div>
           )}
@@ -569,7 +569,7 @@ export default function BranchSummary() {
         <DialogContent className="max-w-sm" dir="rtl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Wallet className="w-4 h-4" /> تسجيل حركة نقدية
+              <Wallet className="w-4 h-4" /> {t("branchSummary.record_movement_dialog_title")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-1">
@@ -586,7 +586,7 @@ export default function BranchSummary() {
                 }`}
               >
                 <ArrowUp className="w-4 h-4" />
-                خروج من الصندوق
+                {t("branchSummary.movement_out_label")}
               </button>
               <button
                 type="button"
@@ -598,7 +598,7 @@ export default function BranchSummary() {
                 }`}
               >
                 <ArrowDown className="w-4 h-4" />
-                دخول للصندوق
+                {t("branchSummary.movement_in_label")}
               </button>
             </div>
 
@@ -621,7 +621,7 @@ export default function BranchSummary() {
 
             {/* المبلغ */}
             <div className="space-y-1">
-              <label className="text-sm font-medium">المبلغ (ر.ع)</label>
+              <label className="text-sm font-medium">{t("branchSummary.movement_amount_label")}</label>
               <Input
                 type="number" step="0.001" min="0.001"
                 value={movAmount}
@@ -633,11 +633,11 @@ export default function BranchSummary() {
 
             {/* ملاحظة */}
             <div className="space-y-1">
-              <label className="text-sm font-medium">ملاحظة (اختياري)</label>
+              <label className="text-sm font-medium">{t("branchSummary.movement_note_label")}</label>
               <Input
                 value={movNote}
                 onChange={e => setMovNote(e.target.value)}
-                placeholder="مثال: تسليم وردية الصباح"
+                placeholder={t("branchSummary.movement_note_placeholder")}
               />
             </div>
 
@@ -646,7 +646,7 @@ export default function BranchSummary() {
               onClick={() => addMovementMutation.mutate()}
               disabled={!movAmount || parseFloat(movAmount) <= 0 || addMovementMutation.isPending}
             >
-              {addMovementMutation.isPending ? "جارٍ الحفظ..." : "تسجيل الحركة"}
+              {addMovementMutation.isPending ? t("branchSummary.movement_saving") : t("branchSummary.movement_submit")}
             </Button>
           </div>
         </DialogContent>
@@ -705,13 +705,13 @@ export default function BranchSummary() {
                     <User className="h-7 w-7 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-muted-foreground font-medium">إجمالي النقد بعهدة الموظف</p>
+                    <p className="text-sm text-muted-foreground font-medium">{t("branchSummary.custody_title")}</p>
                     <p className="text-3xl font-bold text-emerald-700 leading-none mt-0.5">
                       {fmt(data?.custody?.totalEmployeeCashCustody ?? 0)}
                       <span className="text-lg font-medium text-emerald-600 me-1">{omr}</span>
                     </p>
                     <p className="text-xs text-muted-foreground mt-1.5">
-                      يشمل نقد الدرج + النقد المرحّل/المحتفظ به خارج الصندوق
+                      {t("branchSummary.custody_subtitle")}
                     </p>
                   </div>
                 </div>
@@ -721,46 +721,46 @@ export default function BranchSummary() {
                   <div className="rounded-xl border-2 border-blue-200 bg-blue-50 px-4 py-3">
                     <div className="flex items-center gap-2 mb-1">
                       <Briefcase className="w-4 h-4 text-blue-600" />
-                      <p className="text-xs text-blue-700 font-semibold">نقد داخل الدرج الحالي</p>
+                      <p className="text-xs text-blue-700 font-semibold">{t("branchSummary.custody_drawer_title")}</p>
                     </div>
                     <p className="text-2xl font-bold text-blue-700">
                       {fmt(data?.custody?.drawerCash ?? 0)}
                       <span className="text-sm font-medium text-blue-600 me-1">{omr}</span>
                     </p>
                     {(data?.custody?.currentShiftId ?? null) === null && (
-                      <p className="text-xs text-muted-foreground mt-1">لا توجد وردية مفتوحة</p>
+                      <p className="text-xs text-muted-foreground mt-1">{t("branchSummary.custody_no_open_shift")}</p>
                     )}
                   </div>
                   <div className="rounded-xl border-2 border-amber-200 bg-amber-50 px-4 py-3">
                     <div className="flex items-center gap-2 mb-1">
                       <HandCoins className="w-4 h-4 text-amber-600" />
-                      <p className="text-xs text-amber-700 font-semibold">نقد مرحّل / خارج الصندوق</p>
+                      <p className="text-xs text-amber-700 font-semibold">{t("branchSummary.custody_outside_title")}</p>
                     </div>
                     <p className="text-2xl font-bold text-amber-700">
                       {fmt(data?.custody?.outsideDrawerCash ?? 0)}
                       <span className="text-sm font-medium text-amber-600 me-1">{omr}</span>
                     </p>
-                    <p className="text-xs text-muted-foreground mt-1">عُهدة بحوزة الموظف خارج الدرج</p>
+                    <p className="text-xs text-muted-foreground mt-1">{t("branchSummary.custody_outside_sub")}</p>
                   </div>
                 </div>
 
                 {/* معادلة الحساب التراكمية */}
                 <div className="bg-white/70 rounded-xl border border-emerald-100 px-4 py-3">
-                  <p className="text-xs text-muted-foreground mb-2 font-medium">طريقة الحساب (تراكمياً):</p>
+                  <p className="text-xs text-muted-foreground mb-2 font-medium">{t("branchSummary.custody_formula_title")}</p>
                   <div className="flex flex-wrap items-center gap-1.5 text-sm">
                     <span className="font-semibold text-emerald-700">{fmt(data?.custody?.cumulativeCashSales ?? 0)}</span>
-                    <span className="text-xs text-muted-foreground">مبيعات نقدية</span>
+                    <span className="text-xs text-muted-foreground">{t("branchSummary.custody_cash_sales")}</span>
                     <span className="text-emerald-500 font-bold">+</span>
                     <span className="font-semibold text-teal-700">{fmt(data?.custody?.cumulativeOwnerInflows ?? 0)}</span>
-                    <span className="text-xs text-muted-foreground">واردات من المالك</span>
+                    <span className="text-xs text-muted-foreground">{t("branchSummary.custody_owner_inflows")}</span>
                     <span className="text-red-500 font-bold">−</span>
                     <span className="font-semibold text-red-700">{fmt(data?.custody?.cumulativeOwnerOutflows ?? 0)}</span>
-                    <span className="text-xs text-muted-foreground">مسلّم للمالك</span>
+                    <span className="text-xs text-muted-foreground">{t("branchSummary.custody_owner_outflows")}</span>
                     {(data?.custody?.cumulativeCashExpenses ?? 0) > 0 && (
                       <>
                         <span className="text-red-500 font-bold">−</span>
                         <span className="font-semibold text-red-700">{fmt(data!.custody.cumulativeCashExpenses)}</span>
-                        <span className="text-xs text-muted-foreground">مصروفات نقدية</span>
+                        <span className="text-xs text-muted-foreground">{t("branchSummary.custody_cash_expenses")}</span>
                       </>
                     )}
                     {Math.abs(data?.custody?.cumulativeAdjustments ?? 0) > 0.001 && (
@@ -769,7 +769,7 @@ export default function BranchSummary() {
                           {(data?.custody?.cumulativeAdjustments ?? 0) >= 0 ? "+" : "−"}
                         </span>
                         <span className="font-semibold text-orange-700">{fmt(Math.abs(data!.custody.cumulativeAdjustments))}</span>
-                        <span className="text-xs text-muted-foreground">تسويات</span>
+                        <span className="text-xs text-muted-foreground">{t("branchSummary.custody_adjustments")}</span>
                       </>
                     )}
                     <span className="text-muted-foreground">=</span>
@@ -782,7 +782,7 @@ export default function BranchSummary() {
                   <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-                      <p className="text-xs text-emerald-700 font-medium">مبيعات نقدية اليوم</p>
+                      <p className="text-xs text-emerald-700 font-medium">{t("branchSummary.custody_today_cash_sales")}</p>
                     </div>
                     <p className="text-base font-bold text-emerald-700">+{fmt(data?.custody?.todayCashSales ?? 0)} {omr}</p>
                   </div>
@@ -790,7 +790,7 @@ export default function BranchSummary() {
                   <div className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2.5">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <ArrowDownCircle className="w-3.5 h-3.5 text-teal-600" />
-                      <p className="text-xs text-teal-700 font-medium">واردات من المالك</p>
+                      <p className="text-xs text-teal-700 font-medium">{t("branchSummary.custody_today_inflows")}</p>
                     </div>
                     <p className="text-base font-bold text-teal-700">+{fmt(data?.custody?.ownerInflows ?? 0)} {omr}</p>
                   </div>
@@ -798,7 +798,7 @@ export default function BranchSummary() {
                   <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <HandCoins className="w-3.5 h-3.5 text-blue-600" />
-                      <p className="text-xs text-blue-700 font-medium">مسلّم للمالك</p>
+                      <p className="text-xs text-blue-700 font-medium">{t("branchSummary.custody_today_outflows")}</p>
                     </div>
                     <p className="text-base font-bold text-blue-700">−{fmt(data?.custody?.ownerOutflows ?? 0)} {omr}</p>
                   </div>
@@ -806,7 +806,7 @@ export default function BranchSummary() {
                   <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <ShoppingBag className="w-3.5 h-3.5 text-red-600" />
-                      <p className="text-xs text-red-700 font-medium">مصروفات نقدية</p>
+                      <p className="text-xs text-red-700 font-medium">{t("branchSummary.custody_today_expenses")}</p>
                     </div>
                     <p className="text-base font-bold text-red-700">−{fmt(data?.custody?.cashExpenses ?? 0)} {omr}</p>
                   </div>
@@ -816,7 +816,7 @@ export default function BranchSummary() {
                       {(data?.custody?.adjustments ?? 0) >= 0
                         ? <Plus className="w-3.5 h-3.5 text-orange-600" />
                         : <Minus className="w-3.5 h-3.5 text-orange-600" />}
-                      <p className="text-xs text-orange-700 font-medium">تسويات نقدية</p>
+                      <p className="text-xs text-orange-700 font-medium">{t("branchSummary.custody_today_adjustments")}</p>
                     </div>
                     <p className="text-base font-bold text-orange-700">
                       {(data?.custody?.adjustments ?? 0) >= 0 ? "+" : "−"}
@@ -877,7 +877,7 @@ export default function BranchSummary() {
               <CardHeader className="pb-2 pt-4">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
                   <ArrowDownUp className="h-4 w-4 text-muted-foreground" />
-                  حركات الصندوق ({movements.length})
+                  {t("branchSummary.movements_title")} ({movements.length})
                 </CardTitle>
               </CardHeader>
               <CardContent className="pb-4 space-y-4">
@@ -886,7 +886,7 @@ export default function BranchSummary() {
                 {inMovements.length > 0 && (
                   <div className="space-y-1.5">
                     <p className="text-xs font-semibold text-teal-700 flex items-center gap-1.5">
-                      <ArrowDownCircle className="w-3.5 h-3.5" /> واردات ({inMovements.length})
+                      <ArrowDownCircle className="w-3.5 h-3.5" /> {t("branchSummary.inflows_label")} ({inMovements.length})
                     </p>
                     {inMovements.map(m => {
                       const meta = getMovMeta(m.type);
@@ -912,7 +912,7 @@ export default function BranchSummary() {
                 {outMovements.length > 0 && (
                   <div className="space-y-1.5">
                     <p className="text-xs font-semibold text-red-700 flex items-center gap-1.5">
-                      <ArrowUpCircle className="w-3.5 h-3.5" /> مخرجات ({outMovements.length})
+                      <ArrowUpCircle className="w-3.5 h-3.5" /> {t("branchSummary.outflows_label")} ({outMovements.length})
                     </p>
                     {outMovements.map(m => {
                       const meta = getMovMeta(m.type);

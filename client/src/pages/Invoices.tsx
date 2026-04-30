@@ -59,7 +59,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
         credentials: "include",
         body: JSON.stringify({ paymentReference: ref }),
       });
-      if (!res.ok) throw new Error("فشل الحفظ");
+      if (!res.ok) throw new Error(t("invoices.save_failed"));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/sales", saleId] });
@@ -109,7 +109,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
       <div class="row"><span>${t("common.branch")}:</span><span>${detail.branchName || "—"}</span></div>
       <div class="row"><span>${t("invoices.table_cashier")}:</span><span>${detail.cashierName || "—"}</span></div>
       <div class="row"><span>${t("invoices.table_payment")}:</span><span>${pmText}</span></div>
-      ${detail.paymentReference ? `<div class="row"><span>الرقم المرجعي:</span><span dir="ltr">${detail.paymentReference}</span></div>` : ""}
+      ${detail.paymentReference ? `<div class="row"><span>${t("invoices.payment_reference_label")}</span><span dir="ltr">${detail.paymentReference}</span></div>` : ""}
       <div class="sep"></div>
       <table>${itemsHtml}</table>
       <div class="sep"></div>
@@ -131,16 +131,16 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
     const items = (detail.items || []).map((i: any) =>
       `  • ${i.productName} × ${i.quantity} = ${omr(i.total)} ر.ع`
     ).join("\n");
-    const customerLine = detail.customerName ? `العميلة: ${detail.customerName}\n` : "";
+    const customerLine = detail.customerName ? `${t("invoices.customer_label")} ${detail.customerName}\n` : "";
     const msg = encodeURIComponent(
-      `🌸 *لمسة أنوثة* 🌸\n` +
+      `🌸 *${t("app.name")}* 🌸\n` +
       `────────────────\n` +
-      `رقم الفاتورة: ${detail.invoiceNumber || `#${detail.id}`}\n` +
-      `التاريخ: ${fmtDate(detail.createdAt)}\n` +
+      `${t("invoices.invoice_number_label")} ${detail.invoiceNumber || `#${detail.id}`}\n` +
+      `${t("common.date")}: ${fmtDate(detail.createdAt)}\n` +
       customerLine +
-      `\nالمنتجات:\n${items}\n\n` +
-      `الإجمالي: *${omr(detail.total)} ر.ع*\n\n` +
-      `شكراً لتسوقكم معنا 💝`
+      `\n${t("invoices.products_label")}\n${items}\n\n` +
+      `${t("invoices.total_label")} *${omr(detail.total)} ${t("common.omr")}*\n\n` +
+      `${t("pos.receipt_thanks")} 💝`
     );
     const rawPhone = (detail.customerPhone || "").replace(/\D/g, "");
     const phone = rawPhone
@@ -202,7 +202,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
     <div><label>${t("common.branch")}</label><span>${detail.branchName || "—"}</span></div>
     <div><label>${t("invoices.table_cashier")}</label><span>${detail.cashierName || "—"}</span></div>
     <div><label>${t("invoices.table_payment")}</label><span>${pmText}</span></div>
-    ${detail.paymentReference ? `<div><label>الرقم المرجعي</label><span dir="ltr">${detail.paymentReference}</span></div>` : ""}
+    ${detail.paymentReference ? `<div><label>${t("invoices.payment_reference")}</label><span dir="ltr">${detail.paymentReference}</span></div>` : ""}
   </div>
   <table>
     <thead>
@@ -244,7 +244,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
               {detail && (
                 <>
                   <Button size="sm" variant="outline" className="gap-1 border-emerald-500 text-emerald-700 hover:bg-emerald-50" onClick={handleWhatsApp} data-testid="button-whatsapp-invoice">
-                    <MessageSquare className="w-4 h-4" /> واتساب
+                    <MessageSquare className="w-4 h-4" /> {t("common.whatsapp")}
                   </Button>
                   <Button size="sm" variant="outline" className="gap-1" onClick={() => window.open(`/api/exports/invoice.pdf?id=${detail.id}`, "_blank")} data-testid="button-pdf-invoice">
                     <FileText className="w-4 h-4" />
@@ -292,7 +292,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
               </div>
               {detail.customerName && (
                 <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 col-span-2 md:col-span-1">
-                  <p className="text-xs text-emerald-700">العميلة</p>
+                  <p className="text-xs text-emerald-700">{t("invoices.customer")}</p>
                   <p className="font-bold mt-1 text-emerald-900">{detail.customerName}</p>
                   {detail.customerPhone && (
                     <p className="text-xs text-emerald-600 mt-0.5" dir="ltr">{detail.customerPhone}</p>
@@ -314,7 +314,7 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
                       onChange={e => setRefInput(e.target.value)}
                       className="h-7 text-xs w-40 font-mono"
                       dir="ltr"
-                      placeholder="أدخل الرقم المرجعي"
+                      placeholder={t("invoices.enter_payment_reference")}
                       autoFocus
                       onKeyDown={e => {
                         if (e.key === "Enter") saveRef.mutate(refInput);
@@ -335,12 +335,12 @@ function InvoiceDetailModal({ saleId, open, onClose }: { saleId: number | null; 
                         # {detail.paymentReference}
                       </span>
                     ) : (
-                      <span className="text-xs text-muted-foreground italic">لا يوجد رقم مرجعي</span>
+                      <span className="text-xs text-muted-foreground italic">{t("invoices.no_payment_reference")}</span>
                     )}
                     <button
                       onClick={() => { setRefInput(detail.paymentReference || ""); setEditingRef(true); }}
                       className="text-gray-400 hover:text-blue-600 transition-colors p-0.5 rounded"
-                      title="تعديل الرقم المرجعي"
+                      title={t("invoices.edit_payment_reference")}
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
@@ -528,7 +528,7 @@ export default function Invoices() {
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <Input
-              placeholder="بحث برقم الفاتورة أو اسم العميلة أو الهاتف أو الرقم المرجعي..."
+              placeholder={t("invoices.search_placeholder_advanced")}
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pe-10 h-9 text-sm"
@@ -588,10 +588,10 @@ export default function Invoices() {
               className={`h-8 text-xs gap-1 self-end ${hasPendingChange ? "bg-pink-600 hover:bg-pink-700 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}
               onClick={applyFilters}
             >
-              <RefreshCw className="w-3 h-3" /> تطبيق
+              <RefreshCw className="w-3 h-3" /> {t("common.apply")}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">{salesData.length} فاتورة</p>
+          <p className="text-xs text-muted-foreground">{salesData.length} {t("invoices.invoice_label")}</p>
         </CardContent>
       </Card>
 
@@ -641,10 +641,10 @@ export default function Invoices() {
                   <TableRow>
                     <TableHead className="w-[120px]">{t("invoices.table_invoice_no")}</TableHead>
                     {isOwnerOrAdmin && <TableHead>{t("invoices.table_branch")}</TableHead>}
-                    <TableHead>العميلة</TableHead>
+                    <TableHead>{t("invoices.customer")}</TableHead>
                     <TableHead>{t("invoices.table_cashier")}</TableHead>
                     <TableHead className="text-center">{t("invoices.table_payment")}</TableHead>
-                    <TableHead className="text-center">الرقم المرجعي</TableHead>
+                    <TableHead className="text-center">{t("invoices.payment_reference")}</TableHead>
                     <TableHead className="text-center font-mono">{t("invoices.table_total")}</TableHead>
                     <TableHead className="text-center">{t("invoices.table_date")}</TableHead>
                     <TableHead className="w-[100px] text-center">{t("common.actions")}</TableHead>
@@ -658,7 +658,7 @@ export default function Invoices() {
                       <TableCell>
                         {s.customerName
                           ? <span className="text-emerald-700 font-medium">{s.customerName}</span>
-                          : <span className="text-gray-400 text-xs">زائر</span>}
+                          : <span className="text-gray-400 text-xs">{t("invoices.guest")}</span>}
                       </TableCell>
                       <TableCell>{s.cashierName || "—"}</TableCell>
                       <TableCell className="text-center">

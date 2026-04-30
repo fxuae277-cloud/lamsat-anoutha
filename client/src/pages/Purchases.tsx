@@ -689,7 +689,7 @@ function PurchasesTab() {
         setQpBarcode(barcode);
         setQpName(""); setQpColor(""); setQpSize(""); setQpPrice(""); setQpCost("");
         setShowQuickProduct(true);
-        toast({ title: "الباركود غير موجود", description: `${barcode} — يمكنك إضافته كمنتج جديد`, variant: "destructive" });
+        toast({ title: t("purchases.barcode_not_found_title"), description: t("purchases.barcode_not_found_desc", { barcode }), variant: "destructive" });
       }
     } finally {
       setModalBarcodeLoading(false);
@@ -723,7 +723,7 @@ function PurchasesTab() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      if (!newSupplierId) throw new Error("اختر المورد");
+      if (!newSupplierId) throw new Error(t("purchases.select_supplier_error"));
       const res = await apiRequest("POST", "/api/purchases", {
         supplierId: Number(newSupplierId),
         // branchId مُتجاهل — القاعدة: المخزن المركزي دائماً
@@ -773,7 +773,7 @@ function PurchasesTab() {
       qc.invalidateQueries({ queryKey: ["/api/products"] });
       setSelectedInvoice(inv.id);
       if (wizardDirectApprove) {
-        toast({ title: "تم اعتماد الفاتورة وتحديث المخزون ✓" });
+        toast({ title: t("purchases.invoice_approved_success") });
         setWizardSuccess(true);
       } else {
         toast({ title: t("purchases.invoice_created") });
@@ -806,7 +806,7 @@ function PurchasesTab() {
       const productId = addProductId ? Number(addProductId) : null;
       const variantId = addVariantId;
 
-      if (!productId) throw new Error("يرجى اختيار منتج من القائمة أولاً");
+      if (!productId) throw new Error(t("purchases.select_product_error"));
 
       const res = await apiRequest("POST", `/api/purchases/${selectedInvoice}/items`, {
         productId,
@@ -944,7 +944,7 @@ function PurchasesTab() {
       qc.invalidateQueries({ queryKey: ["/api/purchases"] });
       setShowDeleteConfirm(null);
       setSelectedIds(new Set());
-      toast({ title: "تم حذف الفاتورة" });
+      toast({ title: t("purchases.invoice_deleted") });
     },
     onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
@@ -1197,6 +1197,7 @@ function PurchasesTab() {
         ${!isPendingInv ? `<td style="text-align:left;color:#059669;font-weight:bold">${omr(it.unitCostFinal)}</td>` : ""}
       </tr>`).join("");
 
+    // i18n-ignore-block-start — Arabic-only print receipt HTML template
     const html = `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
@@ -1310,6 +1311,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
 </body>
 </html>`;
 
+    // i18n-ignore-block-end
     const w = window.open("", "_blank", "width=900,height=700");
     if (w) { w.document.write(html); w.document.close(); }
   };
@@ -1342,13 +1344,13 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                       fd.append("file", file);
                       const res = await fetch(`/api/purchases/${selectedInvoice}/attachment`, { method: "POST", body: fd, credentials: "include" });
                       const data = await res.json();
-                      if (!data.ok) toast({ title: "فشل رفع " + file.name, description: data.error, variant: "destructive" });
+                      if (!data.ok) toast({ title: t("purchases.upload_failed_file", { filename: file.name }), description: data.error, variant: "destructive" });
                     }
                     qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
                     qc.invalidateQueries({ queryKey: ["/api/purchases"] });
-                    toast({ title: `تم رفع ${files.length} مرفق ✓` });
+                    toast({ title: t("purchases.upload_success_count", { count: files.length }) });
                   } catch (err: any) {
-                    toast({ title: "خطأ", description: err.message, variant: "destructive" });
+                    toast({ title: t("common.error"), description: err.message, variant: "destructive" });
                   } finally {
                     setAttachUploading(false);
                   }
@@ -1356,7 +1358,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
               <Button variant="outline" asChild disabled={attachUploading} className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50">
                 <span>
                   {attachUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                  رفع مرفقات {((invoiceDetail as any)?.attachmentUrls?.length > 0) && `(${(invoiceDetail as any).attachmentUrls.length})`}
+                  {t("purchases.upload_attachments_btn")} {((invoiceDetail as any)?.attachmentUrls?.length > 0) && `(${(invoiceDetail as any).attachmentUrls.length})`}
                 </span>
               </Button>
             </label>
@@ -1365,7 +1367,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
             {((invoiceDetail as any)?.attachmentUrls?.length > 0 || (invoiceDetail as any)?.attachmentUrl) && (
               <Button variant="outline" size="sm" className="gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
                 onClick={() => setShowAttachment(true)}>
-                <FileText className="w-4 h-4" /> عرض المرفقات
+                <FileText className="w-4 h-4" /> {t("purchases.view_attachments_btn")}
                 {((invoiceDetail as any)?.attachmentUrls?.length > 0) && ` (${(invoiceDetail as any).attachmentUrls.length})`}
               </Button>
             )}
@@ -1374,7 +1376,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
               {statusLabel}
             </Badge>
             <Button variant="outline" className="gap-2" onClick={handlePrintInvoice}>
-              <Printer className="w-4 h-4" /> طباعة الفاتورة
+              <Printer className="w-4 h-4" /> {t("purchases.print_invoice_btn")}
             </Button>
             <Button variant="outline" onClick={() => setSelectedInvoice(null)} data-testid="button-back-to-list">{t("purchases.back_to_list")}</Button>
           </div>
@@ -1396,7 +1398,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                       <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                       <Input
                         className="pe-9"
-                        placeholder="ابحث بالاسم أو الباركود أو رقم الموديل..."
+                        placeholder={t("purchases.search_by_invoice")}
                         value={addSearch}
                         data-testid="input-add-product-name"
                         onChange={e => {
@@ -1452,7 +1454,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                                   }}
                                 >
                                   <Plus className="w-4 h-4" />
-                                  إضافة "{addSearch}" كمنتج جديد
+                                  {t("purchases.add_as_new_product", { name: addSearch })}
                                 </button>
                               )}
                             </>
@@ -1479,12 +1481,12 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                           const prodName = prod?.name || barcode;
                           setAddProductName(prodName);
                           setAddSearch(prodName);
-                          toast({ title: "تم العثور على المنتج", description: `${prodName}${variant.color ? " — " + variant.color : ""}${variant.size ? " / " + variant.size : ""}` });
+                          toast({ title: t("purchases.product_found_title"), description: `${prodName}${variant.color ? " — " + variant.color : ""}${variant.size ? " / " + variant.size : ""}` });
                         } else {
                           setQpBarcode(barcode);
                           setQpName(""); setQpColor(""); setQpSize(""); setQpPrice(""); setQpCost("");
                           setShowQuickProduct(true);
-                          toast({ title: "الباركود غير موجود", description: `${barcode} — يمكنك إضافته كمنتج جديد`, variant: "destructive" });
+                          toast({ title: t("purchases.barcode_not_found_title"), description: t("purchases.barcode_not_found_desc", { barcode }), variant: "destructive" });
                         }
                       } catch (e) {
                         toast({ title: t("common.error"), description: String(e), variant: "destructive" });
@@ -1496,7 +1498,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                 {/* المتغيرات (لون / مقاس / نوع) بعد اختيار المنتج */}
                 {addProductId && productVariants.length > 0 && (
                   <div className="space-y-1">
-                    <label className="text-sm font-medium text-muted-foreground text-xs">اختر المتغير (لون / مقاس / نوع)</label>
+                    <label className="text-sm font-medium text-muted-foreground text-xs">{t("purchases.select_variant_label")}</label>
                     <div className="flex flex-wrap gap-2">
                       {productVariants.map(v => {
                         const label = [v.color, v.size].filter(Boolean).join(" / ") || v.sku || v.barcode || `#${v.id}`;
@@ -1531,7 +1533,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                     setQpBarcode(""); setQpColor(""); setQpSize(""); setQpCost("");
                     setShowQuickProduct(true);
                   }} data-testid="button-quick-create-variant">
-                    <Plus className="w-3 h-3" /> إضافة متغير جديد لهذا المنتج
+                    <Plus className="w-3 h-3" /> {t("purchases.add_variant_for_product")}
                   </Button>
                 )}
 
@@ -1547,7 +1549,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                   </div>
                   {addProductId && (
                     <div className="space-y-1 flex-1">
-                      <label className="text-sm font-medium text-muted-foreground text-xs">المنتج المختار</label>
+                      <label className="text-sm font-medium text-muted-foreground text-xs">{t("purchases.selected_product_label")}</label>
                       <p className="text-sm font-medium text-primary bg-primary/5 px-3 py-2 rounded-lg border border-primary/20 flex items-center justify-between">
                         {addProductName}
                         <button type="button" className="text-muted-foreground hover:text-red-500 me-2" onClick={() => { setAddProductId(""); setAddProductName(""); setAddSearch(""); setAddVariantId(null); setAddColor(""); setAddSize(""); }}>
@@ -1795,7 +1797,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
             <DialogHeader className="px-5 py-3.5 border-b flex-shrink-0">
               <DialogTitle className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-blue-600" />
-                مرفقات الفاتورة — #{invoiceDetail?.invoiceNumber}
+                {t("purchases.invoice_attachments_title")} — #{invoiceDetail?.invoiceNumber}
               </DialogTitle>
             </DialogHeader>
             <div className="flex-1 overflow-auto p-4 flex flex-col gap-6">
@@ -1804,17 +1806,17 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                 const attachments: any[] = (invoiceDetail as any)?.attachments?.length > 0
                   ? (invoiceDetail as any).attachments
                   : (invoiceDetail as any)?.attachmentUrls?.length > 0
-                    ? (invoiceDetail as any).attachmentUrls.map((url: string, i: number) => ({ id: null, url, filename: `مرفق ${i + 1}` }))
+                    ? (invoiceDetail as any).attachmentUrls.map((url: string, i: number) => ({ id: null, url, filename: t("purchases.attachment_n", { n: i + 1 }) }))
                     : (invoiceDetail as any)?.attachmentUrl
-                      ? [{ id: null, url: (invoiceDetail as any).attachmentUrl, filename: "مرفق 1" }]
+                      ? [{ id: null, url: (invoiceDetail as any).attachmentUrl, filename: t("purchases.attachment_n", { n: 1 }) }]
                       : [];
-                if (attachments.length === 0) return <p className="text-center text-muted-foreground py-8">لا توجد مرفقات</p>;
+                if (attachments.length === 0) return <p className="text-center text-muted-foreground py-8">{t("purchases.no_attachments")}</p>;
                 return attachments.map((att: any, idx: number) => {
                   const url: string = att.url || att;
                   const isLegacy = typeof url === "string" && url.startsWith("/uploads/");
                   const isPdf = typeof url === "string" && url.toLowerCase().includes(".pdf");
                   const attachId = att.id;
-                  const label = att.filename && att.filename !== `مرفق ${idx + 1}` ? att.filename : `مرفق ${idx + 1}`;
+                  const label = att.filename && att.filename !== t("purchases.attachment_n", { n: idx + 1 }) ? att.filename : t("purchases.attachment_n", { n: idx + 1 });
                   return (
                     <div key={idx} className="flex flex-col gap-2">
                       {/* اسم الملف + زر حذف */}
@@ -1822,7 +1824,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                         <span className="text-sm text-muted-foreground">{label}</span>
                         {!isLegacy && (
                           <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                            title="حذف المرفق"
+                            title={t("purchases.delete_attachment_title")}
                             onClick={async () => {
                               if (!selectedInvoice) return;
                               try {
@@ -1834,11 +1836,11 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                                 if (d.ok) {
                                   qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
                                   qc.invalidateQueries({ queryKey: ["/api/purchases"] });
-                                  toast({ title: "تم حذف المرفق" });
+                                  toast({ title: t("purchases.attachment_deleted") });
                                   if ((d.attachments?.length ?? 0) === 0) setShowAttachment(false);
                                 }
                               } catch (err: any) {
-                                toast({ title: "فشل الحذف", description: err.message, variant: "destructive" });
+                                toast({ title: t("purchases.attachment_delete_failed"), description: err.message, variant: "destructive" });
                               }
                             }}>
                             <Trash2 className="w-4 h-4" />
@@ -1848,8 +1850,8 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                       {/* المحتوى */}
                       {isLegacy ? (
                         <div className="w-full text-center bg-amber-50 border border-amber-200 rounded-lg p-6">
-                          <p className="text-amber-700 font-medium text-sm">⚠️ الملف لم يعد متاحاً</p>
-                          <p className="text-amber-600 text-xs mt-1">يرجى رفعه مجدداً باستخدام زر "رفع مرفقات".</p>
+                          <p className="text-amber-700 font-medium text-sm">⚠️ {t("purchases.file_unavailable_title")}</p>
+                          <p className="text-amber-600 text-xs mt-1">{t("purchases.file_unavailable_desc")}</p>
                         </div>
                       ) : isPdf ? (
                         <iframe src={url} className="w-full h-[75vh] border rounded-lg" title={label} />
@@ -1859,7 +1861,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                           alt={label}
                           className="w-full max-h-[75vh] object-contain rounded-lg border shadow-sm bg-white cursor-zoom-in"
                           onClick={() => window.open(url, "_blank")}
-                          title="اضغط للعرض الكامل"
+                          title={t("purchases.click_full_view")}
                         />
                       )}
                     </div>
@@ -1875,32 +1877,32 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
           <DialogContent className="max-w-md" dir="rtl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">
-                <FileCheck className="w-5 h-5 text-green-600" /> تأكيد اعتماد الفاتورة
+                <FileCheck className="w-5 h-5 text-green-600" /> {t("purchases.post_confirm_title_label")}
               </DialogTitle>
               <DialogDescription className="text-sm">
-                سيتم تحديث المخزون وتكلفة المنتجات. لا يمكن التراجع عن هذا الإجراء.
+                {t("purchases.post_confirm_desc_text")}
               </DialogDescription>
             </DialogHeader>
 
             {/* ملخص مالي مختصر */}
             <div className="grid grid-cols-2 gap-3 py-2">
               <div className="bg-muted/40 rounded-lg p-3 text-center">
-                <p className="text-xs text-muted-foreground mb-1">عدد الأصناف</p>
+                <p className="text-xs text-muted-foreground mb-1">{t("purchases.items_count_label")}</p>
                 <p className="text-xl font-bold">{items.length}</p>
               </div>
               <div className="bg-muted/40 rounded-lg p-3 text-center">
-                <p className="text-xs text-muted-foreground mb-1">المجموع الفرعي</p>
-                <p className="text-lg font-bold font-mono">{omr(itemsSubtotal)} <span className="text-sm">ر.ع</span></p>
+                <p className="text-xs text-muted-foreground mb-1">{t("purchases.subtotal")}</p>
+                <p className="text-lg font-bold font-mono">{omr(itemsSubtotal)} <span className="text-sm">{t("common.omr")}</span></p>
               </div>
               {extraTotal > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
-                  <p className="text-xs text-amber-600 mb-1">تكاليف إضافية</p>
-                  <p className="text-lg font-bold font-mono text-amber-700">{omr(extraTotal)} <span className="text-sm">ر.ع</span></p>
+                  <p className="text-xs text-amber-600 mb-1">{t("purchases.extra_costs")}</p>
+                  <p className="text-lg font-bold font-mono text-amber-700">{omr(extraTotal)} <span className="text-sm">{t("common.omr")}</span></p>
                 </div>
               )}
               <div className={`bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center ${extraTotal > 0 ? "" : "col-span-2"}`}>
-                <p className="text-xs text-emerald-600 mb-1">الإجمالي النهائي</p>
-                <p className="text-xl font-bold font-mono text-emerald-700">{omr(itemsSubtotal + extraTotal)} <span className="text-sm">ر.ع</span></p>
+                <p className="text-xs text-emerald-600 mb-1">{t("purchases.grand_total")}</p>
+                <p className="text-xl font-bold font-mono text-emerald-700">{omr(itemsSubtotal + extraTotal)} <span className="text-sm">{t("common.omr")}</span></p>
               </div>
             </div>
 
@@ -1908,7 +1910,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
               <Button variant="outline" className="flex-1" onClick={() => setShowPostConfirm(false)}>{t("common.cancel")}</Button>
               <Button className="flex-1 bg-green-600 hover:bg-green-700 gap-2" onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending} data-testid="button-confirm-approve">
                 {approveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileCheck className="w-4 h-4" />}
-                {approveMutation.isPending ? "جاري الاعتماد..." : "اعتماد الفاتورة"}
+                {approveMutation.isPending ? t("purchases.approving") : t("purchases.approve_invoice")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1953,10 +1955,10 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
   // ══════════════════════════════════════════════════════════════
   if (showCreate) {
     const STEPS = [
-      { num: 1, label: "المورد والتاريخ",       arabicNum: "١" },
-      { num: 2, label: "المنتجات",              arabicNum: "٢" },
-      { num: 3, label: "التكاليف الإضافية",    arabicNum: "٣" },
-      { num: 4, label: "المراجعة والاعتماد",   arabicNum: "٤" },
+      { num: 1, label: t("purchases.wizard_step1"), arabicNum: "١" },
+      { num: 2, label: t("purchases.wizard_step2"), arabicNum: "٢" },
+      { num: 3, label: t("purchases.wizard_step3"), arabicNum: "٣" },
+      { num: 4, label: t("purchases.wizard_step4"), arabicNum: "٤" },
     ];
     const canNext1 = !!newSupplierId;
     const canNext2 = modalItems.length > 0;
@@ -1977,22 +1979,22 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
           <div style={{ maxWidth: "860px", margin: "0 auto" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
               <div>
-                <div style={{ fontSize: "11px", color: "#888780", marginBottom: "2px" }}>الموردون والمشتريات</div>
-                <div style={{ fontSize: "18px", fontWeight: 600, color: "#2C2C2A" }}>فاتورة مشتريات جديدة</div>
+                <div style={{ fontSize: "11px", color: "#888780", marginBottom: "2px" }}>{t("purchases.wizard_breadcrumb")}</div>
+                <div style={{ fontSize: "18px", fontWeight: 600, color: "#2C2C2A" }}>{t("purchases.wizard_page_title")}</div>
               </div>
             </div>
             <div style={{ background: "#EAF3DE", border: "0.5px solid #C0DD97", borderRadius: "12px", padding: "36px", textAlign: "center" }}>
               <div style={{ fontSize: "40px", marginBottom: "12px" }}>✅</div>
-              <div style={{ fontSize: "17px", fontWeight: 700, color: "#3B6D11", marginBottom: "4px" }}>تم اعتماد الفاتورة بنجاح!</div>
-              <div style={{ fontSize: "13px", color: "#3B6D11", marginBottom: "20px" }}>تم تحديث المخزون المركزي تلقائيًا</div>
+              <div style={{ fontSize: "17px", fontWeight: 700, color: "#3B6D11", marginBottom: "4px" }}>{t("purchases.wizard_success_title")}</div>
+              <div style={{ fontSize: "13px", color: "#3B6D11", marginBottom: "20px" }}>{t("purchases.wizard_success_desc")}</div>
               <div style={{ display: "flex", justifyContent: "center", gap: "10px" }}>
                 <button onClick={resetCreate}
                   style={{ background: "#D4527E", color: "white", border: "none", padding: "11px 22px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
-                  + فاتورة جديدة
+                  {t("purchases.wizard_new_invoice")}
                 </button>
                 <button onClick={() => { setWizardSuccess(false); setShowCreate(false); }}
                   style={{ background: "white", color: "#2C2C2A", border: "0.5px solid #E5E3DC", padding: "11px 22px", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>
-                  العودة للفواتير
+                  {t("purchases.wizard_back_invoices")}
                 </button>
               </div>
             </div>
@@ -2008,8 +2010,8 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
         {/* ── رأس الصفحة ── */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
           <div>
-            <div style={{ fontSize: "11px", color: "#888780", marginBottom: "2px" }}>الموردون والمشتريات</div>
-            <div style={{ fontSize: "18px", fontWeight: 600, color: "#2C2C2A" }}>فاتورة مشتريات جديدة</div>
+            <div style={{ fontSize: "11px", color: "#888780", marginBottom: "2px" }}>{t("purchases.wizard_breadcrumb")}</div>
+            <div style={{ fontSize: "18px", fontWeight: 600, color: "#2C2C2A" }}>{t("purchases.wizard_page_title")}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <div style={{ fontSize: "12px", color: "#888780", background: "white", border: "0.5px solid #E5E3DC", padding: "6px 12px", borderRadius: "8px" }}>PUR-{invNum}</div>
@@ -2044,33 +2046,33 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
         {wizardStep === 1 && (
           <>
             <div style={{ background: "white", border: "0.5px solid #E5E3DC", borderRadius: "12px", padding: "24px", marginBottom: "12px" }}>
-              <div style={{ fontSize: "13px", fontWeight: 600, color: "#2C2C2A", marginBottom: "16px", paddingBottom: "10px", borderBottom: "0.5px solid #E5E3DC" }}>بيانات الفاتورة الأساسية</div>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: "#2C2C2A", marginBottom: "16px", paddingBottom: "10px", borderBottom: "0.5px solid #E5E3DC" }}>{t("purchases.wizard_basic_data")}</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 <div>
-                  <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>المورد <span style={{ color: "#D4527E" }}>*</span></label>
+                  <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>{t("purchases.supplier")} <span style={{ color: "#D4527E" }}>*</span></label>
                   <div style={{ display: "flex", gap: "6px" }}>
                     <div style={{ position: "relative", flex: 1 }}>
                       <select value={newSupplierId} onChange={e => setNewSupplierId(e.target.value)}
                         style={{ width: "100%", padding: "10px 12px", border: `0.5px solid ${newSupplierId ? "#E5E3DC" : "#D4527E"}`, borderRadius: "8px", fontSize: "13px", appearance: "none", background: "white", color: newSupplierId ? "#2C2C2A" : "#888780", cursor: "pointer" }}>
-                        <option value="">اختر المورد...</option>
+                        <option value="">{t("purchases.select_supplier")}</option>
                         {activeSuppliers.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
                       </select>
                       <span style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#888780", fontSize: "10px", pointerEvents: "none" }}>▼</span>
                     </div>
-                    <button onClick={() => setShowQuickSupplier(true)} title="إضافة مورد جديد"
+                    <button onClick={() => setShowQuickSupplier(true)} title={t("purchases.new_supplier")}
                       style={{ padding: "0 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", background: "white", cursor: "pointer", color: "#D4527E", fontSize: "18px", fontWeight: 600 }}>+</button>
                   </div>
                 </div>
                 <div>
-                  <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>وجهة التخزين</label>
+                  <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>{t("purchases.wizard_storage_label")}</label>
                   <div style={{ padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", background: "#EAF3DE", color: "#27500A", fontWeight: 500 }}>
-                    🏭 المخزن المركزي (تلقائي)
+                    {t("purchases.wizard_storage_auto")}
                   </div>
                 </div>
                 <div>
-                  <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>طريقة الدفع <span style={{ color: "#D4527E" }}>*</span></label>
+                  <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>{t("purchases.payment_method_col")} <span style={{ color: "#D4527E" }}>*</span></label>
                   <div style={{ display: "flex", gap: "8px" }}>
-                    {[{ val: "cash", label: "نقدًا" }, { val: "bank_transfer", label: "تحويل" }, { val: "credit", label: "آجل" }].map(opt => (
+                    {[{ val: "cash", label: t("purchases.wizard_pay_cash") }, { val: "bank_transfer", label: t("purchases.wizard_pay_transfer") }, { val: "credit", label: t("purchases.wizard_pay_credit") }].map(opt => (
                       <div key={opt.val} onClick={() => setNewPayMethod(opt.val)} style={{ flex: 1, padding: "10px", border: newPayMethod === opt.val ? "2px solid #D4527E" : "0.5px solid #E5E3DC", borderRadius: "8px", textAlign: "center", cursor: "pointer", background: newPayMethod === opt.val ? "#FBEAF0" : "white", fontSize: "12px", color: newPayMethod === opt.val ? "#72243E" : "#888780", fontWeight: newPayMethod === opt.val ? 600 : 400, transition: "all 0.15s" }}>
                         {opt.label}
                       </div>
@@ -2078,29 +2080,29 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                   </div>
                 </div>
                 <div>
-                  <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>التاريخ <span style={{ color: "#D4527E" }}>*</span></label>
+                  <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>{t("purchases.invoice_date")} <span style={{ color: "#D4527E" }}>*</span></label>
                   <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)}
                     style={{ width: "100%", padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", color: "#2C2C2A", background: "white" }} />
                 </div>
                 {newPayMethod === "credit" && (
                   <div>
-                    <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>تاريخ الاستحقاق</label>
+                    <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>{t("purchases.wizard_due_date")}</label>
                     <input type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)}
                       style={{ width: "100%", padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", color: "#2C2C2A", background: "white" }} />
                   </div>
                 )}
                 <div style={{ gridColumn: "1/-1" }}>
-                  <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>ملاحظات</label>
+                  <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>{t("purchases.notes")}</label>
                   <textarea value={newNotes} onChange={e => setNewNotes(e.target.value)}
                     style={{ width: "100%", padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", resize: "none", height: "64px", color: "#2C2C2A", background: "white", fontFamily: "inherit" }}
-                    placeholder="ملاحظات اختيارية..." />
+                    placeholder={t("purchases.wizard_notes_placeholder")} />
                 </div>
               </div>
             </div>
             <div style={{ display: "flex", justifyContent: "flex-start" }}>
               <button onClick={() => setWizardStep(2)} disabled={!canNext1}
                 style={{ background: canNext1 ? "#D4527E" : "#E5E3DC", color: canNext1 ? "white" : "#888780", border: "none", padding: "12px 28px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: canNext1 ? "pointer" : "not-allowed" }}>
-                التالي — إضافة المنتجات →
+                {t("purchases.wizard_next_products")}
               </button>
             </div>
           </>
@@ -2111,15 +2113,15 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
           <>
             <div style={{ background: "white", border: "0.5px solid #E5E3DC", borderRadius: "12px", padding: "24px", marginBottom: "12px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", paddingBottom: "10px", borderBottom: "0.5px solid #E5E3DC" }}>
-                <div style={{ fontSize: "13px", fontWeight: 600, color: "#2C2C2A" }}>إضافة المنتجات</div>
-                <div style={{ fontSize: "12px", color: "#888780" }}>{modalItems.length} منتجات • {modalItems.reduce((s, i) => s + i.qty, 0)} قطعة</div>
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "#2C2C2A" }}>{t("purchases.wizard_add_products")}</div>
+                <div style={{ fontSize: "12px", color: "#888780" }}>{t("purchases.wizard_items_counter", { count: modalItems.length, qty: modalItems.reduce((s, i) => s + i.qty, 0) })}</div>
               </div>
 
               {/* صف إضافة منتج */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 65px 85px 70px 65px auto", gap: "8px", alignItems: "end", marginBottom: "14px", padding: "16px", background: "#F7F7F5", borderRadius: "8px" }}>
                 <div style={{ position: "relative" }}>
-                  <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>المنتج / SKU / باركود</label>
-                  <input type="text" placeholder="ابحث أو اكتب اسم المنتج..."
+                  <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>{t("purchases.wizard_product_barcode_label")}</label>
+                  <input type="text" placeholder={t("purchases.wizard_product_placeholder")}
                     value={modalNewName}
                     onChange={e => { const v = e.target.value; setModalNewName(v); setModalProductSearch(v); setModalNewSearchOpen(true); if (!v) { setModalManualProductId(""); setModalManualVariantId(null); } }}
                     onFocus={() => { if (modalNewName) setModalNewSearchOpen(true); }}
@@ -2136,35 +2138,35 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                             onMouseDown={() => { setModalManualProductId(String(p.id)); setModalManualVariantId(null); setModalManualCost(""); setModalNewName(p.name); setModalProductSearch(p.name); setModalNewSearchOpen(false); }}
                             style={{ padding: "8px 12px", fontSize: "12px", cursor: "pointer", borderBottom: "0.5px solid #F7F7F5", display: "flex", justifyContent: "space-between", alignItems: "center", color: "#2C2C2A" }}>
                             <span style={{ fontWeight: modalManualProductId === String(p.id) ? 600 : 400 }}>{p.name}</span>
-                            <span style={{ fontSize: "11px", color: "#888780", background: "#EAF3DE", padding: "2px 6px", borderRadius: "4px" }}>مسجل ✓</span>
+                            <span style={{ fontSize: "11px", color: "#888780", background: "#EAF3DE", padding: "2px 6px", borderRadius: "4px" }}>{t("purchases.wizard_registered_badge")}</span>
                           </div>
                         )) : (
-                          <div style={{ padding: "8px 12px", fontSize: "12px", color: "#888780" }}>سيُضاف كمنتج جديد ← "{modalNewName}"</div>
+                          <div style={{ padding: "8px 12px", fontSize: "12px", color: "#888780" }}>{t("purchases.wizard_new_product_hint", { name: modalNewName })}</div>
                         );
                       })()}
                     </div>
                   )}
                   {modalManualProductId && (
-                    <div style={{ marginTop: "4px", fontSize: "11px", color: "#27500A", background: "#EAF3DE", padding: "3px 8px", borderRadius: "4px", display: "inline-block" }}>✓ منتج مسجل</div>
+                    <div style={{ marginTop: "4px", fontSize: "11px", color: "#27500A", background: "#EAF3DE", padding: "3px 8px", borderRadius: "4px", display: "inline-block" }}>{t("purchases.wizard_registered_product")}</div>
                   )}
                 </div>
                 <div>
-                  <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>الكمية</label>
+                  <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>{t("purchases.wizard_barcode_qty_ph")}</label>
                   <input type="text" inputMode="numeric" value={modalManualQty} onChange={e => setModalManualQty(e.target.value.replace(/[^0-9]/g, ""))}
                     style={{ width: "100%", padding: "9px 6px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white", direction: "ltr" }} />
                 </div>
                 <div>
-                  <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>سعر الوحدة</label>
+                  <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>{t("purchases.unit_cost")}</label>
                   <input type="text" inputMode="decimal" value={modalManualCost} onChange={e => setModalManualCost(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0"
                     style={{ width: "100%", padding: "9px 6px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white", direction: "ltr" }} />
                 </div>
                 <div>
-                  <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>اللون</label>
+                  <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>{t("products.variant_color")}</label>
                   <input type="text" value={modalNewColor} placeholder="—" onChange={e => setModalNewColor(e.target.value)}
                     style={{ width: "100%", padding: "9px 4px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white" }} />
                 </div>
                 <div>
-                  <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>المقاس</label>
+                  <label style={{ fontSize: "11px", color: "#888780", display: "block", marginBottom: "4px" }}>{t("products.variant_size")}</label>
                   <input type="text" value={modalNewSize} placeholder="—" onChange={e => setModalNewSize(e.target.value)}
                     style={{ width: "100%", padding: "9px 4px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white" }} />
                 </div>
@@ -2184,7 +2186,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                     setModalNewName(""); setModalProductSearch(""); setModalManualProductId(""); setModalManualVariantId(null); setModalManualQty("1"); setModalManualCost(""); setModalNewSize(""); setModalNewColor(""); setModalManualSellPrice("");
                   }}
                   style={{ background: (!modalNewName.trim() || !modalManualQty) ? "#E5E3DC" : "#D4527E", color: (!modalNewName.trim() || !modalManualQty) ? "#888780" : "white", border: "none", padding: "9px 14px", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: (!modalNewName.trim() || !modalManualQty) ? "not-allowed" : "pointer", whiteSpace: "nowrap", alignSelf: "end" }}>
-                  + إضافة
+                  {t("purchases.wizard_add_row_btn")}
                 </button>
               </div>
 
@@ -2196,21 +2198,21 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                     <div style={{ fontSize: "11px", color: "#3B6D11", fontFamily: "monospace" }}>{modalBarcodeFound.barcode}{modalBarcodeFound.color && ` · ${modalBarcodeFound.color}`}{modalBarcodeFound.size && ` · ${modalBarcodeFound.size}`}</div>
                   </div>
                   <input type="number" value={modalBarcodeConfirmQty} min="1" onChange={e => setModalBarcodeConfirmQty(e.target.value)}
-                    style={{ width: "65px", padding: "7px", border: "0.5px solid #C0DD97", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white" }} placeholder="الكمية" />
+                    style={{ width: "65px", padding: "7px", border: "0.5px solid #C0DD97", borderRadius: "6px", fontSize: "12px", textAlign: "center", background: "white" }} placeholder={t("purchases.wizard_barcode_qty_ph")} />
                   <input type="number" value={modalBarcodeConfirmCost} step="0.001" onChange={e => setModalBarcodeConfirmCost(e.target.value)}
-                    style={{ width: "90px", padding: "7px", border: "0.5px solid #C0DD97", borderRadius: "6px", fontSize: "12px", background: "white" }} placeholder="السعر" />
-                  <button onClick={confirmBarcodeItem} style={{ background: "#27500A", color: "white", border: "none", padding: "8px 14px", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>تأكيد +</button>
+                    style={{ width: "90px", padding: "7px", border: "0.5px solid #C0DD97", borderRadius: "6px", fontSize: "12px", background: "white" }} placeholder={t("purchases.wizard_barcode_price_ph")} />
+                  <button onClick={confirmBarcodeItem} style={{ background: "#27500A", color: "white", border: "none", padding: "8px 14px", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>{t("purchases.wizard_barcode_confirm")}</button>
                   <button onClick={() => setModalBarcodeFound(null)} style={{ background: "none", border: "none", color: "#888780", cursor: "pointer", fontSize: "18px", padding: "0 4px" }}>✕</button>
                 </div>
               ) : (
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
                   <input ref={modalBarcodeRef} type="text" value={modalBarcode} onChange={e => setModalBarcode(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleModalBarcode(modalBarcode); } }}
-                    placeholder="امسح باركود هنا..." dir="ltr"
+                    placeholder={t("purchases.wizard_barcode_placeholder")} dir="ltr"
                     style={{ width: "190px", padding: "8px 10px", border: "0.5px solid #E5E3DC", borderRadius: "6px", fontSize: "12px", fontFamily: "monospace", background: "white" }} />
                   <button onClick={() => handleModalBarcode(modalBarcode)} disabled={modalBarcodeLoading || !modalBarcode.trim()}
                     style={{ padding: "8px 12px", border: "0.5px solid #E5E3DC", borderRadius: "6px", background: "white", fontSize: "12px", cursor: modalBarcode.trim() ? "pointer" : "not-allowed", color: "#888780" }}>
-                    {modalBarcodeLoading ? "⏳" : "🔍 بحث"}
+                    {modalBarcodeLoading ? "⏳" : t("purchases.wizard_barcode_search")}
                   </button>
                   <BarcodeScanButton onScan={handleModalBarcode} />
                 </div>
@@ -2222,12 +2224,12 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                   <thead>
                     <tr style={{ borderBottom: "0.5px solid #E5E3DC" }}>
                       <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500 }}>#</td>
-                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500 }}>المنتج</td>
-                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "center" }}>اللون</td>
-                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "center" }}>المقاس</td>
-                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "center" }}>الكمية</td>
-                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "center" }}>سعر الوحدة</td>
-                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "left" }}>الإجمالي</td>
+                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500 }}>{t("purchases.table_product")}</td>
+                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "center" }}>{t("products.variant_color")}</td>
+                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "center" }}>{t("products.variant_size")}</td>
+                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "center" }}>{t("purchases.table_qty")}</td>
+                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "center" }}>{t("purchases.table_unit_price")}</td>
+                      <td style={{ padding: "8px 6px", color: "#888780", fontWeight: 500, textAlign: "left" }}>{t("purchases.table_total")}</td>
                       <td style={{ padding: "8px 6px" }} />
                     </tr>
                   </thead>
@@ -2256,7 +2258,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                             onChange={e => setModalItems(prev => prev.map(i => i.uid === item.uid ? { ...i, unitCost: parseFloat(e.target.value.replace(/[^0-9.]/g, "")) || 0 } : i))}
                             style={{ width: "80px", padding: "4px", border: "0.5px solid #E5E3DC", borderRadius: "4px", fontSize: "12px", textAlign: "center", fontFamily: "monospace", direction: "ltr" }} />
                         </td>
-                        <td style={{ padding: "8px 6px", textAlign: "left", fontFamily: "monospace", color: "#D4527E", fontWeight: 600 }}>ر.ع {omr(item.qty * item.unitCost)}</td>
+                        <td style={{ padding: "8px 6px", textAlign: "left", fontFamily: "monospace", color: "#D4527E", fontWeight: 600 }}>{t("common.omr")} {omr(item.qty * item.unitCost)}</td>
                         <td style={{ padding: "8px 6px" }}>
                           <button onClick={() => setModalItems(prev => prev.filter(i => i.uid !== item.uid))}
                             style={{ background: "none", border: "none", color: "#CCCCCC", cursor: "pointer", fontSize: "16px" }}>✕</button>
@@ -2266,10 +2268,10 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                   </tbody>
                   <tfoot>
                     <tr style={{ borderTop: "1px solid #E5E3DC", background: "#F7F7F5" }}>
-                      <td colSpan={4} style={{ padding: "10px 6px", fontWeight: 600, fontSize: "12px", color: "#2C2C2A" }}>الإجمالي الفرعي</td>
+                      <td colSpan={4} style={{ padding: "10px 6px", fontWeight: 600, fontSize: "12px", color: "#2C2C2A" }}>{t("purchases.subtotal")}</td>
                       <td style={{ padding: "10px 6px", textAlign: "center", fontWeight: 600 }}>{modalItems.reduce((s, i) => s + i.qty, 0)}</td>
                       <td />
-                      <td style={{ padding: "10px 6px", textAlign: "left", fontWeight: 700, color: "#D4527E", fontFamily: "monospace" }}>ر.ع {omr(wSubtotal)}</td>
+                      <td style={{ padding: "10px 6px", textAlign: "left", fontWeight: 700, color: "#D4527E", fontFamily: "monospace" }}>{t("common.omr")} {omr(wSubtotal)}</td>
                       <td />
                     </tr>
                   </tfoot>
@@ -2277,15 +2279,15 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
               ) : (
                 <div style={{ textAlign: "center", padding: "32px", color: "#888780" }}>
                   <div style={{ fontSize: "32px", marginBottom: "8px", opacity: 0.3 }}>📦</div>
-                  <div style={{ fontSize: "13px" }}>لم تتم إضافة أي منتجات بعد</div>
+                  <div style={{ fontSize: "13px" }}>{t("purchases.wizard_no_products_yet")}</div>
                 </div>
               )}
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <button onClick={() => setWizardStep(1)} style={{ background: "white", color: "#2C2C2A", border: "0.5px solid #E5E3DC", padding: "12px 24px", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>← رجوع</button>
+              <button onClick={() => setWizardStep(1)} style={{ background: "white", color: "#2C2C2A", border: "0.5px solid #E5E3DC", padding: "12px 24px", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>{t("purchases.wizard_prev_btn")}</button>
               <button onClick={() => setWizardStep(3)} disabled={!canNext2}
                 style={{ background: canNext2 ? "#D4527E" : "#E5E3DC", color: canNext2 ? "white" : "#888780", border: "none", padding: "12px 28px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: canNext2 ? "pointer" : "not-allowed" }}>
-                التالي — التكاليف الإضافية →
+                {t("purchases.wizard_next_extras")}
               </button>
             </div>
           </>
@@ -2296,19 +2298,19 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
           <>
             <div style={{ background: "white", border: "0.5px solid #E5E3DC", borderRadius: "12px", padding: "24px", marginBottom: "12px" }}>
               <div style={{ fontSize: "13px", fontWeight: 600, color: "#2C2C2A", paddingBottom: "10px", borderBottom: "0.5px solid #E5E3DC", marginBottom: "4px" }}>
-                التكاليف الإضافية <span style={{ fontSize: "11px", fontWeight: 400, color: "#888780" }}>(اختيارية)</span>
+                {t("purchases.wizard_extra_costs_title")} <span style={{ fontSize: "11px", fontWeight: 400, color: "#888780" }}>{t("purchases.wizard_optional")}</span>
               </div>
               <div style={{ paddingTop: "16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 {[
-                  { label: "الشحن", val: newShipping, set: setNewShipping },
-                  { label: "الجمارك", val: newCustoms, set: setNewCustoms },
-                  { label: "التخليص", val: newClearance, set: setNewClearance },
-                  { label: "أخرى", val: newOther, set: setNewOther },
+                  { label: t("purchases.shipping"), val: newShipping, set: setNewShipping },
+                  { label: t("purchases.customs"), val: newCustoms, set: setNewCustoms },
+                  { label: t("purchases.clearance"), val: newClearance, set: setNewClearance },
+                  { label: t("purchases.other"), val: newOther, set: setNewOther },
                 ].map(({ label, val, set }) => (
                   <div key={label}>
                     <label style={{ fontSize: "12px", color: "#888780", display: "block", marginBottom: "6px" }}>{label}</label>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <span style={{ fontSize: "11px", color: "#888780", whiteSpace: "nowrap" }}>ر.ع</span>
+                      <span style={{ fontSize: "11px", color: "#888780", whiteSpace: "nowrap" }}>{t("common.omr")}</span>
                       <input type="text" inputMode="decimal" value={val} onChange={e => set(e.target.value.replace(/[^0-9.]/g, ""))}
                         style={{ flex: 1, padding: "10px 12px", border: "0.5px solid #E5E3DC", borderRadius: "8px", fontSize: "13px", background: "white", direction: "ltr" }} />
                     </div>
@@ -2318,22 +2320,22 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
               {/* ملخص 3 أعمدة */}
               <div style={{ marginTop: "16px", padding: "16px", background: "#F7F7F5", borderRadius: "8px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", textAlign: "center" }}>
                 <div>
-                  <div style={{ fontSize: "11px", color: "#888780", marginBottom: "4px" }}>المجموع الفرعي</div>
-                  <div style={{ fontSize: "14px", fontWeight: 500, color: "#2C2C2A", fontFamily: "monospace" }}>ر.ع {omr(wSubtotal)}</div>
+                  <div style={{ fontSize: "11px", color: "#888780", marginBottom: "4px" }}>{t("purchases.subtotal")}</div>
+                  <div style={{ fontSize: "14px", fontWeight: 500, color: "#2C2C2A", fontFamily: "monospace" }}>{t("common.omr")} {omr(wSubtotal)}</div>
                 </div>
                 <div style={{ borderRight: "0.5px solid #E5E3DC", borderLeft: "0.5px solid #E5E3DC" }}>
-                  <div style={{ fontSize: "11px", color: "#888780", marginBottom: "4px" }}>التكاليف الإضافية</div>
-                  <div style={{ fontSize: "14px", fontWeight: 500, color: "#BA7517", fontFamily: "monospace" }}>ر.ع {omr(wExtras)}</div>
+                  <div style={{ fontSize: "11px", color: "#888780", marginBottom: "4px" }}>{t("purchases.extra_costs")}</div>
+                  <div style={{ fontSize: "14px", fontWeight: 500, color: "#BA7517", fontFamily: "monospace" }}>{t("common.omr")} {omr(wExtras)}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: "11px", color: "#888780", marginBottom: "4px" }}>الإجمالي النهائي</div>
-                  <div style={{ fontSize: "16px", fontWeight: 700, color: "#D4527E", fontFamily: "monospace" }}>ر.ع {omr(wTotal)}</div>
+                  <div style={{ fontSize: "11px", color: "#888780", marginBottom: "4px" }}>{t("purchases.grand_total")}</div>
+                  <div style={{ fontSize: "16px", fontWeight: 700, color: "#D4527E", fontFamily: "monospace" }}>{t("common.omr")} {omr(wTotal)}</div>
                 </div>
               </div>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <button onClick={() => setWizardStep(2)} style={{ background: "white", color: "#2C2C2A", border: "0.5px solid #E5E3DC", padding: "12px 24px", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>← رجوع</button>
-              <button onClick={() => setWizardStep(4)} style={{ background: "#D4527E", color: "white", border: "none", padding: "12px 28px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>التالي — المراجعة والاعتماد →</button>
+              <button onClick={() => setWizardStep(2)} style={{ background: "white", color: "#2C2C2A", border: "0.5px solid #E5E3DC", padding: "12px 24px", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>{t("purchases.wizard_prev_btn")}</button>
+              <button onClick={() => setWizardStep(4)} style={{ background: "#D4527E", color: "white", border: "none", padding: "12px 28px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>{t("purchases.wizard_next_review")}</button>
             </div>
           </>
         )}
@@ -2342,43 +2344,43 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
         {wizardStep === 4 && (
           <>
             <div style={{ background: "white", border: "0.5px solid #E5E3DC", borderRadius: "12px", padding: "24px", marginBottom: "12px" }}>
-              <div style={{ fontSize: "13px", fontWeight: 600, color: "#2C2C2A", marginBottom: "16px", paddingBottom: "10px", borderBottom: "0.5px solid #E5E3DC" }}>مراجعة الفاتورة قبل الاعتماد</div>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: "#2C2C2A", marginBottom: "16px", paddingBottom: "10px", borderBottom: "0.5px solid #E5E3DC" }}>{t("purchases.wizard_review_title")}</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "20px" }}>
                 <div style={{ background: "#F7F7F5", borderRadius: "8px", padding: "14px" }}>
-                  <div style={{ fontSize: "11px", color: "#888780", marginBottom: "8px", fontWeight: 500 }}>بيانات الفاتورة</div>
+                  <div style={{ fontSize: "11px", color: "#888780", marginBottom: "8px", fontWeight: 500 }}>{t("purchases.wizard_invoice_data")}</div>
                   <div style={{ fontSize: "12px", color: "#2C2C2A", display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>ا��مورد</span><span style={{ fontWeight: 500 }}>{supplierName}</span></div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>الطريقة</span><span style={{ fontWeight: 500 }}>{newPayMethod === "cash" ? "نقدًا" : newPayMethod === "bank_transfer" ? "تحويل" : "آجل"}</span></div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>التاريخ</span><span style={{ fontWeight: 500 }}>{newDate}</span></div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>التخزين</span><span style={{ fontWeight: 500, color: "#3B6D11" }}>المخزن المركزي</span></div>
-                    {newNotes && <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>ملاحظات</span><span style={{ fontWeight: 500, maxWidth: "140px", textAlign: "left", wordBreak: "break-word" }}>{newNotes}</span></div>}
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>{t("purchases.supplier")}</span><span style={{ fontWeight: 500 }}>{supplierName}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>{t("purchases.wizard_field_method")}</span><span style={{ fontWeight: 500 }}>{newPayMethod === "cash" ? t("purchases.wizard_pay_cash") : newPayMethod === "bank_transfer" ? t("purchases.wizard_pay_transfer") : t("purchases.wizard_pay_credit")}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>{t("purchases.invoice_date")}</span><span style={{ fontWeight: 500 }}>{newDate}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>{t("purchases.wizard_field_storage")}</span><span style={{ fontWeight: 500, color: "#3B6D11" }}>{t("purchases.wizard_central_warehouse")}</span></div>
+                    {newNotes && <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>{t("purchases.wizard_field_notes")}</span><span style={{ fontWeight: 500, maxWidth: "140px", textAlign: "left", wordBreak: "break-word" }}>{newNotes}</span></div>}
                   </div>
                 </div>
                 <div style={{ background: "#F7F7F5", borderRadius: "8px", padding: "14px" }}>
-                  <div style={{ fontSize: "11px", color: "#888780", marginBottom: "8px", fontWeight: 500 }}>ملخص مالي</div>
+                  <div style={{ fontSize: "11px", color: "#888780", marginBottom: "8px", fontWeight: 500 }}>{t("purchases.wizard_financial_summary")}</div>
                   <div style={{ fontSize: "12px", color: "#2C2C2A", display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>عدد الأصناف</span><span style={{ fontWeight: 500 }}>{modalItems.length}</span></div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>المجموع الفرعي</span><span style={{ fontWeight: 500, fontFamily: "monospace" }}>ر.ع {omr(wSubtotal)}</span></div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>التكاليف الإضافية</span><span style={{ fontWeight: 500, color: "#BA7517", fontFamily: "monospace" }}>ر.ع {omr(wExtras)}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>{t("purchases.items_count_label")}</span><span style={{ fontWeight: 500 }}>{modalItems.length}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>{t("purchases.subtotal")}</span><span style={{ fontWeight: 500, fontFamily: "monospace" }}>{t("common.omr")} {omr(wSubtotal)}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "#888780" }}>{t("purchases.wizard_extra_costs_short")}</span><span style={{ fontWeight: 500, color: "#BA7517", fontFamily: "monospace" }}>{t("common.omr")} {omr(wExtras)}</span></div>
                     <div style={{ display: "flex", justifyContent: "space-between", borderTop: "0.5px solid #E5E3DC", paddingTop: "6px", marginTop: "2px" }}>
-                      <span style={{ fontWeight: 600 }}>الإجمالي النهائي</span>
-                      <span style={{ fontWeight: 700, color: "#D4527E", fontFamily: "monospace" }}>ر.ع {omr(wTotal)}</span>
+                      <span style={{ fontWeight: 600 }}>{t("purchases.grand_total")}</span>
+                      <span style={{ fontWeight: 700, color: "#D4527E", fontFamily: "monospace" }}>{t("common.omr")} {omr(wTotal)}</span>
                     </div>
                   </div>
                 </div>
               </div>
               {/* جدول الأصناف */}
               <div style={{ marginBottom: "16px" }}>
-                <div style={{ fontSize: "11px", color: "#888780", marginBottom: "8px", fontWeight: 500 }}>الأصناف ({modalItems.length})</div>
+                <div style={{ fontSize: "11px", color: "#888780", marginBottom: "8px", fontWeight: 500 }}>{t("purchases.wizard_items_section")} ({modalItems.length})</div>
                 {modalItems.length > 0 ? (
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
                     <thead>
                       <tr style={{ borderBottom: "0.5px solid #E5E3DC" }}>
                         <td style={{ padding: "6px", color: "#888780" }}>#</td>
-                        <td style={{ padding: "6px", color: "#888780" }}>المنتج</td>
-                        <td style={{ padding: "6px", color: "#888780", textAlign: "center" }}>الكمية</td>
-                        <td style={{ padding: "6px", color: "#888780", textAlign: "center" }}>سعر الوحدة</td>
-                        <td style={{ padding: "6px", color: "#888780", textAlign: "left" }}>الإجمالي</td>
+                        <td style={{ padding: "6px", color: "#888780" }}>{t("purchases.table_product")}</td>
+                        <td style={{ padding: "6px", color: "#888780", textAlign: "center" }}>{t("purchases.table_qty")}</td>
+                        <td style={{ padding: "6px", color: "#888780", textAlign: "center" }}>{t("purchases.table_unit_price")}</td>
+                        <td style={{ padding: "6px", color: "#888780", textAlign: "left" }}>{t("purchases.table_total")}</td>
                       </tr>
                     </thead>
                     <tbody>
@@ -2388,13 +2390,13 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                           <td style={{ padding: "6px", fontWeight: 500, color: "#2C2C2A" }}>{item.name}{item.size && <span style={{ fontSize: "11px", color: "#888780", marginRight: "4px" }}>({item.size})</span>}</td>
                           <td style={{ padding: "6px", textAlign: "center" }}>{item.qty}</td>
                           <td style={{ padding: "6px", textAlign: "center", fontFamily: "monospace" }}>{omr(item.unitCost)}</td>
-                          <td style={{ padding: "6px", textAlign: "left", fontFamily: "monospace", color: "#D4527E", fontWeight: 600 }}>ر.ع {omr(item.qty * item.unitCost)}</td>
+                          <td style={{ padding: "6px", textAlign: "left", fontFamily: "monospace", color: "#D4527E", fontWeight: 600 }}>{t("common.omr")} {omr(item.qty * item.unitCost)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 ) : (
-                  <div style={{ textAlign: "center", padding: "16px", color: "#888780", fontSize: "12px" }}>لم يتم إضافة منتجات</div>
+                  <div style={{ textAlign: "center", padding: "16px", color: "#888780", fontSize: "12px" }}>{t("purchases.wizard_no_items_added")}</div>
                 )}
               </div>
               {/* بانر التحقق */}
@@ -2403,21 +2405,21 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                   <span style={{ color: "white", fontSize: "11px", fontWeight: 700 }}>✓</span>
                 </div>
                 <div>
-                  <div style={{ fontSize: "12px", fontWeight: 600, color: "#3B6D11" }}>جميع التحققات ناجحة — بإمكانك الاعتماد</div>
-                  <div style={{ fontSize: "11px", color: "#3B6D11", marginTop: "2px" }}>سيتم تحديث المخزون المركزي تلقائيًا بعد الاعتماد</div>
+                  <div style={{ fontSize: "12px", fontWeight: 600, color: "#3B6D11" }}>{t("purchases.wizard_all_valid")}</div>
+                  <div style={{ fontSize: "11px", color: "#3B6D11", marginTop: "2px" }}>{t("purchases.wizard_inventory_note")}</div>
                 </div>
               </div>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <button onClick={() => setWizardStep(3)} style={{ background: "white", color: "#2C2C2A", border: "0.5px solid #E5E3DC", padding: "12px 24px", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>← رجوع</button>
+              <button onClick={() => setWizardStep(3)} style={{ background: "white", color: "#2C2C2A", border: "0.5px solid #E5E3DC", padding: "12px 24px", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>{t("purchases.wizard_prev_btn")}</button>
               <div style={{ display: "flex", gap: "8px" }}>
                 <button disabled={createMutation.isPending} onClick={() => { setWizardDirectApprove(false); createMutation.mutate(); }}
                   style={{ background: "white", color: "#2C2C2A", border: "0.5px solid #E5E3DC", padding: "12px 20px", borderRadius: "8px", fontSize: "13px", cursor: createMutation.isPending ? "not-allowed" : "pointer", opacity: createMutation.isPending ? 0.6 : 1 }}>
-                  {createMutation.isPending && !wizardDirectApprove ? "جاري الحفظ..." : "حفظ كمسودة"}
+                  {createMutation.isPending && !wizardDirectApprove ? t("purchases.wizard_saving") : t("purchases.wizard_save_draft")}
                 </button>
                 <button disabled={createMutation.isPending || modalItems.length === 0} onClick={() => { setWizardDirectApprove(true); createMutation.mutate(); }}
                   style={{ background: "#27500A", color: "white", border: "none", padding: "12px 28px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: (createMutation.isPending || modalItems.length === 0) ? "not-allowed" : "pointer", opacity: (createMutation.isPending || modalItems.length === 0) ? 0.6 : 1 }}>
-                  {createMutation.isPending && wizardDirectApprove ? "جاري الاعتماد..." : "اعتماد الفاتورة وتحديث المخزون"}
+                  {createMutation.isPending && wizardDirectApprove ? t("purchases.wizard_approving_btn") : t("purchases.wizard_approve_submit")}
                 </button>
               </div>
             </div>
@@ -2451,27 +2453,27 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="bg-card border rounded-lg p-3 text-center">
           <p className="text-2xl font-bold">{invoiceStats.total}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">إجمالي الفواتير</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("purchases.stat_total_invoices")}</p>
         </div>
         <div className="bg-card border rounded-lg p-3 text-center">
-          <p className="text-lg font-bold text-primary">{omr(invoiceStats.amount)} <span className="text-sm">ر.ع</span></p>
-          <p className="text-xs text-muted-foreground mt-0.5">إجمالي المشتريات</p>
+          <p className="text-lg font-bold text-primary">{omr(invoiceStats.amount)} <span className="text-sm">{t("common.omr")}</span></p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("purchases.stat_total_purchases")}</p>
         </div>
         <div className="bg-card border rounded-lg p-3 text-center cursor-pointer hover:border-amber-400/50" onClick={() => setInvStatus("pending")}>
           <p className="text-xl font-bold text-amber-500">{invoiceStats.pending} <span className="text-sm font-normal">({omr(invoiceStats.pendingAmt)})</span></p>
-          <p className="text-xs text-muted-foreground mt-0.5">المبالغ المعلقة</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("purchases.stat_pending_amounts")}</p>
         </div>
         <div className="bg-card border rounded-lg p-3 text-center cursor-pointer hover:border-green-400/50" onClick={() => { setInvStatus("approved"); }}>
-          <p className="text-lg font-bold text-green-600">{omr(invoiceStats.paidAmt)} <span className="text-sm">ر.ع</span></p>
-          <p className="text-xs text-muted-foreground mt-0.5">إجمالي المدفوع</p>
+          <p className="text-lg font-bold text-green-600">{omr(invoiceStats.paidAmt)} <span className="text-sm">{t("common.omr")}</span></p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("purchases.stat_total_paid")}</p>
         </div>
         <div className="bg-card border rounded-lg p-3 text-center">
           <p className="text-2xl font-bold text-blue-600">{todayCount}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">فواتير اليوم</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("purchases.stat_today_invoices")}</p>
         </div>
         <div className="bg-card border rounded-lg p-3 text-center">
           <p className="text-2xl font-bold text-purple-600">{allSuppliers.length}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">عدد الموردين</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("purchases.stat_suppliers_count")}</p>
         </div>
       </div>
 
@@ -2479,28 +2481,28 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
       <div className="flex flex-wrap gap-3 items-center bg-card p-4 border rounded-lg">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input className="pe-9" placeholder="بحث بالمورد أو رقم الفاتورة..." value={invSearch} onChange={e => setInvSearch(e.target.value)} />
+          <Input className="pe-9" placeholder={t("purchases.search_supplier_invoice")} value={invSearch} onChange={e => setInvSearch(e.target.value)} />
         </div>
         <Select value={invSupplier} onValueChange={setInvSupplier}>
-          <SelectTrigger className="w-[180px]"><SelectValue placeholder="كل الموردين" /></SelectTrigger>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder={t("purchases.all_suppliers")} /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">كل الموردين</SelectItem>
+            <SelectItem value="all">{t("purchases.all_suppliers")}</SelectItem>
             {allSuppliers.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={invStatus} onValueChange={setInvStatus}>
-          <SelectTrigger className="w-[150px]"><SelectValue placeholder="كل الحالات" /></SelectTrigger>
+          <SelectTrigger className="w-[150px]"><SelectValue placeholder={t("purchases.all_statuses")} /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">كل الحالات</SelectItem>
-            <SelectItem value="pending">معلقة</SelectItem>
-            <SelectItem value="approved">مؤكدة</SelectItem>
-            <SelectItem value="received">مستلمة</SelectItem>
-            <SelectItem value="cancelled">ملغاة</SelectItem>
+            <SelectItem value="all">{t("purchases.all_statuses")}</SelectItem>
+            <SelectItem value="pending">{t("purchases.status_pending_filter")}</SelectItem>
+            <SelectItem value="approved">{t("purchases.status_approved_filter")}</SelectItem>
+            <SelectItem value="received">{t("purchases.status_received_filter")}</SelectItem>
+            <SelectItem value="cancelled">{t("purchases.status_cancelled_filter")}</SelectItem>
           </SelectContent>
         </Select>
         {(invSearch || invSupplier !== "all" || invStatus !== "all") && (
           <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => { setInvSearch(""); setInvSupplier("all"); setInvStatus("all"); }}>
-            مسح الفلاتر ✕
+            {t("purchases.clear_filters")} ✕
           </Button>
         )}
         <Button className="gap-2 ms-auto" style={{ background: "#D4527E" }} onClick={() => { setWizardStep(1); setShowCreate(true); }} data-testid="button-new-purchase">
@@ -2525,10 +2527,10 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                 <TableHead className="cursor-pointer select-none" onClick={() => { setSortCol("grandTotal"); setSortDir(d => sortCol === "grandTotal" && d === "asc" ? "desc" : "asc"); }}>
                   {t("purchases.grand_total")} {sortCol === "grandTotal" ? (sortDir === "asc" ? "↑" : "↓") : ""}
                 </TableHead>
-                <TableHead>طريقة الدفع</TableHead>
-                <TableHead>تاريخ الاستحقاق</TableHead>
+                <TableHead>{t("purchases.payment_method_col")}</TableHead>
+                <TableHead>{t("purchases.due_date_col")}</TableHead>
                 <TableHead>{t("purchases.status")}</TableHead>
-                <TableHead className="w-10 text-center" title="مرفق ورقي"><Upload className="w-3.5 h-3.5 mx-auto" /></TableHead>
+                <TableHead className="w-10 text-center" title={t("purchases.view_attachments_btn")}><Upload className="w-3.5 h-3.5 mx-auto" /></TableHead>
                 <TableHead>{t("purchases.table_actions")}</TableHead>
               </TableRow>
             </TableHeader>
@@ -2546,10 +2548,10 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                   <TableCell>{inv.invoiceDate}</TableCell>
                   <TableCell className="font-mono">{omr(inv.grandTotal)} {t("common.omr")}</TableCell>
                   <TableCell>
-                    {(inv as any).paymentMethod === "cash" && <Badge variant="outline" className="text-xs border-emerald-400 text-emerald-700">نقداً</Badge>}
-                    {(inv as any).paymentMethod === "bank_transfer" && <Badge variant="outline" className="text-xs border-blue-400 text-blue-700">تحويل بنكي</Badge>}
-                    {(inv as any).paymentMethod === "cheque" && <Badge variant="outline" className="text-xs border-purple-400 text-purple-700">شيك</Badge>}
-                    {(inv as any).paymentMethod === "credit" && <Badge variant="outline" className="text-xs border-orange-400 text-orange-700">آجل</Badge>}
+                    {(inv as any).paymentMethod === "cash" && <Badge variant="outline" className="text-xs border-emerald-400 text-emerald-700">{t("purchases.pay_cash_badge")}</Badge>}
+                    {(inv as any).paymentMethod === "bank_transfer" && <Badge variant="outline" className="text-xs border-blue-400 text-blue-700">{t("purchases.pay_transfer_badge")}</Badge>}
+                    {(inv as any).paymentMethod === "cheque" && <Badge variant="outline" className="text-xs border-purple-400 text-purple-700">{t("purchases.pay_cheque_badge")}</Badge>}
+                    {(inv as any).paymentMethod === "credit" && <Badge variant="outline" className="text-xs border-orange-400 text-orange-700">{t("purchases.pay_credit_badge")}</Badge>}
                     {!(inv as any).paymentMethod && <span className="text-muted-foreground text-xs">—</span>}
                   </TableCell>
                   <TableCell className="text-sm font-mono">
@@ -2570,10 +2572,10 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                       const oldUrl: string = (inv as any).attachmentUrl || "";
                       const oldIsValid = oldUrl && !oldUrl.startsWith("/uploads/");
                       if (hasNew) return (
-                        <FileText className="w-4 h-4 text-emerald-500 mx-auto cursor-pointer" title="يوجد مرفقات — افتح الفاتورة لعرضها" onClick={() => setSelectedInvoice(inv.id)} />
+                        <FileText className="w-4 h-4 text-emerald-500 mx-auto cursor-pointer" title={t("purchases.view_attachments_btn")} onClick={() => setSelectedInvoice(inv.id)} />
                       );
                       if (oldIsValid) return (
-                        <a href={oldUrl} target="_blank" rel="noreferrer" title="عرض الفاتورة الورقية">
+                        <a href={oldUrl} target="_blank" rel="noreferrer" title={t("purchases.view_attachments_btn")}>
                           <FileText className="w-4 h-4 text-emerald-500 mx-auto hover:text-emerald-700 cursor-pointer" />
                         </a>
                       );
@@ -2585,7 +2587,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                       <FileText className="w-3.5 h-3.5" /> {t("purchases.open_invoice")}
                     </Button>
                     {inv.status !== "cancelled" && canManage && (
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700" onClick={() => setShowDeleteConfirm(inv.id)} title="حذف">
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700" onClick={() => setShowDeleteConfirm(inv.id)} title={t("purchases.delete_btn")}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     )}
@@ -2697,20 +2699,20 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
           <Dialog open={!!showDeleteConfirm} onOpenChange={() => setShowDeleteConfirm(null)}>
             <DialogContent className="max-w-sm" dir="rtl">
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-red-600"><Trash2 className="w-5 h-5" /> تأكيد الحذف</DialogTitle>
+                <DialogTitle className="flex items-center gap-2 text-red-600"><Trash2 className="w-5 h-5" /> {t("purchases.delete_confirm_title_label")}</DialogTitle>
                 <DialogDescription className="space-y-2">
                   {isReceived ? (
                     <span className="block text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 text-xs mt-1">
-                      ⚠️ هذه فاتورة <strong>مستلمة</strong> — سيتم عكس كميات المخزون المضافة عند اعتمادها تلقائياً.
+                      ⚠️ {t("purchases.delete_received_warning")}
                     </span>
                   ) : null}
-                  <span className="block">سيتم حذف الفاتورة نهائياً. لا يمكن التراجع عن هذا الإجراء.</span>
+                  <span className="block">{t("purchases.delete_invoice_final")}</span>
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowDeleteConfirm(null)}>{t("common.cancel")}</Button>
                 <Button variant="destructive" onClick={() => { if (showDeleteConfirm) deleteMutation.mutate(showDeleteConfirm); }} disabled={deleteMutation.isPending}>
-                  {deleteMutation.isPending ? t("common.loading") : "حذف"}
+                  {deleteMutation.isPending ? t("common.loading") : t("purchases.delete_btn")}
                 </Button>
               </DialogFooter>
             </DialogContent>

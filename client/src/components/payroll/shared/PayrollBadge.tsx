@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import type { EmployeeStatus, PaymentStatus, MovementType } from "@/lib/payroll-types";
+import { useI18n } from "@/lib/i18n";
 
 // ─── Payment Status ───────────────────────────────────────────────────────────
 
@@ -76,7 +77,8 @@ export function MovementTypeBadge({ type }: { type: MovementType }) {
 // ─── Movement Status ──────────────────────────────────────────────────────────
 
 export function MovementStatusBadge({ status }: { status: "active" | "cancelled" }) {
+  const { t } = useI18n();
   return status === "active"
-    ? <Badge className="bg-green-100 text-green-700 border-green-200 border text-xs">نشط</Badge>
-    : <Badge className="bg-gray-100 text-gray-500 border-gray-200 border text-xs">ملغي</Badge>;
+    ? <Badge className="bg-green-100 text-green-700 border-green-200 border text-xs">{t("common.active")}</Badge>
+    : <Badge className="bg-gray-100 text-gray-500 border-gray-200 border text-xs">{t("common.cancelled")}</Badge>;
 }

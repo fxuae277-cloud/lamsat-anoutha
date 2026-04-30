@@ -439,7 +439,7 @@ export default function Categories() {
             <DialogTitle className="text-destructive flex items-center gap-2"><Trash2 className="w-5 h-5" /> {t("categories_page.modal_confirm_delete")}</DialogTitle>
             <DialogDescription asChild>
               <div className="space-y-1 pt-1">
-                <p>{t("categories_page.modal_confirm_msg")} <strong>"{deleteCategory?.name}"</strong>؟</p>
+                <p>{t("categories_page.modal_confirm_msg")} <strong>"{deleteCategory?.name}"</strong>{"؟"}</p>
                 {deleteCategory && productCount(deleteCategory.id) > 0 && (
                   <p className="text-orange-600 font-medium">⚠️ {t("categories_page.modal_confirm_products_warning").replace("{count}", String(productCount(deleteCategory.id)))}</p>
                 )}

@@ -70,7 +70,10 @@
     "limited_access": "Limited access",
     "no_details": "No details",
     "open": "Open",
-    "save_changes": "Save Changes"
+    "save_changes": "Save Changes",
+    "by": "By:",
+    "apply": "Apply",
+    "whatsapp": "WhatsApp"
   },
   "app": {
     "loading": "Loading...",
@@ -249,5 +252,9 @@
     "admin": "Admin",
     "employee": "Employee",
     "logout": "Logout"
-  }
+  },
+  "barcode_placeholder": "Barcode...",
+  "pick_date": "Pick a date",
+  "page_load_error": "Page Load Error",
+  "retry": "Retry"
 }

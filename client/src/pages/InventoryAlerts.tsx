@@ -55,17 +55,17 @@ export default function InventoryAlerts() {
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <AlertTriangle className="w-6 h-6 text-yellow-500" /> {t("nav.inventoryAlerts")}
         </h1>
-        <p className="text-muted-foreground">مراقبة مستويات المخزون وتنبيهات النفاد</p>
+        <p className="text-muted-foreground">{t("inventory:alerts.subtitle")}</p>
       </div>
 
       {/* Branch filter */}
       <div>
         <Select value={selectedBranch} onValueChange={setSelectedBranch}>
           <SelectTrigger className="w-56">
-            <SelectValue placeholder="اختر الفرع" />
+            <SelectValue placeholder={t("inventory:alerts.select_branch")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">جميع الفروع</SelectItem>
+            <SelectItem value="all">{t("common.all_branches")}</SelectItem>
             {branches.map((b) => (
               <SelectItem key={b.id} value={String(b.id)}>{branchDisplayName(b)}</SelectItem>
             ))}
@@ -78,14 +78,14 @@ export default function InventoryAlerts() {
         <div className="border rounded-lg p-4 bg-red-50 dark:bg-red-950/20 flex items-center gap-3">
           <ShieldAlert className="w-8 h-8 text-red-500 shrink-0" />
           <div>
-            <p className="text-sm text-muted-foreground">نافد المخزون</p>
+            <p className="text-sm text-muted-foreground">{t("inventory:alerts.out_of_stock_label")}</p>
             <p className="text-2xl font-bold text-red-600">{outOfStock.length}</p>
           </div>
         </div>
         <div className="border rounded-lg p-4 bg-yellow-50 dark:bg-yellow-950/20 flex items-center gap-3">
           <AlertTriangle className="w-8 h-8 text-yellow-500 shrink-0" />
           <div>
-            <p className="text-sm text-muted-foreground">منخفض المخزون</p>
+            <p className="text-sm text-muted-foreground">{t("inventory:alerts.low_stock_label")}</p>
             <p className="text-2xl font-bold text-yellow-600">{lowStock.length}</p>
           </div>
         </div>
@@ -106,7 +106,7 @@ export default function InventoryAlerts() {
             {isLoading ? (
               <TableRow>
                 <TableCell colSpan={4} className="text-center py-10 text-muted-foreground">
-                  جاري التحميل...
+                  {t("common.loading")}
                 </TableCell>
               </TableRow>
             ) : items.length === 0 ? (
@@ -131,7 +131,7 @@ export default function InventoryAlerts() {
                   {item.totalQty <= 0 ? (
                     <Badge variant="destructive" className="gap-1">
                       <ShieldAlert className="w-3 h-3" />
-                      نافد
+                      {t("inventory:alerts.depleted")}
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="text-yellow-600 border-yellow-400 gap-1">
