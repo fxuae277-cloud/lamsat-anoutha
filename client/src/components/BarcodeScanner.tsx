@@ -89,7 +89,7 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
                 <Input
                   autoFocus
                   dir="ltr"
-                  placeholder="الباركود..."
+                  placeholder={t("barcode_placeholder")}
                   value={manualValue}
                   onChange={e => setManualValue(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter" && manualValue.trim()) { onScan(manualValue.trim()); onClose(); } }}

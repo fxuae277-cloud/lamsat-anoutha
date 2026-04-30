@@ -514,7 +514,7 @@ table{width:100%;border-collapse:collapse;margin:15px 0;font-size:12px}th,td{bor
             {statementData && (
               <>
                 <div style={{ textAlign: "center", marginBottom: 16, paddingBottom: 12, borderBottom: "2px solid #e5e7eb" }}>
-                  <h2 style={{ fontSize: 18, fontWeight: "bold" }}>لمسة أنوثة</h2>
+                  <h2 style={{ fontSize: 18, fontWeight: "bold" }}>{t("common.name")}</h2>
                   <p style={{ fontSize: 13, color: "#6b7280" }}>{t("customers.statement")}</p>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-sm">

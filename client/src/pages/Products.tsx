@@ -561,7 +561,7 @@ export default function Products() {
                     : "—"}
                 </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">{p.modelNumber || "—"}</TableCell>
-                <TableCell className="font-medium">{parseFloat(p.price).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} <span className="text-xs text-muted-foreground">ر.ع</span></TableCell>
+                <TableCell className="font-medium">{parseFloat(p.price).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} <span className="text-xs text-muted-foreground">{t("common.omr")}</span></TableCell>
                 <TableCell className="text-center">
                   {(() => {
                     const cost = parseFloat(p.avgCost || p.costDefault || "0");

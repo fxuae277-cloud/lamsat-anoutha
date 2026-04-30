@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -36,6 +37,7 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
     ref
   ) => {
     const [open, setOpen] = React.useState(false);
+    const { t } = useI18n();
 
     // يحوّل YYYY-MM-DD → DD/MM/YYYY
     function toDisplay(iso: string): string {
@@ -153,7 +155,7 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(
               tabIndex={-1}
               disabled={disabled}
               className="absolute left-0 top-0 h-full px-2.5 flex items-center border-r border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50 rounded-l-md"
-              aria-label="اختر تاريخ"
+              aria-label={t("pick_date")}
             >
               <svg
                 className="w-4 h-4"

@@ -73,6 +73,20 @@ import MobileInventory from "@/pages/mobile/MobileInventory";
 import { useEnglishDigits } from "@/lib/useEnglishDigits";
 
 // ─── Error Boundary ──────────────────────────────────────────────────────────
+function PageErrorFallback({ error, onRetry }: { error?: Error; onRetry: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 p-8 text-center" dir="rtl">
+      <div className="text-5xl">⚠️</div>
+      <h2 className="text-xl font-bold text-red-700">{t("common.page_load_error")}</h2>
+      <p className="text-sm text-muted-foreground max-w-md">{error?.message}</p>
+      <button className="mt-2 px-4 py-2 bg-primary text-white rounded-lg text-sm" onClick={onRetry}>
+        {t("common.retry")}
+      </button>
+    </div>
+  );
+}
+
 interface EBState { hasError: boolean; error?: Error }
 class PageErrorBoundary extends Component<{ children: ReactNode }, EBState> {
   constructor(props: { children: ReactNode }) {
@@ -88,17 +102,10 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, EBState> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 p-8 text-center" dir="rtl">
-          <div className="text-5xl">⚠️</div>
-          <h2 className="text-xl font-bold text-red-700">خطأ في تحميل الصفحة</h2>
-          <p className="text-sm text-muted-foreground max-w-md">{this.state.error?.message}</p>
-          <button
-            className="mt-2 px-4 py-2 bg-primary text-white rounded-lg text-sm"
-            onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
-          >
-            إعادة المحاولة
-          </button>
-        </div>
+        <PageErrorFallback
+          error={this.state.error}
+          onRetry={() => { this.setState({ hasError: false }); window.location.reload(); }}
+        />
       );
     }
     return this.props.children;

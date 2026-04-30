@@ -580,12 +580,10 @@ export default function Settings() {
                   <Plug className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
                   <div className="space-y-1">
                     <p className="font-semibold text-sm text-blue-700 dark:text-blue-400">
-                      إعدادات الطابعة لكل جهاز كاشير
+                      {t("printer_per_device_title")}
                     </p>
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      اختيار الطابعة ومقاس الورق والاتصال بخدمة الطباعة المحلية أصبحت في صفحة نقطة البيع
-                      مباشرة — افتح POS من جهاز الكاشير ثم اضغط زر <strong>"الطباعة"</strong> في الشريط
-                      العلوي الوردي. كل جهاز يحفظ إعداداته محلياً ولا تتأثر بقية الفروع أو أجهزة الكاشير الأخرى.
+                      {t("printer_per_device_desc").replace("{btn}", t("print_btn_ref"))}
                     </p>
                   </div>
                 </div>
