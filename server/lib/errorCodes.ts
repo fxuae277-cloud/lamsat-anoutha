@@ -102,6 +102,39 @@ export const ERROR_REGISTRY = {
   JOURNAL_ENTRY_UNBALANCED:     { status: 400, ar: "القيد غير متوازن - المدين لا يساوي الدائن",                en: "Journal entry is unbalanced — debits must equal credits" },
   JOURNAL_POST_FAILED:          { status: 400, ar: "خطأ في ترحيل القيد",                                       en: "Failed to post journal entry" },
 
+  // ── Customers ─────────────────────────────────────────────────────────────
+  CUSTOMER_NOT_FOUND:           { status: 404, ar: "العميل غير موجود",                                        en: "Customer not found" },
+
+  // ── Suppliers ─────────────────────────────────────────────────────────────
+  SUPPLIER_NOT_FOUND:           { status: 404, ar: "المورد غير موجود",                                        en: "Supplier not found" },
+  DUPLICATE_SUPPLIER:           { status: 409, ar: "يوجد مورد بنفس الاسم",                                    en: "A supplier with this name already exists" },
+
+  // ── Purchases ─────────────────────────────────────────────────────────────
+  PURCHASE_NOT_FOUND:           { status: 404, ar: "فاتورة المشتريات غير موجودة",                             en: "Purchase invoice not found" },
+
+  // ── Shifts ────────────────────────────────────────────────────────────────
+  SHIFT_NOT_FOUND:              { status: 404, ar: "الوردية غير موجودة",                                      en: "Shift not found" },
+  SHIFT_REQUIRED:               { status: 400, ar: "يجب فتح وردية أولاً قبل تنفيذ هذه العملية",               en: "A shift must be opened first before this operation" },
+  SHIFT_ALREADY_OPEN:           { status: 409, ar: "يوجد شفت مفتوح بالفعل لهذا الجهاز",                       en: "A shift is already open for this device" },
+
+  // ── Expenses / Returns ────────────────────────────────────────────────────
+  EXPENSE_NOT_FOUND:            { status: 404, ar: "المصروف غير موجود",                                       en: "Expense not found" },
+  RETURN_NOT_FOUND:             { status: 404, ar: "المرتجع غير موجود",                                       en: "Return not found" },
+
+  // ── Users (extended) ──────────────────────────────────────────────────────
+  PHONE_TAKEN:                  { status: 409, ar: "رقم الهاتف مستخدم بالفعل",                                en: "Phone number already in use" },
+
+  // ── Inventory ─────────────────────────────────────────────────────────────
+  NO_ACTIVE_LOCATION:           { status: 400, ar: "لا يوجد موقع نشط للفرع المحدد",                           en: "No active location for the specified branch" },
+  TRANSFER_COMPLETED:           { status: 200, ar: "تم النقل بنجاح",                                          en: "Transfer completed successfully" },
+  INVENTORY_ADDED:              { status: 200, ar: "تم إضافة البضاعة",                                        en: "Inventory added successfully" },
+
+  // ── Payroll ───────────────────────────────────────────────────────────────
+  SALARY_NOT_FOUND:             { status: 404, ar: "تفاصيل الراتب غير موجودة",                                en: "Salary details not found" },
+  PAYROLL_NOT_FOUND:            { status: 404, ar: "كشف الرواتب غير موجود",                                    en: "Payroll run not found" },
+  DUPLICATE_PAYROLL_RUN:        { status: 400, ar: "يوجد كشف رواتب لهذا الشهر مسبقاً",                        en: "A payroll run already exists for this month" },
+  DUPLICATE_DEDUCTION:          { status: 409, ar: "يوجد خصم متكرر بنفس السبب لنفس الفترة",                   en: "A duplicate deduction exists for the same reason and period" },
+
   // ── Employees / Payroll ───────────────────────────────────────────────────
   EMPLOYEE_NOT_FOUND:           { status: 404, ar: "الموظف غير موجود",                                        en: "Employee not found" },
   OWNER_ONLY_OPENING_BALANCES:  { status: 403, ar: "فقط المالك يمكنه تعديل الأرصدة الافتتاحية",                en: "Only the owner can modify opening balances" },

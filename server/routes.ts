@@ -34,6 +34,8 @@ import {
   orderItemSchema, orderStatusSchema,
   createCategorySchema, updateCategorySchema,
 } from "./validation";
+import { getLang } from "./middleware/errorHandler";
+import { errJson } from "./lib/errorCodes";
 import { registerExportRoutes } from "./exports";
 import { journalForSale, journalForExpense, journalForPurchase, journalForSaleReturn, journalForSupplierPayment, journalForSalaryPayment } from "./autoJournal";
 import { registerBackupRoutes } from "./backup";
@@ -70,7 +72,7 @@ export async function registerRoutes(
 
   app.post("/api/auth/login", authLimiter, async (req, res) => {
     const parsed = loginSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
     const { username, password } = parsed.data;
 
     // Bypass Drizzle ORM — use raw pool query with .trim() on username
@@ -96,7 +98,7 @@ export async function registerRoutes(
 
     if (!user) {
       logger.warn("failed_login", { username, reason: "user_not_found", ip: req.ip });
-      return res.status(401).json({ message: "اسم المستخدم أو كلمة المرور غير صحيحة" });
+      return res.status(401).json(errJson("INVALID_CREDENTIALS", getLang(req)));
     }
 
     // ── فحص قفل الحساب ──────────────────────────────────────────────────────
@@ -137,7 +139,7 @@ export async function registerRoutes(
     }
 
     if (!user.isActive) {
-      return res.status(403).json({ message: "الحساب معطّل" });
+      return res.status(403).json(errJson("ACCOUNT_DISABLED", getLang(req)));
     }
 
     // ── تسجيل دخول ناجح: إعادة تعيين العداد ─────────────────────────────────
@@ -152,7 +154,7 @@ export async function registerRoutes(
       if (err) {
         console.error("[login] session.save() FAILED:", err?.message, err?.stack);
         logger.error("session_save_error", { message: err?.message, stack: err?.stack });
-        return res.status(500).json({ message: "خطأ في حفظ الجلسة", detail: err?.message });
+        return res.status(500).json({ ...errJson("SESSION_SAVE_FAILED", getLang(req)), detail: err?.message });
       }
       res.json({ user: safeUser });
     });
@@ -161,7 +163,7 @@ export async function registerRoutes(
   app.post("/api/auth/logout", (req, res) => {
     req.session.destroy(() => {
       res.clearCookie("connect.sid");
-      res.json({ message: "تم تسجيل الخروج" });
+      res.json(errJson("LOGGED_OUT", getLang(req)));
     });
   });
 
@@ -171,12 +173,12 @@ export async function registerRoutes(
       console.log("[/api/auth/me] 401 — sessionID:", req.sessionID,
         "| cookie header:", req.headers.cookie ? "PRESENT" : "MISSING",
         "| session keys:", Object.keys(req.session));
-      return res.status(401).json({ message: "غير مصرح" });
+      return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
     }
     const user = await storage.getUser(req.session.userId);
     if (!user || !user.isActive) {
       req.session.destroy(() => {});
-      return res.status(401).json({ message: "غير مصرح" });
+      return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
     }
     const branch = user.branchId ? await storage.getBranch(user.branchId) : null;
     const { password: _, ...safeUser } = user;
@@ -191,7 +193,7 @@ export async function registerRoutes(
         await pool.query("UPDATE users SET ui_language = $1 WHERE id = $2", [uiLanguage, userId]);
       }
       const user = await storage.getUser(userId);
-      if (!user) return res.status(404).json({ message: "المستخدم غير موجود" });
+      if (!user) return res.status(404).json(errJson("USER_NOT_FOUND", getLang(req)));
       const { password: _, ...safeUser } = user;
       res.json({ user: safeUser });
     } catch (e: any) {
@@ -392,7 +394,7 @@ export async function registerRoutes(
           "[QZ-Sign] bad request — body.request must be a non-empty string, got:",
           typeof toSign
         );
-        return res.status(400).json({ message: "request string مطلوب" });
+        return res.status(400).json(errJson("REQUEST_STRING_REQUIRED", getLang(req)));
       }
 
       const privateKey = resolveQzPrivateKey();
@@ -401,9 +403,7 @@ export async function registerRoutes(
           "[QZ-Sign] QZ_PRIVATE_KEY missing — refusing to sign"
         );
         logger.error("QZ_PRIVATE_KEY missing from environment");
-        return res.status(500).json({
-          message: "QZ_PRIVATE_KEY غير مضبوط في إعدادات الخادم",
-        });
+        return res.status(500).json(errJson("QZ_KEY_MISSING", getLang(req)));
       }
 
       console.log(
@@ -441,7 +441,7 @@ export async function registerRoutes(
 
   app.get("/api/branches", requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
-    if (!user) return res.status(401).json({ message: "المستخدم غير موجود" });
+    if (!user) return res.status(401).json(errJson("USER_NOT_FOUND", getLang(req)));
     if (user.role === "owner" || user.role === "admin") {
       res.json(await storage.getBranches());
     } else {
@@ -460,7 +460,7 @@ export async function registerRoutes(
   });
   app.patch("/api/branches/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     const row = await storage.updateBranch(Number(req.params.id), req.body);
-    if (!row) return res.status(404).json({ message: "لم يتم العثور على الفرع" });
+    if (!row) return res.status(404).json(errJson("BRANCH_NOT_FOUND", getLang(req)));
     res.json(row);
   });
   app.delete("/api/branches/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
@@ -504,18 +504,18 @@ export async function registerRoutes(
   app.post("/api/auth/change-password", requireAuth, passwordLimiter, async (req, res) => {
     const { oldPassword, newPassword } = req.body;
     if (!oldPassword || !newPassword) {
-      return res.status(400).json({ message: "كلمة المرور القديمة والجديدة مطلوبتان" });
+      return res.status(400).json(errJson("PASSWORD_FIELDS_REQUIRED", getLang(req)));
     }
     if (newPassword.length < 6) {
-      return res.status(400).json({ message: "كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل" });
+      return res.status(400).json(errJson("NEW_PASSWORD_TOO_SHORT", getLang(req)));
     }
     const user = await storage.getUser(req.session.userId!);
-    if (!user) return res.status(404).json({ message: "المستخدم غير موجود" });
+    if (!user) return res.status(404).json(errJson("USER_NOT_FOUND", getLang(req)));
     const valid = await bcrypt.compare(oldPassword, user.password);
-    if (!valid) return res.status(401).json({ message: "كلمة المرور القديمة غير صحيحة" });
+    if (!valid) return res.status(401).json(errJson("WRONG_PASSWORD", getLang(req)));
     const hashed = await bcrypt.hash(newPassword, 10);
     await storage.updateUser(user.id, { password: hashed });
-    res.json({ message: "تم تغيير كلمة المرور بنجاح" });
+    res.json(errJson("PASSWORD_CHANGED", getLang(req)));
   });
 
   app.get("/api/users", requireOwnerOrAdmin, async (_req, res) => {
@@ -524,15 +524,15 @@ export async function registerRoutes(
   });
   app.post("/api/users", requireOwnerOrAdmin, async (req, res) => {
     const parsed = createUserSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
     const { name, username, password, role, branchId, terminalName, isActive, pin, phone, salary } = parsed.data;
     const existing = await storage.getUserByUsername(username);
     if (existing) {
-      return res.status(409).json({ message: "اسم المستخدم مستخدم بالفعل" });
+      return res.status(409).json(errJson("USERNAME_TAKEN", getLang(req)));
     }
     if (pin) {
       const pinUser = await storage.getUserByPin(pin);
-      if (pinUser) return res.status(409).json({ message: "رقم PIN مستخدم بالفعل من موظف آخر" });
+      if (pinUser) return res.status(409).json(errJson("PIN_TAKEN", getLang(req)));
     }
     const hashed = await bcrypt.hash(password, 10);
     const { password: _, ...safeUser } = await storage.createUser({
@@ -552,7 +552,7 @@ export async function registerRoutes(
   app.patch("/api/users/:id", requireOwnerOrAdmin, async (req, res) => {
     const id = Number(req.params.id);
     const parsed = updateUserSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
     const { name, role, branchId, terminalName, isActive, pin, phone, salary, salaryType, commissionRate, employmentStatus, openingAdvanceBalance, openingPayableBalance } = req.body;
     const updateData: any = {};
     if (name !== undefined) updateData.name = parsed.data.name;
@@ -563,7 +563,7 @@ export async function registerRoutes(
     if (pin !== undefined) {
       if (pin) {
         const pinUser = await storage.getUserByPin(pin);
-        if (pinUser && pinUser.id !== id) return res.status(409).json({ message: "رقم PIN مستخدم بالفعل" });
+        if (pinUser && pinUser.id !== id) return res.status(409).json(errJson("PIN_TAKEN_SHORT", getLang(req)));
       }
       updateData.pin = pin || null;
     }
@@ -575,15 +575,15 @@ export async function registerRoutes(
     if (openingAdvanceBalance !== undefined) updateData.openingAdvanceBalance = String(openingAdvanceBalance);
     if (openingPayableBalance !== undefined) updateData.openingPayableBalance = String(openingPayableBalance);
     const updated = await storage.updateUser(id, updateData);
-    if (!updated) return res.status(404).json({ message: "المستخدم غير موجود" });
+    if (!updated) return res.status(404).json(errJson("USER_NOT_FOUND", getLang(req)));
     const { password: _, ...safeUser } = updated;
     res.json(safeUser);
   });
   app.post("/api/users/verify-pin", requireAuth, async (req, res) => {
     const { pin } = req.body;
-    if (!pin) return res.status(400).json({ message: "رقم PIN مطلوب" });
+    if (!pin) return res.status(400).json(errJson("PIN_REQUIRED", getLang(req)));
     const user = await storage.getUserByPin(pin);
-    if (!user) return res.status(404).json({ message: "رقم PIN غير صحيح" });
+    if (!user) return res.status(404).json(errJson("INVALID_PIN", getLang(req)));
     const { password: _, ...safeUser } = user;
     res.json(safeUser);
   });
@@ -591,10 +591,10 @@ export async function registerRoutes(
     const id = Number(req.params.id);
     const { newPassword } = req.body;
     if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" });
+      return res.status(400).json(errJson("PASSWORD_TOO_SHORT", getLang(req)));
     }
     const targetUser = await storage.getUser(id);
-    if (!targetUser) return res.status(404).json({ message: "المستخدم غير موجود" });
+    if (!targetUser) return res.status(404).json(errJson("USER_NOT_FOUND", getLang(req)));
     const hashed = await bcrypt.hash(newPassword, 10);
     await storage.updateUser(id, { password: hashed });
     const actor = req.session?.user;
@@ -609,7 +609,7 @@ export async function registerRoutes(
       oldValue: null,
       newValue: null,
     });
-    res.json({ message: "تم إعادة تعيين كلمة المرور بنجاح" });
+    res.json(errJson("PASSWORD_RESET", getLang(req)));
   });
 
   app.get("/api/dashboard/executive", requireOwnerOrAdmin, async (req, res) => {
@@ -1091,20 +1091,20 @@ export async function registerRoutes(
   });
   app.post("/api/categories", requireAuth, requirePermission("categories.manage"), async (req, res) => {
     const parsed = createCategorySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
     res.status(201).json(await storage.createCategory(parsed.data as any));
   });
   // toggle قبل patch العام — مهم للترتيب في Express
   app.patch("/api/categories/:id/toggle", requireAuth, requirePermission("categories.manage"), async (req, res) => {
     const row = await storage.toggleCategoryActive(Number(req.params.id));
-    if (!row) return res.status(404).json({ message: "الفئة غير موجودة" });
+    if (!row) return res.status(404).json(errJson("CATEGORY_NOT_FOUND", getLang(req)));
     res.json(row);
   });
   app.patch("/api/categories/:id", requireAuth, requirePermission("categories.manage"), async (req, res) => {
     const parsed = updateCategorySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
     const row = await storage.updateCategory(Number(req.params.id), parsed.data as any);
-    if (!row) return res.status(404).json({ message: "الفئة غير موجودة" });
+    if (!row) return res.status(404).json(errJson("CATEGORY_NOT_FOUND", getLang(req)));
     res.json(row);
   });
   app.delete("/api/categories/:id", requireAuth, requirePermission("categories.manage"), async (req, res) => {
@@ -1174,7 +1174,7 @@ export async function registerRoutes(
 
   app.get("/api/products/:id", requireAuth, requirePermission("products.view"), async (req, res) => {
     const product = await storage.getProduct(Number(req.params.id));
-    if (!product) return res.status(404).json({ message: "المنتج غير موجود" });
+    if (!product) return res.status(404).json(errJson("PRODUCT_NOT_FOUND", getLang(req)));
     const [variants, locationInventory, lastPurchaseResult, variantPricesResult] = await Promise.all([
       storage.getVariantsByProduct(product.id),
       storage.getLocationInventoryByProduct(product.id),
@@ -1262,7 +1262,7 @@ export async function registerRoutes(
   app.post("/api/products", requireAuth, requirePermission("products.create"), async (req, res) => {
     try {
       const parsed = createProductSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
       const { variants, ...productData } = parsed.data;
       // فحص تكرار الاسم
       const dupName = await pool.query(`SELECT id FROM products WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))`, [productData.name]);
@@ -1275,14 +1275,14 @@ export async function registerRoutes(
       const result = await storage.createProductWithVariants(productData as any, variants ?? []);
       res.status(201).json(result);
     } catch (err: any) {
-      if (err.code === "23505") return res.status(409).json({ message: "الباركود مستخدم بالفعل" });
-      res.status(500).json({ message: err?.message ?? "خطأ في إنشاء المنتج" });
+      if (err.code === "23505") return res.status(409).json(errJson("DUPLICATE_BARCODE", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
   app.patch("/api/products/:id", requireAuth, requirePermission("products.edit"), async (req, res) => {
     try {
       const parsed = updateProductSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
       const productId = Number(req.params.id);
       // فحص تكرار الاسم
       if (parsed.data.name) {
@@ -1302,7 +1302,7 @@ export async function registerRoutes(
       }
       const oldProduct = await storage.getProduct(productId);
       const row = await storage.updateProduct(productId, parsed.data);
-      if (!row) return res.status(404).json({ message: "المنتج غير موجود" });
+      if (!row) return res.status(404).json(errJson("PRODUCT_NOT_FOUND", getLang(req)));
       if (oldProduct && parsed.data.price !== undefined && (oldProduct.price as any) !== parsed.data.price) {
         storage.addAuditLog({
           action: "product_price_change",
@@ -1318,16 +1318,16 @@ export async function registerRoutes(
       }
       res.json(row);
     } catch (err: any) {
-      if (err.code === "23505") return res.status(409).json({ message: "الباركود مستخدم بالفعل" });
-      res.status(500).json({ message: err?.message ?? "خطأ في تحديث المنتج" });
+      if (err.code === "23505") return res.status(409).json(errJson("DUPLICATE_BARCODE", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
   app.delete("/api/products/:id", requireAuth, requirePermission("products.delete"), async (req, res) => {
     try {
       await storage.deleteProduct(Number(req.params.id));
-      res.json({ message: "تم حذف المنتج" });
+      res.json(errJson("PRODUCT_DELETED", getLang(req)));
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "فشل حذف المنتج" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -1341,7 +1341,7 @@ export async function registerRoutes(
     try {
       const productId = Number(req.params.id);
       const productRes = await pool.query(`SELECT category_id FROM products WHERE id = $1`, [productId]);
-      if (!productRes.rows.length) return res.status(404).json({ message: "المنتج غير موجود" });
+      if (!productRes.rows.length) return res.status(404).json(errJson("PRODUCT_NOT_FOUND", getLang(req)));
       const categoryId = productRes.rows[0].category_id || 0;
       const countRes = await pool.query(`SELECT COUNT(*) AS cnt FROM product_variants WHERE product_id = $1`, [productId]);
       const seq = (Number(countRes.rows[0].cnt) + 1).toString().padStart(2, "0");
@@ -1390,21 +1390,21 @@ export async function registerRoutes(
     try {
       const productId = Number(req.params.id);
       const parsed = createProductVariantSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
       const product = await storage.getProduct(productId);
-      if (!product) return res.status(404).json({ message: "المنتج غير موجود" });
+      if (!product) return res.status(404).json(errJson("PRODUCT_NOT_FOUND", getLang(req)));
       if (parsed.data.barcode) {
         const existing = await storage.getVariantByBarcode(parsed.data.barcode);
-        if (existing) return res.status(400).json({ message: "الباركود مستخدم بالفعل" });
+        if (existing) return res.status(400).json(errJson("DUPLICATE_BARCODE", getLang(req)));
       }
       if (parsed.data.sku) {
         const existing = await storage.getVariantBySku(parsed.data.sku);
-        if (existing) return res.status(400).json({ message: "رمز SKU مستخدم بالفعل" });
+        if (existing) return res.status(400).json(errJson("DUPLICATE_SKU", getLang(req)));
       }
       const variant = await storage.createVariant({ ...parsed.data, productId });
       res.status(201).json(variant);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
   app.get("/api/variants", requireAuth, requirePermission("products.view"), async (_req, res) => {
@@ -1412,46 +1412,46 @@ export async function registerRoutes(
   });
   app.get("/api/variants/barcode/:barcode", requireAuth, requirePermission("products.view"), async (req, res) => {
     const variant = await storage.getVariantByBarcode(req.params.barcode as string);
-    if (!variant) return res.status(404).json({ message: "الباركود غير موجود" });
+    if (!variant) return res.status(404).json(errJson("BARCODE_NOT_FOUND", getLang(req)));
     res.json(variant);
   });
   app.patch("/api/variants/:id", requireAuth, requirePermission("products.edit"), async (req, res) => {
     try {
       const id = Number(req.params.id);
       const parsed = updateProductVariantSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
       if (parsed.data.barcode) {
         const existing = await storage.getVariantByBarcode(parsed.data.barcode);
-        if (existing && existing.id !== id) return res.status(400).json({ message: "الباركود مستخدم بالفعل" });
+        if (existing && existing.id !== id) return res.status(400).json(errJson("DUPLICATE_BARCODE", getLang(req)));
       }
       if (parsed.data.sku) {
         const existing = await storage.getVariantBySku(parsed.data.sku);
-        if (existing && existing.id !== id) return res.status(400).json({ message: "رمز SKU مستخدم بالفعل" });
+        if (existing && existing.id !== id) return res.status(400).json(errJson("DUPLICATE_SKU", getLang(req)));
       }
       const variant = await storage.updateVariant(id, parsed.data);
-      if (!variant) return res.status(404).json({ message: "المتغير غير موجود" });
+      if (!variant) return res.status(404).json(errJson("VARIANT_NOT_FOUND", getLang(req)));
       res.json(variant);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
   app.delete("/api/variants/:id", requireAuth, requirePermission("products.delete"), async (req, res) => {
     try {
       await storage.deleteVariant(Number(req.params.id));
-      res.json({ message: "تم حذف المتغير" });
+      res.json(errJson("VARIANT_DELETED", getLang(req)));
     } catch (err: any) {
-      if (err.code === "23503") return res.status(400).json({ message: "لا يمكن حذف المتغير لأنه مستخدم في طلبات أو مخزون" });
-      res.status(500).json({ message: err?.message ?? "خطأ في حذف المتغير" });
+      if (err.code === "23503") return res.status(400).json(errJson("VARIANT_IN_USE", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
   app.post("/api/variants/quick-create", requireAuth, requirePermission("products.create"), async (req, res) => {
     try {
       const parsed = quickCreateVariantSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
       const { productName, categoryId, barcode, sku, color, size, price, costDefault } = parsed.data;
       if (barcode) {
         const existing = await storage.getVariantByBarcode(barcode);
-        if (existing) return res.status(400).json({ message: "الباركود مستخدم بالفعل" });
+        if (existing) return res.status(400).json(errJson("DUPLICATE_BARCODE", getLang(req)));
       }
       const product = await storage.createProduct({
         name: productName,
@@ -1474,7 +1474,7 @@ export async function registerRoutes(
       });
       res.status(201).json({ product, variant });
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -1491,17 +1491,17 @@ export async function registerRoutes(
   app.post("/api/cash-movements", requireAuth, async (req, res) => {
     try {
       const user = await storage.getUser((req as any).session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
 
       const parsed = cashMovementInputSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: formatZodError(parsed.error) });
+        return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
       }
       const { type, amount, note, shiftId } = parsed.data;
 
       const isInflow  = (CASH_MOVEMENT_INFLOW_TYPES  as readonly string[]).includes(type);
       const isOutflow = (CASH_MOVEMENT_OUTFLOW_TYPES as readonly string[]).includes(type);
-      if (!isInflow && !isOutflow) return res.status(400).json({ message: "نوع غير صالح" });
+      if (!isInflow && !isOutflow) return res.status(400).json(errJson("INVALID_TYPE", getLang(req)));
 
       const branchId = user.branchId ?? null;
       const dateStr  = new Date().toISOString().slice(0, 10);
@@ -1573,7 +1573,7 @@ export async function registerRoutes(
   app.get("/api/cash-movements", requireAuth, async (req, res) => {
     try {
       const user = await storage.getUser((req as any).session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
       const isPrivileged = ["owner", "admin", "manager"].includes(user.role);
       const reqBranchId = req.query.branchId ? Number(req.query.branchId) : null;
       const branchId = isPrivileged ? reqBranchId : (user.branchId ?? null);
@@ -1602,7 +1602,7 @@ export async function registerRoutes(
         "SELECT id, role, branch_id FROM users WHERE id = $1",
         [req.session.userId]
       );
-      if (!userRow.rows[0]) return res.status(401).json({ message: "غير مصرح" });
+      if (!userRow.rows[0]) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
       const u = userRow.rows[0];
 
       const isOwnerOrAdmin = u.role === "owner" || u.role === "admin";
@@ -1967,7 +1967,7 @@ export async function registerRoutes(
       });
     } catch (err: any) {
       console.error("[branch-summary]", err);
-      res.status(500).json({ message: "خطأ في الخادم", error: err.message });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -2124,7 +2124,7 @@ export async function registerRoutes(
       async (req, res) => {
         try {
           const branchId = Number(req.params.branchId);
-          if (!branchId) return res.status(400).json({ message: "branchId غير صالح" });
+          if (!branchId) return res.status(400).json(errJson("INVALID_BRANCH_ID", getLang(req)));
           const data = await getOpeningStock(branchId);
           if (!data) return res.json(null);
           res.json(data);
@@ -2163,7 +2163,7 @@ export async function registerRoutes(
       async (req, res) => {
         try {
           const entryId = Number(req.params.entryId);
-          if (!entryId) return res.status(400).json({ message: "entryId غير صالح" });
+          if (!entryId) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
           await commitOpeningStock(entryId, req.session.userId!);
           res.json({ success: true, message: "تم تثبيت المخزون الافتتاحي بنجاح" });
         } catch (err: any) {
@@ -2180,7 +2180,7 @@ export async function registerRoutes(
       async (req, res) => {
         try {
           const branchId = Number(req.params.branchId);
-          if (!branchId) return res.status(400).json({ message: "branchId غير صالح" });
+          if (!branchId) return res.status(400).json(errJson("INVALID_BRANCH_ID", getLang(req)));
           await resetOpeningStock(branchId, req.session.userId!);
           res.json({ success: true, message: "تم إعادة تعيين المخزون الافتتاحي" });
         } catch (err: any) {
@@ -2201,8 +2201,8 @@ export async function registerRoutes(
             csvText: string;
             notes?: string;
           };
-          if (!branchId) return res.status(400).json({ message: "branchId مطلوب" });
-          if (!csvText) return res.status(400).json({ message: "csvText مطلوب" });
+          if (!branchId) return res.status(400).json(errJson("BRANCH_ID_REQUIRED", getLang(req)));
+          if (!csvText) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
 
           const items = await parseCsvToItems(csvText);
           const createdBy = req.session.userId!;
@@ -2235,7 +2235,7 @@ export async function registerRoutes(
     const locationId = Number(req.params.locationId);
     const locRes = await pool.query(`SELECT id, is_central, branch_id FROM locations WHERE id = $1`, [locationId]);
     const loc = locRes.rows[0];
-    if (!loc) return res.status(404).json({ message: "الموقع غير موجود" });
+    if (!loc) return res.status(404).json(errJson("LOCATION_NOT_FOUND", getLang(req)));
 
     let locationIds: number[] = [];
     if (loc.is_central) {
@@ -2289,7 +2289,7 @@ export async function registerRoutes(
   });
   app.get("/api/stock-transfers/:id", requireAuth, requirePermission("inventory.view"), async (req, res) => {
     const transfer = await storage.getStockTransfer(Number(req.params.id));
-    if (!transfer) return res.status(404).json({ message: "التحويل غير موجود" });
+    if (!transfer) return res.status(404).json(errJson("TRANSFER_NOT_FOUND", getLang(req)));
     const lines = await storage.getStockTransferLines(transfer.id);
 
     const fromLocRes = await pool.query(`
@@ -2341,13 +2341,13 @@ export async function registerRoutes(
       });
       res.status(201).json(transfer);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
   app.post("/api/stock-transfers/:id/lines", requireAuth, requirePermission("inventory.transfer"), async (req, res) => {
     try {
       const transfer = await storage.getStockTransfer(Number(req.params.id));
-      if (!transfer || transfer.status !== "draft") return res.status(400).json({ message: "لا يمكن التعديل" });
+      if (!transfer || transfer.status !== "draft") return res.status(400).json(errJson("TRANSFER_NOT_EDITABLE", getLang(req)));
 
       const variantId = req.body.variantId;
       const qty = req.body.qty || 1;
@@ -2383,21 +2383,21 @@ export async function registerRoutes(
       });
       res.status(201).json(line);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
   app.delete("/api/stock-transfer-lines/:id", requireAuth, requirePermission("inventory.transfer"), async (req, res) => {
     await storage.deleteStockTransferLine(Number(req.params.id));
-    res.json({ message: "تم الحذف" });
+    res.json(errJson("TRANSFER_DELETED", getLang(req)));
   });
   app.post("/api/stock-transfers/execute", requireAuth, requirePermission("inventory.transfer"), async (req, res) => {
     const { fromLocationId, toLocationId, lines } = req.body;
     if (!fromLocationId || !toLocationId || !lines?.length) {
-      return res.status(400).json({ message: "بيانات ناقصة" });
+      return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
     }
     const filteredLines = lines.filter((l: any) => l.qty > 0);
     if (filteredLines.length === 0) {
-      return res.status(400).json({ message: "لم يتم تحديد أصناف للتحويل" });
+      return res.status(400).json(errJson("TRANSFER_NO_ITEMS", getLang(req)));
     }
 
     try {
@@ -2419,7 +2419,7 @@ export async function registerRoutes(
 
       const result = await storage.approveStockTransfer(transfer.id, req.session.userId!);
       if (!result) {
-        return res.status(400).json({ message: "فشل اعتماد التحويل" });
+        return res.status(400).json(errJson("TRANSFER_COMMIT_FAILED", getLang(req)));
       }
 
       const fromLocRes = await pool.query(`
@@ -2444,17 +2444,17 @@ export async function registerRoutes(
         lines_count: filteredLines.length,
       });
     } catch (err: any) {
-      res.status(400).json({ message: err?.message ?? "خطأ في تنفيذ التحويل" });
+      res.status(400).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.post("/api/stock-transfers/:id/approve", requireAuth, requirePermission("inventory.transfer"), async (req, res) => {
     try {
       const result = await storage.approveStockTransfer(Number(req.params.id), req.session.userId!);
-      if (!result) return res.status(400).json({ message: "لا يمكن اعتماد التحويل" });
+      if (!result) return res.status(400).json(errJson("TRANSFER_APPROVE_FAILED", getLang(req)));
       res.json(result);
     } catch (err: any) {
-      res.status(400).json({ message: err?.message ?? "خطأ في اعتماد التحويل" });
+      res.status(400).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -2478,7 +2478,7 @@ export async function registerRoutes(
 
   app.get("/api/inventory", requireAuth, requirePermission("inventory.view"), async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
-    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
       : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId ?? undefined);
@@ -2490,7 +2490,7 @@ export async function registerRoutes(
   });
   app.get("/api/inventory/transactions", requireAuth, requirePermission("inventory.view"), async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
-    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
       : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId ?? undefined);
@@ -2506,7 +2506,7 @@ export async function registerRoutes(
   app.post("/api/inventory/receive", requireAuth, requirePermission("inventory.edit"), async (req, res) => {
     const { productId, warehouseId, quantity } = req.body;
     if (!productId || !warehouseId || !quantity) {
-      return res.status(400).json({ message: "البيانات ناقصة" });
+      return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
     }
     res.json(await storage.adjustInventory(productId, warehouseId, quantity));
   });
@@ -2522,7 +2522,7 @@ export async function registerRoutes(
 
   app.get("/api/locations", requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
-    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
       : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId);
@@ -2531,7 +2531,7 @@ export async function registerRoutes(
 
   app.get("/api/branch-inventory", requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
-    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
       : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId);
@@ -2540,7 +2540,7 @@ export async function registerRoutes(
 
   app.get("/api/location-inventory", requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
-    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
       : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId);
@@ -2550,7 +2550,7 @@ export async function registerRoutes(
 
   app.get("/api/location-inventory/transactions", requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
-    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
       : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId);
@@ -2560,7 +2560,7 @@ export async function registerRoutes(
 
   app.get("/api/location-inventory/low-stock", requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
-    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
       : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId);
@@ -2572,10 +2572,10 @@ export async function registerRoutes(
     try {
       const { fromLocationId, toLocationId, productId, quantity, note } = req.body;
       if (!fromLocationId || !toLocationId || !productId || !quantity || quantity <= 0) {
-        return res.status(400).json({ message: "البيانات ناقصة أو غير صحيحة" });
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       }
       await storage.transferStock(fromLocationId, toLocationId, productId, quantity, note, req.session.userId);
-      res.json({ message: "تم النقل بنجاح" });
+      res.json(errJson("TRANSFER_COMPLETED", getLang(req)));
     } catch (e: any) {
       res.status(400).json({ message: e.message || "فشل النقل" });
     }
@@ -2585,7 +2585,7 @@ export async function registerRoutes(
     try {
       const { branchId, items } = req.body;
       if (!branchId || !items || !Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ message: "البيانات ناقصة أو غير صحيحة" });
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       }
       const result = await storage.createLocationTransfer(branchId, items, req.session.userId!);
       res.json(result);
@@ -2598,11 +2598,11 @@ export async function registerRoutes(
     try {
       const { branch_id, items } = req.body;
       if (!branch_id || !items || !Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ message: "البيانات ناقصة أو غير صحيحة" });
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       }
       for (const it of items) {
         if (!it.product_id || !it.qty || it.qty <= 0) {
-          return res.status(400).json({ message: "كل صنف يجب أن يحتوي على product_id و qty > 0" });
+          return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
         }
       }
       const mapped = items.map((it: any) => ({ productId: Number(it.product_id), qty: Number(it.qty) }));
@@ -2619,7 +2619,7 @@ export async function registerRoutes(
 
   app.get("/api/inventory-transfers", requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
-    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
     const branchId = req.query.branchId
       ? Number(req.query.branchId)
       : (user.role === "owner" || user.role === "admin" ? undefined : user.branchId);
@@ -2630,10 +2630,10 @@ export async function registerRoutes(
     try {
       const { branchId, productId, quantity, note } = req.body;
       if (!branchId || !productId || !quantity || quantity <= 0) {
-        return res.status(400).json({ message: "البيانات ناقصة أو غير صحيحة" });
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       }
       await storage.addStock(branchId, productId, quantity, "manual_receipt", undefined, undefined, note || "استلام يدوي", req.session.userId);
-      res.json({ message: "تم إضافة البضاعة" });
+      res.json(errJson("INVENTORY_ADDED", getLang(req)));
     } catch (e: any) {
       res.status(400).json({ message: e.message || "فشل الإضافة" });
     }
@@ -2645,7 +2645,7 @@ export async function registerRoutes(
   });
   app.get("/api/customers", requireAuth, requirePermission("customers.view"), async (req, res) => {
     const user = await storage.getUser((req as any).session.userId!);
-    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
     const isPrivileged = ["owner", "admin", "manager"].includes(user.role);
     const branchId = isPrivileged ? null : (user.branchId ?? null);
     res.json(await storage.getCustomers(branchId));
@@ -2654,7 +2654,7 @@ export async function registerRoutes(
   app.get("/api/customers/search", requireAuth, requirePermission("customers.view"), async (req, res) => {
     try {
       const user = await storage.getUser((req as any).session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
       const isPrivileged = ["owner", "admin", "manager"].includes(user.role);
       const branchId = isPrivileged ? null : (user.branchId ?? null);
 
@@ -2702,9 +2702,9 @@ export async function registerRoutes(
   app.post("/api/customers", requireAuth, requirePermission("customers.create"), async (req, res) => {
     try {
       const user = await storage.getUser((req as any).session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
       const parsed = insertCustomerSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
       const phone = (parsed.data as any).phone;
       if (phone) {
         const existing = await storage.getCustomerByPhone(phone);
@@ -2740,12 +2740,12 @@ export async function registerRoutes(
   app.patch("/api/customers/:id/link-branch", requireAuth, requirePermission("customers.edit"), async (req, res) => {
     try {
       const user = await storage.getUser((req as any).session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
       const id = parseInt(req.params.id as string);
       const branchId = user.branchId ?? null;
-      if (!branchId) return res.status(400).json({ message: "المستخدم غير مرتبط بفرع" });
+      if (!branchId) return res.status(400).json(errJson("BRANCH_ID_REQUIRED", getLang(req)));
       const updated = await storage.updateCustomer(id, { branchId });
-      if (!updated) return res.status(404).json({ message: "العميل غير موجود" });
+      if (!updated) return res.status(404).json(errJson("CUSTOMER_NOT_FOUND", getLang(req)));
       res.json(updated);
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
@@ -2754,14 +2754,14 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id as string);
       const parsed = updateCustomerSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
       const { name, phone, notes, active, branchId } = parsed.data;
       if (phone) {
         const existing = await storage.getCustomerByPhone(phone);
-        if (existing && existing.id !== id) return res.status(409).json({ message: "رقم الهاتف مستخدم بالفعل" });
+        if (existing && existing.id !== id) return res.status(409).json(errJson("PHONE_TAKEN", getLang(req)));
       }
       const updated = await storage.updateCustomer(id, { name, phone, notes, active, branchId });
-      if (!updated) return res.status(404).json({ message: "العميل غير موجود" });
+      if (!updated) return res.status(404).json(errJson("CUSTOMER_NOT_FOUND", getLang(req)));
       res.json(updated);
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
@@ -2778,18 +2778,18 @@ export async function registerRoutes(
   });
   app.get("/api/suppliers/:id", requireAuth, requirePermission("suppliers.manage"), async (req, res) => {
     const row = await storage.getSupplier(Number(req.params.id));
-    if (!row) return res.status(404).json({ message: "المورد غير موجود" });
+    if (!row) return res.status(404).json(errJson("SUPPLIER_NOT_FOUND", getLang(req)));
     res.json(row);
   });
   app.post("/api/suppliers", requireAuth, requirePermission("suppliers.manage"), async (req, res) => {
     const parsed = insertSupplierSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
     if (!(parsed.data as any).name || !(parsed.data as any).name.trim()) {
-      return res.status(400).json({ message: "اسم المورد مطلوب" });
+      return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
     }
     const existing = await storage.getSupplierByName((parsed.data as any).name.trim());
     if (existing) {
-      return res.status(409).json({ message: "يوجد مورد بنفس الاسم" });
+      return res.status(409).json(errJson("DUPLICATE_SUPPLIER", getLang(req)));
     }
     res.status(201).json(await storage.createSupplier(parsed.data));
   });
@@ -2797,11 +2797,11 @@ export async function registerRoutes(
     if (req.body.name) {
       const existing = await storage.getSupplierByName(req.body.name.trim());
       if (existing && existing.id !== Number(req.params.id)) {
-        return res.status(409).json({ message: "يوجد مورد بنفس الاسم" });
+        return res.status(409).json(errJson("DUPLICATE_SUPPLIER", getLang(req)));
       }
     }
     const row = await storage.updateSupplier(Number(req.params.id), req.body);
-    if (!row) return res.status(404).json({ message: "المورد غير موجود" });
+    if (!row) return res.status(404).json(errJson("SUPPLIER_NOT_FOUND", getLang(req)));
     res.json(row);
   });
 
@@ -2812,10 +2812,10 @@ export async function registerRoutes(
       const createdBy = req.session.userId!;
 
       if (!amount || amount <= 0) {
-        return res.status(400).json({ message: "المبلغ يجب أن يكون أكبر من صفر" });
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       }
       if (!method || !PAYMENT_METHODS.includes(method)) {
-        return res.status(400).json({ message: "طريقة دفع غير صحيحة" });
+        return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
       }
 
       await storage.createSupplierPayment(supplierId, {
@@ -2847,7 +2847,7 @@ export async function registerRoutes(
       const from = req.query.from as string;
       const to = req.query.to as string;
       const statement = await storage.getSupplierStatement(id, from, to);
-      if (!statement) return res.status(404).json({ message: "المورد غير موجود" });
+      if (!statement) return res.status(404).json(errJson("SUPPLIER_NOT_FOUND", getLang(req)));
       res.json(statement);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -2871,11 +2871,11 @@ export async function registerRoutes(
   });
   app.get("/api/sales/:id", requireAuth, enforceBranchScope, async (req, res) => {
     const detail = await storage.getSaleWithDetails(Number(req.params.id));
-    if (!detail) return res.status(404).json({ message: "الفاتورة غير موجودة" });
+    if (!detail) return res.status(404).json(errJson("PENDING_INVOICE_NOT_FOUND", getLang(req)));
     const user = await storage.getUser(req.session.userId!);
     const isBranchOnly = user?.role === "cashier" || user?.role === "employee" || user?.role === "manager";
     if (isBranchOnly && detail.branchId !== user!.branchId) {
-      return res.status(403).json({ message: "غير مصرح" });
+      return res.status(403).json(errJson("UNAUTHENTICATED", getLang(req)));
     }
     res.json(detail);
   });
@@ -2883,7 +2883,7 @@ export async function registerRoutes(
     try {
       const saleId = Number(req.params.id);
       const { paymentReference } = req.body;
-      if (!saleId) return res.status(400).json({ message: "id مطلوب" });
+      if (!saleId) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       await pool.query(
         `UPDATE sales SET payment_reference = $1 WHERE id = $2`,
         [paymentReference || null, saleId]
@@ -2897,17 +2897,14 @@ export async function registerRoutes(
   app.post("/api/sales", requireAuth, requirePermission("invoice.create"), async (req, res) => {
     const { items, branchId: _b, cashierId: _c, employeeId: _e, terminalName: _t, shiftId: _s, ...saleData } = req.body;
     const user = await storage.getUser(req.session.userId!);
-    if (!user) return res.status(401).json({ message: "المستخدم غير موجود" });
+    if (!user) return res.status(401).json(errJson("USER_NOT_FOUND", getLang(req)));
     let shiftId: number | null = null;
     if (user.branchId && user.terminalName) {
       const shift = await storage.getCurrentShift(user.branchId, user.terminalName);
       if (shift) shiftId = shift.id;
     }
     if (!shiftId && (user.role === "cashier" || user.role === "employee")) {
-      return res.status(403).json({
-        code: "NO_OPEN_SHIFT",
-        message: "لا يمكن إصدار فاتورة بدون فتح وردية. الرجاء فتح الوردية من شاشة نقطة البيع أولاً.",
-      });
+      return res.status(403).json(errJson("SHIFT_REQUIRED", getLang(req)));
     }
     const parsed = insertSaleSchema.safeParse({
       ...saleData,
@@ -2915,14 +2912,14 @@ export async function registerRoutes(
       cashierId: user.id,
       shiftId,
     });
-    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+    if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
     if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: "لا توجد منتجات في الفاتورة" });
+      return res.status(400).json(errJson("CART_EMPTY", getLang(req)));
     }
     for (let i = 0; i < (items as any[]).length; i++) {
       const itemParsed = orderItemSchema.safeParse((items as any[])[i]);
       if (!itemParsed.success) {
-        return res.status(400).json({ message: `بند ${i + 1}: ${formatZodError(itemParsed.error)}` });
+        return res.status(400).json({ message: `بند ${i + 1}: ${formatZodError(itemParsed.error, getLang(req))}` });
       }
     }
     try {
@@ -2952,7 +2949,7 @@ export async function registerRoutes(
 
   app.get("/api/orders", requireAuth, enforceBranchScope, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
-    if (!user) return res.status(401).json({ message: "غير مصرح" });
+    if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
     const isManager = ["owner", "admin", "manager"].includes(user.role);
     const branchFilter = req.query.branchId ? parseInt(req.query.branchId as string) : undefined;
     const allOrders = await storage.getOrders();
@@ -2969,7 +2966,7 @@ export async function registerRoutes(
     try {
       const search = ((req.query.search || req.query.q || "") as string).trim();
       const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
 
       const isOwnerOrAdmin = user.role === "owner" || user.role === "admin";
       const branchId = isOwnerOrAdmin ? null : (user.branchId ?? null);
@@ -3014,7 +3011,7 @@ export async function registerRoutes(
   app.get("/api/orders/stats", requireAuth, async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
       const isManager = ["owner", "admin", "manager"].includes(user.role);
       const branchClause = isManager ? "" : `AND branch_id = ${user.branchId}`;
       const result = await pool.query(`
@@ -3058,7 +3055,7 @@ export async function registerRoutes(
   app.get("/api/orders/full", requireAuth, async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
       const isManager = ["owner", "admin", "manager"].includes(user.role);
       const { search, status, source, from, to, branchId: bId } = req.query;
 
@@ -3121,7 +3118,7 @@ export async function registerRoutes(
 
   app.get("/api/orders/:id", requireAuth, enforceBranchScope, async (req, res) => {
     const order = await storage.getOrder(Number(req.params.id));
-    if (!order) return res.status(404).json({ message: "الطلب غير موجود" });
+    if (!order) return res.status(404).json(errJson("ORDER_NOT_FOUND", getLang(req)));
     const items = await storage.getOrderItems(order.id);
     res.json({ ...order, items });
   });
@@ -3129,14 +3126,14 @@ export async function registerRoutes(
     try {
       const { items, ...orderData } = req.body;
       const parsed = insertOrderSchema.safeParse(orderData);
-      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
       if (!items || !Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ message: "لا توجد منتجات في الطلب" });
+        return res.status(400).json(errJson("ORDER_NO_ITEMS", getLang(req)));
       }
       for (let i = 0; i < (items as any[]).length; i++) {
         const itemParsed = orderItemSchema.safeParse((items as any[])[i]);
         if (!itemParsed.success) {
-          return res.status(400).json({ message: `بند ${i + 1}: ${formatZodError(itemParsed.error)}` });
+          return res.status(400).json({ message: `بند ${i + 1}: ${formatZodError(itemParsed.error, getLang(req))}` });
         }
       }
       const branchId = (parsed.data as any).branchId;
@@ -3157,7 +3154,7 @@ export async function registerRoutes(
       res.status(201).json(order);
     } catch (err: any) {
       console.error(err);
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
   app.patch("/api/orders/:id/status", requireAuth, requireManager, async (req, res) => {
@@ -3166,10 +3163,10 @@ export async function registerRoutes(
       if (!statusParsed.success) return res.status(400).json({ message: formatZodError(statusParsed.error) });
       const { status } = statusParsed.data;
       const existing = await storage.getOrder(Number(req.params.id));
-      if (!existing) return res.status(404).json({ message: "الطلب غير موجود" });
+      if (!existing) return res.status(404).json(errJson("ORDER_NOT_FOUND", getLang(req)));
       const oldStatus = existing.status;
       const row = await storage.updateOrderStatus(Number(req.params.id), status);
-      if (!row) return res.status(404).json({ message: "الطلب غير موجود" });
+      if (!row) return res.status(404).json(errJson("ORDER_NOT_FOUND", getLang(req)));
 
       // Deduct inventory when order is completed for the first time
       if (status === "completed" && oldStatus !== "completed") {
@@ -3196,16 +3193,16 @@ export async function registerRoutes(
       }
       res.json(row);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
   app.post("/api/orders/:id/pay", requireAuth, async (req, res) => {
     const { paymentMethod, bankTxnId } = req.body;
     if (!paymentMethod || !PAYMENT_METHODS.includes(paymentMethod)) {
-      return res.status(400).json({ message: "طريقة الدفع غير صالحة. الخيارات: cash, card, bank_transfer" });
+      return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
     }
     const row = await storage.payOrder(Number(req.params.id), paymentMethod as PaymentMethod, bankTxnId);
-    if (!row) return res.status(404).json({ message: "الطلب غير موجود" });
+    if (!row) return res.status(404).json(errJson("ORDER_NOT_FOUND", getLang(req)));
     res.json(row);
   });
 
@@ -3213,17 +3210,17 @@ export async function registerRoutes(
     try {
       const orderId = Number(req.params.id);
       const { reason } = req.body;
-      if (!reason) return res.status(400).json({ message: "سبب الإلغاء مطلوب" });
+      if (!reason) return res.status(400).json(errJson("CANCELLED_BY_REQUIRED", getLang(req)));
       const user = req.session?.user;
-      if (!user) return res.status(401).json({ message: "غير مسجل دخول" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
       if (!["owner", "admin", "manager"].includes(user.role)) {
-        return res.status(403).json({ message: "ليس لديك صلاحية إلغاء الطلبات" });
+        return res.status(403).json(errJson("PERMISSION_DENIED", getLang(req)));
       }
       const result = await storage.cancelOrderFull(orderId, user.id, user.name, reason);
-      if (!result) return res.status(404).json({ message: "الطلب غير موجود" });
+      if (!result) return res.status(404).json(errJson("ORDER_NOT_FOUND", getLang(req)));
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -3231,15 +3228,15 @@ export async function registerRoutes(
     try {
       const saleId = Number(req.params.id);
       const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مسجل دخول" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
 
       const { items, reason, refundMethod, shiftId } = req.body;
       if (!items || !Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ message: "يجب تحديد عناصر المرتجع" });
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       }
 
       const sale = await storage.getSale(saleId);
-      if (!sale) return res.status(404).json({ message: "الفاتورة غير موجودة" });
+      if (!sale) return res.status(404).json(errJson("PENDING_INVOICE_NOT_FOUND", getLang(req)));
 
       let refundAmount = 0;
       const returnItems = items.map((item: any) => {
@@ -3298,7 +3295,7 @@ export async function registerRoutes(
 
       res.status(201).json(result);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في إنشاء المرتجع" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -3309,13 +3306,13 @@ export async function registerRoutes(
       const rows = await storage.getSaleReturns(branchId);
       res.json(rows);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.get("/api/sale-returns/:id", requireAuth, enforceBranchScope, async (req, res) => {
     const ret = await storage.getSaleReturn(Number(req.params.id));
-    if (!ret) return res.status(404).json({ message: "المرتجع غير موجود" });
+    if (!ret) return res.status(404).json(errJson("RETURN_NOT_FOUND", getLang(req)));
     const items = await storage.getSaleReturnItems(ret.id);
     res.json({ ...ret, items });
   });
@@ -3330,7 +3327,7 @@ export async function registerRoutes(
       const rows = await storage.getAuditLogs(filters);
       res.json(rows);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -3344,7 +3341,7 @@ export async function registerRoutes(
       const rows = await storage.getExpensesEnriched(branchId, dateStr, fromDate, toDate);
       res.json(rows);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
   app.get("/api/expenses/summary", requireAuth, enforceBranchScope, async (req, res) => {
@@ -3357,23 +3354,23 @@ export async function registerRoutes(
       const summary = await storage.getExpensesSummary(branchId, dateStr, fromDate, toDate);
       res.json(summary);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
   app.post("/api/expenses", requireAuth, requirePermission("expenses.create"), enforceBranchScope, async (req, res) => {
     try {
       const { amount, notes, source, category, date: expenseDate } = req.body;
       if (!amount) {
-        return res.status(400).json({ message: "المبلغ مطلوب" });
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       }
       const expenseSource = source || "cash";
       if (!["cash", "card", "bank_transfer"].includes(expenseSource)) {
-        return res.status(400).json({ message: "مصدر غير صالح. الخيارات: cash, card, bank_transfer" });
+        return res.status(400).json(errJson("INVALID_TYPE", getLang(req)));
       }
 
       const user = await storage.getUser(req.session.userId!);
       if (!user || !user.branchId) {
-        return res.status(400).json({ message: "بيانات المستخدم ناقصة (الفرع)" });
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       }
       const branchId = user.branchId;
 
@@ -3383,10 +3380,7 @@ export async function registerRoutes(
         if (shift) shiftId = shift.id;
       }
       if (!shiftId && (user.role === "cashier" || user.role === "employee")) {
-        return res.status(403).json({
-          code: "NO_OPEN_SHIFT",
-          message: "لا يمكن صرف أي مبلغ بدون فتح وردية. الرجاء فتح الوردية أولاً.",
-        });
+        return res.status(403).json(errJson("SHIFT_REQUIRED", getLang(req)));
       }
 
       const todayStr = expenseDate && /^\d{4}-\d{2}-\d{2}$/.test(expenseDate) ? expenseDate : new Date().toISOString().slice(0, 10);
@@ -3442,7 +3436,7 @@ export async function registerRoutes(
       res.status(201).json(expense);
     } catch (err: any) {
       console.error(err);
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -3457,10 +3451,10 @@ export async function registerRoutes(
       if (notes !== undefined) updateData.notes = notes;
       if (date !== undefined) updateData.date = date;
       const updated = await storage.updateExpense(id, updateData);
-      if (!updated) return res.status(404).json({ message: "المصروف غير موجود" });
+      if (!updated) return res.status(404).json(errJson("EXPENSE_NOT_FOUND", getLang(req)));
       res.json(updated);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -3470,7 +3464,7 @@ export async function registerRoutes(
       await storage.deleteExpense(id);
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -3497,7 +3491,7 @@ export async function registerRoutes(
   app.get("/api/shifts/current", requireAuth, enforceBranchScope, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
     if (!user || !user.branchId || !user.terminalName) {
-      return res.status(400).json({ message: "بيانات المستخدم ناقصة (الفرع أو الجهاز)" });
+      return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
     }
     const shift = await storage.getCurrentShift(user.branchId, user.terminalName);
     if (!shift) return res.json({ shift: null });
@@ -3510,11 +3504,11 @@ export async function registerRoutes(
   app.post("/api/shifts", requireAuth, requirePermission("shift.open"), async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
     if (!user || !user.branchId || !user.terminalName) {
-      return res.status(400).json({ message: "بيانات المستخدم ناقصة (الفرع أو الجهاز)" });
+      return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
     }
     const existing = await storage.getCurrentShift(user.branchId, user.terminalName);
     if (existing) {
-      return res.status(409).json({ message: "يوجد شفت مفتوح بالفعل لهذا الجهاز", shift: existing });
+      return res.status(409).json({ ...errJson("SHIFT_ALREADY_OPEN", getLang(req)), shift: existing });
     }
     const { openingCash } = req.body;
     const shiftData = {
@@ -3533,15 +3527,15 @@ export async function registerRoutes(
     try {
       const shiftId = Number(req.params.id);
       const { openingCash } = req.body;
-      if (!shiftId) return res.status(400).json({ message: "shiftId مطلوب" });
+      if (!shiftId) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       const amount = parseFloat(String(openingCash));
       if (isNaN(amount) || amount < 0) {
-        return res.status(400).json({ message: "النقد الافتتاحي مطلوب ولا يقل عن الصفر" });
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       }
       const [existing] = await db.select().from(shifts).where(eq(shifts.id, shiftId)).limit(1);
-      if (!existing) return res.status(404).json({ message: "الوردية غير موجودة" });
+      if (!existing) return res.status(404).json(errJson("SHIFT_NOT_FOUND", getLang(req)));
       if (existing.status !== "open") {
-        return res.status(400).json({ message: "لا يمكن تعديل النقد الافتتاحي لوردية مغلقة" });
+        return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
       }
       const [row] = await db
         .update(shifts)
@@ -3550,7 +3544,7 @@ export async function registerRoutes(
         .returning();
       res.json(row);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -3565,25 +3559,25 @@ export async function registerRoutes(
     }
     const { actualCash } = req.body;
     if (actualCash === undefined || actualCash === null) {
-      return res.status(400).json({ message: "يجب إدخال المبلغ النقدي الفعلي (actualCash)" });
+      return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
     }
     const row = await storage.closeShift(shiftId, String(actualCash));
-    if (!row) return res.status(404).json({ message: "الوردية غير موجودة" });
+    if (!row) return res.status(404).json(errJson("SHIFT_NOT_FOUND", getLang(req)));
     res.json(row);
   });
 
   app.get("/api/reports/shift", requireAuth, requirePermission("reports.view"), enforceBranchScope, async (req, res) => {
     const shiftId = Number(req.query.shiftId);
-    if (!shiftId) return res.status(400).json({ message: "shiftId مطلوب" });
+    if (!shiftId) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
     const report = await storage.getShiftReport(shiftId);
-    if (!report) return res.status(404).json({ message: "الشفت غير موجود" });
+    if (!report) return res.status(404).json(errJson("SHIFT_NOT_FOUND", getLang(req)));
     res.json(report);
   });
 
   app.get("/api/reports/daily", requireAuth, requirePermission("reports.view"), enforceBranchScope, async (req, res) => {
     const dateStr = req.query.date as string;
     if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
+      return res.status(400).json(errJson("DATE_REQUIRED", getLang(req)));
     }
     const scope = req.branchScope!;
     const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
@@ -3594,7 +3588,7 @@ export async function registerRoutes(
   app.get("/api/reports/shifts-by-date", requireAuth, requirePermission("reports.view"), enforceBranchScope, async (req, res) => {
     const dateStr = req.query.date as string;
     if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
+      return res.status(400).json(errJson("DATE_REQUIRED", getLang(req)));
     }
     const scope = req.branchScope!;
     const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
@@ -3604,7 +3598,7 @@ export async function registerRoutes(
   app.get("/api/reports/branch-comparison", requireOwnerOrAdmin, async (req, res) => {
     const dateStr = req.query.date as string;
     if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
+      return res.status(400).json(errJson("DATE_REQUIRED", getLang(req)));
     }
     res.json(await storage.getBranchComparisonReport(dateStr));
   });
@@ -3773,7 +3767,7 @@ export async function registerRoutes(
         by_product:  byProduct.rows,
       });
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -3876,7 +3870,7 @@ export async function registerRoutes(
         statuses:    statuses.rows,
       });
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -3894,10 +3888,10 @@ export async function registerRoutes(
     const from = req.query.from as string;
     const to = req.query.to as string;
     if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
-      return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD (from & to)" });
+      return res.status(400).json(errJson("DATE_RANGE_REQUIRED", getLang(req)));
     }
     const user = await storage.getUser(employeeId);
-    if (!user) return res.status(404).json({ message: "الموظف غير موجود" });
+    if (!user) return res.status(404).json(errJson("EMPLOYEE_NOT_FOUND", getLang(req)));
     const perf = await storage.getEmployeePerformance(employeeId, from, to);
     const { password: _, ...safeUser } = user;
     res.json({ employee: safeUser, performance: perf });
@@ -3907,7 +3901,7 @@ export async function registerRoutes(
     const from = req.query.from as string;
     const to = req.query.to as string;
     if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
-      return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD (from & to)" });
+      return res.status(400).json(errJson("DATE_RANGE_REQUIRED", getLang(req)));
     }
     res.json(await storage.getProfitByBranches(from, to));
   });
@@ -3916,7 +3910,7 @@ export async function registerRoutes(
     const from = req.query.from as string;
     const to = req.query.to as string;
     if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
-      return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD (from & to)" });
+      return res.status(400).json(errJson("DATE_RANGE_REQUIRED", getLang(req)));
     }
     const scope = req.branchScope!;
     const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
@@ -3927,7 +3921,7 @@ export async function registerRoutes(
     const from = req.query.from as string;
     const to = req.query.to as string;
     if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
-      return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD (from & to)" });
+      return res.status(400).json(errJson("DATE_RANGE_REQUIRED", getLang(req)));
     }
     const scope = req.branchScope!;
     const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
@@ -3945,7 +3939,7 @@ export async function registerRoutes(
   app.get("/api/purchases/:id", requireAuth, requirePermission("purchases.view"), async (req, res) => {
     try {
       const invoice = await storage.getPurchaseInvoice(Number(req.params.id));
-      if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
+      if (!invoice) return res.status(404).json(errJson("PURCHASE_NOT_FOUND", getLang(req)));
       const items = await storage.getPurchaseItems(invoice.id);
 
       const attRes = await pool.query("SELECT attachment_url FROM purchase_invoices WHERE id=$1", [invoice.id]);
@@ -3971,7 +3965,7 @@ export async function registerRoutes(
 
       res.json({ ...invoice, items, attachmentUrl, attachmentUrls, attachments });
     } catch (err: any) {
-      res.status(500).json({ message: "خطأ في جلب الفاتورة" });
+      res.status(500).json(errJson("FETCH_ERROR", getLang(req)));
     }
   });
 
@@ -3980,7 +3974,7 @@ export async function registerRoutes(
       // القاعدة: branchId يُتجاهل دائماً — فواتير الشراء تُسجَّل في المخزن المركزي فقط
       const { supplierId, invoiceDate, shippingCost, customsCost, clearanceCost, otherCost, notes } = req.body;
       if (!invoiceDate) {
-        return res.status(400).json({ message: "تاريخ الفاتورة مطلوب" });
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       }
       const invoiceNumber = `PUR-${Date.now()}`;
       const data = {
@@ -4000,16 +3994,16 @@ export async function registerRoutes(
       if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
       res.status(201).json(await storage.createPurchaseInvoice(parsed.data));
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.patch("/api/purchases/:id", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
     const id = Number(req.params.id);
     const invoice = await storage.getPurchaseInvoice(id);
-    if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
+    if (!invoice) return res.status(404).json(errJson("PURCHASE_NOT_FOUND", getLang(req)));
     if (invoice.status !== "pending") {
-      return res.status(400).json({ message: "لا يمكن تعديل فاتورة معتمدة أو ملغاة" });
+      return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
     }
     const updateData: any = {};
     const { shippingCost, customsCost, clearanceCost, otherCost, notes, supplierId, paymentMethod, dueDate, discount, discountType, vatRate, vatAmount } = req.body;
@@ -4033,12 +4027,12 @@ export async function registerRoutes(
     try {
       const purchaseId = Number(req.params.id);
       const invoice = await storage.getPurchaseInvoice(purchaseId);
-      if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
+      if (!invoice) return res.status(404).json(errJson("PURCHASE_NOT_FOUND", getLang(req)));
       if (invoice.status !== "pending")
-        return res.status(400).json({ message: "لا يمكن إضافة أصناف لفاتورة معتمدة أو مستلمة" });
+        return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
 
       const parsed = addPurchaseItemSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
 
       const { productId, qty, unitCostBase, variantId } = parsed.data;
       const lineSubtotal = qty * unitCostBase;
@@ -4054,16 +4048,16 @@ export async function registerRoutes(
       });
       res.status(201).json(item);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.patch("/api/purchases/:purchaseId/items/:itemId", requireAuth, requirePermission("purchases.edit"), async (req, res) => {
     const purchaseId = Number(req.params.purchaseId);
     const invoice = await storage.getPurchaseInvoice(purchaseId);
-    if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
+    if (!invoice) return res.status(404).json(errJson("PURCHASE_NOT_FOUND", getLang(req)));
     if (invoice.status !== "pending") {
-      return res.status(400).json({ message: "لا يمكن تعديل أصناف فاتورة معتمدة أو ملغاة" });
+      return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
     }
     const itemId = Number(req.params.itemId);
     const { qty, unitCostBase, barcode, color, size, productName } = req.body;
@@ -4072,7 +4066,7 @@ export async function registerRoutes(
       qty: qty !== undefined ? Number(qty) : undefined,
       unitCostBase: unitCostBase !== undefined ? Number(unitCostBase) : undefined,
     });
-    if (!updated) return res.status(404).json({ message: "الصنف غير موجود" });
+    if (!updated) return res.status(404).json(errJson("PRODUCT_NOT_FOUND", getLang(req)));
 
     if (updated.variantId && (barcode !== undefined || color !== undefined || size !== undefined)) {
       const variantUpdates: any = {};
@@ -4092,12 +4086,12 @@ export async function registerRoutes(
   app.delete("/api/purchases/:purchaseId/items/:itemId", requireAuth, requirePermission("purchases.delete"), async (req, res) => {
     const purchaseId = Number(req.params.purchaseId);
     const invoice = await storage.getPurchaseInvoice(purchaseId);
-    if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
+    if (!invoice) return res.status(404).json(errJson("PURCHASE_NOT_FOUND", getLang(req)));
     if (invoice.status !== "pending") {
-      return res.status(400).json({ message: "لا يمكن حذف أصناف من فاتورة معتمدة أو ملغاة" });
+      return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
     }
     await storage.deletePurchaseItem(Number(req.params.itemId));
-    res.json({ message: "تم الحذف" });
+    res.json(errJson("TRANSFER_DELETED", getLang(req)));
   });
 
   app.delete("/api/purchases/:id", requireAuth, requireManager, async (req, res) => {
@@ -4108,7 +4102,7 @@ export async function registerRoutes(
         "SELECT pi.*, COALESCE(pi.grand_total::numeric, 0) AS grand_total_num FROM purchase_invoices pi WHERE pi.id=$1",
         [id]
       );
-      if (!invRes.rows.length) return res.status(404).json({ message: "الفاتورة غير موجودة" });
+      if (!invRes.rows.length) return res.status(404).json(errJson("PENDING_INVOICE_NOT_FOUND", getLang(req)));
       const inv = invRes.rows[0];
 
       await client.query("BEGIN");
@@ -4184,7 +4178,7 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (err: any) {
       await client.query("ROLLBACK");
-      res.status(500).json({ message: err?.message ?? "خطأ في الحذف" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     } finally {
       client.release();
     }
@@ -4194,14 +4188,14 @@ export async function registerRoutes(
     try {
       const id = Number(req.params.id);
       const parsed = patchPurchaseStatusSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error) });
+      if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
 
       const invoice = await storage.getPurchaseInvoice(id);
-      if (!invoice) return res.status(404).json({ message: "فاتورة المشتريات غير موجودة" });
+      if (!invoice) return res.status(404).json(errJson("PURCHASE_NOT_FOUND", getLang(req)));
 
       if (parsed.data.status === "approved") {
         if (invoice.status !== "pending")
-          return res.status(400).json({ message: "يمكن اعتماد الفواتير بحالة (pending) فقط" });
+          return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
         const result = await storage.approvePurchaseInvoice(id);
         journalForPurchase({
           id: result.id,
@@ -4217,12 +4211,12 @@ export async function registerRoutes(
 
       if (parsed.data.status === "received") {
         if (invoice.status !== "approved")
-          return res.status(400).json({ message: "يجب اعتماد الفاتورة أولاً قبل الاستلام" });
+          return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
         const result = await storage.receivePurchaseInvoice(id);
         return res.json(result);
       }
     } catch (err: any) {
-      res.status(400).json({ message: err?.message ?? "فشل تحديث الحالة" });
+      res.status(400).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -4242,7 +4236,7 @@ export async function registerRoutes(
 
       res.json(result);
     } catch (err: any) {
-      res.status(400).json({ message: err?.message ?? "فشل الترحيل" });
+      res.status(400).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -4397,7 +4391,7 @@ export async function registerRoutes(
       res.json(result);
     } catch (err: any) {
       const status = err?.message?.includes("مستلمة مسبقاً") ? 409 : 400;
-      res.status(status).json({ message: err?.message ?? "فشل الاستلام" });
+      res.status(status).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -4428,9 +4422,9 @@ export async function registerRoutes(
   app.post("/api/cash-ledger/deposit", requireAuth, requirePermission("cash.deposit"), async (req, res) => {
     try {
       const { amount, note } = req.body;
-      if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ message: "المبلغ مطلوب ويجب أن يكون أكبر من صفر" });
+      if (!amount || parseFloat(amount) <= 0) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       const user = await storage.getUser(req.session.userId!);
-      if (!user || !user.branchId) return res.status(400).json({ message: "بيانات المستخدم ناقصة" });
+      if (!user || !user.branchId) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       let shiftId: number | null = null;
       if (user.terminalName) {
         const shift = await storage.getCurrentShift(user.branchId, user.terminalName);
@@ -4449,16 +4443,16 @@ export async function registerRoutes(
       });
       res.status(201).json(entry);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.post("/api/cash-ledger/withdrawal", requireAuth, requirePermission("cash.withdraw"), async (req, res) => {
     try {
       const { amount, note } = req.body;
-      if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ message: "المبلغ مطلوب ويجب أن يكون أكبر من صفر" });
+      if (!amount || parseFloat(amount) <= 0) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       const user = await storage.getUser(req.session.userId!);
-      if (!user || !user.branchId) return res.status(400).json({ message: "بيانات المستخدم ناقصة" });
+      if (!user || !user.branchId) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       let shiftId: number | null = null;
       if (user.terminalName) {
         const shift = await storage.getCurrentShift(user.branchId, user.terminalName);
@@ -4477,7 +4471,7 @@ export async function registerRoutes(
       });
       res.status(201).json(entry);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -4666,7 +4660,7 @@ export async function registerRoutes(
       const result = await pool.query(query, params);
       res.json(result.rows);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -4676,14 +4670,14 @@ export async function registerRoutes(
       const list = await storage.getStocktakes(branchId);
       res.json(list);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.post("/api/stocktakes", requireAuth, requirePermission("inventory.count"), async (req, res) => {
     try {
       const { branchId, note } = req.body;
-      if (!branchId) return res.status(400).json({ message: "الفرع مطلوب" });
+      if (!branchId) return res.status(400).json(errJson("BRANCH_ID_REQUIRED", getLang(req)));
 
       // Auto-resolve branch default location
       let locRes = await pool.query(
@@ -4696,7 +4690,7 @@ export async function registerRoutes(
           [branchId]
         );
       }
-      if (locRes.rows.length === 0) return res.status(400).json({ message: "لا يوجد موقع نشط للفرع المحدد" });
+      if (locRes.rows.length === 0) return res.status(400).json(errJson("NO_ACTIVE_LOCATION", getLang(req)));
       const locationId = locRes.rows[0].id;
 
       const st = await storage.createStocktake({
@@ -4708,7 +4702,7 @@ export async function registerRoutes(
       });
       res.status(201).json(st);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -4717,29 +4711,29 @@ export async function registerRoutes(
       const items = await storage.getStocktakeItems(Number(req.params.id));
       res.json(items);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.patch("/api/stocktake-items/:id", requireAuth, requirePermission("inventory.count"), async (req, res) => {
     try {
       const { countedQty, note } = req.body;
-      if (countedQty === undefined || countedQty === null) return res.status(400).json({ message: "الكمية المعدودة مطلوبة" });
+      if (countedQty === undefined || countedQty === null) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       const updated = await storage.updateStocktakeItem(Number(req.params.id), Number(countedQty), note);
-      if (!updated) return res.status(404).json({ message: "العنصر غير موجود" });
+      if (!updated) return res.status(404).json(errJson("PRODUCT_NOT_FOUND", getLang(req)));
       res.json(updated);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.post("/api/stocktakes/:id/approve", requireAuth, requirePermission("inventory.count"), async (req, res) => {
     try {
       const updated = await storage.approveStocktake(Number(req.params.id), req.session.userId!);
-      if (!updated) return res.status(400).json({ message: "لا يمكن اعتماد هذا الجرد" });
+      if (!updated) return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
       res.json(updated);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -4750,7 +4744,7 @@ export async function registerRoutes(
       const list = await storage.getInventoryAdjustments(branchId, locationId);
       res.json(list);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -4758,7 +4752,7 @@ export async function registerRoutes(
     try {
       const { branchId, productId, qtyChange, reason } = req.body;
       if (!branchId || !productId || qtyChange === undefined || !reason) {
-        return res.status(400).json({ message: "الفرع والمنتج والكمية والسبب مطلوبة" });
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       }
 
       // Auto-resolve branch default location
@@ -4772,7 +4766,7 @@ export async function registerRoutes(
           [branchId]
         );
       }
-      if (locRes.rows.length === 0) return res.status(400).json({ message: "لا يوجد موقع نشط للفرع المحدد" });
+      if (locRes.rows.length === 0) return res.status(400).json(errJson("NO_ACTIVE_LOCATION", getLang(req)));
       const locationId = locRes.rows[0].id;
 
       const invRow = await pool.query(
@@ -4781,7 +4775,7 @@ export async function registerRoutes(
       );
       const qtyBefore = invRow.rows[0]?.qty_on_hand || 0;
       const qtyAfter = qtyBefore + Number(qtyChange);
-      if (qtyAfter < 0) return res.status(400).json({ message: "الكمية الناتجة لا يمكن أن تكون سالبة" });
+      if (qtyAfter < 0) return res.status(400).json(errJson("INSUFFICIENT_STOCK", getLang(req)));
 
       await pool.query(
         `INSERT INTO location_inventory (location_id, product_id, qty_on_hand)
@@ -4823,7 +4817,7 @@ export async function registerRoutes(
 
       res.status(201).json(adj);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -4831,7 +4825,7 @@ export async function registerRoutes(
     try {
       res.json(await storage.getPayrollRemainingByEmployee());
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "Internal Server Error" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -4844,7 +4838,7 @@ export async function registerRoutes(
         year ? Number(year) : undefined
       ));
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "Internal Server Error" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -4864,7 +4858,7 @@ export async function registerRoutes(
       });
       res.status(201).json(commission);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "Internal Server Error" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -4877,7 +4871,7 @@ export async function registerRoutes(
         year ? Number(year) : undefined
       ));
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "Internal Server Error" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -4897,7 +4891,7 @@ export async function registerRoutes(
       });
       res.status(201).json(entitlement);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "Internal Server Error" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -4910,20 +4904,20 @@ export async function registerRoutes(
       const runs = await storage.getPayrollRuns(filters);
       res.json(runs);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.post("/api/payroll-runs", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const { month, year, note, periodStart, periodEnd } = req.body;
-      if (!month || !year) return res.status(400).json({ message: "الشهر والسنة مطلوبة" });
+      if (!month || !year) return res.status(400).json(errJson("MONTH_YEAR_REQUIRED", getLang(req)));
       const existing = await pool.query(
         `SELECT id FROM payroll_runs WHERE month = $1 AND year = $2 AND status != 'cancelled'`,
         [String(month), Number(year)]
       );
       if (existing.rows.length > 0) {
-        return res.status(400).json({ message: "يوجد كشف رواتب لهذا الشهر مسبقاً", existingId: existing.rows[0].id });
+        return res.status(400).json({ ...errJson("DUPLICATE_PAYROLL_RUN", getLang(req)), existingId: existing.rows[0].id });
       }
       const run = await storage.createPayrollRun({
         month: String(month),
@@ -4945,27 +4939,27 @@ export async function registerRoutes(
       const updated = await storage.getPayrollRun(run.id);
       res.status(201).json(updated);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.post("/api/payroll-runs/:id/regenerate", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const run = await storage.getPayrollRun(Number(req.params.id));
-      if (!run) return res.status(404).json({ message: "كشف الرواتب غير موجود" });
-      if (run.status !== "draft") return res.status(400).json({ message: "لا يمكن إعادة احتساب كشف معتمد" });
+      if (!run) return res.status(404).json(errJson("PAYROLL_NOT_FOUND", getLang(req)));
+      if (run.status !== "draft") return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
       await storage.generatePayrollRun(run.id, run.month, run.year);
       const updated = await storage.getPayrollRun(run.id);
       res.json(updated);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.post("/api/payroll-runs/:id/approve", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const updated = await storage.approvePayrollRun(Number(req.params.id), req.session.userId!);
-      if (!updated) return res.status(400).json({ message: "لا يمكن اعتماد هذا الكشف" });
+      if (!updated) return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
       await storage.addAuditLog({
         action: "payroll_approve", entityType: "payroll_run", entityId: updated.id,
         userId: req.session.userId!, userName: req.session.userName || "",
@@ -4973,14 +4967,14 @@ export async function registerRoutes(
       });
       res.json(updated);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.post("/api/payroll-runs/:id/review", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const updated = await storage.reviewPayrollRun(Number(req.params.id), req.session.userId!);
-      if (!updated) return res.status(400).json({ message: "لا يمكن مراجعة هذا الكشف" });
+      if (!updated) return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
       await storage.addAuditLog({
         action: "payroll_review", entityType: "payroll_run", entityId: updated.id,
         userId: req.session.userId!, userName: req.session.userName || "",
@@ -4988,16 +4982,16 @@ export async function registerRoutes(
       });
       res.json(updated);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.post("/api/payroll-runs/:id/reopen", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
-      if (!user || user.role !== "owner") return res.status(403).json({ message: "فقط المالك يمكنه إعادة فتح الكشف" });
+      if (!user || user.role !== "owner") return res.status(403).json(errJson("OWNER_ONLY", getLang(req)));
       const updated = await storage.reopenPayrollRun(Number(req.params.id), req.session.userId!);
-      if (!updated) return res.status(400).json({ message: "لا يمكن إعادة فتح هذا الكشف" });
+      if (!updated) return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
       await storage.addAuditLog({
         action: "payroll_reopen", entityType: "payroll_run", entityId: updated.id,
         userId: req.session.userId!, userName: req.session.userName || "",
@@ -5005,16 +4999,16 @@ export async function registerRoutes(
       });
       res.json(updated);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.post("/api/payroll-runs/:id/cancel", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
-      if (!user || user.role !== "owner") return res.status(403).json({ message: "فقط المالك يمكنه إلغاء الكشف" });
+      if (!user || user.role !== "owner") return res.status(403).json(errJson("OWNER_ONLY", getLang(req)));
       const updated = await storage.cancelPayrollRun(Number(req.params.id), req.session.userId!);
-      if (!updated) return res.status(400).json({ message: "لا يمكن إلغاء هذا الكشف" });
+      if (!updated) return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
       await storage.addAuditLog({
         action: "payroll_cancel", entityType: "payroll_run", entityId: updated.id,
         userId: req.session.userId!, userName: req.session.userName || "",
@@ -5022,7 +5016,7 @@ export async function registerRoutes(
       });
       res.json(updated);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5031,7 +5025,7 @@ export async function registerRoutes(
       const details = await storage.getPayrollDetails(Number(req.params.id));
       res.json(details);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5041,14 +5035,14 @@ export async function registerRoutes(
       const advances = await storage.getEmployeeAdvances(employeeId);
       res.json(advances);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.post("/api/employee-advances", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const { employeeId, amount, date, note, deductionMode, installmentAmount } = req.body;
-      if (!employeeId || !amount || !date) return res.status(400).json({ message: "بيانات ناقصة" });
+      if (!employeeId || !amount || !date) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       const advance = await storage.createEmployeeAdvance({
         employeeId: Number(employeeId),
         amount: String(amount),
@@ -5092,7 +5086,7 @@ export async function registerRoutes(
 
       res.status(201).json(advance);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5102,14 +5096,14 @@ export async function registerRoutes(
       const deductions = await storage.getEmployeeDeductions(employeeId);
       res.json(deductions);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.post("/api/employee-deductions", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const { employeeId, amount, reason, date, deductionType, monthReference } = req.body;
-      if (!employeeId || !amount || !reason || !date) return res.status(400).json({ message: "بيانات ناقصة" });
+      if (!employeeId || !amount || !reason || !date) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
 
       if (deductionType === "recurring" && monthReference) {
         const existingDup = await pool.query(
@@ -5117,7 +5111,7 @@ export async function registerRoutes(
           [Number(employeeId), reason, monthReference]
         );
         if (existingDup.rows.length > 0) {
-          return res.status(400).json({ message: "يوجد خصم متكرر بنفس السبب لنفس الفترة" });
+          return res.status(400).json(errJson("DUPLICATE_DEDUCTION", getLang(req)));
         }
       }
 
@@ -5140,7 +5134,7 @@ export async function registerRoutes(
 
       res.status(201).json(deduction);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5149,7 +5143,7 @@ export async function registerRoutes(
       const summary = await storage.getPayrollSummary(Number(req.params.id));
       res.json(summary);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5158,17 +5152,17 @@ export async function registerRoutes(
       const details = await storage.getPayrollDetailsWithPayments(Number(req.params.id));
       res.json(details);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.get("/api/employees/:id/financial-profile", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const profile = await storage.getEmployeeFinancialProfile(Number(req.params.id));
-      if (!profile) return res.status(404).json({ message: "الموظف غير موجود" });
+      if (!profile) return res.status(404).json(errJson("EMPLOYEE_NOT_FOUND", getLang(req)));
       res.json(profile);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5177,7 +5171,7 @@ export async function registerRoutes(
       const report = await storage.getPayrollOutstandingReport();
       res.json(report);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5186,7 +5180,7 @@ export async function registerRoutes(
       const report = await storage.getAdvancesOutstandingReport();
       res.json(report);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5196,7 +5190,7 @@ export async function registerRoutes(
       const payments = await storage.getSalaryPayments(payrollId);
       res.json(payments);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5204,22 +5198,22 @@ export async function registerRoutes(
     try {
       const { payrollId, payrollDetailId, employeeId, amount, paymentDate, paymentMethod, referenceNo, branchId, note } = req.body;
       if (!payrollId || !payrollDetailId || !employeeId || !amount || !paymentDate) {
-        return res.status(400).json({ message: "بيانات ناقصة" });
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       }
 
       const run = await storage.getPayrollRun(Number(payrollId));
       if (run && !["approved", "partial", "reviewed"].includes(run.status)) {
-        return res.status(400).json({ message: "لا يمكن الدفع إلا لكشف معتمد أو تمت مراجعته" });
+        return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
       }
 
       const detail = await pool.query(`SELECT * FROM payroll_details WHERE id = $1`, [payrollDetailId]);
-      if (!detail.rows[0]) return res.status(404).json({ message: "تفاصيل الراتب غير موجودة" });
+      if (!detail.rows[0]) return res.status(404).json(errJson("SALARY_NOT_FOUND", getLang(req)));
 
       const existingPayments = await pool.query(`SELECT COALESCE(SUM(amount::numeric), 0) as total FROM salary_payments WHERE payroll_detail_id = $1`, [payrollDetailId]);
       const alreadyPaid = parseFloat(existingPayments.rows[0].total || "0");
       const netSalary = parseFloat(detail.rows[0].net_salary || "0");
       const payAmount = parseFloat(amount);
-      if (payAmount <= 0) return res.status(400).json({ message: "المبلغ يجب أن يكون أكبر من صفر" });
+      if (payAmount <= 0) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       if (alreadyPaid + payAmount > netSalary + 0.001) {
         return res.status(400).json({ message: `المبلغ يتجاوز المتبقي. المتبقي: ${(netSalary - alreadyPaid).toFixed(3)}` });
       }
@@ -5227,7 +5221,7 @@ export async function registerRoutes(
       const allowedMethods = ["cash", "bank_transfer", "cheque", "wallet"];
       const method = paymentMethod || "bank_transfer";
       if (!allowedMethods.includes(method)) {
-        return res.status(400).json({ message: "طريقة الدفع غير مسموحة" });
+        return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
       }
 
       const payment = await storage.createSalaryPayment({
@@ -5278,7 +5272,7 @@ export async function registerRoutes(
 
       res.status(201).json(payment);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5287,7 +5281,7 @@ export async function registerRoutes(
       const payments = await storage.getPayrollDetailPayments(Number(req.params.id));
       res.json(payments);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5295,11 +5289,11 @@ export async function registerRoutes(
   app.get("/api/payroll/preview", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const { month, year } = req.query;
-      if (!month || !year) return res.status(400).json({ message: "الشهر والسنة مطلوبة" });
+      if (!month || !year) return res.status(400).json(errJson("MONTH_YEAR_REQUIRED", getLang(req)));
       const preview = await storage.previewPayrollRun(String(month), Number(year));
       res.json(preview);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5312,7 +5306,7 @@ export async function registerRoutes(
       const ledger = await storage.getEmployeeLedger(Number(req.params.id), filters);
       res.json(ledger);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5321,10 +5315,10 @@ export async function registerRoutes(
       const from = String(req.query.from || "2020-01-01");
       const to = String(req.query.to || new Date().toISOString().slice(0, 10));
       const statement = await storage.getEmployeeStatement(Number(req.params.id), from, to);
-      if (!statement) return res.status(404).json({ message: "الموظف غير موجود" });
+      if (!statement) return res.status(404).json(errJson("EMPLOYEE_NOT_FOUND", getLang(req)));
       res.json(statement);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5337,7 +5331,7 @@ export async function registerRoutes(
       const report = await storage.getPayrollPaymentsReport(filters);
       res.json(report);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5346,18 +5340,18 @@ export async function registerRoutes(
       const report = await storage.getRecurringDeductionsReport();
       res.json(report);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.get("/api/reports/payroll-by-branch", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const { month, year } = req.query;
-      if (!month || !year) return res.status(400).json({ message: "الشهر والسنة مطلوبة" });
+      if (!month || !year) return res.status(400).json(errJson("MONTH_YEAR_REQUIRED", getLang(req)));
       const report = await storage.getPayrollByBranch(String(month), Number(year));
       res.json(report);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5367,20 +5361,20 @@ export async function registerRoutes(
       const report = await storage.getPayrollComparison(year);
       res.json(report);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.post("/api/employees/:id/opening-balances", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
-      if (!user || user.role !== "owner") return res.status(403).json({ message: "فقط المالك يمكنه تعديل الأرصدة الافتتاحية" });
+      if (!user || user.role !== "owner") return res.status(403).json(errJson("OWNER_ONLY_OPENING_BALANCES", getLang(req)));
       const { openingAdvanceBalance, openingPayableBalance } = req.body;
       const updated = await storage.updateUser(Number(req.params.id), {
         openingAdvanceBalance: openingAdvanceBalance !== undefined ? String(openingAdvanceBalance) : undefined,
         openingPayableBalance: openingPayableBalance !== undefined ? String(openingPayableBalance) : undefined,
       });
-      if (!updated) return res.status(404).json({ message: "الموظف غير موجود" });
+      if (!updated) return res.status(404).json(errJson("EMPLOYEE_NOT_FOUND", getLang(req)));
 
       await storage.addAuditLog({
         action: "opening_balance_update", entityType: "user", entityId: updated.id,
@@ -5390,7 +5384,7 @@ export async function registerRoutes(
       });
       res.json(updated);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5398,10 +5392,10 @@ export async function registerRoutes(
     try {
       const { employmentStatus } = req.body;
       if (!["active", "suspended", "terminated"].includes(employmentStatus)) {
-        return res.status(400).json({ message: "حالة غير صالحة" });
+        return res.status(400).json(errJson("INVALID_STATUS", getLang(req)));
       }
       const emp = await storage.getUser(Number(req.params.id));
-      if (!emp) return res.status(404).json({ message: "الموظف غير موجود" });
+      if (!emp) return res.status(404).json(errJson("EMPLOYEE_NOT_FOUND", getLang(req)));
 
       const updated = await storage.updateUser(Number(req.params.id), { employmentStatus });
       await storage.addAuditLog({
@@ -5412,7 +5406,7 @@ export async function registerRoutes(
       });
       res.json(updated);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5422,7 +5416,7 @@ export async function registerRoutes(
       const accs = await storage.getAccounts();
       res.json(accs);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5430,22 +5424,22 @@ export async function registerRoutes(
   app.post("/api/accounts", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const { code, name, nameEn, type, parentId, level } = req.body;
-      if (!code || !name || !type) return res.status(400).json({ message: "بيانات ناقصة" });
+      if (!code || !name || !type) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       const acc = await storage.createAccount({ code, name, nameEn, type, parentId: parentId || null, level: level || 1 });
       res.status(201).json(acc);
     } catch (err: any) {
-      if (err?.message?.includes("unique")) return res.status(400).json({ message: "رمز الحساب موجود مسبقاً" });
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      if (err?.message?.includes("unique")) return res.status(400).json(errJson("ACCOUNT_CODE_DUPLICATE", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.patch("/api/accounts/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const acc = await storage.updateAccount(parseInt(req.params.id as string), req.body);
-      if (!acc) return res.status(404).json({ message: "الحساب غير موجود" });
+      if (!acc) return res.status(404).json(errJson("ACCOUNT_NOT_FOUND", getLang(req)));
       res.json(acc);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5455,7 +5449,7 @@ export async function registerRoutes(
       const accs = await storage.getAccounts();
       res.json(accs);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5470,17 +5464,17 @@ export async function registerRoutes(
       });
       res.json(entries);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.get("/api/journal-entries/:id", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const entry = await storage.getJournalEntry(parseInt(req.params.id as string));
-      if (!entry) return res.status(404).json({ message: "القيد غير موجود" });
+      if (!entry) return res.status(404).json(errJson("JOURNAL_ENTRY_NOT_FOUND", getLang(req)));
       res.json(entry);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5488,12 +5482,12 @@ export async function registerRoutes(
     try {
       const { date, description, sourceType, sourceId, branchId, lines } = req.body;
       if (!date || !description || !lines || lines.length < 2) {
-        return res.status(400).json({ message: "القيد يجب أن يحتوي على تاريخ ووصف وسطرين على الأقل" });
+        return res.status(400).json(errJson("JOURNAL_ENTRY_INVALID", getLang(req)));
       }
       const totalDebit = lines.reduce((s: number, l: any) => s + parseFloat(l.debit || 0), 0);
       const totalCredit = lines.reduce((s: number, l: any) => s + parseFloat(l.credit || 0), 0);
       if (Math.abs(totalDebit - totalCredit) > 0.01) {
-        return res.status(400).json({ message: "القيد غير متوازن - المدين لا يساوي الدائن" });
+        return res.status(400).json(errJson("JOURNAL_ENTRY_UNBALANCED", getLang(req)));
       }
       const entryNumber = await storage.getNextEntryNumber();
       const entry = await storage.createJournalEntry({
@@ -5510,17 +5504,17 @@ export async function registerRoutes(
       }, lines);
       res.status(201).json(entry);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.post("/api/journal-entries/:id/post", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const entry = await storage.postJournalEntry(parseInt(req.params.id as string));
-      if (!entry) return res.status(404).json({ message: "القيد غير موجود" });
+      if (!entry) return res.status(404).json(errJson("JOURNAL_ENTRY_NOT_FOUND", getLang(req)));
       res.json(entry);
     } catch (err: any) {
-      res.status(400).json({ message: err?.message ?? "خطأ في ترحيل القيد" });
+      res.status(400).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5608,7 +5602,7 @@ export async function registerRoutes(
 
       res.json({ success: true, generated, message: `تم توليد ${generated} قيد محاسبي بأثر رجعي` });
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في التوليد" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5616,11 +5610,11 @@ export async function registerRoutes(
   app.get("/api/general-ledger", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const accountId = parseInt(req.query.accountId as string);
-      if (!accountId) return res.status(400).json({ message: "يجب تحديد الحساب" });
+      if (!accountId) return res.status(400).json(errJson("ACCOUNT_ID_REQUIRED", getLang(req)));
       const entries = await storage.getGeneralLedger(accountId, req.query.from as string, req.query.to as string);
       res.json(entries);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5629,7 +5623,7 @@ export async function registerRoutes(
       const data = await storage.getTrialBalance(req.query.from as string, req.query.to as string);
       res.json(data);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5641,7 +5635,7 @@ export async function registerRoutes(
       const data = await storage.getPayrollEmployees(branchId);
       res.json(data);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5650,11 +5644,11 @@ export async function registerRoutes(
       const month   = Number(req.query.month);
       const year    = Number(req.query.year);
       const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
-      if (!month || !year) return res.status(400).json({ message: "month و year مطلوبان" });
+      if (!month || !year) return res.status(400).json(errJson("MONTH_YEAR_REQUIRED", getLang(req)));
       const data = await storage.getPayrollMovements(month, year, branchId);
       res.json(data);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5663,11 +5657,11 @@ export async function registerRoutes(
       const month   = Number(req.query.month);
       const year    = Number(req.query.year);
       const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
-      if (!month || !year) return res.status(400).json({ message: "month و year مطلوبان" });
+      if (!month || !year) return res.status(400).json(errJson("MONTH_YEAR_REQUIRED", getLang(req)));
       const data = await storage.getPayrollPayments(month, year, branchId);
       res.json(data);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5675,7 +5669,7 @@ export async function registerRoutes(
     try {
       const { employeeId, month, year, amount, paymentMethod, paidBy, branchId, note, referenceNo } = req.body;
       if (!employeeId || !month || !year || !amount || !paymentMethod || !paidBy) {
-        return res.status(400).json({ message: "بيانات ناقصة" });
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       }
       const data = await storage.addPayrollPayment({
         employeeId: Number(employeeId),
@@ -5690,7 +5684,7 @@ export async function registerRoutes(
       });
       res.json(data);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5698,7 +5692,7 @@ export async function registerRoutes(
     try {
       const { employeeIds, month, year, paymentMethod, paidBy, branchId } = req.body;
       if (!Array.isArray(employeeIds) || !month || !year || !paymentMethod || !paidBy) {
-        return res.status(400).json({ message: "بيانات ناقصة" });
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       }
       // Get current payroll rows to determine remaining amounts
       const movements = await storage.getPayrollMovements(Number(month), Number(year), branchId ? Number(branchId) : undefined);
@@ -5729,7 +5723,7 @@ export async function registerRoutes(
       }
       res.json({ count: results.length, payments: results });
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5737,7 +5731,7 @@ export async function registerRoutes(
     try {
       const { type, employeeId, amount, date, reason, createdBy } = req.body;
       if (!type || !employeeId || !amount || !date || !createdBy) {
-        return res.status(400).json({ message: "بيانات ناقصة" });
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       }
       let result: any;
       const dateObj = new Date(date);
@@ -5752,11 +5746,11 @@ export async function registerRoutes(
       } else if (type === 'bonus') {
         result = await storage.createEmployeeEntitlement({ employeeId: Number(employeeId), amount: String(amount), date, note: reason, createdBy: Number(createdBy), month, year });
       } else {
-        return res.status(400).json({ message: "نوع غير مدعوم" });
+        return res.status(400).json(errJson("UNSUPPORTED_TYPE", getLang(req)));
       }
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5765,9 +5759,9 @@ export async function registerRoutes(
       const table = req.params.table as string;
       const id    = req.params.id;
       const { cancelledBy } = req.body;
-      if (!cancelledBy) return res.status(400).json({ message: "cancelledBy مطلوب" });
+      if (!cancelledBy) return res.status(400).json(errJson("CANCELLED_BY_REQUIRED", getLang(req)));
       const allowedTables = ['employee_advances', 'employee_deductions', 'employee_commissions', 'employee_entitlements'];
-      if (!allowedTables.includes(table)) return res.status(400).json({ message: "جدول غير مدعوم" });
+      if (!allowedTables.includes(table)) return res.status(400).json(errJson("UNSUPPORTED_TABLE", getLang(req)));
       let result: any;
       if (table === 'employee_advances') {
         result = await storage.settleAdvance(Number(id), 0);
@@ -5779,7 +5773,7 @@ export async function registerRoutes(
       }
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5792,11 +5786,11 @@ export async function registerRoutes(
     try {
       const from = req.query.from as string;
       const to   = req.query.to   as string;
-      if (!from || !to) return res.status(400).json({ message: "from & to مطلوبان (YYYY-MM-DD)" });
+      if (!from || !to) return res.status(400).json(errJson("DATE_RANGE_REQUIRED", getLang(req)));
       const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
       res.json(await storage.getIncomeStatement(from, to, branchId));
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5807,7 +5801,7 @@ export async function registerRoutes(
       const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
       res.json(await storage.getBalanceSheet(asOf, branchId));
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5821,7 +5815,7 @@ export async function registerRoutes(
         : scope?.mode === "branch" ? scope.branchId : undefined;
       res.json(await storage.getDailyCashStatement(date, branchId));
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5831,10 +5825,10 @@ export async function registerRoutes(
       const branchId = req.query.branchId
         ? Number(req.query.branchId)
         : (req.session as any).branchId;
-      if (!branchId) return res.status(400).json({ message: "branchId مطلوب" });
+      if (!branchId) return res.status(400).json(errJson("BRANCH_ID_REQUIRED", getLang(req)));
       res.json(await storage.checkCashBalance(branchId));
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5843,11 +5837,11 @@ export async function registerRoutes(
     try {
       const from = req.query.from as string;
       const to   = req.query.to   as string;
-      if (!from || !to) return res.status(400).json({ message: "from & to مطلوبان" });
+      if (!from || !to) return res.status(400).json(errJson("DATE_RANGE_REQUIRED", getLang(req)));
       const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
       res.json(await storage.getExpensesByCategory(from, to, branchId));
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5856,11 +5850,11 @@ export async function registerRoutes(
     try {
       const from = req.query.from as string;
       const to   = req.query.to   as string;
-      if (!from || !to) return res.status(400).json({ message: "from & to مطلوبان" });
+      if (!from || !to) return res.status(400).json(errJson("DATE_RANGE_REQUIRED", getLang(req)));
       const branchId = req.query.branchId ? Number(req.query.branchId) : undefined;
       res.json(await storage.getCashFlowStatement(from, to, branchId));
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5870,7 +5864,7 @@ export async function registerRoutes(
     try {
       res.json(await storage.getOwnerFinancialSummary());
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5882,16 +5876,16 @@ export async function registerRoutes(
       const to       = req.query.to   as string | undefined;
       res.json(await storage.getOwnerTransactions(limit, branchId, from, to));
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.post("/api/owner/transactions", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     try {
       const { date, type, branchId, amount, paymentMethod, fromAccount, toAccount, referenceNo, note } = req.body;
-      if (!date || !type || !amount) return res.status(400).json({ message: "date, type, amount مطلوبة" });
+      if (!date || !type || !amount) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       const validTypes = ["BRANCH_CASH_TRANSFER_TO_OWNER","OWNER_DEPOSIT_TO_BANK","OWNER_WITHDRAWAL","MANUAL_ADJUSTMENT_IN","MANUAL_ADJUSTMENT_OUT"];
-      if (!validTypes.includes(type)) return res.status(400).json({ message: "نوع غير صالح" });
+      if (!validTypes.includes(type)) return res.status(400).json(errJson("INVALID_TYPE", getLang(req)));
       const txn = await storage.createOwnerTransaction({
         date, type, branchId: branchId ? Number(branchId) : undefined,
         amount: parseFloat(amount), paymentMethod, fromAccount, toAccount,
@@ -5899,7 +5893,7 @@ export async function registerRoutes(
       });
       res.json(txn);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في الخادم" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5938,7 +5932,7 @@ export async function registerRoutes(
       await pool.query(sql);
       res.json({ success: true, message: "تم تشغيل المايجريشن بنجاح" });
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5952,7 +5946,7 @@ export async function registerRoutes(
       await pool.query(sql);
       res.json({ success: true, message: "تم تشغيل migration 0015 — payment_method/due_date/discount/vat بنجاح" });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5966,7 +5960,7 @@ export async function registerRoutes(
       await pool.query(sql);
       res.json({ success: true, message: "تم تشغيل migration 0014 — qty_before/qty_after بنجاح" });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5980,7 +5974,7 @@ export async function registerRoutes(
       await pool.query(sql);
       res.json({ success: true, message: "تم تشغيل migration 0012 — POS & Orders بنجاح" });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -5994,7 +5988,7 @@ export async function registerRoutes(
       await pool.query(sql);
       res.json({ success: true, message: "تم تشغيل migration 0011 — الأدوار والصلاحيات بنجاح" });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -6054,13 +6048,13 @@ export async function registerRoutes(
     const roleId = Number(req.params.id);
     const { permissionIds } = req.body as { permissionIds: number[] };
     if (!Array.isArray(permissionIds)) {
-      return res.status(400).json({ message: "permissionIds يجب أن يكون مصفوفة" });
+      return res.status(400).json(errJson("PERMISSIONS_ARRAY_REQUIRED", getLang(req)));
     }
     try {
       // المالك لا يمكن تعديل صلاحياته (دائماً كاملة)
       const role = await pool.query("SELECT name FROM roles WHERE id = $1", [roleId]);
       if (role.rows[0]?.name === "owner") {
-        return res.status(403).json({ message: "لا يمكن تعديل صلاحيات المالك" });
+        return res.status(403).json(errJson("OWNER_PERMISSIONS_IMMUTABLE", getLang(req)));
       }
       await pool.query("DELETE FROM role_permissions WHERE role_id = $1", [roleId]);
       if (permissionIds.length > 0) {
@@ -6081,10 +6075,10 @@ export async function registerRoutes(
     const id = Number(req.params.id);
     try {
       const user = await storage.getUser(id);
-      if (!user) return res.status(404).json({ message: "المستخدم غير موجود" });
-      if (user.role === "owner") return res.status(400).json({ message: "لا يمكن تعطيل حساب المالك" });
+      if (!user) return res.status(404).json(errJson("USER_NOT_FOUND", getLang(req)));
+      if (user.role === "owner") return res.status(400).json(errJson("CANNOT_DEACTIVATE_OWNER", getLang(req)));
       const updated = await storage.updateUser(id, { isActive: !user.isActive });
-      if (!updated) return res.status(404).json({ message: "فشل التحديث" });
+      if (!updated) return res.status(404).json(errJson("UPDATE_FAILED", getLang(req)));
       const { password: _, ...safe } = updated;
       res.json(safe);
     } catch (err: any) {
@@ -6098,15 +6092,15 @@ export async function registerRoutes(
     try {
       const actor = await storage.getUser(req.session.userId!);
       if (actor?.id === id) {
-        return res.status(400).json({ message: "لا يمكنك حذف حسابك الخاص" });
+        return res.status(400).json(errJson("CANNOT_DELETE_SELF", getLang(req)));
       }
       const target = await storage.getUser(id);
       if (target?.role === "owner") {
-        return res.status(400).json({ message: "لا يمكن حذف حساب المالك" });
+        return res.status(400).json(errJson("CANNOT_DELETE_OWNER", getLang(req)));
       }
       // إلغاء تفعيل بدلاً من الحذف الفعلي
       const updated = await storage.updateUser(id, { isActive: false });
-      if (!updated) return res.status(404).json({ message: "المستخدم غير موجود" });
+      if (!updated) return res.status(404).json(errJson("USER_NOT_FOUND", getLang(req)));
       await storage.addAuditLog({
         action: "user_update",
         entityType: "user",
@@ -6128,10 +6122,10 @@ export async function registerRoutes(
   app.patch("/api/users/:id/role", requireAuth, requireOwnerOrAdmin, async (req, res) => {
     const id = Number(req.params.id);
     const { roleId } = req.body as { roleId: number };
-    if (!roleId) return res.status(400).json({ message: "roleId مطلوب" });
+    if (!roleId) return res.status(400).json(errJson("ROLE_ID_REQUIRED", getLang(req)));
     try {
       const roleRow = await pool.query("SELECT name FROM roles WHERE id = $1", [roleId]);
-      if (!roleRow.rows.length) return res.status(404).json({ message: "الدور غير موجود" });
+      if (!roleRow.rows.length) return res.status(404).json(errJson("ROLE_NOT_FOUND", getLang(req)));
       const roleName = roleRow.rows[0].name; // 'owner' or 'sales'
       await pool.query(
         "UPDATE users SET role_id = $1, role = $2 WHERE id = $3",
@@ -6174,7 +6168,7 @@ export async function registerRoutes(
   app.get("/api/pos/products", requireAuth, requirePermission("pos.access"), async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
       const { search, categoryId } = req.query;
 
       // للمالك/المدير بدون فرع محدد → يرى إجمالي المخزون من كل الفروع
@@ -6232,7 +6226,7 @@ export async function registerRoutes(
   app.get("/api/pos/top", requireAuth, requirePermission("pos.access"), async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
       const branchId = user.branchId ?? null;
       const branchFilter  = branchId ? `AND l.branch_id = $1` : ``;
       const branchFilter2 = branchId ? `AND s.branch_id = $1` : ``;
@@ -6275,7 +6269,7 @@ export async function registerRoutes(
   app.get("/api/pos/held", requireAuth, requirePermission("pos.access"), async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
       const result = await pool.query(
         `SELECT * FROM held_invoices WHERE branch_id = $1 AND created_by = $2 ORDER BY created_at DESC`,
         [user.branchId, user.id]
@@ -6290,10 +6284,10 @@ export async function registerRoutes(
   app.post("/api/pos/held", requireAuth, requirePermission("pos.access"), async (req, res) => {
     try {
       const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
       const { items, customerId, customerName, customerPhone } = req.body;
       if (!items || !Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ message: "السلة فارغة" });
+        return res.status(400).json(errJson("CART_EMPTY", getLang(req)));
       }
       const cntRes = await pool.query(`SELECT COALESCE(MAX(id),0)+1 as next FROM held_invoices`);
       const holdNumber = `HOLD-${String(cntRes.rows[0].next).padStart(4, "0")}`;
@@ -6316,7 +6310,7 @@ export async function registerRoutes(
         `DELETE FROM held_invoices WHERE id=$1 RETURNING *`,
         [Number(req.params.id)]
       );
-      if (result.rowCount === 0) return res.status(404).json({ message: "الفاتورة المعلقة غير موجودة" });
+      if (result.rowCount === 0) return res.status(404).json(errJson("PENDING_INVOICE_NOT_FOUND", getLang(req)));
       const row = result.rows[0];
       res.json({ ...row, items: JSON.parse(row.items || "[]") });
     } catch (err: any) {
@@ -6340,7 +6334,7 @@ export async function registerRoutes(
       const orderId = Number(req.params.id);
       const { items, ...data } = req.body;
       const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
 
       // تحديث بيانات الطلب
       const fields: string[] = [];
@@ -6395,20 +6389,20 @@ export async function registerRoutes(
     try {
       const orderId = Number(req.params.id);
       const user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(401).json({ message: "غير مصرح" });
+      if (!user) return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
 
       const orderRes = await pool.query(`SELECT * FROM orders WHERE id=$1`, [orderId]);
-      if (orderRes.rowCount === 0) return res.status(404).json({ message: "الطلب غير موجود" });
+      if (orderRes.rowCount === 0) return res.status(404).json(errJson("ORDER_NOT_FOUND", getLang(req)));
       const order = orderRes.rows[0];
-      if (order.status !== "delivered") return res.status(400).json({ message: "الطلب يجب أن يكون في حالة 'تم التسليم' أولاً" });
-      if (order.invoice_id) return res.status(400).json({ message: "الطلب محول لفاتورة مسبقاً" });
+      if (order.status !== "delivered") return res.status(400).json(errJson("ORDER_NOT_DELIVERED", getLang(req)));
+      if (order.invoice_id) return res.status(400).json(errJson("ORDER_ALREADY_INVOICED", getLang(req)));
 
       const itemsRes = await pool.query(
         `SELECT oi.*, p.avg_cost FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id=$1`,
         [orderId]
       );
       const items = itemsRes.rows;
-      if (items.length === 0) return res.status(400).json({ message: "الطلب لا يحتوي على منتجات" });
+      if (items.length === 0) return res.status(400).json(errJson("ORDER_NO_ITEMS", getLang(req)));
 
       // تحقق من المخزون
       for (const item of items) {
@@ -6610,7 +6604,7 @@ export async function registerRoutes(
         locations: locResult.rows,
       });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err?.message ?? "خطأ" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -6770,7 +6764,7 @@ export async function registerRoutes(
     } catch (err: any) {
       await client.query("ROLLBACK");
       console.error("[backfill-shift-today]", err);
-      res.status(500).json({ success: false, message: err?.message ?? "خطأ" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     } finally {
       client.release();
     }
@@ -6786,7 +6780,7 @@ export async function registerRoutes(
       const centralRes = await client.query(`SELECT id FROM locations WHERE is_central = TRUE LIMIT 1`);
       if (centralRes.rows.length === 0) {
         await client.query("ROLLBACK");
-        return res.status(400).json({ success: false, message: "لا يوجد مخزن مركزي" });
+        return res.status(400).json(errJson("NO_CENTRAL_WAREHOUSE", getLang(req)));
       }
       const centralId = centralRes.rows[0].id;
 
@@ -6841,7 +6835,7 @@ export async function registerRoutes(
       });
     } catch (err: any) {
       await client.query("ROLLBACK");
-      res.status(500).json({ success: false, message: err?.message ?? "خطأ" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     } finally {
       client.release();
     }
@@ -6853,7 +6847,7 @@ export async function registerRoutes(
     try {
       const centralRes = await pool.query(`SELECT id FROM locations WHERE is_central = TRUE LIMIT 1`);
       const centralId = centralRes.rows[0]?.id;
-      if (!centralId) return res.status(400).json({ ok: false, message: "لا يوجد مخزن مركزي" });
+      if (!centralId) return res.status(400).json(errJson("NO_CENTRAL_WAREHOUSE", getLang(req)));
 
       // variants من فواتير معتمدة غائبة كلياً عن inventory_balances
       const missing = await pool.query(`
@@ -6911,7 +6905,7 @@ export async function registerRoutes(
     try {
       const centralRes = await client.query(`SELECT id FROM locations WHERE is_central = TRUE LIMIT 1`);
       if (centralRes.rows.length === 0) {
-        return res.status(400).json({ ok: false, message: "لا يوجد مخزن مركزي" });
+        return res.status(400).json(errJson("NO_CENTRAL_WAREHOUSE", getLang(req)));
       }
       const centralId = centralRes.rows[0].id;
 
@@ -7037,7 +7031,7 @@ export async function registerRoutes(
       await pool.query(sqlText);
       res.json({ success: true, message: "تم تشغيل migration 0021 — جدول المرفقات الدائمة بنجاح" });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -7051,7 +7045,7 @@ export async function registerRoutes(
       await pool.query(sqlText);
       res.json({ success: true, message: "تم تشغيل migration 0020 — دعم مرفقات متعددة بنجاح" });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -7065,7 +7059,7 @@ export async function registerRoutes(
       await pool.query(sqlText);
       res.json({ success: true, message: "تم تشغيل migration 0016 — قيود المخزون والفهارس بنجاح" });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -7080,7 +7074,7 @@ export async function registerRoutes(
       await pool.query(sqlText);
       res.json({ success: true, message: "تم تشغيل migration 0019 — إضافة address + phone للفروع بنجاح" });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -7093,7 +7087,7 @@ export async function registerRoutes(
       await pool.query(sqlText);
       res.json({ success: true, message: "تم تشغيل migration 0018 — إضافة description + cost_default + min_qty للمنتجات بنجاح" });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -7107,7 +7101,7 @@ export async function registerRoutes(
       await pool.query(sqlText);
       res.json({ success: true, message: "تم تشغيل migration 0017 — إضافة variant_id لـ order_items بنجاح" });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err?.message ?? "خطأ في تشغيل المايجريشن" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -7175,7 +7169,7 @@ export async function registerRoutes(
       res.json({ success: true, message: "تم مسح جميع البيانات التجريبية بنجاح. النظام جاهز للبيانات الحقيقية." });
     } catch (err: any) {
       await pool.query("ROLLBACK;").catch(() => {});
-      res.status(500).json({ success: false, message: err?.message ?? "خطأ أثناء مسح البيانات" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
