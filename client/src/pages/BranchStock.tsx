@@ -39,6 +39,7 @@ function formatDateTime(dateStr: string | null) {
 
 function TransferRow({ tr }: { tr: any }) {
   const [expanded, setExpanded] = useState(false);
+  const { t } = useI18n();
   const date = tr.approved_at || tr.created_at;
 
   return (
@@ -50,24 +51,24 @@ function TransferRow({ tr }: { tr: any }) {
       >
         <div className="flex-1 grid grid-cols-2 sm:grid-cols-5 gap-2 text-sm">
           <div>
-            <p className="text-muted-foreground text-xs">رقم التحويل</p>
+            <p className="text-muted-foreground text-xs">{t("branch_stock.transfer_number")}</p>
             <p className="font-bold text-primary font-mono">TRF-{tr.transfer_number}</p>
           </div>
           <div>
-            <p className="text-muted-foreground text-xs">التاريخ</p>
+            <p className="text-muted-foreground text-xs">{t("common.date")}</p>
             <p className="font-semibold">{formatDate(date)}</p>
           </div>
           <div>
-            <p className="text-muted-foreground text-xs">المصدر</p>
+            <p className="text-muted-foreground text-xs">{t("branch_stock.source")}</p>
             <p className="font-semibold truncate">{tr.from_location_name}</p>
           </div>
           <div>
-            <p className="text-muted-foreground text-xs">إجمالي الكمية</p>
-            <p className="font-bold text-emerald-600">{tr.total_qty} قطعة</p>
+            <p className="text-muted-foreground text-xs">{t("branch_stock.total_qty_label")}</p>
+            <p className="font-bold text-emerald-600">{tr.total_qty} {t("branch_stock.unit")}</p>
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-muted-foreground text-xs">عدد الأصناف</p>
+              <p className="text-muted-foreground text-xs">{t("branch_stock.items_count")}</p>
               <p className="font-semibold">{tr.lines_count}</p>
             </div>
             {expanded
@@ -82,23 +83,23 @@ function TransferRow({ tr }: { tr: any }) {
         <div className="border-t bg-muted/20 px-4 py-4 space-y-3">
           {tr.notes && (
             <p className="text-xs text-muted-foreground bg-white border rounded px-3 py-2">
-              <span className="font-semibold text-foreground">ملاحظات: </span>{tr.notes}
+              <span className="font-semibold text-foreground">{t("common.note")}: </span>{tr.notes}
             </p>
           )}
           <div className="text-xs text-muted-foreground">
-            بواسطة: {tr.created_by_name || "—"} • {formatDateTime(date)}
+            {t("common.by")} {tr.created_by_name || "—"} • {formatDateTime(date)}
           </div>
           <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow>
                   <TableHead>#</TableHead>
-                  <TableHead>المنتج</TableHead>
-                  <TableHead>الفئة</TableHead>
-                  <TableHead>اللون</TableHead>
-                  <TableHead>المقاس</TableHead>
-                  <TableHead>الباركود</TableHead>
-                  <TableHead className="text-center">الكمية</TableHead>
+                  <TableHead>{t("branch_stock.product")}</TableHead>
+                  <TableHead>{t("branch_stock.category")}</TableHead>
+                  <TableHead>{t("branch_stock.color")}</TableHead>
+                  <TableHead>{t("branch_stock.size")}</TableHead>
+                  <TableHead>{t("branch_stock.barcode")}</TableHead>
+                  <TableHead className="text-center">{t("branch_stock.qty")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -252,11 +253,11 @@ export default function BranchStock() {
           <TabsList className="mb-4">
             <TabsTrigger value="stock" className="gap-2">
               <Box className="w-4 h-4" />
-              المخزون الحالي
+              {t("branch_stock.current_stock_tab")}
             </TabsTrigger>
             <TabsTrigger value="transfers" className="gap-2">
               <Truck className="w-4 h-4" />
-              سجل التحويلات
+              {t("branch_stock.transfers_tab")}
               {transfers.length > 0 && (
                 <Badge variant="secondary" className="text-xs px-1.5">{transfers.length}</Badge>
               )}
@@ -285,14 +286,14 @@ export default function BranchStock() {
                 <CardContent className="p-4 text-center">
                   <Layers className="w-5 h-5 mx-auto mb-1 text-purple-500" />
                   <div className="text-2xl font-bold text-purple-600">{totalProducts}</div>
-                  <div className="text-xs text-muted-foreground">إجمالي المنتجات</div>
+                  <div className="text-xs text-muted-foreground">{t("branch_stock.total_products")}</div>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4 text-center">
                   <Layers className="w-5 h-5 mx-auto mb-1 text-orange-500" />
                   <div className="text-2xl font-bold text-orange-600">{totalCategories}</div>
-                  <div className="text-xs text-muted-foreground">الفئات</div>
+                  <div className="text-xs text-muted-foreground">{t("branch_stock.categories_count")}</div>
                 </CardContent>
               </Card>
             </div>
@@ -352,12 +353,12 @@ export default function BranchStock() {
                     <TableHeader className="bg-muted/50 sticky top-0 z-10">
                       <TableRow>
                         <TableHead>{t("branch_stock.product")}</TableHead>
-                        <TableHead>الفئة</TableHead>
+                        <TableHead>{t("branch_stock.category")}</TableHead>
                         <TableHead>{t("branch_stock.color")}</TableHead>
                         <TableHead>{t("branch_stock.size")}</TableHead>
                         <TableHead>{t("branch_stock.barcode")}</TableHead>
                         <TableHead className="text-center">{t("branch_stock.qty")}</TableHead>
-                        <TableHead className="text-center">آخر تحويل</TableHead>
+                        <TableHead className="text-center">{t("branch_stock.last_transfer")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -390,8 +391,8 @@ export default function BranchStock() {
                   </Table>
                 </div>
                 <div className="border-t px-4 py-2 bg-muted/30 flex gap-6 text-sm">
-                  <span className="text-muted-foreground">إجمالي الأصناف: <strong>{totalVariants}</strong></span>
-                  <span className="text-muted-foreground">إجمالي الكميات: <strong className="text-emerald-600">{totalQty}</strong></span>
+                  <span className="text-muted-foreground">{t("branch_stock.total_variants_summary")} <strong>{totalVariants}</strong></span>
+                  <span className="text-muted-foreground">{t("branch_stock.total_qty_summary")} <strong className="text-emerald-600">{totalQty}</strong></span>
                 </div>
               </div>
             )}
@@ -405,14 +406,14 @@ export default function BranchStock() {
                 <CardContent className="p-4 text-center">
                   <Truck className="w-5 h-5 mx-auto mb-1 text-blue-500" />
                   <div className="text-2xl font-bold text-blue-600">{transfers.length}</div>
-                  <div className="text-xs text-muted-foreground">إجمالي التحويلات</div>
+                  <div className="text-xs text-muted-foreground">{t("branch_stock.total_transfers")}</div>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4 text-center">
                   <Package className="w-5 h-5 mx-auto mb-1 text-green-500" />
                   <div className="text-2xl font-bold text-green-600">{totalTransferQty}</div>
-                  <div className="text-xs text-muted-foreground">إجمالي القطع المستلمة</div>
+                  <div className="text-xs text-muted-foreground">{t("branch_stock.total_received")}</div>
                 </CardContent>
               </Card>
               <Card>
@@ -423,7 +424,7 @@ export default function BranchStock() {
                       ? formatDate(transfers[0].approved_at || transfers[0].created_at)
                       : "—"}
                   </div>
-                  <div className="text-xs text-muted-foreground">آخر تحويل</div>
+                  <div className="text-xs text-muted-foreground">{t("branch_stock.last_transfer")}</div>
                 </CardContent>
               </Card>
             </div>
@@ -432,7 +433,7 @@ export default function BranchStock() {
             <div className="relative max-w-md">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="بحث برقم التحويل أو اسم المنتج أو الباركود..."
+                placeholder={t("branch_stock.transfer_search_placeholder")}
                 value={transferSearch}
                 onChange={e => setTransferSearch(e.target.value)}
                 className="pe-9"
@@ -445,7 +446,7 @@ export default function BranchStock() {
             ) : filteredTransfers.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Truck className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p>لا توجد تحويلات مسجلة لهذا الفرع</p>
+                <p>{t("branch_stock.no_transfers")}</p>
               </div>
             ) : (
               <div className="space-y-2">
