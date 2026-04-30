@@ -689,7 +689,7 @@ function PurchasesTab() {
         setQpBarcode(barcode);
         setQpName(""); setQpColor(""); setQpSize(""); setQpPrice(""); setQpCost("");
         setShowQuickProduct(true);
-        toast({ title: "الباركود غير موجود", description: `${barcode} — يمكنك إضافته كمنتج جديد`, variant: "destructive" });
+        toast({ title: t("purchases.barcode_not_found_title"), description: t("purchases.barcode_not_found_desc", { barcode }), variant: "destructive" });
       }
     } finally {
       setModalBarcodeLoading(false);
@@ -723,7 +723,7 @@ function PurchasesTab() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      if (!newSupplierId) throw new Error("اختر المورد");
+      if (!newSupplierId) throw new Error(t("purchases.select_supplier_error"));
       const res = await apiRequest("POST", "/api/purchases", {
         supplierId: Number(newSupplierId),
         // branchId مُتجاهل — القاعدة: المخزن المركزي دائماً
@@ -773,7 +773,7 @@ function PurchasesTab() {
       qc.invalidateQueries({ queryKey: ["/api/products"] });
       setSelectedInvoice(inv.id);
       if (wizardDirectApprove) {
-        toast({ title: "تم اعتماد الفاتورة وتحديث المخزون ✓" });
+        toast({ title: t("purchases.invoice_approved_success") });
         setWizardSuccess(true);
       } else {
         toast({ title: t("purchases.invoice_created") });
@@ -806,7 +806,7 @@ function PurchasesTab() {
       const productId = addProductId ? Number(addProductId) : null;
       const variantId = addVariantId;
 
-      if (!productId) throw new Error("يرجى اختيار منتج من القائمة أولاً");
+      if (!productId) throw new Error(t("purchases.select_product_error"));
 
       const res = await apiRequest("POST", `/api/purchases/${selectedInvoice}/items`, {
         productId,
@@ -944,7 +944,7 @@ function PurchasesTab() {
       qc.invalidateQueries({ queryKey: ["/api/purchases"] });
       setShowDeleteConfirm(null);
       setSelectedIds(new Set());
-      toast({ title: "تم حذف الفاتورة" });
+      toast({ title: t("purchases.invoice_deleted") });
     },
     onError: (e: Error) => toast({ title: t("common.error"), description: e.message, variant: "destructive" }),
   });
@@ -1342,13 +1342,13 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                       fd.append("file", file);
                       const res = await fetch(`/api/purchases/${selectedInvoice}/attachment`, { method: "POST", body: fd, credentials: "include" });
                       const data = await res.json();
-                      if (!data.ok) toast({ title: "فشل رفع " + file.name, description: data.error, variant: "destructive" });
+                      if (!data.ok) toast({ title: t("purchases.upload_failed_file", { filename: file.name }), description: data.error, variant: "destructive" });
                     }
                     qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
                     qc.invalidateQueries({ queryKey: ["/api/purchases"] });
-                    toast({ title: `تم رفع ${files.length} مرفق ✓` });
+                    toast({ title: t("purchases.upload_success_count", { count: files.length }) });
                   } catch (err: any) {
-                    toast({ title: "خطأ", description: err.message, variant: "destructive" });
+                    toast({ title: t("common.error"), description: err.message, variant: "destructive" });
                   } finally {
                     setAttachUploading(false);
                   }
@@ -1356,7 +1356,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
               <Button variant="outline" asChild disabled={attachUploading} className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50">
                 <span>
                   {attachUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                  رفع مرفقات {((invoiceDetail as any)?.attachmentUrls?.length > 0) && `(${(invoiceDetail as any).attachmentUrls.length})`}
+                  {t("purchases.upload_attachments_btn")} {((invoiceDetail as any)?.attachmentUrls?.length > 0) && `(${(invoiceDetail as any).attachmentUrls.length})`}
                 </span>
               </Button>
             </label>
@@ -1365,7 +1365,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
             {((invoiceDetail as any)?.attachmentUrls?.length > 0 || (invoiceDetail as any)?.attachmentUrl) && (
               <Button variant="outline" size="sm" className="gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
                 onClick={() => setShowAttachment(true)}>
-                <FileText className="w-4 h-4" /> عرض المرفقات
+                <FileText className="w-4 h-4" /> {t("purchases.view_attachments_btn")}
                 {((invoiceDetail as any)?.attachmentUrls?.length > 0) && ` (${(invoiceDetail as any).attachmentUrls.length})`}
               </Button>
             )}
@@ -1374,7 +1374,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
               {statusLabel}
             </Badge>
             <Button variant="outline" className="gap-2" onClick={handlePrintInvoice}>
-              <Printer className="w-4 h-4" /> طباعة الفاتورة
+              <Printer className="w-4 h-4" /> {t("purchases.print_invoice_btn")}
             </Button>
             <Button variant="outline" onClick={() => setSelectedInvoice(null)} data-testid="button-back-to-list">{t("purchases.back_to_list")}</Button>
           </div>
@@ -1396,7 +1396,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                       <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                       <Input
                         className="pe-9"
-                        placeholder="ابحث بالاسم أو الباركود أو رقم الموديل..."
+                        placeholder={t("purchases.search_by_invoice")}
                         value={addSearch}
                         data-testid="input-add-product-name"
                         onChange={e => {
@@ -1452,7 +1452,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                                   }}
                                 >
                                   <Plus className="w-4 h-4" />
-                                  إضافة "{addSearch}" كمنتج جديد
+                                  {t("purchases.add_as_new_product", { name: addSearch })}
                                 </button>
                               )}
                             </>
@@ -1479,12 +1479,12 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                           const prodName = prod?.name || barcode;
                           setAddProductName(prodName);
                           setAddSearch(prodName);
-                          toast({ title: "تم العثور على المنتج", description: `${prodName}${variant.color ? " — " + variant.color : ""}${variant.size ? " / " + variant.size : ""}` });
+                          toast({ title: t("purchases.product_found_title"), description: `${prodName}${variant.color ? " — " + variant.color : ""}${variant.size ? " / " + variant.size : ""}` });
                         } else {
                           setQpBarcode(barcode);
                           setQpName(""); setQpColor(""); setQpSize(""); setQpPrice(""); setQpCost("");
                           setShowQuickProduct(true);
-                          toast({ title: "الباركود غير موجود", description: `${barcode} — يمكنك إضافته كمنتج جديد`, variant: "destructive" });
+                          toast({ title: t("purchases.barcode_not_found_title"), description: t("purchases.barcode_not_found_desc", { barcode }), variant: "destructive" });
                         }
                       } catch (e) {
                         toast({ title: t("common.error"), description: String(e), variant: "destructive" });
@@ -1531,7 +1531,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                     setQpBarcode(""); setQpColor(""); setQpSize(""); setQpCost("");
                     setShowQuickProduct(true);
                   }} data-testid="button-quick-create-variant">
-                    <Plus className="w-3 h-3" /> إضافة متغير جديد لهذا المنتج
+                    <Plus className="w-3 h-3" /> {t("purchases.add_variant_for_product")}
                   </Button>
                 )}
 
@@ -1547,7 +1547,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                   </div>
                   {addProductId && (
                     <div className="space-y-1 flex-1">
-                      <label className="text-sm font-medium text-muted-foreground text-xs">المنتج المختار</label>
+                      <label className="text-sm font-medium text-muted-foreground text-xs">{t("purchases.selected_product_label")}</label>
                       <p className="text-sm font-medium text-primary bg-primary/5 px-3 py-2 rounded-lg border border-primary/20 flex items-center justify-between">
                         {addProductName}
                         <button type="button" className="text-muted-foreground hover:text-red-500 me-2" onClick={() => { setAddProductId(""); setAddProductName(""); setAddSearch(""); setAddVariantId(null); setAddColor(""); setAddSize(""); }}>
@@ -1795,7 +1795,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
             <DialogHeader className="px-5 py-3.5 border-b flex-shrink-0">
               <DialogTitle className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-blue-600" />
-                مرفقات الفاتورة — #{invoiceDetail?.invoiceNumber}
+                {t("purchases.invoice_attachments_title")} — #{invoiceDetail?.invoiceNumber}
               </DialogTitle>
             </DialogHeader>
             <div className="flex-1 overflow-auto p-4 flex flex-col gap-6">
@@ -1804,17 +1804,17 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                 const attachments: any[] = (invoiceDetail as any)?.attachments?.length > 0
                   ? (invoiceDetail as any).attachments
                   : (invoiceDetail as any)?.attachmentUrls?.length > 0
-                    ? (invoiceDetail as any).attachmentUrls.map((url: string, i: number) => ({ id: null, url, filename: `مرفق ${i + 1}` }))
+                    ? (invoiceDetail as any).attachmentUrls.map((url: string, i: number) => ({ id: null, url, filename: t("purchases.attachment_n", { n: i + 1 }) }))
                     : (invoiceDetail as any)?.attachmentUrl
-                      ? [{ id: null, url: (invoiceDetail as any).attachmentUrl, filename: "مرفق 1" }]
+                      ? [{ id: null, url: (invoiceDetail as any).attachmentUrl, filename: t("purchases.attachment_n", { n: 1 }) }]
                       : [];
-                if (attachments.length === 0) return <p className="text-center text-muted-foreground py-8">لا توجد مرفقات</p>;
+                if (attachments.length === 0) return <p className="text-center text-muted-foreground py-8">{t("purchases.no_attachments")}</p>;
                 return attachments.map((att: any, idx: number) => {
                   const url: string = att.url || att;
                   const isLegacy = typeof url === "string" && url.startsWith("/uploads/");
                   const isPdf = typeof url === "string" && url.toLowerCase().includes(".pdf");
                   const attachId = att.id;
-                  const label = att.filename && att.filename !== `مرفق ${idx + 1}` ? att.filename : `مرفق ${idx + 1}`;
+                  const label = att.filename && att.filename !== t("purchases.attachment_n", { n: idx + 1 }) ? att.filename : t("purchases.attachment_n", { n: idx + 1 });
                   return (
                     <div key={idx} className="flex flex-col gap-2">
                       {/* اسم الملف + زر حذف */}
@@ -1822,7 +1822,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                         <span className="text-sm text-muted-foreground">{label}</span>
                         {!isLegacy && (
                           <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                            title="حذف المرفق"
+                            title={t("purchases.delete_attachment_title")}
                             onClick={async () => {
                               if (!selectedInvoice) return;
                               try {
@@ -1834,11 +1834,11 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                                 if (d.ok) {
                                   qc.invalidateQueries({ queryKey: ["/api/purchases", selectedInvoice] });
                                   qc.invalidateQueries({ queryKey: ["/api/purchases"] });
-                                  toast({ title: "تم حذف المرفق" });
+                                  toast({ title: t("purchases.attachment_deleted") });
                                   if ((d.attachments?.length ?? 0) === 0) setShowAttachment(false);
                                 }
                               } catch (err: any) {
-                                toast({ title: "فشل الحذف", description: err.message, variant: "destructive" });
+                                toast({ title: t("purchases.attachment_delete_failed"), description: err.message, variant: "destructive" });
                               }
                             }}>
                             <Trash2 className="w-4 h-4" />
