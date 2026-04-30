@@ -6,35 +6,247 @@ import XLSX from "xlsx";
 import PDFDocument from "pdfkit";
 import path from "path";
 import fs from "fs";
+import { getLang } from "./middleware/errorHandler";
+import { errJson } from "./lib/errorCodes";
+
+// ── Bilingual labels for XLSX/CSV exports ─────────────────────────────────────
+const LABELS = {
+  ar: {
+    allBranches:    "جميع الفروع",
+    period:         "الفترة",
+    from:           "من",
+    to:             "إلى",
+    branch:         "الفرع",
+    date:           "التاريخ",
+    total:          "المجموع",
+    grandTotal:     "المجموع الكلي",
+    reportDate:     "تاريخ التقرير",
+    // Daily report
+    dailyTitle:     "التقرير اليومي - لمسة أنوثة",
+    salesDetail:    "تفصيل المبيعات",
+    amountOMR:      "المبلغ (OMR)",
+    count:          "العدد",
+    cashSales:      "مبيعات نقدي",
+    cardSales:      "مبيعات بطاقة",
+    bankSales:      "تحويل بنكي",
+    totalSales:     "إجمالي المبيعات",
+    profitAnalysis: "تحليل الربحية",
+    cogs:           "تكلفة البضاعة المباعة (COGS)",
+    grossProfit:    "إجمالي الربح",
+    totalExpenses:  "إجمالي المصروفات",
+    netProfit:      "صافي الربح",
+    expensesDetail: "تفصيل المصروفات",
+    cashExpenses:   "مصروفات نقدي",
+    bankExpenses:   "مصروفات بنكي",
+    cashBox:        "الصندوق النقدي",
+    openingBalance: "رصيد الافتتاح",
+    closingBalance: "رصيد الإغلاق (تقديري)",
+    differences:    "مجموع الفروقات",
+    sheetSummary:   "الملخص",
+    sheetShifts:    "الشفتات",
+    shiftColId:     "#",
+    shiftColBranch: "الفرع",
+    shiftColDevice: "الجهاز",
+    shiftColStart:  "البداية",
+    shiftColEnd:    "النهاية",
+    shiftColStatus: "الحالة",
+    shiftColSales:  "المبيعات",
+    shiftColOpening:"رصيد الافتتاح",
+    shiftOpen:      "مفتوح",
+    shiftClosed:    "مغلق",
+    // Profit reports
+    branchProfitTitle:    "تقرير أرباح الفروع - لمسة أنوثة",
+    employeeProfitTitle:  "تقرير أرباح الموظفين - لمسة أنوثة",
+    productProfitTitle:   "تقرير أرباح المنتجات - لمسة أنوثة",
+    colBranch:    "الفرع",
+    colEmployee:  "الموظف",
+    colProduct:   "المنتج",
+    colSales:     "المبيعات",
+    colCogs:      "التكلفة (COGS)",
+    colGrossProfit: "إجمالي الربح",
+    colExpenses:  "المصروفات",
+    colNetProfit: "صافي الربح",
+    colMargin:    "هامش الربح %",
+    colOpsCount:  "عدد العمليات",
+    colQtySold:   "الكمية المباعة",
+    sheetBranchProfit:   "أرباح الفروع",
+    sheetEmployeeProfit: "أرباح الموظفين",
+    sheetProductProfit:  "أرباح المنتجات",
+    // Sales
+    salesTitle:   "فواتير نقطة البيع - لمسة أنوثة",
+    colInvoice:   "رقم الفاتورة",
+    colCashier:   "الكاشير",
+    colPayMethod: "طريقة الدفع",
+    colRef:       "الرقم المرجعي",
+    colSubtotal:  "المجموع الفرعي",
+    colDiscount:  "الخصم",
+    colVat:       "الضريبة",
+    colTotal:     "الإجمالي",
+    colCost:      "التكلفة",
+    colProfit:    "الربح",
+    pmCash:       "نقدي",
+    pmCard:       "بطاقة",
+    pmBank:       "تحويل بنكي",
+    sheetSales:   "فواتير البيع",
+    // Inventory
+    inventoryTitle:    "تقرير المخزون - لمسة أنوثة",
+    colBarcode:        "الباركود",
+    colLocation:       "الموقع",
+    colQty:            "الكمية",
+    colReorderLevel:   "حد إعادة الطلب",
+    colAvgCost:        "متوسط التكلفة",
+    colPrice:          "السعر",
+    colInventoryValue: "قيمة المخزون",
+    sheetInventory:    "المخزون",
+    // Purchases
+    purchasesTitle:    "تقرير المشتريات - لمسة أنوثة",
+    colOrderNo:        "رقم الأمر",
+    colSupplier:       "المورد",
+    colAmount:         "المبلغ",
+    colStatus:         "الحالة",
+    colCreatedBy:      "أنشأ بواسطة",
+    colNotes:          "ملاحظات",
+    allPeriods:        "الكل",
+    purchaseStatusDraft:    "مسودة",
+    purchaseStatusOrdered:  "تم الطلب",
+    purchaseStatusReceived: "مستلم",
+    purchaseStatusPartial:  "مستلم جزئياً",
+    purchaseStatusCancelled:"ملغي",
+    sheetPurchases:    "المشتريات",
+  },
+  en: {
+    allBranches:    "All Branches",
+    period:         "Period",
+    from:           "From",
+    to:             "To",
+    branch:         "Branch",
+    date:           "Date",
+    total:          "Total",
+    grandTotal:     "Grand Total",
+    reportDate:     "Report Date",
+    // Daily report
+    dailyTitle:     "Daily Report - Lamsat Anotha",
+    salesDetail:    "Sales Breakdown",
+    amountOMR:      "Amount (OMR)",
+    count:          "Count",
+    cashSales:      "Cash Sales",
+    cardSales:      "Card Sales",
+    bankSales:      "Bank Transfer",
+    totalSales:     "Total Sales",
+    profitAnalysis: "Profitability Analysis",
+    cogs:           "Cost of Goods Sold (COGS)",
+    grossProfit:    "Gross Profit",
+    totalExpenses:  "Total Expenses",
+    netProfit:      "Net Profit",
+    expensesDetail: "Expenses Breakdown",
+    cashExpenses:   "Cash Expenses",
+    bankExpenses:   "Bank Expenses",
+    cashBox:        "Cash Box",
+    openingBalance: "Opening Balance",
+    closingBalance: "Closing Balance (Estimated)",
+    differences:    "Total Differences",
+    sheetSummary:   "Summary",
+    sheetShifts:    "Shifts",
+    shiftColId:     "#",
+    shiftColBranch: "Branch",
+    shiftColDevice: "Device",
+    shiftColStart:  "Start",
+    shiftColEnd:    "End",
+    shiftColStatus: "Status",
+    shiftColSales:  "Sales",
+    shiftColOpening:"Opening Balance",
+    shiftOpen:      "Open",
+    shiftClosed:    "Closed",
+    // Profit reports
+    branchProfitTitle:    "Branch Profit Report - Lamsat Anotha",
+    employeeProfitTitle:  "Employee Profit Report - Lamsat Anotha",
+    productProfitTitle:   "Product Profit Report - Lamsat Anotha",
+    colBranch:    "Branch",
+    colEmployee:  "Employee",
+    colProduct:   "Product",
+    colSales:     "Sales",
+    colCogs:      "Cost (COGS)",
+    colGrossProfit: "Gross Profit",
+    colExpenses:  "Expenses",
+    colNetProfit: "Net Profit",
+    colMargin:    "Profit Margin %",
+    colOpsCount:  "Operations Count",
+    colQtySold:   "Qty Sold",
+    sheetBranchProfit:   "Branch Profits",
+    sheetEmployeeProfit: "Employee Profits",
+    sheetProductProfit:  "Product Profits",
+    // Sales
+    salesTitle:   "POS Invoices - Lamsat Anotha",
+    colInvoice:   "Invoice No.",
+    colCashier:   "Cashier",
+    colPayMethod: "Payment Method",
+    colRef:       "Reference",
+    colSubtotal:  "Subtotal",
+    colDiscount:  "Discount",
+    colVat:       "VAT",
+    colTotal:     "Total",
+    colCost:      "Cost",
+    colProfit:    "Profit",
+    pmCash:       "Cash",
+    pmCard:       "Card",
+    pmBank:       "Bank Transfer",
+    sheetSales:   "Sales Invoices",
+    // Inventory
+    inventoryTitle:    "Inventory Report - Lamsat Anotha",
+    colBarcode:        "Barcode",
+    colLocation:       "Location",
+    colQty:            "Quantity",
+    colReorderLevel:   "Reorder Level",
+    colAvgCost:        "Avg Cost",
+    colPrice:          "Price",
+    colInventoryValue: "Inventory Value",
+    sheetInventory:    "Inventory",
+    // Purchases
+    purchasesTitle:    "Purchases Report - Lamsat Anotha",
+    colOrderNo:        "Order No.",
+    colSupplier:       "Supplier",
+    colAmount:         "Amount",
+    colStatus:         "Status",
+    colCreatedBy:      "Created By",
+    colNotes:          "Notes",
+    allPeriods:        "All",
+    purchaseStatusDraft:    "Draft",
+    purchaseStatusOrdered:  "Ordered",
+    purchaseStatusReceived: "Received",
+    purchaseStatusPartial:  "Partially Received",
+    purchaseStatusCancelled:"Cancelled",
+    sheetPurchases:    "Purchases",
+  },
+} as const;
 
 const FONT_PATH = path.join(process.cwd(), "server", "fonts", "Cairo-Regular.ttf");
 const hasArabicFont = fs.existsSync(FONT_PATH);
 
 function requireAuth(req: Request, res: Response, next: () => void) {
   if (!req.session.userId) {
-    return res.status(401).json({ message: "غير مصرح" });
+    return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
   }
   next();
 }
 
 async function requireOwnerOrAdmin(req: Request, res: Response, next: () => void) {
   if (!req.session.userId) {
-    return res.status(401).json({ message: "غير مصرح" });
+    return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
   }
   const user = await storage.getUser(req.session.userId);
   if (!user || (user.role !== "owner" && user.role !== "admin")) {
-    return res.status(403).json({ message: "غير مصرح - صلاحيات غير كافية" });
+    return res.status(403).json(errJson("PERMISSION_DENIED", getLang(req)));
   }
   next();
 }
 
 async function enforceBranchScope(req: Request, res: Response, next: () => void) {
   if (!req.session.userId) {
-    return res.status(401).json({ message: "غير مصرح" });
+    return res.status(401).json(errJson("UNAUTHENTICATED", getLang(req)));
   }
   const user = await storage.getUser(req.session.userId);
   if (!user) {
-    return res.status(401).json({ message: "المستخدم غير موجود" });
+    return res.status(401).json(errJson("USER_NOT_FOUND", getLang(req)));
   }
   if (user.role === "owner" || user.role === "admin") {
     const qb = (req.query.branchId || req.query.branch_id) as string | undefined;
@@ -60,68 +272,70 @@ export function registerExportRoutes(app: Express) {
     try {
       const dateStr = req.query.date as string;
       if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-        return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
+        return res.status(400).json(errJson("DATE_REQUIRED", getLang(req)));
       }
+      const lang = getLang(req);
+      const L = LABELS[lang];
       const scope = req.branchScope!;
       const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
       const report = await storage.getDailyReport(dateStr, branchId);
 
       const branches = await storage.getBranches();
       const foundBranch = branchId ? branches.find(b => b.id === branchId) : null;
-      const branchName = foundBranch ? (foundBranch.address ? `${foundBranch.name} - ${foundBranch.address}` : foundBranch.name) : "جميع الفروع";
+      const branchName = foundBranch ? (foundBranch.address ? `${foundBranch.name} - ${foundBranch.address}` : foundBranch.name) : L.allBranches;
 
       const wb = XLSX.utils.book_new();
 
       const summaryData = [
-        ["التقرير اليومي - لمسة أنوثة"],
-        ["التاريخ", report.date],
-        ["الفرع", branchName],
+        [L.dailyTitle],
+        [L.date, report.date],
+        [L.branch, branchName],
         [],
-        ["تفصيل المبيعات", "المبلغ (OMR)", "العدد"],
-        ["مبيعات نقدي", report.salesCash.total, report.salesCash.count],
-        ["مبيعات بطاقة", report.salesCard.total, report.salesCard.count],
-        ["تحويل بنكي", report.salesBankTransfer.total, report.salesBankTransfer.count],
-        ["إجمالي المبيعات", report.totalSales, ""],
+        [L.salesDetail, L.amountOMR, L.count],
+        [L.cashSales, report.salesCash.total, report.salesCash.count],
+        [L.cardSales, report.salesCard.total, report.salesCard.count],
+        [L.bankSales, report.salesBankTransfer.total, report.salesBankTransfer.count],
+        [L.totalSales, report.totalSales, ""],
         [],
-        ["تحليل الربحية", "المبلغ (OMR)"],
-        ["إجمالي المبيعات", report.totalSales],
-        ["تكلفة البضاعة المباعة (COGS)", report.cogsTotal],
-        ["إجمالي الربح", report.grossProfit],
-        ["إجمالي المصروفات", report.totalExpenses],
-        ["صافي الربح", report.netProfit],
+        [L.profitAnalysis, L.amountOMR],
+        [L.totalSales, report.totalSales],
+        [L.cogs, report.cogsTotal],
+        [L.grossProfit, report.grossProfit],
+        [L.totalExpenses, report.totalExpenses],
+        [L.netProfit, report.netProfit],
         [],
-        ["تفصيل المصروفات", "المبلغ (OMR)", "العدد"],
-        ["مصروفات نقدي", report.expensesCash.total, report.expensesCash.count],
-        ["مصروفات بنكي", report.expensesBank.total, report.expensesBank.count],
+        [L.expensesDetail, L.amountOMR, L.count],
+        [L.cashExpenses, report.expensesCash.total, report.expensesCash.count],
+        [L.bankExpenses, report.expensesBank.total, report.expensesBank.count],
         [],
-        ["الصندوق النقدي", "المبلغ (OMR)"],
-        ["رصيد الافتتاح", report.openingCash],
-        ["رصيد الإغلاق (تقديري)", report.cashClosingBalance],
-        ["مجموع الفروقات", report.differencesSum],
+        [L.cashBox, L.amountOMR],
+        [L.openingBalance, report.openingCash],
+        [L.closingBalance, report.cashClosingBalance],
+        [L.differences, report.differencesSum],
       ];
       const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
       ws1["!cols"] = [{ wch: 30 }, { wch: 15 }, { wch: 10 }];
-      ws1["!dir"] = "rtl";
-      XLSX.utils.book_append_sheet(wb, ws1, "الملخص");
+      ws1["!dir"] = lang === "ar" ? "rtl" : "ltr";
+      XLSX.utils.book_append_sheet(wb, ws1, L.sheetSummary);
 
       if (report.shifts.length > 0) {
         const shiftRows = [
-          ["#", "الفرع", "الجهاز", "البداية", "النهاية", "الحالة", "المبيعات", "رصيد الافتتاح"],
+          [L.shiftColId, L.shiftColBranch, L.shiftColDevice, L.shiftColStart, L.shiftColEnd, L.shiftColStatus, L.shiftColSales, L.shiftColOpening],
           ...report.shifts.map((s: any) => [
             s.id,
             branches.find(b => b.id === s.branchId)?.name || "",
             s.terminalName,
             s.startedAt ? new Date(s.startedAt).toLocaleTimeString("ar-OM") : "",
-            s.endedAt ? new Date(s.endedAt).toLocaleTimeString("ar-OM") : "مفتوح",
-            s.status === "open" ? "مفتوح" : "مغلق",
+            s.endedAt ? new Date(s.endedAt).toLocaleTimeString("ar-OM") : L.shiftOpen,
+            s.status === "open" ? L.shiftOpen : L.shiftClosed,
             omr(s.totalSales),
             omr(s.openingCash),
           ]),
         ];
         const ws2 = XLSX.utils.aoa_to_sheet(shiftRows);
         ws2["!cols"] = [{ wch: 6 }, { wch: 25 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 12 }, { wch: 12 }];
-        ws2["!dir"] = "rtl";
-        XLSX.utils.book_append_sheet(wb, ws2, "الشفتات");
+        ws2["!dir"] = lang === "ar" ? "rtl" : "ltr";
+        XLSX.utils.book_append_sheet(wb, ws2, L.sheetShifts);
       }
 
       const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
@@ -129,7 +343,7 @@ export function registerExportRoutes(app: Express) {
       res.setHeader("Content-Disposition", `attachment; filename="daily-report-${dateStr}.xlsx"`);
       res.send(buf);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -138,17 +352,19 @@ export function registerExportRoutes(app: Express) {
       const from = req.query.from as string;
       const to = req.query.to as string;
       if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
-        return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD (from & to)" });
+        return res.status(400).json(errJson("DATE_RANGE_REQUIRED", getLang(req)));
       }
+      const lang = getLang(req);
+      const L = LABELS[lang];
 
       const data = await storage.getProfitByBranches(from, to);
       const wb = XLSX.utils.book_new();
 
       const rows: any[][] = [
-        [`تقرير أرباح الفروع - لمسة أنوثة`],
-        [`الفترة`, `من ${from} إلى ${to}`],
+        [L.branchProfitTitle],
+        [L.period, `${L.from} ${from} ${L.to} ${to}`],
         [],
-        ["الفرع", "المبيعات", "التكلفة (COGS)", "إجمالي الربح", "المصروفات", "صافي الربح", "هامش الربح %"],
+        [L.colBranch, L.colSales, L.colCogs, L.colGrossProfit, L.colExpenses, L.colNetProfit, L.colMargin],
       ];
 
       let grandTotals = { sales: 0, cogs: 0, gross: 0, exp: 0, net: 0 };
@@ -174,7 +390,7 @@ export function registerExportRoutes(app: Express) {
         ? ((grandTotals.net / grandTotals.sales) * 100).toFixed(1) + "%"
         : "0.0%";
       rows.push([
-        "المجموع الكلي",
+        L.grandTotal,
         omr(grandTotals.sales), omr(grandTotals.cogs), omr(grandTotals.gross),
         omr(grandTotals.exp), omr(grandTotals.net), totalMargin,
       ]);
@@ -184,15 +400,15 @@ export function registerExportRoutes(app: Express) {
         { wch: 25 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
         { wch: 14 }, { wch: 14 }, { wch: 12 },
       ];
-      ws["!dir"] = "rtl";
-      XLSX.utils.book_append_sheet(wb, ws, "أرباح الفروع");
+      ws["!dir"] = lang === "ar" ? "rtl" : "ltr";
+      XLSX.utils.book_append_sheet(wb, ws, L.sheetBranchProfit);
 
       const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="profit-all-branches-${from}-to-${to}.xlsx"`);
       res.send(buf);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -200,21 +416,23 @@ export function registerExportRoutes(app: Express) {
     try {
       const from = req.query.from as string;
       const to = req.query.to as string;
-      if (!from || !to) return res.status(400).json({ message: "from & to مطلوبان" });
+      if (!from || !to) return res.status(400).json(errJson("DATE_RANGE_REQUIRED", getLang(req)));
+      const lang = getLang(req);
+      const L = LABELS[lang];
       const scope = req.branchScope!;
       const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
       const data = await storage.getProfitByEmployees(from, to, branchId);
 
       const branches = await storage.getBranches();
-      const branchLabel = branchId ? branches.find(b => b.id === branchId)?.name || "" : "جميع الفروع";
+      const branchLabel = branchId ? branches.find(b => b.id === branchId)?.name || "" : L.allBranches;
 
       const wb = XLSX.utils.book_new();
       const rows: any[][] = [
-        ["تقرير أرباح الموظفين - لمسة أنوثة"],
-        [`الفترة`, `من ${from} إلى ${to}`],
-        [`الفرع`, branchLabel],
+        [L.employeeProfitTitle],
+        [L.period, `${L.from} ${from} ${L.to} ${to}`],
+        [L.branch, branchLabel],
         [],
-        ["الموظف", "عدد العمليات", "المبيعات", "التكلفة (COGS)", "إجمالي الربح", "هامش الربح %"],
+        [L.colEmployee, L.colOpsCount, L.colSales, L.colCogs, L.colGrossProfit, L.colMargin],
       ];
       let totals = { orders: 0, sales: 0, cogs: 0, profit: 0 };
       for (const e of data) {
@@ -226,19 +444,19 @@ export function registerExportRoutes(app: Express) {
       }
       rows.push([]);
       const totalMargin = totals.sales > 0 ? ((totals.profit / totals.sales) * 100).toFixed(1) : "0.0";
-      rows.push(["المجموع", totals.orders, omr(totals.sales), omr(totals.cogs), omr(totals.profit), totalMargin + "%"]);
+      rows.push([L.total, totals.orders, omr(totals.sales), omr(totals.cogs), omr(totals.profit), totalMargin + "%"]);
 
       const ws = XLSX.utils.aoa_to_sheet(rows);
       ws["!cols"] = [{ wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
-      ws["!dir"] = "rtl";
-      XLSX.utils.book_append_sheet(wb, ws, "أرباح الموظفين");
+      ws["!dir"] = lang === "ar" ? "rtl" : "ltr";
+      XLSX.utils.book_append_sheet(wb, ws, L.sheetEmployeeProfit);
 
       const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="profit-by-employee-${from}-to-${to}.xlsx"`);
       res.send(buf);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -246,21 +464,23 @@ export function registerExportRoutes(app: Express) {
     try {
       const from = req.query.from as string;
       const to = req.query.to as string;
-      if (!from || !to) return res.status(400).json({ message: "from & to مطلوبان" });
+      if (!from || !to) return res.status(400).json(errJson("DATE_RANGE_REQUIRED", getLang(req)));
+      const lang = getLang(req);
+      const L = LABELS[lang];
       const scope = req.branchScope!;
       const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
       const data = await storage.getProfitByProducts(from, to, branchId);
 
       const branches = await storage.getBranches();
-      const branchLabel = branchId ? branches.find(b => b.id === branchId)?.name || "" : "جميع الفروع";
+      const branchLabel = branchId ? branches.find(b => b.id === branchId)?.name || "" : L.allBranches;
 
       const wb = XLSX.utils.book_new();
       const rows: any[][] = [
-        ["تقرير أرباح المنتجات - لمسة أنوثة"],
-        [`الفترة`, `من ${from} إلى ${to}`],
-        [`الفرع`, branchLabel],
+        [L.productProfitTitle],
+        [L.period, `${L.from} ${from} ${L.to} ${to}`],
+        [L.branch, branchLabel],
         [],
-        ["المنتج", "الكمية المباعة", "المبيعات", "التكلفة (COGS)", "إجمالي الربح", "هامش الربح %"],
+        [L.colProduct, L.colQtySold, L.colSales, L.colCogs, L.colGrossProfit, L.colMargin],
       ];
       let totals = { qty: 0, sales: 0, cogs: 0, profit: 0 };
       for (const p of data) {
@@ -272,19 +492,19 @@ export function registerExportRoutes(app: Express) {
       }
       rows.push([]);
       const totalMargin = totals.sales > 0 ? ((totals.profit / totals.sales) * 100).toFixed(1) : "0.0";
-      rows.push(["المجموع", totals.qty, omr(totals.sales), omr(totals.cogs), omr(totals.profit), totalMargin + "%"]);
+      rows.push([L.total, totals.qty, omr(totals.sales), omr(totals.cogs), omr(totals.profit), totalMargin + "%"]);
 
       const ws = XLSX.utils.aoa_to_sheet(rows);
       ws["!cols"] = [{ wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
-      ws["!dir"] = "rtl";
-      XLSX.utils.book_append_sheet(wb, ws, "أرباح المنتجات");
+      ws["!dir"] = lang === "ar" ? "rtl" : "ltr";
+      XLSX.utils.book_append_sheet(wb, ws, L.sheetProductProfit);
 
       const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="profit-by-product-${from}-to-${to}.xlsx"`);
       res.send(buf);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -292,7 +512,7 @@ export function registerExportRoutes(app: Express) {
     try {
       const dateStr = req.query.date as string;
       if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-        return res.status(400).json({ message: "التاريخ مطلوب بصيغة YYYY-MM-DD" });
+        return res.status(400).json(errJson("DATE_REQUIRED", getLang(req)));
       }
       const scope = req.branchScope!;
       const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
@@ -408,7 +628,7 @@ export function registerExportRoutes(app: Express) {
       doc.end();
     } catch (err: any) {
       if (!res.headersSent) {
-        res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+        res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
       }
     }
   });
@@ -418,8 +638,10 @@ export function registerExportRoutes(app: Express) {
       const from = req.query.from as string;
       const to = req.query.to as string;
       if (!from || !to) {
-        return res.status(400).json({ message: "التاريخ مطلوب (from & to)" });
+        return res.status(400).json(errJson("DATE_RANGE_REQUIRED", getLang(req)));
       }
+      const lang = getLang(req);
+      const L = LABELS[lang];
 
       const scope = req.branchScope!;
       const filters: any = { from, to };
@@ -432,13 +654,13 @@ export function registerExportRoutes(app: Express) {
       const data = await storage.getSalesFiltered(filters);
       const wb = XLSX.utils.book_new();
 
-      const pmLabel: Record<string, string> = { cash: "نقدي", card: "بطاقة", bank_transfer: "تحويل بنكي" };
+      const pmLabel: Record<string, string> = { cash: L.pmCash, card: L.pmCard, bank_transfer: L.pmBank };
 
       const rows: any[][] = [
-        ["فواتير نقطة البيع - لمسة أنوثة"],
-        ["الفترة", `من ${from} إلى ${to}`],
+        [L.salesTitle],
+        [L.period, `${L.from} ${from} ${L.to} ${to}`],
         [],
-        ["رقم الفاتورة", "التاريخ", "الفرع", "الكاشير", "طريقة الدفع", "الرقم المرجعي", "المجموع الفرعي", "الخصم", "الضريبة", "الإجمالي", "التكلفة", "الربح"],
+        [L.colInvoice, L.date, L.colBranch, L.colCashier, L.colPayMethod, L.colRef, L.colSubtotal, L.colDiscount, L.colVat, L.colTotal, L.colCost, L.colProfit],
       ];
 
       let totals = { subtotal: 0, discount: 0, vat: 0, total: 0, cogs: 0, profit: 0 };
@@ -471,7 +693,7 @@ export function registerExportRoutes(app: Express) {
 
       rows.push([]);
       rows.push([
-        "المجموع", "", "", "", "",
+        L.total, "", "", "", "",
         omr(totals.subtotal), omr(totals.discount), omr(totals.vat), omr(totals.total), omr(totals.cogs), omr(totals.profit),
       ]);
 
@@ -480,24 +702,24 @@ export function registerExportRoutes(app: Express) {
         { wch: 16 }, { wch: 20 }, { wch: 25 }, { wch: 16 }, { wch: 14 },
         { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
       ];
-      ws["!dir"] = "rtl";
-      XLSX.utils.book_append_sheet(wb, ws, "فواتير البيع");
+      ws["!dir"] = lang === "ar" ? "rtl" : "ltr";
+      XLSX.utils.book_append_sheet(wb, ws, L.sheetSales);
 
       const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="sales-invoices-${from}-to-${to}.xlsx"`);
       res.send(buf);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.get("/api/exports/invoice.pdf", requireAuth, async (req, res) => {
     try {
       const saleId = Number(req.query.id);
-      if (!saleId) return res.status(400).json({ message: "id مطلوب" });
+      if (!saleId) return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
       const detail = await storage.getSaleWithDetails(saleId);
-      if (!detail) return res.status(404).json({ message: "الفاتورة غير موجودة" });
+      if (!detail) return res.status(404).json(errJson("PENDING_INVOICE_NOT_FOUND", getLang(req)));
 
       const doc = new PDFDocument({ size: "A4", margin: 40 });
       res.setHeader("Content-Type", "application/pdf");
@@ -603,26 +825,28 @@ export function registerExportRoutes(app: Express) {
       doc.end();
     } catch (err: any) {
       if (!res.headersSent) {
-        res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+        res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
       }
     }
   });
 
   app.get("/api/exports/inventory.xlsx", requireAuth, enforceBranchScope, async (req, res) => {
     try {
+      const lang = getLang(req);
+      const L = LABELS[lang];
       const scope = req.branchScope!;
       const branchId = scope.mode === "branch" ? scope.branchId! : undefined;
       const data = await storage.getLocationInventoryList(branchId);
       const branches = await storage.getBranches();
-      const branchLabel = branchId ? branches.find(b => b.id === branchId)?.name || "" : "جميع الفروع";
+      const branchLabel = branchId ? branches.find(b => b.id === branchId)?.name || "" : L.allBranches;
 
       const wb = XLSX.utils.book_new();
       const rows: any[][] = [
-        ["تقرير المخزون - لمسة أنوثة"],
-        ["الفرع", branchLabel],
-        ["تاريخ التقرير", new Date().toLocaleDateString("ar-OM")],
+        [L.inventoryTitle],
+        [L.branch, branchLabel],
+        [L.reportDate, new Date().toLocaleDateString("ar-OM")],
         [],
-        ["المنتج", "الباركود", "الموقع", "الفرع", "الكمية", "حد إعادة الطلب", "متوسط التكلفة", "السعر", "قيمة المخزون"],
+        [L.colProduct, L.colBarcode, L.colLocation, L.colBranch, L.colQty, L.colReorderLevel, L.colAvgCost, L.colPrice, L.colInventoryValue],
       ];
       let totalValue = 0;
       let totalQty = 0;
@@ -641,27 +865,29 @@ export function registerExportRoutes(app: Express) {
         ]);
       }
       rows.push([]);
-      rows.push(["المجموع", "", "", "", totalQty, "", "", "", omr(totalValue)]);
+      rows.push([L.total, "", "", "", totalQty, "", "", "", omr(totalValue)]);
 
       const ws = XLSX.utils.aoa_to_sheet(rows);
       ws["!cols"] = [
         { wch: 25 }, { wch: 16 }, { wch: 20 }, { wch: 20 },
         { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 14 },
       ];
-      ws["!dir"] = "rtl";
-      XLSX.utils.book_append_sheet(wb, ws, "المخزون");
+      ws["!dir"] = lang === "ar" ? "rtl" : "ltr";
+      XLSX.utils.book_append_sheet(wb, ws, L.sheetInventory);
 
       const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="inventory-report.xlsx"`);
       res.send(buf);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
   app.get("/api/exports/purchases.xlsx", requireAuth, enforceBranchScope, async (req, res) => {
     try {
+      const lang = getLang(req);
+      const L = LABELS[lang];
       const from = req.query.from as string;
       const to = req.query.to as string;
 
@@ -688,19 +914,19 @@ export function registerExportRoutes(app: Express) {
 
       const wb = XLSX.utils.book_new();
       const rows: any[][] = [
-        ["تقرير المشتريات - لمسة أنوثة"],
-        ["الفترة", from && to ? `من ${from} إلى ${to}` : "الكل"],
+        [L.purchasesTitle],
+        [L.period, from && to ? `${L.from} ${from} ${L.to} ${to}` : L.allPeriods],
         [],
-        ["رقم الأمر", "التاريخ", "المورد", "الفرع", "المبلغ", "الحالة", "أنشأ بواسطة", "ملاحظات"],
+        [L.colOrderNo, L.date, L.colSupplier, L.colBranch, L.colAmount, L.colStatus, L.colCreatedBy, L.colNotes],
       ];
       let totalAmount = 0;
+      const statusLabels: Record<string, string> = {
+        draft: L.purchaseStatusDraft, ordered: L.purchaseStatusOrdered, received: L.purchaseStatusReceived,
+        partially_received: L.purchaseStatusPartial, cancelled: L.purchaseStatusCancelled,
+      };
       for (const p of purchResult.rows) {
         const amt = parseFloat(p.total_amount || p.amount || "0");
         totalAmount += amt;
-        const statusLabels: Record<string, string> = {
-          draft: "مسودة", ordered: "تم الطلب", received: "مستلم",
-          partially_received: "مستلم جزئياً", cancelled: "ملغي",
-        };
         rows.push([
           p.order_number || `#${p.id}`, p.date || "",
           p.supplier_name || "—", p.branch_name || "—",
@@ -709,22 +935,22 @@ export function registerExportRoutes(app: Express) {
         ]);
       }
       rows.push([]);
-      rows.push(["المجموع", "", "", "", omr(totalAmount), "", "", ""]);
+      rows.push([L.total, "", "", "", omr(totalAmount), "", "", ""]);
 
       const ws = XLSX.utils.aoa_to_sheet(rows);
       ws["!cols"] = [
         { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 20 },
         { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 25 },
       ];
-      ws["!dir"] = "rtl";
-      XLSX.utils.book_append_sheet(wb, ws, "المشتريات");
+      ws["!dir"] = lang === "ar" ? "rtl" : "ltr";
+      XLSX.utils.book_append_sheet(wb, ws, L.sheetPurchases);
 
       const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="purchases-report.xlsx"`);
       res.send(buf);
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "فشل التصدير" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
     }
   });
 
@@ -765,7 +991,7 @@ export function registerExportRoutes(app: Express) {
       res.setHeader("Content-Disposition", `attachment; filename="backup-${dateStr}.json"`);
       res.send(JSON.stringify(data, null, 2));
     } catch (err: any) {
-      res.status(500).json({ message: err?.message ?? "فشل النسخ الاحتياطي" });
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 }
