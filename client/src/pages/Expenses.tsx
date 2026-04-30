@@ -186,6 +186,7 @@ export default function Expenses() {
     if (!w) return;
     const cat = categoryLabelMap[exp.category] || exp.category;
     const src = SOURCE_LABELS[exp.source] || exp.source;
+    // i18n-ignore-block-start — Arabic-only print receipt HTML template
     w.document.write(`
       <html dir="rtl"><head><title>إيصال مصروف</title>
       <style>body{font-family:Cairo,sans-serif;font-size:14px;padding:20px;} h2{color:#E91E63;} table{width:100%;border-collapse:collapse;margin-top:10px;} td{padding:6px 8px;border-bottom:1px solid #eee;} .amount{font-size:20px;font-weight:bold;color:#E91E63;} .footer{text-align:center;color:#aaa;font-size:11px;margin-top:20px;}</style>
@@ -204,6 +205,7 @@ export default function Expenses() {
       <p class="footer">طُبع بتاريخ ${new Date().toLocaleDateString("en-GB")} — لمسة أنوثة للإكسسوارات</p>
       </body></html>
     `);
+    // i18n-ignore-block-end
     w.document.close();
     w.print();
   }
@@ -363,7 +365,7 @@ export default function Expenses() {
                 <div>
                   <p className="text-xs text-muted-foreground">{t("expenses_page.summary_total")}</p>
                   <p className="text-2xl font-bold text-red-600 mt-1" data-testid="text-expenses-total">
-                    {fmt(summary.total)} <span className="text-sm font-normal">ر.ع</span>
+                    {fmt(summary.total)} <span className="text-sm font-normal">{t("common.omr")}</span>
                   </p>
                 </div>
                 <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
@@ -378,7 +380,7 @@ export default function Expenses() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-muted-foreground">{t("expenses.cash_expenses")}</p>
-                  <p className="text-xl font-bold mt-1">{fmt(summary.cash?.total)} <span className="text-sm font-normal">ر.ع</span></p>
+                  <p className="text-xl font-bold mt-1">{fmt(summary.cash?.total)} <span className="text-sm font-normal">{t("common.omr")}</span></p>
                 </div>
                 <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
                   <Banknote className="w-5 h-5 text-green-600" />
@@ -393,7 +395,7 @@ export default function Expenses() {
                 <div>
                   <p className="text-xs text-muted-foreground">{t("expenses.card_and_transfer")}</p>
                   <p className="text-xl font-bold mt-1">
-                    {fmt(parseFloat(summary.card?.total || "0") + parseFloat(summary.bank?.total || "0"))} <span className="text-sm font-normal">ر.ع</span>
+                    {fmt(parseFloat(summary.card?.total || "0") + parseFloat(summary.bank?.total || "0"))} <span className="text-sm font-normal">{t("common.omr")}</span>
                   </p>
                 </div>
                 <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
@@ -411,7 +413,7 @@ export default function Expenses() {
                   {summary.byCategory && summary.byCategory.length > 0 ? (
                     <>
                       <p className="text-sm font-bold mt-1">{categoryLabelMap[summary.byCategory[0].category] || summary.byCategory[0].category}</p>
-                      <p className="text-xs text-red-600 font-medium">{fmt(summary.byCategory[0].total)} ر.ع</p>
+                      <p className="text-xs text-red-600 font-medium">{fmt(summary.byCategory[0].total)} {t("common.omr")}</p>
                     </>
                   ) : <p className="text-sm text-muted-foreground mt-1">—</p>}
                 </div>
@@ -547,7 +549,7 @@ export default function Expenses() {
                         {exp.source === "cash" ? t("expenses.source_cash_short") : exp.source === "bank_transfer" ? t("expenses.source_bank_short") : t("expenses.source_card_short")}
                       </Badge>
                     </TableCell>
-                    <TableCell className="font-bold text-red-600">{parseFloat(exp.amount).toFixed(3)} <span className="text-xs font-normal text-muted-foreground">ر.ع</span></TableCell>
+                    <TableCell className="font-bold text-red-600">{parseFloat(exp.amount).toFixed(3)} <span className="text-xs font-normal text-muted-foreground">{t("common.omr")}</span></TableCell>
                     <TableCell className="text-muted-foreground max-w-[180px] truncate text-xs" title={exp.notes || ""}>
                       {exp.notes || "-"}
                     </TableCell>

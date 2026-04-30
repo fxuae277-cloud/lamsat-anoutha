@@ -156,6 +156,7 @@ export default function Finance() {
         <td>${e.note || "-"}</td>
       </tr>`).join("");
 
+    // i18n-ignore-block-start — Arabic-only print receipt HTML template
     const html = `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
@@ -190,6 +191,7 @@ export default function Finance() {
   <div class="net"><span>= صافي النقد المتوقع:</span><span style="color:#E91E63">${fmt(summary?.netCash)} ر.ع</span></div>
 </div>
 </body></html>`;
+    // i18n-ignore-block-end
 
     const w = window.open("", "_blank");
     if (w) { w.document.write(html); w.document.close(); w.print(); }
