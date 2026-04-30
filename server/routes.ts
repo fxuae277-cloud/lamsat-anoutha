@@ -4825,7 +4825,7 @@ export async function registerRoutes(
     try {
       res.json(await storage.getPayrollRemainingByEmployee());
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -5416,7 +5416,7 @@ export async function registerRoutes(
       const accs = await storage.getAccounts();
       res.json(accs);
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -5449,7 +5449,7 @@ export async function registerRoutes(
       const accs = await storage.getAccounts();
       res.json(accs);
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -5864,7 +5864,7 @@ export async function registerRoutes(
     try {
       res.json(await storage.getOwnerFinancialSummary());
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -5932,7 +5932,7 @@ export async function registerRoutes(
       await pool.query(sql);
       res.json({ success: true, message: "تم تشغيل المايجريشن بنجاح" });
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -5946,7 +5946,7 @@ export async function registerRoutes(
       await pool.query(sql);
       res.json({ success: true, message: "تم تشغيل migration 0015 — payment_method/due_date/discount/vat بنجاح" });
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -5960,7 +5960,7 @@ export async function registerRoutes(
       await pool.query(sql);
       res.json({ success: true, message: "تم تشغيل migration 0014 — qty_before/qty_after بنجاح" });
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -5974,7 +5974,7 @@ export async function registerRoutes(
       await pool.query(sql);
       res.json({ success: true, message: "تم تشغيل migration 0012 — POS & Orders بنجاح" });
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -5988,7 +5988,7 @@ export async function registerRoutes(
       await pool.query(sql);
       res.json({ success: true, message: "تم تشغيل migration 0011 — الأدوار والصلاحيات بنجاح" });
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -6604,7 +6604,7 @@ export async function registerRoutes(
         locations: locResult.rows,
       });
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -6764,7 +6764,7 @@ export async function registerRoutes(
     } catch (err: any) {
       await client.query("ROLLBACK");
       console.error("[backfill-shift-today]", err);
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     } finally {
       client.release();
     }
@@ -6780,7 +6780,7 @@ export async function registerRoutes(
       const centralRes = await client.query(`SELECT id FROM locations WHERE is_central = TRUE LIMIT 1`);
       if (centralRes.rows.length === 0) {
         await client.query("ROLLBACK");
-        return res.status(400).json(errJson("NO_CENTRAL_WAREHOUSE", getLang(req)));
+        return res.status(400).json(errJson("NO_CENTRAL_WAREHOUSE", getLang(_req)));
       }
       const centralId = centralRes.rows[0].id;
 
@@ -6835,7 +6835,7 @@ export async function registerRoutes(
       });
     } catch (err: any) {
       await client.query("ROLLBACK");
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     } finally {
       client.release();
     }
@@ -6847,7 +6847,7 @@ export async function registerRoutes(
     try {
       const centralRes = await pool.query(`SELECT id FROM locations WHERE is_central = TRUE LIMIT 1`);
       const centralId = centralRes.rows[0]?.id;
-      if (!centralId) return res.status(400).json(errJson("NO_CENTRAL_WAREHOUSE", getLang(req)));
+      if (!centralId) return res.status(400).json(errJson("NO_CENTRAL_WAREHOUSE", getLang(_req)));
 
       // variants من فواتير معتمدة غائبة كلياً عن inventory_balances
       const missing = await pool.query(`
@@ -6905,7 +6905,7 @@ export async function registerRoutes(
     try {
       const centralRes = await client.query(`SELECT id FROM locations WHERE is_central = TRUE LIMIT 1`);
       if (centralRes.rows.length === 0) {
-        return res.status(400).json(errJson("NO_CENTRAL_WAREHOUSE", getLang(req)));
+        return res.status(400).json(errJson("NO_CENTRAL_WAREHOUSE", getLang(_req)));
       }
       const centralId = centralRes.rows[0].id;
 
@@ -7031,7 +7031,7 @@ export async function registerRoutes(
       await pool.query(sqlText);
       res.json({ success: true, message: "تم تشغيل migration 0021 — جدول المرفقات الدائمة بنجاح" });
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -7045,7 +7045,7 @@ export async function registerRoutes(
       await pool.query(sqlText);
       res.json({ success: true, message: "تم تشغيل migration 0020 — دعم مرفقات متعددة بنجاح" });
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -7059,7 +7059,7 @@ export async function registerRoutes(
       await pool.query(sqlText);
       res.json({ success: true, message: "تم تشغيل migration 0016 — قيود المخزون والفهارس بنجاح" });
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -7074,7 +7074,7 @@ export async function registerRoutes(
       await pool.query(sqlText);
       res.json({ success: true, message: "تم تشغيل migration 0019 — إضافة address + phone للفروع بنجاح" });
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -7087,7 +7087,7 @@ export async function registerRoutes(
       await pool.query(sqlText);
       res.json({ success: true, message: "تم تشغيل migration 0018 — إضافة description + cost_default + min_qty للمنتجات بنجاح" });
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -7101,7 +7101,7 @@ export async function registerRoutes(
       await pool.query(sqlText);
       res.json({ success: true, message: "تم تشغيل migration 0017 — إضافة variant_id لـ order_items بنجاح" });
     } catch (err: any) {
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
@@ -7169,7 +7169,7 @@ export async function registerRoutes(
       res.json({ success: true, message: "تم مسح جميع البيانات التجريبية بنجاح. النظام جاهز للبيانات الحقيقية." });
     } catch (err: any) {
       await pool.query("ROLLBACK;").catch(() => {});
-      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(_req)));
     }
   });
 
