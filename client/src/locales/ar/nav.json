@@ -42,7 +42,8 @@
     "branchSummary": "ملخص الفرع المالي",
     "branchPerformance": "مؤشرات الأداء",
     "openingStock": "المخزون الافتتاحي",
-    "ownerFinancial": "المركز المالي للمالك"
+    "ownerFinancial": "المركز المالي للمالك",
+    "cashierReceive": "استلام البضاعة"
   },
   "sidebar": {
     "role_owner": "مالك",

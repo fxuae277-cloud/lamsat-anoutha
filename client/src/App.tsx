@@ -56,6 +56,7 @@ import PayrollSummaryPage from "@/components/payroll/payroll-summary/PayrollSumm
 import SalaryPaymentsPage from "@/components/payroll/salary-payments/SalaryPaymentsPage";
 import PayrollSheetPage from "@/components/payroll/payroll-sheet/PayrollSheetPage";
 
+import CashierReceiveTransfers from "@/pages/CashierReceiveTransfers";
 import MobileEmployeeHome from "@/pages/mobile/MobileEmployeeHome";
 import MobileOwnerHome from "@/pages/mobile/MobileOwnerHome";
 import MobilePOS from "@/pages/mobile/MobilePOS";
@@ -291,6 +292,7 @@ function DesktopRouter() {
           <RequireOwner><OpeningStock /></RequireOwner>
         </Route>
         <Route path="/barcode-labels" component={BarcodeLabels} />
+        <Route path="/cashier/receive" component={CashierReceiveTransfers} />
         <Route path="/payroll/employees">
           <RequireOwner><EmployeesPage /></RequireOwner>
         </Route>

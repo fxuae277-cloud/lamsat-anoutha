@@ -1,5 +1,6 @@
 // cache-bust: 2026-04-05
 import type { Express, Request, Response, NextFunction } from "express";
+import { registerCashierReceiveRoutes } from "./cashier-receive-routes";
 import { createServer, type Server } from "http";
 import { logger } from "./logger";
 import { storage } from "./storage";
@@ -7177,6 +7178,8 @@ export async function registerRoutes(
       res.status(500).json({ success: false, message: err?.message ?? "خطأ أثناء مسح البيانات" });
     }
   });
+
+  registerCashierReceiveRoutes(app);
 
   return httpServer;
 }

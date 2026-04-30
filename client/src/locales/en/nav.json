@@ -42,7 +42,8 @@
     "openingStock": "Opening Stock",
     "ownerFinancial": "Owner Financial Position",
     "usersManagement": "Users Management",
-    "rolesManagement": "Roles Management"
+    "rolesManagement": "Roles Management",
+    "cashierReceive": "Receive Goods"
   },
   "sidebar": {
     "role_owner": "Owner",
