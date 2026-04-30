@@ -262,12 +262,12 @@ export default function Dashboard() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/50">
-                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t("dashboard.invoice_number")}</th>
-                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t("dashboard.branch")}</th>
-                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t("dashboard.cashier")}</th>
-                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t("dashboard.payment_method")}</th>
-                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t("dashboard.total")}</th>
-                      <th className="text-right py-3 px-4 font-medium text-muted-foreground">{t("dashboard.time")}</th>
+                      <th className="text-start py-3 px-4 font-medium text-muted-foreground">{t("dashboard.invoice_number")}</th>
+                      <th className="text-start py-3 px-4 font-medium text-muted-foreground">{t("dashboard.branch")}</th>
+                      <th className="text-start py-3 px-4 font-medium text-muted-foreground">{t("dashboard.cashier")}</th>
+                      <th className="text-start py-3 px-4 font-medium text-muted-foreground">{t("dashboard.payment_method")}</th>
+                      <th className="text-start py-3 px-4 font-medium text-muted-foreground">{t("dashboard.total")}</th>
+                      <th className="text-start py-3 px-4 font-medium text-muted-foreground">{t("dashboard.time")}</th>
                     </tr>
                   </thead>
                   <tbody>

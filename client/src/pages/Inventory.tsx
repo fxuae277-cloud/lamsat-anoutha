@@ -82,7 +82,7 @@ function BalancesTab() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder={t("products.search_placeholder")}
-              className="pl-9"
+              className="ps-9"
               value={search}
               onChange={e => setSearch(e.target.value)}
               data-testid="input-search-balances"
@@ -100,9 +100,9 @@ function BalancesTab() {
               <TableHead>{t("products.barcode")}</TableHead>
               <TableHead>{t("products.variant_color")}</TableHead>
               <TableHead>{t("products.variant_size")}</TableHead>
-              <TableHead className="text-right">{t("inv_balances.qty_on_hand")}</TableHead>
-              <TableHead className="text-right">{t("products.table_price")}</TableHead>
-              <TableHead className="text-right">{t("products.last_purchase_price")}</TableHead>
+              <TableHead className="text-start">{t("inv_balances.qty_on_hand")}</TableHead>
+              <TableHead className="text-start">{t("products.table_price")}</TableHead>
+              <TableHead className="text-start">{t("products.last_purchase_price")}</TableHead>
               <TableHead>{t("inventory.last_receipt_date")}</TableHead>
               <TableHead>{t("inv_balances.location")}</TableHead>
             </TableRow>
@@ -126,12 +126,12 @@ function BalancesTab() {
                   <TableCell className="font-mono text-xs">{b.barcode || "-"}</TableCell>
                   <TableCell>{b.color || "-"}</TableCell>
                   <TableCell>{b.size || "-"}</TableCell>
-                  <TableCell className={`text-right font-bold ${qty < 5 ? "text-red-600" : ""}`}>
+                  <TableCell className={`text-start font-bold ${qty < 5 ? "text-red-600" : ""}`}>
                     {qty}
-                    {qty < 5 && <Badge variant="destructive" className="ml-2 text-[10px] h-4">{t("inv_balances.low_stock")}</Badge>}
+                    {qty < 5 && <Badge variant="destructive" className="ms-2 text-[10px] h-4">{t("inv_balances.low_stock")}</Badge>}
                   </TableCell>
-                  <TableCell className="text-right font-mono">{Number(b.price || 0).toFixed(3)}</TableCell>
-                  <TableCell className="text-right font-mono">{Number(lpp).toFixed(3)}</TableCell>
+                  <TableCell className="text-start font-mono">{Number(b.price || 0).toFixed(3)}</TableCell>
+                  <TableCell className="text-start font-mono">{Number(lpp).toFixed(3)}</TableCell>
                   <TableCell className="text-xs">
                     {lrd ? fmtDate(lrd) : "-"}
                   </TableCell>
@@ -415,7 +415,7 @@ function TransfersTab() {
               className="bg-green-600 hover:bg-green-700"
               data-testid="button-execute-transfer"
             >
-              <CheckCircle className="w-4 h-4 mr-2" /> {t("transfers.approve")}
+              <CheckCircle className="w-4 h-4 me-2" /> {t("transfers.approve")}
             </Button>
           </div>
         )}
@@ -650,7 +650,7 @@ function TransfersTab() {
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
                 placeholder="بحث..."
-                className="pr-9 h-8 w-44 text-sm"
+                className="pe-9 h-8 w-44 text-sm"
                 value={txSearch}
                 onChange={e => setTxSearch(e.target.value)}
               />
@@ -735,7 +735,7 @@ function TransfersTab() {
                   <TableHead>{t("products.variant_color")}</TableHead>
                   <TableHead>{t("products.variant_size")}</TableHead>
                   <TableHead>{t("products.barcode")}</TableHead>
-                  <TableHead className="text-right">{t("transfers.qty_to_transfer")}</TableHead>
+                  <TableHead className="text-start">{t("transfers.qty_to_transfer")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -752,7 +752,7 @@ function TransfersTab() {
                       <TableCell>{line.color || "-"}</TableCell>
                       <TableCell>{line.size || "-"}</TableCell>
                       <TableCell className="font-mono text-xs">{line.barcode || "-"}</TableCell>
-                      <TableCell className="text-right font-semibold">{line.qty}</TableCell>
+                      <TableCell className="text-start font-semibold">{line.qty}</TableCell>
                     </TableRow>
                   ))
                 )}
@@ -898,7 +898,7 @@ function LedgerTab() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder={t("products.search_placeholder")}
-            className="pl-9"
+            className="ps-9"
             value={ledgerSearch}
             onChange={e => setLedgerSearch(e.target.value)}
             data-testid="input-search-ledger"
@@ -917,9 +917,9 @@ function LedgerTab() {
               <TableHead>{t("products.variant_color")}</TableHead>
               <TableHead>{t("products.variant_size")}</TableHead>
               <TableHead>{t("inv_balances.location")}</TableHead>
-              <TableHead className="text-right">قبل</TableHead>
-              <TableHead className="text-right">{t("inv_ledger.qty_change")}</TableHead>
-              <TableHead className="text-right">بعد</TableHead>
+              <TableHead className="text-start">قبل</TableHead>
+              <TableHead className="text-start">{t("inv_ledger.qty_change")}</TableHead>
+              <TableHead className="text-start">بعد</TableHead>
               <TableHead>{t("common.employee")}</TableHead>
               <TableHead>{t("inv_ledger.reference")}</TableHead>
             </TableRow>
@@ -944,13 +944,13 @@ function LedgerTab() {
                 <TableCell>{entry.color || "-"}</TableCell>
                 <TableCell>{entry.size || "-"}</TableCell>
                 <TableCell>{entry.location_name || entry.locationName}</TableCell>
-                <TableCell className="text-right font-mono text-muted-foreground text-xs">
+                <TableCell className="text-start font-mono text-muted-foreground text-xs">
                   {entry.qty_before ?? "-"}
                 </TableCell>
-                <TableCell className={`text-right font-bold ${(entry.qty_change ?? entry.qtyChange) > 0 ? "text-green-600" : "text-red-600"}`}>
+                <TableCell className={`text-start font-bold ${(entry.qty_change ?? entry.qtyChange) > 0 ? "text-green-600" : "text-red-600"}`}>
                   {(entry.qty_change ?? entry.qtyChange) > 0 ? `+${entry.qty_change ?? entry.qtyChange}` : (entry.qty_change ?? entry.qtyChange)}
                 </TableCell>
-                <TableCell className="text-right font-mono text-muted-foreground text-xs">
+                <TableCell className="text-start font-mono text-muted-foreground text-xs">
                   {entry.qty_after ?? "-"}
                 </TableCell>
                 <TableCell>{entry.creator_name || entry.userName || "-"}</TableCell>

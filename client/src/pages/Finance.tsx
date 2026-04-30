@@ -38,15 +38,6 @@ const TYPE_BADGE: Record<string, string> = {
   shift_difference: "bg-yellow-100 text-yellow-800",
   order:            "bg-green-100 text-green-800",
 };
-const TYPE_LABELS_AR: Record<string, string> = {
-  sale:             "مبيعات",
-  expense:          "مصروف",
-  deposit:          "إيداع",
-  withdrawal:       "سحب",
-  shift_difference: "فرق الوردية",
-  order:            "طلب",
-  order_payment:    "دفع طلب",
-};
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 function KpiCard({ label, value, icon: Icon, color, border = false }:
@@ -158,7 +149,7 @@ export default function Finance() {
       <tr>
         <td>${i + 1}</td>
         <td>${e.createdAt ? fmtTime(e.createdAt) : "-"}</td>
-        <td>${TYPE_LABELS_AR[e.type] || e.type}</td>
+        <td>${t(`finance:transactionTypes.${e.type}`)}</td>
         <td style="color:green">${parseFloat(e.amountIn || "0") > 0 ? fmt(e.amountIn) : "-"}</td>
         <td style="color:red">${parseFloat(e.amountOut || "0") > 0 ? fmt(e.amountOut) : "-"}</td>
         <td><b>${e.runningBalance}</b></td>
@@ -237,13 +228,13 @@ export default function Finance() {
           </Select>
         )}
         <Button variant="outline" size="sm" onClick={() => setDepositOpen(true)}>
-          <ArrowDownCircle className="h-4 w-4 ml-1" /> إيداع
+          <ArrowDownCircle className="h-4 w-4 ms-1" /> إيداع
         </Button>
         <Button variant="outline" size="sm" onClick={() => setWithdrawalOpen(true)}>
-          <ArrowUpCircle className="h-4 w-4 ml-1" /> سحب
+          <ArrowUpCircle className="h-4 w-4 ms-1" /> سحب
         </Button>
         <Button variant="outline" size="sm" onClick={printCashStatement}>
-          <Printer className="h-4 w-4 ml-1" /> طباعة
+          <Printer className="h-4 w-4 ms-1" /> طباعة
         </Button>
       </div>
 
@@ -276,15 +267,15 @@ export default function Finance() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead className="text-right w-10">#</TableHead>
-                  <TableHead className="text-right">الوقت</TableHead>
-                  {isAdmin && <TableHead className="text-right">الفرع</TableHead>}
-                  <TableHead className="text-right">النوع</TableHead>
-                  <TableHead className="text-right">وارد</TableHead>
-                  <TableHead className="text-right">صادر</TableHead>
-                  <TableHead className="text-right font-bold text-primary">الرصيد الجاري</TableHead>
-                  <TableHead className="text-right">الموظف</TableHead>
-                  <TableHead className="text-right">ملاحظة</TableHead>
+                  <TableHead className="text-start w-10">#</TableHead>
+                  <TableHead className="text-start">الوقت</TableHead>
+                  {isAdmin && <TableHead className="text-start">الفرع</TableHead>}
+                  <TableHead className="text-start">النوع</TableHead>
+                  <TableHead className="text-start">وارد</TableHead>
+                  <TableHead className="text-start">صادر</TableHead>
+                  <TableHead className="text-start font-bold text-primary">الرصيد الجاري</TableHead>
+                  <TableHead className="text-start">الموظف</TableHead>
+                  <TableHead className="text-start">ملاحظة</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -317,7 +308,7 @@ export default function Finance() {
                     {isAdmin && <TableCell className="text-xs">{branchName(entry.branchId)}</TableCell>}
                     <TableCell>
                       <Badge className={`text-xs ${TYPE_BADGE[entry.type] || "bg-gray-100 text-gray-800"}`}>
-                        {TYPE_LABELS_AR[entry.type] || entry.type}
+                        {t(`finance:transactionTypes.${entry.type}`)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-green-600 font-medium">
@@ -381,13 +372,13 @@ export default function Finance() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead className="text-right">#</TableHead>
-                  <TableHead className="text-right">الوقت</TableHead>
-                  {isAdmin && <TableHead className="text-right">الفرع</TableHead>}
-                  <TableHead className="text-right">طريقة الدفع</TableHead>
-                  <TableHead className="text-right">وارد</TableHead>
-                  <TableHead className="text-right">صادر</TableHead>
-                  <TableHead className="text-right">ملاحظة</TableHead>
+                  <TableHead className="text-start">#</TableHead>
+                  <TableHead className="text-start">الوقت</TableHead>
+                  {isAdmin && <TableHead className="text-start">الفرع</TableHead>}
+                  <TableHead className="text-start">طريقة الدفع</TableHead>
+                  <TableHead className="text-start">وارد</TableHead>
+                  <TableHead className="text-start">صادر</TableHead>
+                  <TableHead className="text-start">ملاحظة</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -480,16 +471,16 @@ export default function Finance() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead className="text-right">#</TableHead>
-                  {isAdmin && <TableHead className="text-right">الفرع</TableHead>}
-                  <TableHead className="text-right">الكاشير</TableHead>
-                  <TableHead className="text-right">الجهاز</TableHead>
-                  <TableHead className="text-right">الافتتاح</TableHead>
-                  <TableHead className="text-right">المبيعات النقدية</TableHead>
-                  <TableHead className="text-right">المتوقع</TableHead>
-                  <TableHead className="text-right">الفعلي</TableHead>
-                  <TableHead className="text-right">الفرق</TableHead>
-                  <TableHead className="text-right">وقت الإغلاق</TableHead>
+                  <TableHead className="text-start">#</TableHead>
+                  {isAdmin && <TableHead className="text-start">الفرع</TableHead>}
+                  <TableHead className="text-start">الكاشير</TableHead>
+                  <TableHead className="text-start">الجهاز</TableHead>
+                  <TableHead className="text-start">الافتتاح</TableHead>
+                  <TableHead className="text-start">المبيعات النقدية</TableHead>
+                  <TableHead className="text-start">المتوقع</TableHead>
+                  <TableHead className="text-start">الفعلي</TableHead>
+                  <TableHead className="text-start">الفرق</TableHead>
+                  <TableHead className="text-start">وقت الإغلاق</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

@@ -145,7 +145,7 @@ export default function MobileOwnerHome() {
       <div className="flex items-center gap-2 mb-1">
         <Clock className="w-4 h-4 text-primary" />
         <span className="text-sm font-semibold">{t("mobile.open_shifts")}: {kpi?.openShifts || 0}</span>
-        <span className="text-xs text-muted-foreground mr-auto"><Store className="w-3 h-3 inline" /> {kpi?.branchCount || 0} {t("mobile.branches")}</span>
+        <span className="text-xs text-muted-foreground me-auto"><Store className="w-3 h-3 inline" /> {kpi?.branchCount || 0} {t("mobile.branches")}</span>
       </div>
 
       <div className="grid grid-cols-4 gap-2">

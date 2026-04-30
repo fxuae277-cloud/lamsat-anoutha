@@ -437,15 +437,15 @@ export default function InventoryOverview() {
                     <div className="flex-1 min-w-0">
                       <span className="font-semibold">{item.product_name}</span>
                       {(item.color || item.size) && (
-                        <span className="text-muted-foreground text-xs mr-2">
+                        <span className="text-muted-foreground text-xs me-2">
                           {[item.color, item.size].filter(Boolean).join(" / ")}
                         </span>
                       )}
-                      <span className="text-muted-foreground text-xs mr-2">
+                      <span className="text-muted-foreground text-xs me-2">
                         — {item.full_location_name || item.branch_name}
                       </span>
                     </div>
-                    <div className="text-left shrink-0">
+                    <div className="text-end shrink-0">
                       <span className={`font-bold ${isZero ? "text-red-600" : "text-yellow-700"}`}>
                         {isZero ? "نفد" : `${item.qty_on_hand} وحدة`}
                       </span>
@@ -719,7 +719,7 @@ export default function InventoryOverview() {
               <div className="relative flex-1">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  className="pr-9 h-9"
+                  className="pe-9 h-9"
                   placeholder={t("inv_overview.search_placeholder")}
                   value={stockSearch}
                   onChange={e => setStockSearch(e.target.value)}
@@ -976,7 +976,7 @@ export default function InventoryOverview() {
               <div className="relative flex-1">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  className="pr-9 h-9"
+                  className="pe-9 h-9"
                   placeholder="بحث بالاسم أو الباركود أو رقم الموديل..."
                   value={movSearch}
                   onChange={e => setMovSearch(e.target.value)}

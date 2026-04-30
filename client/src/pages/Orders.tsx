@@ -311,7 +311,7 @@ function ProductTableRow({ item, idx, onUpdate, onRemove, t }: {
                 <div className="absolute top-full right-0 left-0 bg-white border rounded-lg shadow-xl max-h-48 overflow-y-auto mt-0.5" style={{ zIndex: 9999 }}>
                   {results.map(p => (
                     <button key={p.id} type="button"
-                      className="w-full text-right flex items-center gap-2 px-3 py-2 hover:bg-pink-50 border-b border-gray-50 last:border-0"
+                      className="w-full text-start flex items-center gap-2 px-3 py-2 hover:bg-pink-50 border-b border-gray-50 last:border-0"
                       onMouseDown={e => e.preventDefault()}
                       onClick={() => selectProduct(p)}>
                       <div className="flex-1 min-w-0">
@@ -367,7 +367,7 @@ function ProductTableRow({ item, idx, onUpdate, onRemove, t }: {
             </div>
 
             {/* الإجمالي */}
-            <div className="shrink-0 text-xs font-bold text-pink-600 min-w-[70px] text-left" dir="ltr">
+            <div className="shrink-0 text-xs font-bold text-pink-600 min-w-[70px] text-end" dir="ltr">
               {omr(n(item.unitPrice) * item.quantity)} ر.ع
             </div>
 
@@ -410,7 +410,7 @@ function ProductTableRow({ item, idx, onUpdate, onRemove, t }: {
                               : "border-gray-200 bg-white hover:border-pink-300 hover:bg-pink-50"
                           } ${totalStock === 0 ? "opacity-40" : ""}`}>
                           {color}
-                          <span className={`mr-1 text-[10px] ${stockColor(totalStock).split(" ")[1]}`}>
+                          <span className={`me-1 text-[10px] ${stockColor(totalStock).split(" ")[1]}`}>
                             ({totalStock})
                           </span>
                         </button>
@@ -587,7 +587,7 @@ function OrderFormModal({ order, onClose, onSaved }: {
                 <div className="absolute top-full right-0 left-0 z-50 bg-white border rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
                   {customerSuggestions.map(c => (
                     <button key={c.id} type="button"
-                      className="w-full text-right flex items-center gap-2 px-3 py-2 hover:bg-pink-50 text-sm"
+                      className="w-full text-start flex items-center gap-2 px-3 py-2 hover:bg-pink-50 text-sm"
                       onClick={() => {
                         setCustomerName(c.name);
                         setCustomerPhone(c.phone || "");
@@ -804,7 +804,7 @@ function StatusModal({ order, onClose, onSaved }: {
                     onClick={() => setStatus(val)}>
                     <Icon className="w-4 h-4" />
                     <span>{info.label}</span>
-                    {status === val && <CheckCircle className="w-4 h-4 text-pink-600 mr-auto" />}
+                    {status === val && <CheckCircle className="w-4 h-4 text-pink-600 me-auto" />}
                   </button>
                 );
               })}
@@ -1087,7 +1087,7 @@ export default function Orders() {
             <Input placeholder={t("orders_page.search_placeholder")} value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={e => e.key === "Enter" && applyFilters()}
-              className="pr-9 h-8 text-sm" />
+              className="pe-9 h-8 text-sm" />
           </div>
           <Select value={statusFilter} onValueChange={v => setStatusFilter(v)}>
             <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder={t("orders_page.filter_all_statuses")} /></SelectTrigger>
@@ -1149,7 +1149,7 @@ export default function Orders() {
                     t("orders_page.col_date"),
                     t("orders_page.col_actions"),
                   ].map(h => (
-                    <th key={h} className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
+                    <th key={h} className="text-start px-4 py-2.5 text-xs font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1162,7 +1162,7 @@ export default function Orders() {
                     <tr key={order.id} className="hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-3 font-mono text-xs font-medium text-pink-700">
                         {order.orderNumber}
-                        {order.invoiceId && <span className="mr-1 text-[10px] bg-purple-100 text-purple-600 px-1 rounded">{t("orders_page.badge_invoice")}</span>}
+                        {order.invoiceId && <span className="me-1 text-[10px] bg-purple-100 text-purple-600 px-1 rounded">{t("orders_page.badge_invoice")}</span>}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">

@@ -127,7 +127,7 @@ export default function Suppliers() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            className="pl-9"
+            className="ps-9"
             placeholder={t("suppliers_page.search_placeholder")}
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -147,7 +147,7 @@ export default function Suppliers() {
               <TableHead>{t("suppliers_page.col_total_purchases")}</TableHead>
               <TableHead>{t("suppliers_page.col_last_purchase")}</TableHead>
               <TableHead>{t("suppliers_page.col_status")}</TableHead>
-              <TableHead className="text-right">{t("products.table_actions")}</TableHead>
+              <TableHead className="text-start">{t("products.table_actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -188,7 +188,7 @@ export default function Suppliers() {
                     {s.active ? t("suppliers_page.active") : t("suppliers_page.inactive")}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-start">
                   <div className="flex justify-end gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDetail(s.id)}>
                       <Eye className="w-4 h-4" />

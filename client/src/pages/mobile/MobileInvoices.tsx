@@ -49,7 +49,7 @@ export default function MobileInvoices() {
       <div className="flex items-center gap-2 mb-2">
         <ReceiptText className="w-5 h-5 text-primary" />
         <h2 className="text-lg font-bold">{t("mobile.today_invoices_title")}</h2>
-        <Badge variant="secondary" className="mr-auto">{invoices.length}</Badge>
+        <Badge variant="secondary" className="me-auto">{invoices.length}</Badge>
       </div>
 
       {invoices.length === 0 ? (

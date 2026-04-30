@@ -6,6 +6,7 @@ import {
 
 import { usePayroll }                from "@/hooks/usePayroll";
 import type { PaymentMethod, PayrollRow } from "@/lib/payroll-types";
+import { useI18n }                   from "@/lib/i18n";
 
 import { Button }                    from "@/components/ui/button";
 import { Input }                     from "@/components/ui/input";
@@ -34,17 +35,11 @@ import { PaymentStatusBadge } from "@/components/payroll/shared/PayrollBadge";
 import { usePayrollToast }    from "@/components/payroll/shared/usePayrollToast";
 import { MONTHS_AR, YEARS, formatOMR, METHOD_LABELS } from "@/components/payroll/shared/payrollUtils";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 const PINK  = "#E91E63";
 const GREEN = "#4CAF50";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function omr(n: number)             { return formatOMR(n); }
 function pct(a: number, b: number)  { return b > 0 ? Math.min(100, Math.round((a / b) * 100)) : 0; }
-
-// ─── Payment Dialog ───────────────────────────────────────────────────────────
 
 interface PaymentDialogProps {
   open: boolean;
@@ -57,6 +52,9 @@ interface PaymentDialogProps {
 function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProps) {
   const { employees, payrollRows, addPayment } = usePayroll();
   const toast = usePayrollToast();
+  const { t } = useI18n();
+  const NS = "payroll:payments";
+  const NS_EMP = "payroll:employees";
 
   const [empId,        setEmpId]       = useState<string>(preRow ? String(preRow.employee.id) : "");
   const [amount,       setAmount]      = useState<string>("");
@@ -95,10 +93,10 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
   }
 
   function handleSubmit() {
-    if (!empId) { setError("يرجى اختيار الموظف"); return; }
+    if (!empId) { setError(t(`${NS}.errorSelectEmployee`)); return; }
     const parsed = parseFloat(amount);
     if (!amount || isNaN(parsed) || parsed <= 0) {
-      setError("يرجى إدخال مبلغ صحيح أكبر من صفر");
+      setError(t(`${NS}.errorPositiveAmount`));
       return;
     }
 
@@ -109,7 +107,7 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
       month, year,
       amount: parsed,
       method,
-      paidBy: "المستخدم الحالي",
+      paidBy: t(`${NS_EMP}.currentUserLabel`),
     });
     toast.successPayment(empName, omr(parsed));
     setIsSubmitting(false);
@@ -118,21 +116,20 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="sm:max-w-[460px]" dir="rtl">
+      <DialogContent className="sm:max-w-[460px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <CreditCard className="h-5 w-5" style={{ color: PINK }} />
-            تسجيل دفعة راتب
+            {t(`${NS}.dialogTitle`)}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            ستُحدَّث حالة الدفع فوراً في كشف الرواتب
+            {t(`${NS}.dialogDesc`)}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-1">
-          {/* Employee */}
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">الموظف</label>
+            <label className="text-sm font-medium">{t(`${NS}.employeeLabel`)}</label>
             {preRow ? (
               <div className="rounded-lg bg-muted/50 p-3">
                 <p className="font-semibold text-sm">{preRow.employee.name}</p>
@@ -141,7 +138,7 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
             ) : (
               <Select value={empId} onValueChange={handleEmpChange}>
                 <SelectTrigger>
-                  <SelectValue placeholder="اختر موظفاً..." />
+                  <SelectValue placeholder={t(`${NS}.selectEmployee`)} />
                 </SelectTrigger>
                 <SelectContent>
                   {employees
@@ -156,31 +153,29 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
             )}
           </div>
 
-          {/* Readonly info */}
           {liveRow && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">صافي الراتب</label>
-                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium tabular-nums text-right">
+                <label className="text-xs text-muted-foreground">{t(`${NS}.netSalary`)}</label>
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium tabular-nums text-start">
                   {omr(liveRow.netSalary)}
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">المدفوع مسبقاً</label>
-                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium tabular-nums text-right">
+                <label className="text-xs text-muted-foreground">{t(`${NS}.paidPreviously`)}</label>
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium tabular-nums text-start">
                   {liveRow.amountPaid > 0 ? omr(liveRow.amountPaid) : "—"}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Amount */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium">
-              المبلغ الآن (ر.ع)
+              {t(`${NS}.amountNow`)}
               {remaining > 0 && (
-                <span className="text-xs text-muted-foreground font-normal mr-2">
-                  المتبقي: {omr(remaining)}
+                <span className="text-xs text-muted-foreground font-normal me-2">
+                  {t(`${NS}.remainingHint`, { value: omr(remaining) })}
                 </span>
               )}
             </label>
@@ -188,14 +183,13 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
               type="number" min="0.001" step="0.001"
               value={amount}
               onChange={(e) => { setAmount(e.target.value); setError(""); }}
-              className="text-right tabular-nums"
-              placeholder="0.000"
+              className="text-start tabular-nums"
+              placeholder={t(`${NS}.amountPlaceholder`)}
             />
           </div>
 
-          {/* Method */}
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">طريقة الدفع</label>
+            <label className="text-sm font-medium">{t(`${NS}.paymentMethod`)}</label>
             <Select value={method} onValueChange={(v) => setMethod(v as PaymentMethod)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -206,14 +200,13 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
             </Select>
           </div>
 
-          {/* Note */}
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">ملاحظة (اختياري)</label>
+            <label className="text-sm font-medium">{t(`${NS}.noteLabel`)}</label>
             <Textarea
-              placeholder="ملاحظات إضافية..."
+              placeholder={t(`${NS}.notePlaceholder`)}
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="text-right resize-none" rows={2}
+              className="text-start resize-none" rows={2}
             />
           </div>
 
@@ -232,16 +225,14 @@ function PaymentDialog({ open, preRow, month, year, onClose }: PaymentDialogProp
             style={{ backgroundColor: PINK }}
           >
             <CheckCircle2 className="h-4 w-4" />
-            {isSubmitting ? "جاري التسجيل..." : "تأكيد الدفع"}
+            {isSubmitting ? t(`${NS}.submitting`) : t(`${NS}.submit`)}
           </Button>
-          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>إلغاء</Button>
+          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>{t(`${NS}.cancel`)}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-
-// ─── Bulk Partial Dialog ──────────────────────────────────────────────────────
 
 interface BulkPartialDialogProps {
   open: boolean;
@@ -254,6 +245,9 @@ interface BulkPartialDialogProps {
 function BulkPartialDialog({ open, unpaidRows, month, year, onClose }: BulkPartialDialogProps) {
   const { addPayment } = usePayroll();
   const toast = usePayrollToast();
+  const { t } = useI18n();
+  const NS = "payroll:payments";
+  const NS_EMP = "payroll:employees";
 
   type Mode = "percentage" | "fixed";
   const [mode,         setMode]        = useState<Mode>("percentage");
@@ -290,8 +284,8 @@ function BulkPartialDialog({ open, unpaidRows, month, year, onClose }: BulkParti
 
   function handleConfirm() {
     const num = parseFloat(value);
-    if (isNaN(num) || num <= 0) { setError("يرجى إدخال قيمة صحيحة"); return; }
-    if (preview.length === 0)   { setError("لا توجد رواتب غير مدفوعة"); return; }
+    if (isNaN(num) || num <= 0) { setError(t(`${NS}.errorValidValue`)); return; }
+    if (preview.length === 0)   { setError(t(`${NS}.errorNoUnpaid`)); return; }
 
     setIsSubmitting(true);
     for (const { row, pay } of preview) {
@@ -300,7 +294,7 @@ function BulkPartialDialog({ open, unpaidRows, month, year, onClose }: BulkParti
         month, year,
         amount: pay,
         method,
-        paidBy: "المستخدم الحالي",
+        paidBy: t(`${NS_EMP}.currentUserLabel`),
       });
     }
     toast.successBulkPay(preview.length);
@@ -310,19 +304,18 @@ function BulkPartialDialog({ open, unpaidRows, month, year, onClose }: BulkParti
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto" dir="rtl">
+      <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Users className="h-5 w-5 text-orange-500" />
-            دفعة جماعية جزئية
+            {t(`${NS}.bulkTitle`)}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            حدد نسبة أو مبلغاً ثابتاً لكل موظف غير مدفوع
+            {t(`${NS}.bulkDesc`)}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-1">
-          {/* Mode toggle */}
           <div className="flex rounded-lg border overflow-hidden">
             <button
               className={`flex-1 py-2 text-sm font-medium transition-colors ${
@@ -332,7 +325,7 @@ function BulkPartialDialog({ open, unpaidRows, month, year, onClose }: BulkParti
               }`}
               onClick={() => setMode("percentage")}
             >
-              نسبة مئوية %
+              {t(`${NS}.modePercentage`)}
             </button>
             <button
               className={`flex-1 py-2 text-sm font-medium transition-colors ${
@@ -342,14 +335,13 @@ function BulkPartialDialog({ open, unpaidRows, month, year, onClose }: BulkParti
               }`}
               onClick={() => setMode("fixed")}
             >
-              مبلغ ثابت ر.ع
+              {t(`${NS}.modeFixed`)}
             </button>
           </div>
 
-          {/* Value input */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium">
-              {mode === "percentage" ? "النسبة (%) من المتبقي لكل موظف" : "المبلغ (ر.ع) لكل موظف"}
+              {mode === "percentage" ? t(`${NS}.pctLabel`) : t(`${NS}.fixedLabel`)}
             </label>
             <div className="flex gap-2">
               <Input
@@ -358,17 +350,16 @@ function BulkPartialDialog({ open, unpaidRows, month, year, onClose }: BulkParti
                 max={mode === "percentage" ? "100" : undefined}
                 value={value}
                 onChange={(e) => { setValue(e.target.value); setError(""); }}
-                className="text-right tabular-nums flex-1"
+                className="text-start tabular-nums flex-1"
               />
               <span className="flex items-center text-sm text-muted-foreground px-2">
-                {mode === "percentage" ? "%" : "ر.ع"}
+                {mode === "percentage" ? t(`${NS}.pctSuffix`) : t(`${NS}.fixedSuffix`)}
               </span>
             </div>
           </div>
 
-          {/* Method */}
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">طريقة الدفع</label>
+            <label className="text-sm font-medium">{t(`${NS}.paymentMethod`)}</label>
             <Select value={method} onValueChange={(v) => setMethod(v as PaymentMethod)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -379,13 +370,12 @@ function BulkPartialDialog({ open, unpaidRows, month, year, onClose }: BulkParti
             </Select>
           </div>
 
-          {/* Preview */}
           {preview.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">معاينة المبالغ</label>
+                <label className="text-sm font-medium">{t(`${NS}.preview`)}</label>
                 <span className="text-xs text-muted-foreground">
-                  الإجمالي: <strong className="text-foreground tabular-nums">{omr(previewTotal)}</strong>
+                  {t(`${NS}.previewTotal`)} <strong className="text-foreground tabular-nums">{omr(previewTotal)}</strong>
                 </span>
               </div>
               <div className="rounded-lg border divide-y max-h-[200px] overflow-y-auto">
@@ -394,7 +384,7 @@ function BulkPartialDialog({ open, unpaidRows, month, year, onClose }: BulkParti
                     <div>
                       <p className="font-medium leading-tight">{row.employee.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        متبقي: {omr(Math.max(0, row.netSalary - row.amountPaid))}
+                        {t(`${NS}.remainingPrefix`)} {omr(Math.max(0, row.netSalary - row.amountPaid))}
                       </p>
                     </div>
                     <span className="font-semibold tabular-nums text-orange-600">{omr(pay)}</span>
@@ -418,16 +408,14 @@ function BulkPartialDialog({ open, unpaidRows, month, year, onClose }: BulkParti
             className="text-white gap-1.5 bg-orange-500 hover:bg-orange-600"
           >
             <CheckCircle2 className="h-4 w-4" />
-            {isSubmitting ? "جاري الدفع..." : `تأكيد الدفع الجزئي (${preview.length})`}
+            {isSubmitting ? t(`${NS}.bulkSubmitting`) : t(`${NS}.bulkConfirm`, { count: preview.length })}
           </Button>
-          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>إلغاء</Button>
+          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>{t(`${NS}.bulkCancel`)}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SalaryPaymentsPage() {
   const {
@@ -439,15 +427,16 @@ export default function SalaryPaymentsPage() {
     bulkPayUnpaid,
   } = usePayroll();
   const toast = usePayrollToast();
+  const { t } = useI18n();
+  const NS = "payroll:payments";
+  const NS_EMP = "payroll:employees";
 
-  // Dialogs
   const [singleOpen,      setSingleOpen]      = useState(false);
   const [singleKey,       setSingleKey]       = useState(0);
   const [singleRow,       setSingleRow]       = useState<PayrollRow | null>(null);
   const [bulkPartialOpen, setBulkPartialOpen] = useState(false);
   const [bulkPartialKey,  setBulkPartialKey]  = useState(0);
 
-  // Filters
   const [search,     setSearch]     = useState("");
   const [statusFilt, setStatusFilt] = useState<string>("all");
 
@@ -489,7 +478,7 @@ export default function SalaryPaymentsPage() {
 
   function handleBulkFull(method: PaymentMethod) {
     const count = unpaidRows.length;
-    bulkPayUnpaid(method, "المستخدم الحالي");
+    bulkPayUnpaid(method, t(`${NS_EMP}.currentUserLabel`));
     toast.successBulkPay(count);
   }
 
@@ -523,45 +512,43 @@ export default function SalaryPaymentsPage() {
   );
 
   return (
-    <div dir="rtl" className="font-sans min-h-screen bg-background">
+    <div className="font-sans min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
         <PageHeader
-          title="متابعة دفع الرواتب"
+          title={t(`${NS}.title`)}
           subtitle={`${MONTHS_AR[selectedMonth - 1]} ${selectedYear}`}
           actions={monthYearSelectors}
         />
 
-        {/* ── Summary cards ── */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard
-            title="إجمالي المدفوع"
+            title={t(`${NS}.statPaid`)}
             value={omr(summary.paid)}
             color="blue"
             icon={<CheckCircle2 className="h-4 w-4" />}
           />
           <StatCard
-            title="إجمالي المتبقي"
+            title={t(`${NS}.statRemaining`)}
             value={omr(summary.remaining)}
             color={summary.remaining > 0 ? "red" : "grey"}
             icon={<AlertCircle className="h-4 w-4" />}
           />
           <StatCard
-            title="غير مدفوع / جزئي"
-            value={`${summary.pendingCount} موظف`}
+            title={t(`${NS}.statPending`)}
+            value={t(`${NS}.pendingUnit`, { count: summary.pendingCount })}
             color="orange"
             icon={<Users className="h-4 w-4" />}
             sub={
               summary.pendingCount > 0 && (
                 <Badge className="mt-1 bg-orange-100 text-orange-700 border-orange-200 border text-xs w-fit">
-                  يحتاج متابعة
+                  {t(`${NS}.needsFollowup`)}
                 </Badge>
               )
             }
           />
         </div>
 
-        {/* ── Action buttons ── */}
         <div className="flex flex-wrap gap-3">
           <Button
             className="gap-2 text-white"
@@ -569,7 +556,7 @@ export default function SalaryPaymentsPage() {
             onClick={() => openSingle(null)}
           >
             <CreditCard className="h-4 w-4" />
-            تسجيل دفعة
+            {t(`${NS}.registerPayment`)}
           </Button>
 
           <Button
@@ -579,7 +566,7 @@ export default function SalaryPaymentsPage() {
             onClick={() => handleBulkFull("bank_transfer")}
           >
             <CheckCircle2 className="h-4 w-4" />
-            دفعة جماعية كاملة
+            {t(`${NS}.bulkFullPay`)}
             {unpaidRows.length > 0 && (
               <span className="bg-white/25 rounded-full px-1.5 text-xs font-bold">
                 {unpaidRows.length}
@@ -594,13 +581,13 @@ export default function SalaryPaymentsPage() {
             onClick={openBulkPartial}
           >
             <Users className="h-4 w-4" />
-            دفعة جماعية جزئية
+            {t(`${NS}.bulkPartialPay`)}
           </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="gap-1 text-sm">
-                طريقة الدفع الجماعي
+                {t(`${NS}.bulkPaymentMethodLabel`)}
                 <ChevronDown className="h-3.5 w-3.5" />
               </Button>
             </DropdownMenuTrigger>
@@ -618,38 +605,36 @@ export default function SalaryPaymentsPage() {
           </DropdownMenu>
         </div>
 
-        {/* ── Filters ── */}
         <Card className="shadow-sm">
           <CardContent className="p-4">
             <div className="flex flex-wrap gap-3">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <Input
-                  placeholder="البحث باسم الموظف..."
+                  placeholder={t(`${NS}.searchPlaceholder`)}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="pr-9 text-right"
+                  className="pe-9 text-start"
                 />
               </div>
               <Select value={statusFilt} onValueChange={setStatusFilt}>
-                <SelectTrigger className="w-[160px]"><SelectValue placeholder="حالة الدفع" /></SelectTrigger>
+                <SelectTrigger className="w-[160px]"><SelectValue placeholder={t(`${NS}.payStatus`)} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">كل الحالات</SelectItem>
-                  <SelectItem value="unpaid">غير مدفوع</SelectItem>
-                  <SelectItem value="partial">جزئي</SelectItem>
-                  <SelectItem value="paid">مدفوع</SelectItem>
+                  <SelectItem value="all">{t(`${NS}.allStatuses`)}</SelectItem>
+                  <SelectItem value="unpaid">{t(`${NS}.statusUnpaid`)}</SelectItem>
+                  <SelectItem value="partial">{t(`${NS}.statusPartial`)}</SelectItem>
+                  <SelectItem value="paid">{t(`${NS}.statusPaid`)}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </CardContent>
         </Card>
 
-        {/* ── Table ── */}
         <Card className="shadow-sm">
           <div className="px-4 py-3 border-b flex items-center justify-between">
             <h2 className="font-semibold text-base">
-              سجل الرواتب
-              <span className="text-muted-foreground font-normal text-sm mr-2">
+              {t(`${NS}.listTitle`)}
+              <span className="text-muted-foreground font-normal text-sm me-2">
                 ({filtered.length})
               </span>
             </h2>
@@ -658,21 +643,21 @@ export default function SalaryPaymentsPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40">
-                  <TableHead className="text-right font-semibold min-w-[160px]">الموظف</TableHead>
-                  <TableHead className="text-right font-semibold">الفرع</TableHead>
-                  <TableHead className="text-right font-semibold">الصافي</TableHead>
-                  <TableHead className="text-right font-semibold text-blue-600">المدفوع</TableHead>
-                  <TableHead className="text-right font-semibold text-red-600">المتبقي</TableHead>
-                  <TableHead className="text-right font-semibold min-w-[120px]">نسبة الدفع</TableHead>
-                  <TableHead className="text-right font-semibold">الحالة</TableHead>
-                  <TableHead className="text-right font-semibold w-20">إجراء</TableHead>
+                  <TableHead className="text-start font-semibold min-w-[160px]">{t(`${NS}.thEmployee`)}</TableHead>
+                  <TableHead className="text-start font-semibold">{t(`${NS}.thBranch`)}</TableHead>
+                  <TableHead className="text-start font-semibold">{t(`${NS}.thNet`)}</TableHead>
+                  <TableHead className="text-start font-semibold text-blue-600">{t(`${NS}.thPaid`)}</TableHead>
+                  <TableHead className="text-start font-semibold text-red-600">{t(`${NS}.thRemaining`)}</TableHead>
+                  <TableHead className="text-start font-semibold min-w-[120px]">{t(`${NS}.thPaidPct`)}</TableHead>
+                  <TableHead className="text-start font-semibold">{t(`${NS}.thStatus`)}</TableHead>
+                  <TableHead className="text-start font-semibold w-20">{t(`${NS}.thAction`)}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8}>
-                      <EmptyState message="لا توجد بيانات تطابق الفلتر" />
+                      <EmptyState message={t(`${NS}.empty`)} />
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -741,7 +726,7 @@ export default function SalaryPaymentsPage() {
                             onClick={() => openSingle(row)}
                           >
                             <CreditCard className="h-3.5 w-3.5" />
-                            {isPaid ? "مدفوع" : "دفع"}
+                            {isPaid ? t(`${NS}.btnPaid`) : t(`${NS}.btnPay`)}
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -753,14 +738,12 @@ export default function SalaryPaymentsPage() {
           </div>
         </Card>
 
-        {/* Footer */}
         <p className="text-xs text-muted-foreground pb-2">
-          عرض {filtered.length} من {payrollRows.length} موظف
+          {t(`${NS}.footerCount`, { shown: filtered.length, total: payrollRows.length })}
         </p>
 
       </div>
 
-      {/* ── Single Pay Dialog ── */}
       <PaymentDialog
         key={singleKey}
         open={singleOpen}
@@ -770,7 +753,6 @@ export default function SalaryPaymentsPage() {
         onClose={() => setSingleOpen(false)}
       />
 
-      {/* ── Bulk Partial Dialog ── */}
       <BulkPartialDialog
         key={bulkPartialKey}
         open={bulkPartialOpen}

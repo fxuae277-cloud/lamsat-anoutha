@@ -163,7 +163,7 @@ function SuppliersTab() {
             placeholder={t("purchases.search_suppliers")}
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="pr-9"
+            className="pe-9"
             data-testid="input-supplier-search"
           />
         </div>
@@ -304,7 +304,7 @@ function SuppliersTab() {
               className="bg-green-600 hover:bg-green-700"
               data-testid="button-confirm-payment"
             >
-              {payMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {payMutation.isPending && <Loader2 className="w-4 h-4 me-2 animate-spin" />}
               {t("common.confirm")}
             </Button>
           </DialogFooter>
@@ -425,7 +425,7 @@ function SupplierStatementDialog({ open, onOpenChange, supplierId }: { open: boo
                   <h2 className="text-2xl font-bold">{t("customers.supplier_statement")}</h2>
                   <p className="text-muted-foreground">{from} - {to}</p>
                 </div>
-                <div className="text-left">
+                <div className="text-end">
                   <h3 className="font-bold text-lg">{statement.supplier.name}</h3>
                   <p className="text-sm">{statement.supplier.phone}</p>
                   <p className="text-sm">{statement.supplier.city}</p>
@@ -458,8 +458,8 @@ function SupplierStatementDialog({ open, onOpenChange, supplierId }: { open: boo
                     <TableHead>{t("common.type")}</TableHead>
                     <TableHead>{t("customers.invoice_number")}</TableHead>
                     <TableHead>{t("common.branch")}</TableHead>
-                    <TableHead className="text-left">{t("common.amount")}</TableHead>
-                    <TableHead className="text-left">{t("customers.statement_balance")}</TableHead>
+                    <TableHead className="text-end">{t("common.amount")}</TableHead>
+                    <TableHead className="text-end">{t("customers.statement_balance")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -478,8 +478,8 @@ function SupplierStatementDialog({ open, onOpenChange, supplierId }: { open: boo
                         </TableCell>
                         <TableCell className="font-mono text-xs">{item.invoice_number || "—"}</TableCell>
                         <TableCell>{item.branch_name || "—"}</TableCell>
-                        <TableCell className="text-left font-medium">{omr(item.total)}</TableCell>
-                        <TableCell className="text-left font-bold">{omr(item.balance)}</TableCell>
+                        <TableCell className="text-end font-medium">{omr(item.total)}</TableCell>
+                        <TableCell className="text-end font-bold">{omr(item.balance)}</TableCell>
                       </TableRow>
                     ))
                   )}
@@ -1395,7 +1395,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                     <div className="relative">
                       <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                       <Input
-                        className="pr-9"
+                        className="pe-9"
                         placeholder="ابحث بالاسم أو الباركود أو رقم الموديل..."
                         value={addSearch}
                         data-testid="input-add-product-name"
@@ -1425,7 +1425,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                                 <button
                                   key={p.id}
                                   type="button"
-                                  className="w-full text-right px-3 py-2 text-sm hover:bg-muted/60 transition-colors border-b last:border-0 flex items-center justify-between gap-2"
+                                  className="w-full text-start px-3 py-2 text-sm hover:bg-muted/60 transition-colors border-b last:border-0 flex items-center justify-between gap-2"
                                   onMouseDown={() => {
                                     setAddProductId(String(p.id));
                                     setAddProductName(p.name);
@@ -1443,7 +1443,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                               {results.length === 0 && (
                                 <button
                                   type="button"
-                                  className="w-full text-right px-3 py-2.5 text-sm text-primary hover:bg-primary/5 flex items-center gap-2"
+                                  className="w-full text-start px-3 py-2.5 text-sm text-primary hover:bg-primary/5 flex items-center gap-2"
                                   onMouseDown={() => {
                                     setQpName(addSearch);
                                     setQpBarcode(""); setQpSku(""); setQpColor(""); setQpSize(""); setQpPrice(""); setQpCost("");
@@ -1515,7 +1515,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                             className={`px-3 py-1.5 rounded-lg border text-sm transition-colors ${isSelected ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted/50"}`}
                           >
                             {label}
-                            {v.barcode && <span className="text-xs opacity-60 mr-1 font-mono">({v.barcode})</span>}
+                            {v.barcode && <span className="text-xs opacity-60 me-1 font-mono">({v.barcode})</span>}
                           </button>
                         );
                       })}
@@ -1550,7 +1550,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                       <label className="text-sm font-medium text-muted-foreground text-xs">المنتج المختار</label>
                       <p className="text-sm font-medium text-primary bg-primary/5 px-3 py-2 rounded-lg border border-primary/20 flex items-center justify-between">
                         {addProductName}
-                        <button type="button" className="text-muted-foreground hover:text-red-500 mr-2" onClick={() => { setAddProductId(""); setAddProductName(""); setAddSearch(""); setAddVariantId(null); setAddColor(""); setAddSize(""); }}>
+                        <button type="button" className="text-muted-foreground hover:text-red-500 me-2" onClick={() => { setAddProductId(""); setAddProductName(""); setAddSearch(""); setAddVariantId(null); setAddColor(""); setAddSize(""); }}>
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </p>
@@ -1558,7 +1558,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                   )}
                   <Button onClick={() => addItemMutation.mutate()} disabled={!addProductId || !addQty || !addUnitCost || addItemMutation.isPending} data-testid="button-add-item"
                     className="bg-pink-500 hover:bg-pink-600 text-white">
-                    <Plus className="w-4 h-4 ml-1" /> {t("purchases.add")}
+                    <Plus className="w-4 h-4 ms-1" /> {t("purchases.add")}
                   </Button>
                 </div>
               </div>
@@ -2479,7 +2479,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
       <div className="flex flex-wrap gap-3 items-center bg-card p-4 border rounded-lg">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input className="pr-9" placeholder="بحث بالمورد أو رقم الفاتورة..." value={invSearch} onChange={e => setInvSearch(e.target.value)} />
+          <Input className="pe-9" placeholder="بحث بالمورد أو رقم الفاتورة..." value={invSearch} onChange={e => setInvSearch(e.target.value)} />
         </div>
         <Select value={invSupplier} onValueChange={setInvSupplier}>
           <SelectTrigger className="w-[180px]"><SelectValue placeholder="كل الموردين" /></SelectTrigger>
@@ -2641,7 +2641,7 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                       {parent.name}
                     </SelectItem>,
                     ...(categories as any[]).filter(c => c.parentId === parent.id).map((child: any) => (
-                      <SelectItem key={child.id} value={String(child.id)} className="pr-6 text-muted-foreground">
+                      <SelectItem key={child.id} value={String(child.id)} className="pe-6 text-muted-foreground">
                         ↳ {child.name}
                       </SelectItem>
                     ))
@@ -2728,7 +2728,7 @@ export default function PurchasesPage() {
   const { t } = useI18n();
   return (
     <div className="container mx-auto p-4 lg:p-6 pb-20">
-      <div className="mb-6 text-right">
+      <div className="mb-6 text-start">
         <h1 className="text-3xl font-bold tracking-tight">{t("purchases.title")}</h1>
         <p className="text-muted-foreground">{t("purchases.subtitle")}</p>
       </div>

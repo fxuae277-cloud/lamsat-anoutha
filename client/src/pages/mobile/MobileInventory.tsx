@@ -78,7 +78,7 @@ export default function MobileInventory() {
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder={t("mobile.search_product")} value={search} onChange={e => setSearch(e.target.value)}
-              className="pr-10 h-12 text-base" data-testid="input-search-inventory" />
+              className="pe-10 h-12 text-base" data-testid="input-search-inventory" />
           </div>
 
           {loadingBal ? (
@@ -104,7 +104,7 @@ export default function MobileInventory() {
                             {b.size && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Ruler className="w-3 h-3" />{b.size}</span>}
                           </div>
                         </div>
-                        <div className="text-left shrink-0">
+                        <div className="text-end shrink-0">
                           <p className={`text-2xl font-bold ${isOut ? "text-red-600" : isLow ? "text-orange-600" : "text-primary"}`}>{b.qtyOnHand}</p>
                           {isLow && !isOut && <div className="flex items-center gap-1 text-orange-600"><AlertTriangle className="w-3 h-3" /><span className="text-[10px]">{t("mobile.low_stock")}</span></div>}
                           {isOut && <div className="flex items-center gap-1 text-red-600"><AlertTriangle className="w-3 h-3" /><span className="text-[10px]">{t("mobile.out_of_stock")}</span></div>}

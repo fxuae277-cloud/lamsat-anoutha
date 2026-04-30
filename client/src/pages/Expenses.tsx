@@ -446,7 +446,7 @@ export default function Expenses() {
               {/* Search */}
               <div className="relative w-52">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input placeholder="بحث..." className="pr-9 bg-background" value={search}
+                <Input placeholder="بحث..." className="pe-9 bg-background" value={search}
                   onChange={e => setSearch(e.target.value)} data-testid="input-search-expenses" />
               </div>
               {/* Date range */}
@@ -473,7 +473,7 @@ export default function Expenses() {
               {/* Category filter */}
               <Select value={filterCategory} onValueChange={setFilterCategory}>
                 <SelectTrigger className="w-44 bg-background">
-                  <Filter className="w-3.5 h-3.5 ml-1" /><SelectValue placeholder="كل التصنيفات" />
+                  <Filter className="w-3.5 h-3.5 ms-1" /><SelectValue placeholder="كل التصنيفات" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">كل التصنيفات</SelectItem>
@@ -726,7 +726,7 @@ export default function Expenses() {
             <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>إلغاء</Button>
             <Button variant="destructive" onClick={() => deleteConfirmId && deleteMutation.mutate(deleteConfirmId)}
               disabled={deleteMutation.isPending}>
-              <Trash2 className="w-4 h-4 ml-1" />
+              <Trash2 className="w-4 h-4 ms-1" />
               {deleteMutation.isPending ? "جارٍ الحذف..." : "حذف نهائياً"}
             </Button>
           </DialogFooter>

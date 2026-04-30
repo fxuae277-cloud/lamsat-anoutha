@@ -32,6 +32,7 @@ import {
   PieChart,
   BarChart2,
   DollarSign,
+  PackageCheck,
 } from "lucide-react";
 
 export type SidebarItem = {
@@ -79,6 +80,7 @@ export const OWNER_SIDEBAR: SidebarSection[] = [
       { labelKey: "nav.purchases",       icon: FileSpreadsheet, path: "/purchases" },
       { labelKey: "nav.purchaseReturns", icon: PackageX,        path: "/purchase-returns" },
       { labelKey: "nav.transfers",       icon: ArrowLeftRight,  path: "/transfers" },
+      { labelKey: "nav.cashierReceive",  icon: PackageCheck,    path: "/cashier/receive" },
     ],
   },
 
@@ -145,12 +147,13 @@ export const EMPLOYEE_SIDEBAR: SidebarSection[] = [
       { labelKey: "nav.branchStock",  icon: Warehouse,    path: "/branch-stock" },
       { labelKey: "nav.branchSummary",     icon: PieChart,   path: "/branch-summary" },
       { labelKey: "nav.branchPerformance", icon: BarChart2,  path: "/branch-performance" },
-      { labelKey: "nav.barcodeLabels", icon: Printer,     path: "/barcode-labels" },
+      { labelKey: "nav.barcodeLabels",  icon: Printer,       path: "/barcode-labels" },
+      { labelKey: "nav.cashierReceive", icon: PackageCheck,  path: "/cashier/receive" },
     ],
   },
 ];
 
-export const EMPLOYEE_ALLOWED_PATHS = ["/pos", "/orders", "/invoices", "/customers", "/branch-stock", "/branch-summary", "/branch-performance", "/barcode-labels"];
+export const EMPLOYEE_ALLOWED_PATHS = ["/pos", "/orders", "/invoices", "/customers", "/branch-stock", "/branch-summary", "/branch-performance", "/barcode-labels", "/cashier/receive"];
 
 export function getSidebarForRole(role: string): SidebarSection[] {
   if (role === "owner" || role === "admin") return OWNER_SIDEBAR;

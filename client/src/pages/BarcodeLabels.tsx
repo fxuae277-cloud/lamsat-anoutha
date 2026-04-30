@@ -605,7 +605,7 @@ export default function BarcodeLabels() {
                     : "Search by name, model or barcode…"}
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  className="pr-9"
+                  className="pe-9"
                   autoComplete="off"
                 />
                 {search && (
@@ -636,7 +636,7 @@ export default function BarcodeLabels() {
                     return (
                       <button
                         key={p.id}
-                        className="w-full text-right px-3 py-2.5 hover:bg-pink-50 flex items-center justify-between gap-2 transition-colors"
+                        className="w-full text-start px-3 py-2.5 hover:bg-pink-50 flex items-center justify-between gap-2 transition-colors"
                         onClick={() => addProduct(p)}
                       >
                         <div className="min-w-0 flex-1">

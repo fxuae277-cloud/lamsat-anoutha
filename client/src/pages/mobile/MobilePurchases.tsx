@@ -182,7 +182,7 @@ export default function MobilePurchases() {
                       setItems(prev => prev.map((it, i) => i === idx ? { ...it, unitCost: v } : it));
                     }} className="h-9" />
                   </div>
-                  <div className="text-left pt-5">
+                  <div className="text-end pt-5">
                     <p className="font-bold text-primary text-sm">{(item.qty * item.unitCost).toFixed(3)}</p>
                   </div>
                 </div>

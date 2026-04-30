@@ -233,7 +233,7 @@ export default function Categories() {
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            className="pl-9"
+            className="ps-9"
             placeholder={t("categories_page.search_placeholder")}
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -271,7 +271,7 @@ export default function Categories() {
               <TableHead>{t("categories_page.col_parent")}</TableHead>
               <TableHead>{t("categories_page.col_products")}</TableHead>
               <TableHead>{t("categories_page.col_status")}</TableHead>
-              {isOwnerOrAdmin && <TableHead className="text-right">{t("categories_page.col_actions")}</TableHead>}
+              {isOwnerOrAdmin && <TableHead className="text-start">{t("categories_page.col_actions")}</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -317,7 +317,7 @@ export default function Categories() {
                             : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
                         </button>
                       )}
-                      {c.depth === 1 && <span className="text-muted-foreground text-xs ml-1">└</span>}
+                      {c.depth === 1 && <span className="text-muted-foreground text-xs ms-1">└</span>}
                       <span className="font-medium">{c.name}</span>
                     </div>
                   </TableCell>
@@ -363,7 +363,7 @@ export default function Categories() {
 
                   {/* إجراءات */}
                   {isOwnerOrAdmin && (
-                    <TableCell className="text-right">
+                    <TableCell className="text-start">
                       <div className="flex justify-end gap-1">
                         {c.depth === 0 && (
                           <Button variant="ghost" size="icon" title={t("categories_page.add_sub_title")} onClick={() => openAddSub(c)}>

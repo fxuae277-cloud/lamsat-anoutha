@@ -70,7 +70,7 @@ export default function MobileProducts() {
         <div className="relative flex-1">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder={t("mobile.search_product")} value={search} onChange={e => setSearch(e.target.value)}
-            className="pr-10 h-12 text-base" data-testid="input-search-product" />
+            className="pe-10 h-12 text-base" data-testid="input-search-product" />
         </div>
         <Select value={catFilter} onValueChange={setCatFilter}>
           <SelectTrigger className="w-32 h-12" data-testid="select-category"><SelectValue /></SelectTrigger>
@@ -81,7 +81,7 @@ export default function MobileProducts() {
                 {parent.name}
               </SelectItem>,
               ...categories.filter((c: any) => c.parentId === parent.id).map((child: any) => (
-                <SelectItem key={child.id} value={String(child.id)} className="pr-5 text-muted-foreground">
+                <SelectItem key={child.id} value={String(child.id)} className="pe-5 text-muted-foreground">
                   ↳ {child.name}
                 </SelectItem>
               ))
@@ -122,7 +122,7 @@ export default function MobileProducts() {
                 </Card>
 
                 {isExpanded && (
-                  <div className="mr-3 border-r-2 border-primary/20 pr-3 mt-1 space-y-2">
+                  <div className="me-3 border-r-2 border-primary/20 pe-3 mt-1 space-y-2">
                     {variants.length === 0 ? (
                       <p className="text-sm text-muted-foreground py-3 text-center">{t("products.no_variants") || "لا توجد متغيرات"}</p>
                     ) : (
@@ -139,7 +139,7 @@ export default function MobileProducts() {
                             <div className="flex items-center gap-3 text-xs text-muted-foreground">
                               <span className="flex items-center gap-1"><Barcode className="w-3 h-3" /><span className="font-mono">{v.barcode || "---"}</span></span>
                               {v.sku && <span>SKU: {v.sku}</span>}
-                              <span className="mr-auto">{t("products.variant_cost")}: {f3(v.costDefault)}</span>
+                              <span className="me-auto">{t("products.variant_cost")}: {f3(v.costDefault)}</span>
                             </div>
                           </CardContent>
                         </Card>

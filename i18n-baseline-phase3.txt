@@ -1,0 +1,187 @@
+
+> rest-express@1.0.0 lint:i18n
+> node scripts/check-arabic-jsx.mjs
+
+Scanned: 136 JSX files (excluded 5)
+Files with Arabic in JSX: 31
+Total warnings: 898
+
+client\src\pages\Purchases.tsx  (130)
+  L1244  [jsx-text]  فاتورة شراء
+  L1251  [jsx-text]  المورد
+  L1252  [jsx-text]  تاريخ الفاتورة
+  L1253  [jsx-text]  طريقة الدفع
+  L1254  [jsx-text]  تاريخ الاستحقاق
+  ... and 125 more
+client\src\pages\Reports.tsx  (108)
+  L 195  [prop:placeholder]  كل الفروع
+  L 198  [jsx-text]  كل الفروع
+  L 231  [jsx-text]  نظرة عامة
+  L 232  [jsx-text]  المدفوعات
+  L 233  [jsx-text]  المنتجات
+  ... and 103 more
+client\src\pages\OwnerFinancialSummary.tsx  (85)
+  L 171  [jsx-text]  نظرة شاملة على المركز المالي للشركة
+  L 179  [jsx-text]  جاري التحميل...
+  L 183  [jsx-text]  نظرة عامة
+  L 184  [jsx-text]  أرصدة الفروع
+  L 185  [jsx-text]  قيمة المخزون
+  ... and 80 more
+client\src\pages\Expenses.tsx  (78)
+  L 190  [jsx-text]  إيصال مصروف
+  L 193  [jsx-text]  لمسة أنوثة — إيصال مصروف
+  L 195  [jsx-text]  رقم المصروف
+  L 196  [jsx-text]  التاريخ
+  L 197  [jsx-text]  الفرع
+  ... and 73 more
+client\src\pages\Finance.tsx  (67)
+  L 187  [jsx-text]  لمسة أنوثة — كشف الصندوق اليومي
+  L 190  [jsx-text]  الوقت
+  L 190  [jsx-text]  النوع
+  L 190  [jsx-text]  وارد
+  L 190  [jsx-text]  صادر
+  ... and 62 more
+client\src\pages\Products.tsx  (51)
+  L 427  [jsx-text]  إجمالي المنتجات
+  L 431  [jsx-text]  نفد المخزون
+  L 435  [jsx-text]  مخزون منخفض
+  L 439  [jsx-text]  غير نشط
+  L 485  [jsx-text]  كل الحالات
+  ... and 46 more
+client\src\pages\InventoryOverview.tsx  (40)
+  L 292  [jsx-text]  القيمة:
+  L 293  [jsx-text]  الكمية:
+  L 294  [jsx-text]  النسبة:
+  L 326  [jsx-text]  قيمة المخزون
+  L 352  [jsx-text]  إجمالي الكمية
+  ... and 35 more
+client\src\pages\BranchPerformance.tsx  (39)
+  L 217  [jsx-text]  مؤشرات أداء الفرع
+  L 218  [jsx-text]  متابعة المبيعات وتوزيع طرق الدفع
+  L 242  [jsx-text]  الفرع
+  L 245  [prop:placeholder]  اختر الفرع...
+  L 248  [jsx-text]  الكل — جميع الفروع
+  ... and 34 more
+client\src\components\payroll\financial-movements\FinancialMovementsPage.tsx  (30)
+  L 163  [jsx-text]  الموظف
+  L 166  [prop:placeholder]  اختر موظفاً...
+  L 180  [jsx-text]  النوع
+  L 197  [jsx-text]  المبلغ (ر.ع)
+  L 212  [jsx-text]  الشهر
+  ... and 25 more
+client\src\components\payroll\salary-payments\SalaryPaymentsPage.tsx  (29)
+  L 135  [jsx-text]  الموظف
+  L 144  [prop:placeholder]  اختر موظفاً...
+  L 163  [jsx-text]  صافي الراتب
+  L 169  [jsx-text]  المدفوع مسبقاً
+  L 198  [jsx-text]  طريقة الدفع
+  ... and 24 more
+client\src\pages\BranchSummary.tsx  (28)
+  L 206  [jsx-text]  بداية ← نهاية الصندوق
+  L 211  [jsx-text]  ← مفتوح
+  L 241  [jsx-text]  بداية الصندوق
+  L 247  [jsx-text]  نهاية الصندوق
+  L 495  [jsx-text]  الكاشير
+  ... and 23 more
+client\src\pages\Inventory.tsx  (28)
+  L 265  [jsx-text]  م
+  L 280  [jsx-text]  اتجاه
+  L 285  [jsx-text]  و
+  L 486  [jsx-text]  متابعة عمليات نقل المخزون بين المواقع
+  L 521  [jsx-text]  التحويلات الشهرية (آخر 6 أشهر)
+  ... and 23 more
+client\src\components\payroll\employees\EmployeesPage.tsx  (25)
+  L 125  [prop:title]  الموظفون
+  L 136  [prop:title]  إجمالي الموظفين
+  L 137  [prop:title]  موظفون نشطون
+  L 138  [prop:title]  إجمالي الرواتب الشهرية
+  L 139  [prop:title]  رواتب غير مدفوعة
+  ... and 20 more
+client\src\pages\BranchStock.tsx  (23)
+  L  53  [jsx-text]  رقم التحويل
+  L  57  [jsx-text]  التاريخ
+  L  61  [jsx-text]  المصدر
+  L  65  [jsx-text]  إجمالي الكمية
+  L  70  [jsx-text]  عدد الأصناف
+  ... and 18 more
+client\src\components\DevicePrintSettingsDialog.tsx  (21)
+  L 240  [jsx-text]  اسم جهاز الكاشير (اختياري)
+  L 244  [prop:placeholder]  مثال: كاشير 1 — فرع لوى
+  L 247  [jsx-text]  يساعدك على التمييز بين أجهزة الكاشير عند مراجعة سجلات الطباع…
+  L 252  [jsx-text]  رابط خدمة الطباعة المحلية
+  L 264  [jsx-text]  مفتاح API
+  ... and 16 more
+client\src\components\payroll\payroll-sheet\PayrollSheetPage.tsx  (20)
+  L 121  [jsx-text]  صافي الراتب
+  L 127  [jsx-text]  المبلغ المطلوب
+  L 136  [jsx-text]  المبلغ المدفوع (ر.ع)
+  L 149  [jsx-text]  طريقة الدفع
+  L 162  [jsx-text]  ملاحظة (اختياري)
+  ... and 15 more
+client\src\components\payroll\payroll-summary\PayrollSummaryPage.tsx  (18)
+  L 125  [prop:title]  ملخص الرواتب
+  L 133  [prop:title]  إجمالي الراتب الإجمالي
+  L 139  [prop:title]  إجمالي الصافي
+  L 145  [prop:title]  إجمالي المدفوع
+  L 151  [prop:title]  إجمالي المتبقي
+  ... and 13 more
+client\src\pages\Branches.tsx  (17)
+  L  91  [jsx-text]  إدارة الفروع والمواقع
+  L 106  [jsx-text]  اسم الفرع
+  L 107  [jsx-text]  عنوان الفرع
+  L 108  [jsx-text]  هاتف الفرع
+  L 109  [jsx-text]  النوع
+  ... and 12 more
+client\src\pages\CashierReceiveTransfers.tsx  (14)
+  L 246  [jsx-text]  📦 استلام البضاعة الواردة
+  L 267  [jsx-text]  التحويلات في انتظار الاستلام
+  L 269  [jsx-text]  لا توجد تحويلات واردة حالياً.
+  L 306  [jsx-text]  تحويل رقم
+  L 310  [jsx-text]  من:
+  ... and 9 more
+client\src\pages\OpeningStock.tsx  (13)
+  L 236  [jsx-text]  اللون
+  L 237  [jsx-text]  المقاس
+  L 238  [jsx-text]  باركود
+  L 239  [jsx-text]  الكمية
+  L 240  [jsx-text]  التكلفة
+  ... and 8 more
+client\src\pages\Invoices.tsx  (10)
+  L 112  [jsx-text]  الرقم المرجعي:
+  L 205  [jsx-text]  الرقم المرجعي
+  L 295  [jsx-text]  العميلة
+  L 317  [prop:placeholder]  أدخل الرقم المرجعي
+  L 338  [jsx-text]  لا يوجد رقم مرجعي
+  ... and 5 more
+client\src\components\layout\NotificationBell.tsx  (8)
+  L  89  [prop:aria-label]  الإشعارات
+  L 106  [jsx-text]  الإشعارات
+  L 113  [prop:title]  تحديد الكل كمقروء
+  L 125  [prop:title]  تحديث
+  L 138  [jsx-text]  جاري التحميل…
+  ... and 3 more
+client\src\pages\InventoryAlerts.tsx  (5)
+  L  58  [jsx-text]  مراقبة مستويات المخزون وتنبيهات النفاد
+  L  65  [prop:placeholder]  اختر الفرع
+  L  68  [jsx-text]  جميع الفروع
+  L  81  [jsx-text]  نافد المخزون
+  L  88  [jsx-text]  منخفض المخزون
+client\src\pages\UsersManagement.tsx  (3)
+  L 367  [prop:title]  تعديل
+  L 370  [prop:title]  إعادة تعيين كلمة المرور
+  L 377  [prop:title]  حذف
+client\src\components\payroll\shared\PayrollBadge.tsx  (2)
+  L  80  [jsx-text]  نشط
+  L  81  [jsx-text]  ملغي
+client\src\App.tsx  (1)
+  L  93  [jsx-text]  خطأ في تحميل الصفحة
+client\src\components\BarcodeScanner.tsx  (1)
+  L  92  [prop:placeholder]  الباركود...
+client\src\components\ui\date-input.tsx  (1)
+  L 156  [prop:aria-label]  اختر تاريخ
+client\src\pages\Categories.tsx  (1)
+  L 442  [jsx-text]  ؟
+client\src\pages\Customers.tsx  (1)
+  L 517  [jsx-text]  لمسة أنوثة
+
+... and 1 more files

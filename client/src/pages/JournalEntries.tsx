@@ -265,8 +265,8 @@ export default function JournalEntries() {
               <TableHead>{t("journal.date")}</TableHead>
               <TableHead>{t("journal.description")}</TableHead>
               <TableHead>{t("journal.status")}</TableHead>
-              <TableHead className="text-right">{t("journal.total_debit")}</TableHead>
-              <TableHead className="text-right">{t("journal.total_credit")}</TableHead>
+              <TableHead className="text-start">{t("journal.total_debit")}</TableHead>
+              <TableHead className="text-start">{t("journal.total_credit")}</TableHead>
               <TableHead>{t("journal.source_type")}</TableHead>
               <TableHead>{t("common.employee")}</TableHead>
               <TableHead className="w-12"></TableHead>
@@ -293,8 +293,8 @@ export default function JournalEntries() {
                       {t(`journal.${entry.status}`)}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right font-mono">{f3(entry.totalDebit)}</TableCell>
-                  <TableCell className="text-right font-mono">{f3(entry.totalCredit)}</TableCell>
+                  <TableCell className="text-start font-mono">{f3(entry.totalDebit)}</TableCell>
+                  <TableCell className="text-start font-mono">{f3(entry.totalCredit)}</TableCell>
                   <TableCell>{entry.sourceType ? t(`journal.${entry.sourceType}`) : t("journal.manual")}</TableCell>
                   <TableCell>{entry.created_by_name || "---"}</TableCell>
                   <TableCell onClick={e => e.stopPropagation()}>
@@ -377,7 +377,7 @@ export default function JournalEntries() {
                         step="0.001" 
                         value={line.debit} 
                         onChange={e => handleLineChange(index, "debit", e.target.value)} 
-                        className="font-mono text-right"
+                        className="font-mono text-start"
                         data-testid={`line-debit-${index}`}
                       />
                     </TableCell>
@@ -387,7 +387,7 @@ export default function JournalEntries() {
                         step="0.001" 
                         value={line.credit} 
                         onChange={e => handleLineChange(index, "credit", e.target.value)} 
-                        className="font-mono text-right"
+                        className="font-mono text-start"
                         data-testid={`line-credit-${index}`}
                       />
                     </TableCell>
@@ -419,23 +419,23 @@ export default function JournalEntries() {
 
           <div className="flex justify-between items-center mt-4">
             <Button variant="outline" size="sm" onClick={handleAddLine} data-testid="button-add-line">
-              <Plus className="w-4 h-4 ml-1" /> {t("journal.add_line")}
+              <Plus className="w-4 h-4 ms-1" /> {t("journal.add_line")}
             </Button>
 
             <div className="flex gap-6 items-center bg-muted/30 p-3 rounded-lg border">
               <div className="text-sm">
-                <span className="text-muted-foreground ml-2">{t("journal.total_debit")}:</span>
+                <span className="text-muted-foreground ms-2">{t("journal.total_debit")}:</span>
                 <span className="font-mono font-bold">{f3(totals.debit)}</span>
               </div>
               <div className="text-sm">
-                <span className="text-muted-foreground ml-2">{t("journal.total_credit")}:</span>
+                <span className="text-muted-foreground ms-2">{t("journal.total_credit")}:</span>
                 <span className="font-mono font-bold">{f3(totals.credit)}</span>
               </div>
               <div className="flex items-center gap-2">
                 {totals.balanced ? (
-                  <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200"><CheckCircle2 className="w-3 h-3 ml-1" /> {t("journal.balanced")}</Badge>
+                  <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200"><CheckCircle2 className="w-3 h-3 ms-1" /> {t("journal.balanced")}</Badge>
                 ) : (
-                  <Badge variant="destructive" className="bg-red-100 text-red-700 border-red-200"><AlertCircle className="w-3 h-3 ml-1" /> {t("journal.not_balanced")}</Badge>
+                  <Badge variant="destructive" className="bg-red-100 text-red-700 border-red-200"><AlertCircle className="w-3 h-3 ms-1" /> {t("journal.not_balanced")}</Badge>
                 )}
               </div>
             </div>
@@ -472,7 +472,7 @@ export default function JournalEntries() {
                   disabled={postMutation.isPending}
                   data-testid="button-post-entry"
                 >
-                  <CheckCircle2 className="w-4 h-4 ml-1" /> {t("journal.post_entry")}
+                  <CheckCircle2 className="w-4 h-4 ms-1" /> {t("journal.post_entry")}
                 </Button>
               )}
             </div>
@@ -512,8 +512,8 @@ export default function JournalEntries() {
                   <TableHeader>
                     <TableRow className="bg-muted/50">
                       <TableHead>{t("journal.account")}</TableHead>
-                      <TableHead className="text-right">{t("journal.debit")}</TableHead>
-                      <TableHead className="text-right">{t("journal.credit")}</TableHead>
+                      <TableHead className="text-start">{t("journal.debit")}</TableHead>
+                      <TableHead className="text-start">{t("journal.credit")}</TableHead>
                       <TableHead>{t("journal.line_description")}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -521,18 +521,18 @@ export default function JournalEntries() {
                     {entryDetail.lines.map((line, idx) => (
                       <TableRow key={idx}>
                         <TableCell>
-                          <span className="font-mono text-sm text-muted-foreground ml-2">{line.account_code}</span>
+                          <span className="font-mono text-sm text-muted-foreground ms-2">{line.account_code}</span>
                           <span className="font-medium">{line.account_name}</span>
                         </TableCell>
-                        <TableCell className="text-right font-mono">{f3(line.debit)}</TableCell>
-                        <TableCell className="text-right font-mono">{f3(line.credit)}</TableCell>
+                        <TableCell className="text-start font-mono">{f3(line.debit)}</TableCell>
+                        <TableCell className="text-start font-mono">{f3(line.credit)}</TableCell>
                         <TableCell className="text-sm">{line.description || "---"}</TableCell>
                       </TableRow>
                     ))}
                     <TableRow className="bg-muted/30 font-bold">
-                      <TableCell className="text-right">{t("common.total")}</TableCell>
-                      <TableCell className="text-right font-mono">{f3(entryDetail.totalDebit)}</TableCell>
-                      <TableCell className="text-right font-mono">{f3(entryDetail.totalCredit)}</TableCell>
+                      <TableCell className="text-start">{t("common.total")}</TableCell>
+                      <TableCell className="text-start font-mono">{f3(entryDetail.totalDebit)}</TableCell>
+                      <TableCell className="text-start font-mono">{f3(entryDetail.totalCredit)}</TableCell>
                       <TableCell></TableCell>
                     </TableRow>
                   </TableBody>

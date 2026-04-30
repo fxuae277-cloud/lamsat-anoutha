@@ -1,6 +1,6 @@
 /**
- * POS.tsx — شاشة نقطة البيع لمسة أنوثة
- * جلسة 10 | RTL | عملة OMR 3 خانات عشرية
+ * POS.tsx — Point of Sale screen
+ * RTL/LTR via <html dir>; OMR with 3 decimal places.
  */
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
@@ -72,17 +72,22 @@ interface Customer { id: number; name: string; phone?: string; city?: string; }
 const n = (v: string | number | null | undefined) => parseFloat(String(v || "0")) || 0;
 const omr = (v: number) => v.toFixed(3).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
+// CATEGORY_ICONS keys are intentionally Arabic — they match category names
+// stored in the database and are NOT user-facing labels. DB migration TODO.
 const CATEGORY_ICONS: Record<string, string> = {
   "خواتم": "💍", "حلقان": "💎", "أطقم": "👑",
   "عقود": "📿", "أساور": "⌚",
 };
 const catIcon = (name?: string) => CATEGORY_ICONS[name || ""] || "🛍️";
 
-const stockBadge = (qty: number) => {
-  if (qty === 0) return { label: "نافد", cls: "bg-red-100 text-red-700 border-red-200" };
-  if (qty < 5)  return { label: "منخفض", cls: "bg-amber-100 text-amber-700 border-amber-200" };
-  return { label: "متوفر", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" };
-};
+function useStockBadge() {
+  const { t } = useI18n();
+  return (qty: number) => {
+    if (qty === 0) return { label: t("pos:stockBadge.out"),       cls: "bg-red-100 text-red-700 border-red-200" };
+    if (qty < 5)  return { label: t("pos:stockBadge.low"),       cls: "bg-amber-100 text-amber-700 border-amber-200" };
+    return            { label: t("pos:stockBadge.available"), cls: "bg-emerald-100 text-emerald-700 border-emerald-200" };
+  };
+}
 
 const uid = () => Math.random().toString(36).slice(2);
 
@@ -92,6 +97,8 @@ function StartPOS({ branchName, terminalName, userName, onShiftOpened }: {
   onShiftOpened: (shift: Shift) => void;
 }) {
   const { toast } = useToast();
+  const { t } = useI18n();
+  const NS = "pos:startShift";
   const [openingCash, setOpeningCash] = useState("");
   const [checking, setChecking] = useState(true);
 
@@ -111,18 +118,24 @@ function StartPOS({ branchName, terminalName, userName, onShiftOpened }: {
       const res = await apiRequest("POST", "/api/shifts", { openingCash: openingCash || "0" });
       return res.json();
     },
-    onSuccess: (shift: Shift) => { toast({ title: "تم فتح الوردية بنجاح" }); onShiftOpened(shift); },
-    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onSuccess: (shift: Shift) => { toast({ title: t(`${NS}.openSuccess`) }); onShiftOpened(shift); },
+    onError: (e: Error) => toast({ title: t("pos:messages.error"), description: e.message, variant: "destructive" }),
   });
 
   if (checking) return (
     <div className="h-screen flex items-center justify-center">
       <div className="text-center space-y-3">
         <div className="w-10 h-10 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="text-muted-foreground">جارٍ التحقق من الوردية...</p>
+        <p className="text-muted-foreground">{t(`${NS}.loading`)}</p>
       </div>
     </div>
   );
+
+  const fields: [string, string, any][] = [
+    [t(`${NS}.cashier`), userName, UserIcon],
+    [t(`${NS}.branch`), branchName, Store],
+    [t(`${NS}.terminal`), terminalName, Monitor],
+  ];
 
   return (
     <div className="h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 to-rose-50">
@@ -131,12 +144,12 @@ function StartPOS({ branchName, terminalName, userName, onShiftOpened }: {
           <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-4">
             <Store className="w-10 h-10" />
           </div>
-          <h1 className="text-2xl font-bold">لمسة أنوثة</h1>
-          <p className="text-pink-100 mt-1 text-sm">نقطة البيع</p>
+          <h1 className="text-2xl font-bold">{t(`${NS}.appName`)}</h1>
+          <p className="text-pink-100 mt-1 text-sm">{t(`${NS}.subtitle`)}</p>
         </div>
         <div className="p-8 space-y-6">
           <div className="bg-pink-50 rounded-xl p-4 space-y-2 text-sm">
-            {[["الكاشير", userName, UserIcon], ["الفرع", branchName, Store], ["الجهاز", terminalName, Monitor]].map(([label, val, Icon]: any) => (
+            {fields.map(([label, val, Icon]) => (
               <div key={label} className="flex justify-between items-center">
                 <span className="text-muted-foreground flex items-center gap-1.5"><Icon className="w-3.5 h-3.5" /> {label}</span>
                 <span className="font-semibold">{val}</span>
@@ -144,9 +157,9 @@ function StartPOS({ branchName, terminalName, userName, onShiftOpened }: {
             ))}
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">النقد الافتتاحي (اختياري)</label>
+            <label className="text-sm font-medium">{t(`${NS}.openingCashLabel`)}</label>
             <Input
-              type="number" step="0.001" min="0" placeholder="0.000 ر.ع"
+              type="number" step="0.001" min="0" placeholder={t(`${NS}.openingPlaceholder`)}
               value={openingCash} onChange={e => setOpeningCash(e.target.value)}
               className="text-center text-lg h-12"
               dir="ltr"
@@ -157,7 +170,7 @@ function StartPOS({ branchName, terminalName, userName, onShiftOpened }: {
             onClick={() => openShiftMutation.mutate()}
             disabled={openShiftMutation.isPending}
           >
-            {openShiftMutation.isPending ? "جارٍ الفتح..." : "فتح الوردية وبدء البيع"}
+            {openShiftMutation.isPending ? t(`${NS}.opening`) : t(`${NS}.openShiftBtn`)}
           </Button>
         </div>
       </div>
@@ -174,6 +187,9 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId }: {
   branchName: string; cashierName: string; shiftId?: number;
 }) {
   const { toast } = useToast();
+  const { t } = useI18n();
+  const R = "pos:receipt";
+  const W = "pos:whatsapp";
   const total  = n(sale.total);
   const paid   = n(sale.amountPaid ?? sale.amount_paid ?? total);
   const change = n(sale.changeAmount ?? sale.change_amount ?? 0);
@@ -188,16 +204,16 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId }: {
     };
   }, []);
 
+  const paymentLabel = (method: string) =>
+    method === "cash" ? t(`${R}.cash`) :
+    method === "card" ? t(`${R}.card`) :
+    t(`${R}.bank_transfer`);
+
   const handlePrint = async () => {
-    // Re-entrancy guard — `printing` state may not have flushed yet on a
-    // double-click, so use a ref for the synchronous check.
     if (printingRef.current) return;
     printingRef.current = true;
     setPrinting(true);
     try {
-      // Direct ESC/POS path — sends bytes to localhost:3001 which uses the
-      // raw winspool driver to print on EPSON TM-T100. No browser print
-      // dialog, no popup, no preview.
       const result = await printInvoiceLocal({
         invoiceNumber: sale.invoiceNumber || sale.invoice_number || "",
         createdAt:     sale.createdAt     || sale.created_at,
@@ -220,21 +236,15 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId }: {
         paymentMethod: sale.paymentMethod || sale.payment_method || "cash",
       });
       if (result.ok) {
-        // Silent on ignoredDuplicate — duplicate suppression is an internal
-        // safeguard, the cashier should not see it. The console logs
-        // ([Print] duplicate ignored …) are enough for diagnosis.
         if (!result.ignoredDuplicate) {
-          toast({ title: "تمت الطباعة بنجاح" });
+          toast({ title: t(`${R}.printSuccess`) });
         }
         setPrintSuccess(true);
-        // Brief "تمت الطباعة ✓" confirmation, then auto-close so the cashier
-        // jumps straight to the next customer (cart was already cleared by
-        // the sale mutation; onClose() also focuses the search/barcode input).
         closeTimerRef.current = window.setTimeout(() => {
           onClose();
         }, 800);
       } else {
-        toast({ title: "فشلت الطباعة - حاول مرة أخرى", description: result.error, variant: "destructive" });
+        toast({ title: t(`${R}.printFailed`), description: result.error, variant: "destructive" });
       }
     } finally {
       setPrinting(false);
@@ -246,74 +256,74 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId }: {
     const items = (sale.items || []).map((i: any) =>
       `  • ${i.productName || i.product_name} × ${i.quantity} = ${omr(n(i.unitPrice || i.unit_price) * i.quantity)} ر.ع`
     ).join("\n");
-    const customerLine = sale.customerName ? `العميلة: ${sale.customerName}\n` : "";
+    const customerLine = sale.customerName
+      ? t(`${W}.customerLine`, { name: sale.customerName }) + "\n"
+      : "";
     const msg = encodeURIComponent(
-      `🌸 *لمسة أنوثة* 🌸\n` +
-      `────────────────\n` +
-      `رقم الفاتورة: ${sale.invoiceNumber || sale.invoice_number}\n` +
-      `التاريخ: ${fmtDate(sale.createdAt || sale.created_at)}\n` +
+      t(`${W}.appHeader`) + "\n" +
+      t(`${W}.divider`) + "\n" +
+      t(`${W}.invoiceLine`, { number: sale.invoiceNumber || sale.invoice_number }) + "\n" +
+      t(`${W}.dateLine`, { date: fmtDate(sale.createdAt || sale.created_at) }) + "\n" +
       customerLine +
-      `\nالمنتجات:\n${items}\n\n` +
-      `الإجمالي: *${omr(total)} ر.ع*\n` +
-      `المدفوع: ${omr(paid)} ر.ع\n` +
-      (n(change) > 0 ? `الباقي: ${omr(change)} ر.ع\n` : "") +
-      `\nشكراً لتسوقكم معنا 💝`
+      "\n" + t(`${W}.productsHeader`) + "\n" + items + "\n\n" +
+      t(`${W}.totalLine`, { amount: omr(total) }) + "\n" +
+      t(`${W}.paidLine`, { amount: omr(paid) }) + "\n" +
+      (n(change) > 0 ? t(`${W}.changeLine`, { amount: omr(change) }) + "\n" : "") +
+      "\n" + t(`${W}.thankYou`)
     );
-    const rawPhone = (sale.customerPhone || "").replace(/\D/g, ""); // أرقام فقط
+    const rawPhone = (sale.customerPhone || "").replace(/\D/g, "");
     if (!rawPhone) {
-      // لا يوجد رقم عميل — api.whatsapp.com يدعم الإرسال بدون رقم
       window.open(`https://web.whatsapp.com/send?text=${msg}`, "_blank");
       return;
     }
-    // تطبيع الرقم: إضافة 968 إذا لم تكن موجودة
     let phone = rawPhone;
-    if (phone.startsWith("00968")) phone = phone.slice(2);       // 00968 → 968...
-    else if (!phone.startsWith("968")) phone = `968${phone}`;    // 9XXXXXXXX → 9689XXXXXXXX
+    if (phone.startsWith("00968")) phone = phone.slice(2);
+    else if (!phone.startsWith("968")) phone = `968${phone}`;
     window.open(`https://web.whatsapp.com/send?phone=${phone}&text=${msg}`, "_blank");
   };
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-sm" dir="rtl">
+      <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-emerald-600">
-            <CheckCircle2 className="w-5 h-5" /> تمت عملية البيع بنجاح
+            <CheckCircle2 className="w-5 h-5" /> {t(`${R}.title`)}
           </DialogTitle>
         </DialogHeader>
 
         <div className="text-sm space-y-1 bg-gray-50 rounded-lg p-4 max-h-[50vh] overflow-y-auto">
-          <p className="text-center font-bold text-base">🌸 لمسة أنوثة 🌸</p>
+          <p className="text-center font-bold text-base">{t(`${R}.appHeader`)}</p>
           <p className="text-center text-xs text-muted-foreground">{branchName}</p>
           <hr className="border-dashed my-1" />
           <div className="grid grid-cols-2 gap-x-2 text-xs">
-            <span className="text-muted-foreground">رقم الفاتورة:</span>
+            <span className="text-muted-foreground">{t(`${R}.invoiceNumber`)}</span>
             <span className="font-medium">{sale.invoiceNumber || sale.invoice_number}</span>
-            <span className="text-muted-foreground">التاريخ:</span>
+            <span className="text-muted-foreground">{t(`${R}.date`)}</span>
             <span>{fmtDateTime(sale.createdAt || sale.created_at)}</span>
-            <span className="text-muted-foreground">الكاشير:</span>
+            <span className="text-muted-foreground">{t(`${R}.cashier`)}</span>
             <span>{cashierName}</span>
             {sale.customerName && (<>
-              <span className="text-muted-foreground">العميلة:</span>
+              <span className="text-muted-foreground">{t(`${R}.customerLabel`)}</span>
               <span>{sale.customerName}</span>
             </>)}
             {sale.customerPhone && (<>
-              <span className="text-muted-foreground">الهاتف:</span>
+              <span className="text-muted-foreground">{t(`${R}.phone`)}</span>
               <span dir="ltr">{sale.customerPhone}</span>
             </>)}
           </div>
           <hr className="border-dashed my-1" />
           <table className="w-full text-xs">
             <thead><tr>
-              <th className="text-right pb-1">المنتج</th>
-              <th className="text-center">كمية</th>
-              <th className="text-left">المبلغ</th>
+              <th className="text-start pb-1">{t(`${R}.thProduct`)}</th>
+              <th className="text-center">{t(`${R}.thQty`)}</th>
+              <th className="text-end">{t(`${R}.thAmount`)}</th>
             </tr></thead>
             <tbody>
               {(sale.items || []).map((item: any, i: number) => (
                 <tr key={i}>
                   <td>{item.productName || item.product_name}{item.color ? ` (${item.color})` : ""}</td>
                   <td className="text-center">{item.quantity}</td>
-                  <td className="text-left" dir="ltr">{omr(n(item.unitPrice || item.unit_price) * item.quantity)}</td>
+                  <td className="text-end" dir="ltr">{omr(n(item.unitPrice || item.unit_price) * item.quantity)}</td>
                 </tr>
               ))}
             </tbody>
@@ -321,36 +331,36 @@ function ReceiptModal({ sale, onClose, branchName, cashierName, shiftId }: {
           <hr className="border-dashed my-1" />
           <div className="space-y-0.5 text-xs">
             {n(sale.discount) > 0 && (
-              <div className="flex justify-between"><span>خصم:</span><span dir="ltr">- {omr(n(sale.discount))} ر.ع</span></div>
+              <div className="flex justify-between"><span>{t(`${R}.discount`)}</span><span dir="ltr">- {omr(n(sale.discount))} {t("pos:fallback.currency")}</span></div>
             )}
             <div className="flex justify-between font-bold text-sm">
-              <span>الإجمالي:</span><span dir="ltr">{omr(total)} ر.ع</span>
+              <span>{t(`${R}.total`)}</span><span dir="ltr">{omr(total)} {t("pos:fallback.currency")}</span>
             </div>
-            <div className="flex justify-between"><span>المدفوع:</span><span dir="ltr">{omr(paid)} ر.ع</span></div>
-            {change > 0 && <div className="flex justify-between text-emerald-600"><span>الباقي:</span><span dir="ltr">{omr(change)} ر.ع</span></div>}
+            <div className="flex justify-between"><span>{t(`${R}.paid`)}</span><span dir="ltr">{omr(paid)} {t("pos:fallback.currency")}</span></div>
+            {change > 0 && <div className="flex justify-between text-emerald-600"><span>{t(`${R}.change`)}</span><span dir="ltr">{omr(change)} {t("pos:fallback.currency")}</span></div>}
             <div className="flex justify-between text-muted-foreground">
-              <span>طريقة الدفع:</span>
-              <span>{sale.paymentMethod === "cash" ? "نقدي" : sale.paymentMethod === "card" ? "بطاقة" : "تحويل"}</span>
+              <span>{t(`${R}.paymentMethod`)}</span>
+              <span>{paymentLabel(sale.paymentMethod)}</span>
             </div>
           </div>
           <hr className="border-dashed my-1" />
-          <p className="text-center text-xs text-muted-foreground">شكراً لتسوقكم معنا 💝</p>
+          <p className="text-center text-xs text-muted-foreground">{t(`${R}.thankYou`)}</p>
         </div>
 
         <DialogFooter className="flex gap-2 sm:justify-start">
           <Button size="sm" onClick={handlePrint} disabled={printing || printSuccess} className="bg-pink-600 hover:bg-pink-700 gap-1">
             {printing ? (
-              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> جارٍ الطباعة...</>
+              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {t(`${R}.printing`)}</>
             ) : printSuccess ? (
-              <><CheckCircle2 className="w-3.5 h-3.5" /> تمت الطباعة ✓</>
+              <><CheckCircle2 className="w-3.5 h-3.5" /> {t(`${R}.printed`)}</>
             ) : (
-              <><Printer className="w-3.5 h-3.5" /> طباعة</>
+              <><Printer className="w-3.5 h-3.5" /> {t(`${R}.printBtn`)}</>
             )}
           </Button>
           <Button size="sm" variant="outline" onClick={handleWhatsApp} className="gap-1 border-emerald-500 text-emerald-700 hover:bg-emerald-50">
-            <MessageSquare className="w-3.5 h-3.5" /> واتساب
+            <MessageSquare className="w-3.5 h-3.5" /> {t(`${R}.whatsappBtn`)}
           </Button>
-          <Button size="sm" variant="ghost" onClick={onClose}>إغلاق</Button>
+          <Button size="sm" variant="ghost" onClick={onClose}>{t(`${R}.closeBtn`)}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -363,6 +373,8 @@ function HoldListModal({ onClose, onResume }: {
   onResume: (held: HeldInvoice) => void;
 }) {
   const { toast } = useToast();
+  const { t } = useI18n();
+  const NS = "pos:holdList";
   const qc = useQueryClient();
   const { data: held = [], isLoading } = useQuery<HeldInvoice[]>({
     queryKey: ["/api/pos/held"],
@@ -372,7 +384,7 @@ function HoldListModal({ onClose, onResume }: {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/pos/held/${id}`).then(r => r.json()),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/pos/held"] }); toast({ title: "تم حذف الفاتورة المعلقة" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/pos/held"] }); toast({ title: t(`${NS}.deleteSuccess`) }); },
   });
 
   const resumeMutation = useMutation({
@@ -382,11 +394,11 @@ function HoldListModal({ onClose, onResume }: {
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-md" dir="rtl">
-        <DialogHeader><DialogTitle className="flex items-center gap-2"><Pause className="w-4 h-4 text-amber-500" /> الفواتير المعلقة</DialogTitle></DialogHeader>
-        {isLoading && <p className="text-center text-sm text-muted-foreground py-4">جارٍ التحميل...</p>}
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle className="flex items-center gap-2"><Pause className="w-4 h-4 text-amber-500" /> {t(`${NS}.title`)}</DialogTitle></DialogHeader>
+        {isLoading && <p className="text-center text-sm text-muted-foreground py-4">{t(`${NS}.loading`)}</p>}
         {!isLoading && held.length === 0 && (
-          <p className="text-center text-sm text-muted-foreground py-6">لا توجد فواتير معلقة</p>
+          <p className="text-center text-sm text-muted-foreground py-6">{t(`${NS}.empty`)}</p>
         )}
         <div className="space-y-2 max-h-80 overflow-y-auto">
           {held.map(h => (
@@ -394,14 +406,14 @@ function HoldListModal({ onClose, onResume }: {
               <div>
                 <p className="font-medium text-sm">{h.hold_number}</p>
                 <p className="text-xs text-muted-foreground">
-                  {h.customer_name || "بدون عميل"} · {h.items.length} منتج
+                  {h.customer_name || t("pos:fallback.noCustomer")} · {t(`${NS}.itemCount`, { count: h.items.length })}
                 </p>
                 <p className="text-xs text-muted-foreground">{fmtDateTime(h.created_at)}</p>
               </div>
               <div className="flex gap-2">
                 <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 gap-1 h-7 text-xs"
                   onClick={() => resumeMutation.mutate(h.id)} disabled={resumeMutation.isPending}>
-                  <Play className="w-3 h-3" /> استئناف
+                  <Play className="w-3 h-3" /> {t(`${NS}.resume`)}
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs text-red-500 hover:text-red-700"
                   onClick={() => deleteMutation.mutate(h.id)} disabled={deleteMutation.isPending}>
@@ -411,7 +423,7 @@ function HoldListModal({ onClose, onResume }: {
             </div>
           ))}
         </div>
-        <DialogFooter><Button variant="outline" size="sm" onClick={onClose}>إغلاق</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" size="sm" onClick={onClose}>{t(`${NS}.close`)}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -423,6 +435,8 @@ function CustomerModal({ onClose, onSelect }: {
   onSelect: (c: Customer | null) => void;
 }) {
   const { toast } = useToast();
+  const { t } = useI18n();
+  const NS = "pos:customer";
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<"search" | "new">("search");
@@ -430,13 +444,11 @@ function CustomerModal({ onClose, onSelect }: {
   const [newPhone, setNewPhone] = useState("");
   const [existsOtherBranch, setExistsOtherBranch] = useState<{ id: number; name: string; phone: string } | null>(null);
 
-  // جلب عملاء الفرع فقط (البيكند يفلتر حسب الدور)
   const { data: allCustomers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers/search", ""],
     queryFn: () => fetch(`/api/customers/search`, { credentials: "include" }).then(r => r.json()),
   });
 
-  // فلترة محلية بدلاً من API call لكل حرف
   const results = search.trim()
     ? allCustomers.filter(c =>
         (c.name || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -447,12 +459,12 @@ function CustomerModal({ onClose, onSelect }: {
   const linkBranchMutation = useMutation({
     mutationFn: (id: number) => apiRequest("PATCH", `/api/customers/${id}/link-branch`, {}).then(r => r.json()),
     onSuccess: (c) => {
-      toast({ title: "تم ربط العميل بفرعك" });
+      toast({ title: t(`${NS}.linkSuccess`) });
       queryClient.invalidateQueries({ queryKey: ["/api/customers/search"] });
       setExistsOtherBranch(null);
       onSelect(c);
     },
-    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t(`${NS}.errorGeneric`), description: e.message, variant: "destructive" }),
   });
 
   const createMutation = useMutation({
@@ -460,47 +472,46 @@ function CustomerModal({ onClose, onSelect }: {
       if (!r.ok) {
         const body = await r.json();
         if (body.code === "exists_other_branch") { setExistsOtherBranch(body.customer); throw new Error("exists_other_branch"); }
-        throw new Error(body.message || "خطأ");
+        throw new Error(body.message || t(`${NS}.errorGeneric`));
       }
       return r.json();
     }),
     onSuccess: (c) => {
-      toast({ title: "تم إضافة العميل" });
+      toast({ title: t(`${NS}.addSuccess`) });
       queryClient.invalidateQueries({ queryKey: ["/api/customers/search"] });
       onSelect(c);
     },
-    onError: (e: Error) => { if (e.message !== "exists_other_branch") toast({ title: "خطأ", description: e.message, variant: "destructive" }); },
+    onError: (e: Error) => { if (e.message !== "exists_other_branch") toast({ title: t(`${NS}.errorGeneric`), description: e.message, variant: "destructive" }); },
   });
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-sm" dir="rtl">
-        <DialogHeader><DialogTitle className="flex items-center gap-2"><UserIcon className="w-4 h-4" /> اختيار العميل</DialogTitle></DialogHeader>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle className="flex items-center gap-2"><UserIcon className="w-4 h-4" /> {t(`${NS}.title`)}</DialogTitle></DialogHeader>
 
-        {/* تحذير عميل موجود في فرع آخر */}
         {existsOtherBranch && (
           <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
-            <p className="text-sm font-medium text-amber-800">⚠️ هذا العميل مسجّل في فرع آخر</p>
+            <p className="text-sm font-medium text-amber-800">⚠️ {t(`${NS}.existsOtherBranch`)}</p>
             <p className="text-xs text-amber-700">{existsOtherBranch.name} — {existsOtherBranch.phone}</p>
             <div className="flex gap-2">
               <Button size="sm" className="flex-1 h-7 text-xs bg-amber-600 hover:bg-amber-700"
                 onClick={() => linkBranchMutation.mutate(existsOtherBranch.id)}
                 disabled={linkBranchMutation.isPending}>
-                {linkBranchMutation.isPending ? "جارٍ..." : "ربط بفرعي واستخدام"}
+                {linkBranchMutation.isPending ? t(`${NS}.linking`) : t(`${NS}.linkAndUse`)}
               </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setExistsOtherBranch(null)}>إلغاء</Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setExistsOtherBranch(null)}>{t(`${NS}.cancel`)}</Button>
             </div>
           </div>
         )}
 
         <div className="flex gap-2 mb-3">
-          <Button size="sm" variant={mode === "search" ? "default" : "outline"} onClick={() => setMode("search")} className="flex-1 h-8 text-xs">قائمة العملاء</Button>
-          <Button size="sm" variant={mode === "new" ? "default" : "outline"} onClick={() => setMode("new")} className="flex-1 h-8 text-xs bg-pink-50">+ عميل جديد</Button>
+          <Button size="sm" variant={mode === "search" ? "default" : "outline"} onClick={() => setMode("search")} className="flex-1 h-8 text-xs">{t(`${NS}.customerList`)}</Button>
+          <Button size="sm" variant={mode === "new" ? "default" : "outline"} onClick={() => setMode("new")} className="flex-1 h-8 text-xs bg-pink-50">{t(`${NS}.newCustomer`)}</Button>
         </div>
         {mode === "search" ? (
           <div className="space-y-2">
             <Input
-              placeholder="ابحث بالاسم أو الهاتف..."
+              placeholder={t(`${NS}.searchPlaceholder`)}
               value={search}
               onChange={e => setSearch(e.target.value)}
               autoFocus
@@ -508,18 +519,18 @@ function CustomerModal({ onClose, onSelect }: {
             <div className="space-y-1 max-h-56 overflow-y-auto rounded-lg border bg-gray-50/50 p-1">
               {results.length === 0 ? (
                 <div className="text-center py-4 space-y-2">
-                  <p className="text-xs text-muted-foreground">لا يوجد عملاء مطابقون</p>
+                  <p className="text-xs text-muted-foreground">{t(`${NS}.noResults`)}</p>
                   <Button size="sm" className="bg-pink-600 hover:bg-pink-700 text-xs h-7"
                     onClick={() => { setNewName(search); setMode("new"); }}>
-                    + إضافة "{search}" كعميل جديد
+                    {t(`${NS}.addAsNew`, { name: search })}
                   </Button>
                 </div>
               ) : (
                 results.map(c => (
-                  <button key={c.id} className="w-full text-right flex items-center gap-3 p-2 hover:bg-pink-50 rounded-lg transition-colors"
+                  <button key={c.id} className="w-full text-start flex items-center gap-3 p-2 hover:bg-pink-50 rounded-lg transition-colors"
                     onClick={() => onSelect(c)}>
                     <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center text-pink-600 text-sm font-bold shrink-0">
-                      {c.name?.charAt(0) || "؟"}
+                      {c.name?.charAt(0) || t("pos:fallback.unknownInitial")}
                     </div>
                     <div>
                       <p className="text-sm font-medium">{c.name}</p>
@@ -532,17 +543,17 @@ function CustomerModal({ onClose, onSelect }: {
           </div>
         ) : (
           <div className="space-y-3">
-            <Input placeholder="اسم العميل *" value={newName} onChange={e => setNewName(e.target.value)} autoFocus />
-            <Input placeholder="رقم الهاتف" value={newPhone} onChange={e => setNewPhone(e.target.value)} dir="ltr" />
+            <Input placeholder={t(`${NS}.namePlaceholder`)} value={newName} onChange={e => setNewName(e.target.value)} autoFocus />
+            <Input placeholder={t(`${NS}.phonePlaceholder`)} value={newPhone} onChange={e => setNewPhone(e.target.value)} dir="ltr" />
             <Button className="w-full bg-pink-600 hover:bg-pink-700"
               onClick={() => createMutation.mutate()} disabled={!newName || createMutation.isPending}>
-              {createMutation.isPending ? "جارٍ الإضافة..." : "إضافة وتحديد"}
+              {createMutation.isPending ? t(`${NS}.adding`) : t(`${NS}.addAndSelect`)}
             </Button>
           </div>
         )}
         <div className="pt-1">
           <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => onSelect(null)}>
-            بيع بدون عميل
+            {t(`${NS}.noCustomerSale`)}
           </Button>
         </div>
       </DialogContent>
@@ -553,6 +564,8 @@ function CustomerModal({ onClose, onSelect }: {
 // ─── ReturnModal ──────────────────────────────────────────────────────────────
 function ReturnModal({ onClose }: { onClose: () => void }) {
   const { toast } = useToast();
+  const { t } = useI18n();
+  const NS = "pos:returnInvoice";
   const [invoiceNum, setInvoiceNum] = useState("");
   const [sale, setSale] = useState<any>(null);
   const [selected, setSelected] = useState<Record<number, number>>({});
@@ -563,13 +576,13 @@ function ReturnModal({ onClose }: { onClose: () => void }) {
       const res = await fetch(`/api/sales?invoiceNumber=${invoiceNum}`, { credentials: "include" });
       const data = await res.json();
       const found = Array.isArray(data) ? data[0] : data;
-      if (!found) { toast({ title: "لم يتم العثور على الفاتورة", variant: "destructive" }); return; }
+      if (!found) { toast({ title: t(`${NS}.notFound`), variant: "destructive" }); return; }
       const det = await fetch(`/api/sales/${found.id}`, { credentials: "include" }).then(r => r.json());
       setSale(det);
       const s: Record<number, number> = {};
       (det.items || []).forEach((i: any) => { s[i.id] = i.quantity; });
       setSelected(s);
-    } catch { toast({ title: "خطأ في البحث", variant: "destructive" }); }
+    } catch { toast({ title: t(`${NS}.searchError`), variant: "destructive" }); }
   };
 
   const returnMutation = useMutation({
@@ -580,27 +593,34 @@ function ReturnModal({ onClose }: { onClose: () => void }) {
           const si = sale.items.find((i: any) => i.id === Number(id));
           return { saleItemId: Number(id), productId: si.productId, quantity, unitPrice: si.unitPrice };
         });
+      // reason kept as fixed string for backend audit trail (not user-facing).
       return apiRequest("POST", `/api/sales/${sale.id}/return`, { items, refundMethod, reason: "مرتجع من POS" }).then(r => r.json());
     },
-    onSuccess: () => { toast({ title: "تم تسجيل المرتجع بنجاح" }); onClose(); },
-    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onSuccess: () => { toast({ title: t(`${NS}.success`) }); onClose(); },
+    onError: (e: Error) => toast({ title: t("pos:messages.error"), description: e.message, variant: "destructive" }),
   });
+
+  const refundOptions: [string, string][] = [
+    ["cash", t(`${NS}.cash`)],
+    ["card", t(`${NS}.card`)],
+    ["bank_transfer", t(`${NS}.bankTransfer`)],
+  ];
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-lg" dir="rtl">
-        <DialogHeader><DialogTitle className="flex items-center gap-2"><RotateCcw className="w-4 h-4 text-orange-500" /> إرجاع فاتورة</DialogTitle></DialogHeader>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle className="flex items-center gap-2"><RotateCcw className="w-4 h-4 text-orange-500" /> {t(`${NS}.title`)}</DialogTitle></DialogHeader>
         <div className="flex gap-2">
-          <Input placeholder="رقم الفاتورة (INV-XXXXX)" value={invoiceNum}
+          <Input placeholder={t(`${NS}.invoicePlaceholder`)} value={invoiceNum}
             onChange={e => setInvoiceNum(e.target.value)}
             onKeyDown={e => e.key === "Enter" && search()} />
-          <Button onClick={search} className="bg-pink-600 hover:bg-pink-700 shrink-0">بحث</Button>
+          <Button onClick={search} className="bg-pink-600 hover:bg-pink-700 shrink-0">{t(`${NS}.search`)}</Button>
         </div>
         {sale && (
           <div className="space-y-3 mt-2">
             <div className="bg-muted/50 rounded-lg p-3 text-sm">
               <p className="font-medium">{sale.invoiceNumber} — {fmtDate(sale.createdAt)}</p>
-              <p className="text-muted-foreground text-xs">الإجمالي: {omr(n(sale.total))} ر.ع</p>
+              <p className="text-muted-foreground text-xs">{t(`${NS}.totalLabel`)} {omr(n(sale.total))} {t("pos:fallback.currency")}</p>
             </div>
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {(sale.items || []).map((item: any) => (
@@ -621,7 +641,7 @@ function ReturnModal({ onClose }: { onClose: () => void }) {
               ))}
             </div>
             <div className="flex gap-2">
-              {[["cash","نقدي"], ["card","بطاقة"], ["bank_transfer","تحويل"]].map(([val, label]) => (
+              {refundOptions.map(([val, label]) => (
                 <button key={val}
                   className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${refundMethod === val ? "bg-orange-500 text-white border-orange-500" : "border-border hover:bg-muted/50"}`}
                   onClick={() => setRefundMethod(val)}>{label}</button>
@@ -629,7 +649,7 @@ function ReturnModal({ onClose }: { onClose: () => void }) {
             </div>
             <Button className="w-full bg-orange-500 hover:bg-orange-600"
               onClick={() => returnMutation.mutate()} disabled={returnMutation.isPending}>
-              {returnMutation.isPending ? "جارٍ الإرجاع..." : "تأكيد الإرجاع"}
+              {returnMutation.isPending ? t(`${NS}.processing`) : t(`${NS}.confirm`)}
             </Button>
           </div>
         )}
@@ -646,6 +666,8 @@ function CloseShiftModal({ shift, onClose, onClosed, canEditOpening }: {
   canEditOpening: boolean;
 }) {
   const { toast } = useToast();
+  const { t, lang } = useI18n();
+  const NS = "pos:closeShift";
   const [actualCash, setActualCash] = useState("");
   const [summary, setSummary] = useState<any>(null);
   const [loadingSummary, setLoadingSummary] = useState(true);
@@ -671,7 +693,7 @@ function CloseShiftModal({ shift, onClose, onClosed, canEditOpening }: {
   const saveOpeningCash = async () => {
     const amount = parseFloat(openingDraft);
     if (isNaN(amount) || amount < 0) {
-      toast({ title: "قيمة غير صالحة", variant: "destructive" });
+      toast({ title: t(`${NS}.invalidValue`), variant: "destructive" });
       return;
     }
     setSavingOpening(true);
@@ -683,13 +705,13 @@ function CloseShiftModal({ shift, onClose, onClosed, canEditOpening }: {
         body: JSON.stringify({ openingCash: amount.toFixed(3) }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.message || "فشل تحديث النقد الافتتاحي");
+      if (!r.ok) throw new Error(data.message || t(`${NS}.openingUpdateFailed`));
       setOpeningValue(amount);
       setEditingOpening(false);
       await reloadSummary();
-      toast({ title: "تم تحديث النقد الافتتاحي" });
+      toast({ title: t(`${NS}.openingUpdated`) });
     } catch (e: any) {
-      toast({ title: "خطأ", description: e.message, variant: "destructive" });
+      toast({ title: t(`${NS}.errorGeneric`), description: e.message, variant: "destructive" });
     } finally {
       setSavingOpening(false);
     }
@@ -697,7 +719,7 @@ function CloseShiftModal({ shift, onClose, onClosed, canEditOpening }: {
 
   const closeMutation = useMutation({
     mutationFn: async () => {
-      if (actualCash === "") throw new Error("يجب إدخال مبلغ الكاش الفعلي");
+      if (actualCash === "") throw new Error(t(`${NS}.actualCashRequired`));
       const r = await fetch(`/api/shifts/${shift.id}/close`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -705,14 +727,14 @@ function CloseShiftModal({ shift, onClose, onClosed, canEditOpening }: {
         body: JSON.stringify({ actualCash }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.message || "فشل إغلاق الوردية");
+      if (!r.ok) throw new Error(data.message || t(`${NS}.closeFailed`));
       return data;
     },
     onSuccess: () => {
-      toast({ title: "تم إغلاق الوردية بنجاح ✅" });
+      toast({ title: t(`${NS}.closedSuccess`) });
       onClosed();
     },
-    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t(`${NS}.errorGeneric`), description: e.message, variant: "destructive" }),
   });
 
   const totalSales = n(summary?.totalSales ?? 0);
@@ -724,17 +746,37 @@ function CloseShiftModal({ shift, onClose, onClosed, canEditOpening }: {
   const expected   = n(summary?.expectedCash ?? (openingCash + totalCash - cashExp));
   const actualNum  = n(actualCash);
   const diff       = actualNum - expected;
+  const currency = t("pos:fallback.currency");
+
+  const startedAtLabel = (() => {
+    if (!shift.startedAt) return "";
+    const locale = lang === "en" ? "en-GB" : "ar-OM-u-nu-latn";
+    try {
+      return new Date(shift.startedAt).toLocaleString(locale);
+    } catch {
+      return new Date(shift.startedAt).toLocaleString();
+    }
+  })();
+
+  const summaryRows: [string, string, string][] = [
+    [t(`${NS}.totalSales`),   omr(totalSales) + " " + currency, "text-emerald-600 font-bold"],
+    [t(`${NS}.cashSales`),    omr(totalCash)  + " " + currency, "text-gray-700"],
+    [t(`${NS}.cardSales`),    omr(totalCard)  + " " + currency, "text-purple-600"],
+    [t(`${NS}.bankSales`),    omr(totalBank)  + " " + currency, "text-blue-600"],
+    [t(`${NS}.cashExpenses`), "−" + omr(cashExp) + " " + currency, "text-red-600"],
+    [t(`${NS}.expectedCash`), omr(expected)   + " " + currency, "text-orange-600 font-semibold"],
+  ];
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-md" dir="rtl">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <LogOut className="w-5 h-5 text-orange-500" />
-            إغلاق الوردية
+            {t(`${NS}.title`)}
           </DialogTitle>
-          <DialogDescription className="text-right">
-            {new Date(shift.startedAt!).toLocaleString("ar-OM")} ← بداية الوردية
+          <DialogDescription className="text-start">
+            {startedAtLabel} ← {t(`${NS}.startedAt`)}
           </DialogDescription>
         </DialogHeader>
 
@@ -744,15 +786,13 @@ function CloseShiftModal({ shift, onClose, onClosed, canEditOpening }: {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Shift Summary */}
             <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
               <div className="flex justify-between items-center pb-2 border-b">
-                <span className="font-bold text-base">ملخص الوردية</span>
-                <span className="text-muted-foreground text-xs">الفاتورة الإلكترونية</span>
+                <span className="font-bold text-base">{t(`${NS}.summaryTitle`)}</span>
+                <span className="text-muted-foreground text-xs">{t(`${NS}.electronicInvoice`)}</span>
               </div>
-              {/* النقد الافتتاحي — قابل للتعديل */}
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">💰 النقد الافتتاحي</span>
+                <span className="text-muted-foreground">{t(`${NS}.openingCashLabel`)}</span>
                 {editingOpening ? (
                   <div className="flex items-center gap-1">
                     <Input
@@ -765,51 +805,43 @@ function CloseShiftModal({ shift, onClose, onClosed, canEditOpening }: {
                     />
                     <Button size="sm" className="h-7 px-2 text-xs"
                       onClick={saveOpeningCash} disabled={savingOpening}>
-                      حفظ
+                      {t(`${NS}.save`)}
                     </Button>
                     <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
                       onClick={() => { setEditingOpening(false); setOpeningDraft(String(openingValue)); }}>
-                      إلغاء
+                      {t(`${NS}.cancel`)}
                     </Button>
                   </div>
                 ) : (
                   <span className="flex items-center gap-1">
-                    <span className="text-gray-700">{omr(openingCash)} ر.ع</span>
+                    <span className="text-gray-700">{omr(openingCash)} {currency}</span>
                     {canEditOpening && (
                       <Button size="sm" variant="ghost" className="h-6 px-1 text-[11px] text-pink-600 hover:bg-pink-50"
                         onClick={() => { setOpeningDraft(String(openingCash)); setEditingOpening(true); }}>
-                        تعديل
+                        {t(`${NS}.edit`)}
                       </Button>
                     )}
                   </span>
                 )}
               </div>
-              {[
-                ["🧾 إجمالي المبيعات", omr(totalSales)  + " ر.ع", "text-emerald-600 font-bold"],
-                ["💵 مبيعات نقداً",     omr(totalCash)   + " ر.ع", "text-gray-700"],
-                ["💳 مبيعات بطاقة",    omr(totalCard)   + " ر.ع", "text-purple-600"],
-                ["🏦 تحويل بنكي",       omr(totalBank)   + " ر.ع", "text-blue-600"],
-                ["💸 مصروفات كاش",     "−" + omr(cashExp) + " ر.ع", "text-red-600"],
-                ["📊 الكاش المتوقع",   omr(expected)    + " ر.ع", "text-orange-600 font-semibold"],
-              ].map(([label, val, cls]) => (
-                <div key={label as string} className="flex justify-between items-center">
-                  <span className="text-muted-foreground">{label as string}</span>
-                  <span className={cls as string}>{val as string}</span>
+              {summaryRows.map(([label, val, cls]) => (
+                <div key={label} className="flex justify-between items-center">
+                  <span className="text-muted-foreground">{label}</span>
+                  <span className={cls}>{val}</span>
                 </div>
               ))}
             </div>
 
-            {/* Actual cash input */}
             <div className="space-y-2">
               <label className="text-sm font-bold flex items-center gap-1.5">
                 <Banknote className="w-4 h-4 text-green-600" />
-                عدّ الكاش الفعلي في الصندوق
+                {t(`${NS}.countActualCash`)}
               </label>
               <Input
                 type="number"
                 step="0.001"
                 min="0"
-                placeholder="0.000 ر.ع"
+                placeholder={t(`${NS}.actualCashPlaceholder`)}
                 value={actualCash}
                 onChange={e => setActualCash(e.target.value)}
                 className="text-center text-xl h-14 font-bold border-2 focus:border-pink-400"
@@ -825,10 +857,10 @@ function CloseShiftModal({ shift, onClose, onClosed, canEditOpening }: {
                     : "bg-red-50 text-red-700"
                 }`}>
                   {Math.abs(diff) < 0.001
-                    ? "✅ الصندوق متطابق"
+                    ? t(`${NS}.cashMatches`)
                     : diff > 0
-                    ? `⬆️ زيادة +${omr(diff)} ر.ع`
-                    : `⬇️ عجز −${omr(Math.abs(diff))} ر.ع`}
+                    ? t(`${NS}.cashOver`, { amount: omr(diff) })
+                    : t(`${NS}.cashShort`, { amount: omr(Math.abs(diff)) })}
                 </div>
               )}
             </div>
@@ -836,15 +868,15 @@ function CloseShiftModal({ shift, onClose, onClosed, canEditOpening }: {
         )}
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>إلغاء</Button>
+          <Button variant="outline" onClick={onClose}>{t(`${NS}.cancel`)}</Button>
           <Button
             className="bg-orange-500 hover:bg-orange-600 gap-1"
             onClick={() => closeMutation.mutate()}
             disabled={closeMutation.isPending || actualCash === ""}
           >
             {closeMutation.isPending
-              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> جارٍ الإغلاق...</>
-              : <><LogOut className="w-4 h-4" /> تأكيد الإغلاق</>
+              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> {t(`${NS}.closing`)}</>
+              : <><LogOut className="w-4 h-4" /> {t(`${NS}.confirmClose`)}</>
             }
           </Button>
         </DialogFooter>
@@ -858,6 +890,8 @@ export default function POS() {
   const { data: authData } = useAuth();
   const user = authData?.user;
   const { toast } = useToast();
+  const { t } = useI18n();
+  const stockBadge = useStockBadge();
   const qc = useQueryClient();
 
   const [shift, setShift]           = useState<Shift | null>(null);
@@ -882,7 +916,6 @@ export default function POS() {
   const { settings: scannerSettings } = useScannerSettings();
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // ── Fullscreen toggle (cashier kiosk-style) ──────────────────────────
   const fullscreenSupported =
     typeof document !== "undefined" &&
     typeof (document.documentElement as any).requestFullscreen === "function";
@@ -909,18 +942,15 @@ export default function POS() {
   const isOwner = user?.role === "owner" || user?.role === "admin";
   const branchId = user?.branchId || 1;
 
-  // ── Data Queries ────────────────────────────────────────────────────
   const { data: branches = [] } = useQuery<Branch[]>({
     queryKey: ["/api/branches"], queryFn: getQueryFn({ on401: "returnNull" }),
   });
-  const branchName = branches.find(b => b.id === branchId)?.name || "الفرع";
+  const branchName = branches.find(b => b.id === branchId)?.name || t("pos:fallback.branch");
 
   const { data: appSettings } = useQuery<Record<string, string>>({
     queryKey: ["/api/settings"], queryFn: getQueryFn({ on401: "returnNull" }),
     staleTime: 120_000,
   });
-  // Printer name/paper width come from the per-device profile in localStorage,
-  // not from /api/settings — see client/src/lib/localPrintClient.ts.
 
   const { data: categories = [] } = useQuery<any[]>({
     queryKey: ["/api/categories"], queryFn: getQueryFn({ on401: "returnNull" }),
@@ -952,7 +982,6 @@ export default function POS() {
     enabled: !!shift,
   });
 
-  // ── Cart Calculations ───────────────────────────────────────────────
   const subtotal = cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
   const discVal = (() => {
     const d = n(discount);
@@ -963,11 +992,11 @@ export default function POS() {
   const paid  = n(amountPaid);
   const change = Math.max(0, paid - total);
   const canComplete = cart.length > 0 && (payMethod !== "cash" || paid >= total) && shift;
+  const currency = t("pos:fallback.currency");
 
-  // ── Cart Ops ─────────────────────────────────────────────────────────
   const addToCart = useCallback((prod: POSProduct, qty = 1, color?: string, size?: string) => {
     if (prod.stockQty <= 0) {
-      toast({ title: "المخزون نافد", description: prod.name, variant: "destructive" }); return;
+      toast({ title: t("pos:messages.outOfStock"), description: prod.name, variant: "destructive" }); return;
     }
     setCart(prev => {
       const key = `${prod.id}-${color || ""}-${size || ""}`;
@@ -989,8 +1018,8 @@ export default function POS() {
         categoryName: prod.categoryName,
       }];
     });
-    toast({ title: "تمت الإضافة", description: prod.name, duration: 1500 });
-  }, [toast]);
+    toast({ title: t("pos:messages.added"), description: prod.name, duration: 1500 });
+  }, [toast, t]);
 
   const updateQty = (uid: string, delta: number) => {
     setCart(prev => prev.map(i => {
@@ -1077,17 +1106,16 @@ export default function POS() {
     setCart([]); setCustomer(null); setDiscount(""); setAmountPaid(""); setPayRef(""); setConfirmClear(false);
   };
 
-  // ── Hold ─────────────────────────────────────────────────────────────
   const holdMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/pos/held", {
       items: cart, customerId: customer?.id, customerName: customer?.name, customerPhone: customer?.phone,
     }).then(r => r.json()),
     onSuccess: (data) => {
-      toast({ title: `تم تعليق الفاتورة ${data.hold_number}` });
+      toast({ title: t("pos:messages.holdSuccess", { number: data.hold_number }) });
       clearCart();
       qc.invalidateQueries({ queryKey: ["/api/pos/held-count"] });
     },
-    onError: (e: Error) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("pos:messages.error"), description: e.message, variant: "destructive" }),
   });
 
   const resumeHeld = (held: HeldInvoice) => {
@@ -1097,15 +1125,14 @@ export default function POS() {
     qc.invalidateQueries({ queryKey: ["/api/pos/held-count"] });
   };
 
-  // ── Complete Sale ─────────────────────────────────────────────────────
   const saleMutation = useMutation({
     mutationFn: async () => {
-      if (!shift) throw new Error("يجب فتح وردية أولاً");
-      if (cart.length === 0) throw new Error("السلة فارغة");
-      if (payMethod === "cash" && paid < total) throw new Error("المبلغ المدفوع أقل من الإجمالي");
+      if (!shift) throw new Error(t("pos:messages.errOpenShiftFirst"));
+      if (cart.length === 0) throw new Error(t("pos:messages.errCartEmpty"));
+      if (payMethod === "cash" && paid < total) throw new Error(t("pos:messages.errAmountInsufficient"));
 
       const body = {
-        invoiceNumber: "", // يُولَّد في الـ storage
+        invoiceNumber: "",
         subtotal: subtotal.toFixed(3),
         discount: discVal.toFixed(3),
         discountType: discType,
@@ -1131,7 +1158,7 @@ export default function POS() {
       const res = await apiRequest("POST", "/api/sales", body);
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.message || "فشل إنشاء الفاتورة");
+        throw new Error(err.message || t("pos:messages.errInvoiceFailed"));
       }
       const sale = await res.json();
       return {
@@ -1148,8 +1175,6 @@ export default function POS() {
       setPayRef("");
       qc.invalidateQueries({ queryKey: ["/api/pos/products"] });
 
-      // Auto-print receipt immediately after sale is saved in DB.
-      // Direct ESC/POS path — same as the manual print button.
       const autoPrintResult = await printInvoiceLocal({
         invoiceNumber: sale.invoiceNumber || sale.invoice_number || "",
         createdAt:     sale.createdAt     || sale.created_at,
@@ -1173,27 +1198,24 @@ export default function POS() {
       });
       if (!autoPrintResult.ok) {
         toast({
-          title: "تحذير: لم تتم الطباعة التلقائية",
+          title: t("pos:messages.autoPrintWarning"),
           description: autoPrintResult.error,
           variant: "destructive",
         });
       }
     },
-    onError: (e: Error) => toast({ title: "خطأ في الفاتورة", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: t("pos:messages.invoiceError"), description: e.message, variant: "destructive" }),
   });
 
   // ── Barcode scan (physical scanner redirects to search) ──────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // لا تتدخل إذا كان هناك أي مودال أو نافذة حوار مفتوحة
       if (document.querySelector("[role='dialog']")) return;
-      // لا تتدخل إذا كان المستخدم يكتب في أي حقل
       const active = document.activeElement;
       if (!active) return;
       const tag = active.tagName.toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") return;
       if ((active as HTMLElement).isContentEditable) return;
-      // توجيه الضغطة لحقل البحث فقط في الشاشة الرئيسية
       if (e.key.length === 1 && /[a-zA-Z0-9\-]/.test(e.key)) {
         searchRef.current?.focus();
       }
@@ -1202,7 +1224,6 @@ export default function POS() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // ── Auth guard ───────────────────────────────────────────────────────
   if (!user) return null;
   if (!shift) return (
     <StartPOS
@@ -1213,23 +1234,32 @@ export default function POS() {
     />
   );
 
-  // ── Render ────────────────────────────────────────────────────────────
   const rootCats = categories.filter(c => !c.parentId && c.isActive !== false);
 
+  const paymentMethods: ["cash" | "card" | "bank_transfer", string, any][] = [
+    ["cash",          t("pos:payment.cash"),          Banknote],
+    ["card",          t("pos:payment.card"),          CreditCard],
+    ["bank_transfer", t("pos:payment.bank_transfer"), Wallet],
+  ];
+
+  const discountTypes: ["value" | "percent", string][] = [
+    ["value", currency],
+    ["percent", "%"],
+  ];
+
   return (
-    <div className="w-full h-full min-h-0 flex overflow-hidden bg-gray-50" dir="rtl">
+    <div className="w-full h-full min-h-0 flex overflow-hidden bg-gray-50">
 
       {/* ══ Cart (Right) ══ */}
       <div className="w-[360px] xl:w-[400px] 2xl:w-[440px] shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden shadow-md min-h-0">
 
-          {/* Customer — أول شيء في السلة */}
           <div className="px-3 py-2 border-b shrink-0">
             <button className="w-full flex items-center justify-between bg-gray-50 hover:bg-pink-50 border border-dashed border-gray-300 hover:border-pink-300 rounded-lg px-3 py-2 transition-colors text-sm"
               onClick={() => setShowCustomer(true)}>
               <span className="flex items-center gap-2">
                 <UserIcon className="w-3.5 h-3.5 text-gray-400" />
                 <span className={customer ? "text-gray-800 font-medium" : "text-gray-400"}>
-                  {customer ? customer.name : "اختيار العميل (اختياري)"}
+                  {customer ? customer.name : t("pos:cart.selectCustomer")}
                 </span>
               </span>
               {customer ? (
@@ -1242,13 +1272,12 @@ export default function POS() {
             </button>
           </div>
 
-          {/* Cart Items */}
           <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
             {cart.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
                 <ShoppingCart className="w-12 h-12 mb-3 opacity-20" />
-                <p className="text-sm">السلة فارغة</p>
-                <p className="text-xs mt-1">اضغط على أي منتج لإضافته</p>
+                <p className="text-sm">{t("pos:cart.empty")}</p>
+                <p className="text-xs mt-1">{t("pos:cart.emptyHint")}</p>
               </div>
             )}
             {cart.map(item => (
@@ -1263,7 +1292,7 @@ export default function POS() {
                   {(item.color || item.size) && (
                     <p className="text-[10px] text-muted-foreground">{[item.color, item.size].filter(Boolean).join(" · ")}</p>
                   )}
-                  <p className="text-xs font-bold text-pink-600 mt-0.5">{omr(item.unitPrice)} ر.ع</p>
+                  <p className="text-xs font-bold text-pink-600 mt-0.5">{omr(item.unitPrice)} {currency}</p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button className="w-6 h-6 rounded border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-colors"
@@ -1284,46 +1313,42 @@ export default function POS() {
             ))}
           </div>
 
-          {/* Summary & Payment */}
           <div className="border-t bg-white shrink-0 px-3 py-3 space-y-3">
-            {/* Discount (owner only) */}
             {isOwner && cart.length > 0 && (
               <div className="flex items-center gap-2">
                 <Tag className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                 <Input
-                  type="number" min="0" step="0.001" placeholder="خصم"
+                  type="number" min="0" step="0.001" placeholder={t("pos:totals.discountPlaceholder")}
                   value={discount} onChange={e => setDiscount(e.target.value)}
                   className="h-7 text-xs flex-1" dir="ltr"
                 />
                 <div className="flex rounded-md border overflow-hidden shrink-0">
-                  {[["value","ر.ع"],["percent","%"]].map(([val,lbl]) => (
+                  {discountTypes.map(([val, lbl]) => (
                     <button key={val}
                       className={`px-2 py-0.5 text-xs transition-colors ${discType === val ? "bg-pink-600 text-white" : "hover:bg-gray-100"}`}
-                      onClick={() => setDiscType(val as any)}>{lbl}</button>
+                      onClick={() => setDiscType(val)}>{lbl}</button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Totals */}
             <div className="space-y-1 text-sm">
               <div className="flex justify-between text-muted-foreground text-xs">
-                <span>المجموع الفرعي</span><span dir="ltr">{omr(subtotal)} ر.ع</span>
+                <span>{t("pos:totals.subtotal")}</span><span dir="ltr">{omr(subtotal)} {currency}</span>
               </div>
               {discVal > 0 && (
                 <div className="flex justify-between text-emerald-600 text-xs">
-                  <span>الخصم</span><span dir="ltr">- {omr(discVal)} ر.ع</span>
+                  <span>{t("pos:totals.discount")}</span><span dir="ltr">- {omr(discVal)} {currency}</span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-base pt-1 border-t">
-                <span>الإجمالي</span>
-                <span className="text-pink-600" dir="ltr">{omr(total)} ر.ع</span>
+                <span>{t("pos:totals.total")}</span>
+                <span className="text-pink-600" dir="ltr">{omr(total)} {currency}</span>
               </div>
             </div>
 
-            {/* Payment Method */}
             <div className="grid grid-cols-3 gap-1.5">
-              {([["cash","نقدي",Banknote],["card","بطاقة",CreditCard],["bank_transfer","تحويل",Wallet]] as const).map(([val,label,Icon]) => (
+              {paymentMethods.map(([val, label, Icon]) => (
                 <button key={val}
                   className={`flex flex-col items-center gap-1 py-2 rounded-lg border text-xs font-medium transition-all ${payMethod === val ? "bg-pink-600 text-white border-pink-600 shadow-sm" : "border-gray-200 hover:border-pink-300 hover:bg-pink-50"}`}
                   onClick={() => { setPayMethod(val); setAmountPaid(""); setPayRef(""); }}>
@@ -1333,7 +1358,6 @@ export default function POS() {
               ))}
             </div>
 
-            {/* Cash input */}
             {payMethod === "cash" && (
               <div className="space-y-2">
                 <div className="flex gap-1">
@@ -1347,51 +1371,48 @@ export default function POS() {
                 </div>
                 <Input
                   type="number" step="0.001" min="0"
-                  placeholder="المبلغ المدفوع"
+                  placeholder={t("pos:payment.amountReceived")}
                   value={amountPaid}
                   onChange={e => setAmountPaid(e.target.value)}
                   className="h-8 text-sm text-center" dir="ltr"
                 />
                 {paid > 0 && (
                   <div className={`flex justify-between text-sm px-1 font-medium ${change >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                    <span>الباقي</span>
-                    <span dir="ltr">{omr(change >= 0 ? change : paid - total)} ر.ع</span>
+                    <span>{t("pos:payment.change")}</span>
+                    <span dir="ltr">{omr(change >= 0 ? change : paid - total)} {currency}</span>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Card / Transfer reference */}
             {(payMethod === "card" || payMethod === "bank_transfer") && (
               <Input
-                placeholder={payMethod === "card" ? "رقم مرجع البطاقة" : "رقم مرجع التحويل"}
+                placeholder={payMethod === "card" ? t("pos:payment.cardRefPlaceholder") : t("pos:payment.bankRefPlaceholder")}
                 value={payRef} onChange={e => setPayRef(e.target.value)}
                 className="h-8 text-sm" dir="ltr"
               />
             )}
 
-            {/* Complete Sale */}
             <Button
               className={`w-full h-11 text-sm font-bold transition-all ${canComplete ? "bg-gradient-to-l from-pink-600 to-rose-500 hover:from-pink-700 hover:to-rose-600 shadow-md" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
               disabled={!canComplete || saleMutation.isPending}
               onClick={() => saleMutation.mutate()}
             >
               {saleMutation.isPending ? (
-                <span className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> جارٍ البيع...</span>
+                <span className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> {t("pos:actions.checkoutLoading")}</span>
               ) : (
                 <span className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" />
-                  إتمام البيع {cart.length > 0 ? `— ${omr(total)} ر.ع` : ""}
+                  {t("pos:actions.checkout")} {cart.length > 0 ? `— ${omr(total)} ${currency}` : ""}
                 </span>
               )}
             </Button>
 
-            {/* Hold */}
             {cart.length > 0 && (
               <Button variant="outline" size="sm" className="w-full h-8 text-xs gap-1 border-amber-300 text-amber-700 hover:bg-amber-50"
                 onClick={() => holdMutation.mutate()} disabled={holdMutation.isPending}>
                 <Pause className="w-3 h-3" />
-                {holdMutation.isPending ? "جارٍ التعليق..." : "تعليق الفاتورة"}
+                {holdMutation.isPending ? t("pos:actions.holdLoading") : t("pos:actions.hold")}
               </Button>
             )}
           </div>
@@ -1400,21 +1421,18 @@ export default function POS() {
         {/* ══ Products (Left) ══ */}
         <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
 
-          {/* ── الشريط الوردي: لمسة أنوثة | 🛒 السلة | إرجاع + معلق ── */}
           <div className="flex items-center px-3 py-2 bg-gradient-to-l from-pink-600 to-rose-500 shrink-0 gap-3">
 
-            {/* يسار: لمسة أنوثة */}
             <div className="flex items-center gap-1.5 shrink-0">
               <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
                 <Store className="w-3.5 h-3.5 text-white" />
               </div>
-              <span className="text-white text-xs font-bold whitespace-nowrap">لمسة أنوثة</span>
+              <span className="text-white text-xs font-bold whitespace-nowrap">{t("pos:header.appName")}</span>
             </div>
 
-            {/* وسط: 🛒 سلة المشتريات */}
             <div className="flex-1 flex items-center justify-center gap-1.5">
               <ShoppingCart className="w-4 h-4 text-white" />
-              <span className="text-white text-sm font-bold">سلة المشتريات</span>
+              <span className="text-white text-sm font-bold">{t("pos:header.cart")}</span>
               {cart.length > 0 && (
                 <span className="bg-white text-pink-600 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">{cart.length}</span>
               )}
@@ -1425,19 +1443,18 @@ export default function POS() {
               )}
             </div>
 
-            {/* يمين: إرجاع + معلق + إغلاق الوردية */}
             <div className="flex items-center gap-1 shrink-0">
               {isOwner && (
                 <Button size="sm" variant="ghost"
                   className="h-7 text-xs gap-1 text-white hover:bg-white/20 px-2"
                   onClick={() => setShowReturn(true)}>
-                  <RotateCcw className="w-3.5 h-3.5" /> إرجاع
+                  <RotateCcw className="w-3.5 h-3.5" /> {t("pos:header.return")}
                 </Button>
               )}
               <Button size="sm" variant="ghost"
                 className="h-7 text-xs gap-1 text-white hover:bg-white/20 px-2 relative"
                 onClick={() => setShowHold(true)}>
-                <Pause className="w-3.5 h-3.5" /> معلق
+                <Pause className="w-3.5 h-3.5" /> {t("pos:header.hold")}
                 {heldCount > 0 && (
                   <span className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-white text-pink-600 text-[9px] font-bold flex items-center justify-center">{heldCount}</span>
                 )}
@@ -1446,10 +1463,10 @@ export default function POS() {
                 <Button size="sm" variant="ghost"
                   className="h-7 text-xs gap-1 text-white hover:bg-white/20 px-2"
                   onClick={toggleFullscreen}
-                  title={isFullscreen ? "خروج من ملء الشاشة" : "ملء الشاشة"}>
+                  title={isFullscreen ? t("pos:header.exitFullscreen") : t("pos:header.fullscreen")}>
                   {isFullscreen
-                    ? <><Minimize2 className="w-3.5 h-3.5" /> تصغير</>
-                    : <><Maximize2 className="w-3.5 h-3.5" /> ملء الشاشة</>
+                    ? <><Minimize2 className="w-3.5 h-3.5" /> {t("pos:header.minimize")}</>
+                    : <><Maximize2 className="w-3.5 h-3.5" /> {t("pos:header.maximize")}</>
                   }
                 </Button>
               )}
@@ -1463,20 +1480,18 @@ export default function POS() {
               <Button size="sm" variant="ghost"
                 className="h-7 text-xs gap-1 text-orange-200 hover:text-white hover:bg-white/20 px-2 border border-orange-300/40"
                 onClick={() => setShowCloseShift(true)}>
-                <LogOut className="w-3.5 h-3.5" /> إغلاق
+                <LogOut className="w-3.5 h-3.5" /> {t("pos:header.close")}
               </Button>
             </div>
           </div>
 
-          {/* Search + Categories */}
           <div className="bg-white border-b px-4 py-3 space-y-2 shrink-0">
-            {/* Search bar */}
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                 <Input
                   ref={searchRef}
-                  placeholder="بحث بالاسم أو الباركود أو رقم الموديل..."
+                  placeholder={t("pos:search.placeholder")}
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="pr-10 pl-4 h-9 text-sm bg-gray-50 border-gray-200 focus:border-pink-400"
@@ -1497,12 +1512,11 @@ export default function POS() {
                 }
               }} />
             </div>
-            {/* Category tabs */}
             <div className="flex gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
               <button
                 className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all shrink-0 ${activeCat === "all" ? "bg-pink-600 text-white shadow-sm" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
                 onClick={() => setActiveCat("all")}>
-                الكل <span className="opacity-70">({products.length})</span>
+                {t("pos:search.all")} <span className="opacity-70">({products.length})</span>
               </button>
               {rootCats.map(cat => {
                 const cnt = products.filter(p => p.categoryId === cat.id).length;
@@ -1517,10 +1531,9 @@ export default function POS() {
             </div>
           </div>
 
-          {/* Top products strip */}
           {topProducts.length > 0 && !search && activeCat === "all" && (
             <div className="bg-white border-b px-4 py-2 shrink-0">
-              <p className="text-xs text-muted-foreground mb-1.5">⚡ الأكثر مبيعاً</p>
+              <p className="text-xs text-muted-foreground mb-1.5">{t("pos:search.topSelling")}</p>
               <div className="flex gap-2 overflow-x-auto no-scrollbar">
                 {topProducts.map(p => (
                   <button key={p.id}
@@ -1535,7 +1548,6 @@ export default function POS() {
             </div>
           )}
 
-          {/* Products Grid */}
           <div className="flex-1 overflow-y-auto p-3">
             {loadingProducts && (
               <div className="grid grid-cols-3 xl:grid-cols-4 gap-3">
@@ -1552,8 +1564,8 @@ export default function POS() {
             {!loadingProducts && products.length === 0 && (
               <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
                 <Package className="w-16 h-16 mb-3 opacity-20" />
-                <p>لا توجد منتجات مطابقة</p>
-                {search && <p className="text-xs mt-1">جرب بحثاً مختلفاً أو امسح الفلاتر</p>}
+                <p>{t("pos:search.noProducts")}</p>
+                {search && <p className="text-xs mt-1">{t("pos:search.tryDifferent")}</p>}
               </div>
             )}
 
@@ -1572,7 +1584,6 @@ export default function POS() {
                           : "cursor-pointer hover:bg-gray-50 active:bg-gray-100"
                       }`}
                     >
-                      {/* الاسم والفئة */}
                       <div>
                         <p className="text-sm font-medium text-gray-800 leading-tight">{prod.name}</p>
                         <p className="text-xs text-gray-400 mt-0.5">
@@ -1584,12 +1595,10 @@ export default function POS() {
                         </p>
                       </div>
 
-                      {/* السعر */}
                       <span className="text-sm font-medium text-pink-700 whitespace-nowrap">
-                        {omr(n(prod.price))} ر.ع
+                        {omr(n(prod.price))} {currency}
                       </span>
 
-                      {/* زر الإضافة */}
                       {!outOfStock ? (
                         <button
                           onClick={(e) => { e.stopPropagation(); addToCart(prod); }}
@@ -1632,14 +1641,14 @@ export default function POS() {
 
       {/* Confirm Clear Cart */}
       <Dialog open={confirmClear} onOpenChange={setConfirmClear}>
-        <DialogContent className="max-w-xs" dir="rtl">
+        <DialogContent className="max-w-xs">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle className="w-4 h-4" /> مسح السلة</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle className="w-4 h-4" /> {t("pos:actions.clearCart")}</DialogTitle>
           </DialogHeader>
-          <DialogDescription>هل تريد مسح جميع المنتجات من السلة؟ لا يمكن التراجع عن هذا الإجراء.</DialogDescription>
+          <DialogDescription>{t("pos:actions.clearCartConfirm")}</DialogDescription>
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setConfirmClear(false)}>إلغاء</Button>
-            <Button size="sm" className="bg-red-600 hover:bg-red-700" onClick={clearCart}>نعم، مسح الكل</Button>
+            <Button variant="outline" size="sm" onClick={() => setConfirmClear(false)}>{t("pos:actions.cancel")}</Button>
+            <Button size="sm" className="bg-red-600 hover:bg-red-700" onClick={clearCart}>{t("pos:actions.clearYes")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
