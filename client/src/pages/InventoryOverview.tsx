@@ -236,7 +236,7 @@ export default function InventoryOverview() {
     return Math.max(0, Math.min(100, Math.round(100 * (1 - badItems / maxBad))));
   }, [totalRows, zeroRows, lowStockRows, missingCostCount]);
 
-  const healthLabel = healthScore >= 80 ? "ممتاز" : healthScore >= 60 ? "جيد" : healthScore >= 40 ? "متوسط" : "يحتاج تحسين";
+  const healthLabel = healthScore >= 80 ? t("inventoryOverview.health_excellent") : healthScore >= 60 ? t("inventoryOverview.health_good") : healthScore >= 40 ? t("inventoryOverview.health_average") : t("inventoryOverview.health_needs_improvement");
   const healthColor = healthScore >= 80 ? "text-green-600" : healthScore >= 60 ? "text-blue-600" : healthScore >= 40 ? "text-yellow-600" : "text-red-600";
   const healthBg    = healthScore >= 80 ? "bg-green-50 border-green-200" : healthScore >= 60 ? "bg-blue-50 border-blue-200" : healthScore >= 40 ? "bg-yellow-50 border-yellow-200" : "bg-red-50 border-red-200";
 
@@ -289,9 +289,9 @@ export default function InventoryOverview() {
     return (
       <div className="bg-background border rounded-lg shadow-lg p-3 text-sm" dir="rtl">
         <p className="font-semibold mb-1">{d.name}</p>
-        <p className="text-muted-foreground">القيمة: <span className="font-bold text-primary">{fmtOMR(d.value)}</span></p>
-        <p className="text-muted-foreground">الكمية: <span className="font-bold">{d.qty} وحدة</span></p>
-        <p className="text-muted-foreground">النسبة: <span className="font-bold">{totalValue > 0 ? ((d.value / totalValue) * 100).toFixed(1) : 0}%</span></p>
+        <p className="text-muted-foreground">{t("inventoryOverview.tooltip_value")} <span className="font-bold text-primary">{fmtOMR(d.value)}</span></p>
+        <p className="text-muted-foreground">{t("inventoryOverview.tooltip_qty")} <span className="font-bold">{d.qty} {t("inventoryOverview.tooltip_unit")}</span></p>
+        <p className="text-muted-foreground">{t("inventoryOverview.tooltip_pct")} <span className="font-bold">{totalValue > 0 ? ((d.value / totalValue) * 100).toFixed(1) : 0}%</span></p>
       </div>
     );
   }
@@ -307,7 +307,7 @@ export default function InventoryOverview() {
         {totalRows > 0 && (
           <div className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-semibold ${healthBg} ${healthColor}`}>
             <Activity className="w-4 h-4" />
-            صحة المخزون: {healthLabel} ({healthScore}/100)
+            {t("inventoryOverview.health_label")}: {healthLabel} ({healthScore}/100)
           </div>
         )}
       </div>
@@ -323,7 +323,7 @@ export default function InventoryOverview() {
             </div>
             <div className="min-w-0">
               <p className="text-xl font-bold text-yellow-700 truncate">{fmtOMR(totalValue)}</p>
-              <p className="text-xs text-muted-foreground">قيمة المخزون</p>
+              <p className="text-xs text-muted-foreground">{t("inventoryOverview.kpi_inventory_value")}</p>
             </div>
           </CardContent>
         </Card>
@@ -349,7 +349,7 @@ export default function InventoryOverview() {
             </div>
             <div>
               <p className="text-2xl font-bold text-green-600">{totalQty}</p>
-              <p className="text-xs text-muted-foreground">إجمالي الكمية</p>
+              <p className="text-xs text-muted-foreground">{t("inventoryOverview.kpi_total_qty")}</p>
             </div>
           </CardContent>
         </Card>
@@ -375,7 +375,7 @@ export default function InventoryOverview() {
             </div>
             <div>
               <p className="text-2xl font-bold text-red-600">{zeroRows}</p>
-              <p className="text-xs text-muted-foreground">نفاد المخزون</p>
+              <p className="text-xs text-muted-foreground">{t("inventoryOverview.kpi_out_of_stock")}</p>
             </div>
           </CardContent>
         </Card>
@@ -401,7 +401,7 @@ export default function InventoryOverview() {
             </div>
             <div className="min-w-0">
               <p className="text-xl font-bold text-purple-600 truncate">{fmtOMR(avgPrice)}</p>
-              <p className="text-xs text-muted-foreground">متوسط سعر البيع</p>
+              <p className="text-xs text-muted-foreground">{t("inventoryOverview.kpi_avg_sell_price")}</p>
             </div>
           </CardContent>
         </Card>
@@ -414,7 +414,7 @@ export default function InventoryOverview() {
           <CardHeader className="pb-3 pt-4 px-5">
             <CardTitle className="text-base flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-yellow-600" />
-              تنبيهات المخزون
+              {t("inventoryOverview.alerts_title")}
               <Badge variant="outline" className="border-yellow-400 text-yellow-700 bg-yellow-50 text-xs">
                 {alertItems.length}
               </Badge>
@@ -447,11 +447,11 @@ export default function InventoryOverview() {
                     </div>
                     <div className="text-end shrink-0">
                       <span className={`font-bold ${isZero ? "text-red-600" : "text-yellow-700"}`}>
-                        {isZero ? "نفد" : `${item.qty_on_hand} وحدة`}
+                        {isZero ? t("inventoryOverview.alert_depleted") : `${item.qty_on_hand} ${t("inventoryOverview.alert_unit")}`}
                       </span>
                       {!isZero && (
                         <span className="text-muted-foreground text-xs block">
-                          الحد الأدنى: {item.reorder_level}
+                          {t("inventoryOverview.alert_min_label")} {item.reorder_level}
                         </span>
                       )}
                     </div>
@@ -472,12 +472,12 @@ export default function InventoryOverview() {
             <CardHeader className="pb-3 pt-4 px-5">
               <CardTitle className="text-base flex items-center gap-2">
                 <Warehouse className="w-4 h-4 text-blue-600" />
-                توزيع المخزون حسب الموقع
+                {t("inventoryOverview.dist_by_location")}
               </CardTitle>
             </CardHeader>
             <CardContent className="px-5 pb-5">
               {filteredLocationData.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">لا توجد بيانات</p>
+                <p className="text-sm text-muted-foreground text-center py-4">{t("inventoryOverview.no_data")}</p>
               ) : (
                 <div className="flex flex-col gap-4">
                   {filteredLocationData.map((loc, idx) => {
@@ -504,8 +504,8 @@ export default function InventoryOverview() {
                           />
                         </div>
                         <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>{loc.qty} وحدة ({pctQty.toFixed(1)}% من الكمية)</span>
-                          <span>{pctValue.toFixed(1)}% من القيمة</span>
+                          <span>{loc.qty} {t("inventoryOverview.location_qty_pct")} ({pctQty.toFixed(1)}% {t("inventoryOverview.location_pct_of_qty")})</span>
+                          <span>{pctValue.toFixed(1)}% {t("inventoryOverview.location_pct_of_value")}</span>
                         </div>
                       </div>
                     );
@@ -513,14 +513,14 @@ export default function InventoryOverview() {
                   {/* ملخص إجمالي */}
                   <div className="pt-3 border-t flex justify-between text-sm">
                     <div className="flex items-center gap-3 text-muted-foreground">
-                      <span>الإجمالي</span>
+                      <span>{t("inventoryOverview.location_total")}</span>
                       <span className="text-xs">
-                        {locationData.filter(l => !l.isCentral).length} فرع
-                        {locationData.some(l => l.isCentral) && " · مستودع مركزي"}
+                        {locationData.filter(l => !l.isCentral).length} {t("inventoryOverview.location_branch_count")}
+                        {locationData.some(l => l.isCentral) && ` · ${t("inventoryOverview.location_central")}`}
                       </span>
                     </div>
                     <div className="flex gap-4">
-                      <span className="font-semibold">{totalQty} وحدة</span>
+                      <span className="font-semibold">{totalQty} {t("inventoryOverview.footer_unit")}</span>
                       <span className="font-bold text-primary">{fmtOMR(totalValue)}</span>
                     </div>
                   </div>
@@ -534,12 +534,12 @@ export default function InventoryOverview() {
             <CardHeader className="pb-3 pt-4 px-5">
               <CardTitle className="text-base flex items-center gap-2">
                 <BarChart2 className="w-4 h-4 text-purple-600" />
-                توزيع القيمة حسب المنتج
+                {t("inventoryOverview.dist_by_product")}
               </CardTitle>
             </CardHeader>
             <CardContent className="px-5 pb-5">
               {productPieData.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">لا توجد بيانات</p>
+                <p className="text-sm text-muted-foreground text-center py-4">{t("inventoryOverview.no_data")}</p>
               ) : (
                 <div className="flex flex-col sm:flex-row items-center gap-4">
                   <ResponsiveContainer width={170} height={170}>
@@ -595,7 +595,7 @@ export default function InventoryOverview() {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp className="w-4 h-4 text-green-600" />
-                <span className="font-semibold text-sm">هامش الربح الإجمالي</span>
+                <span className="font-semibold text-sm">{t("inventoryOverview.margin_title")}</span>
               </div>
               {costValue > 0 ? (
                 <>
@@ -610,23 +610,23 @@ export default function InventoryOverview() {
                   </div>
                   <div className="text-xs text-muted-foreground space-y-0.5">
                     <div className="flex justify-between">
-                      <span>تكلفة المخزون:</span>
+                      <span>{t("inventoryOverview.margin_cost_label")}</span>
                       <span className="font-medium">{fmtOMR(costValue)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>قيمة البيع:</span>
+                      <span>{t("inventoryOverview.margin_sell_label")}</span>
                       <span className="font-medium">{fmtOMR(totalValue)}</span>
                     </div>
                     <div className="flex justify-between font-semibold text-green-700">
-                      <span>الربح المتوقع:</span>
+                      <span>{t("inventoryOverview.margin_expected_profit")}</span>
                       <span>{fmtOMR(totalValue - costValue)}</span>
                     </div>
                   </div>
                 </>
               ) : (
                 <div className="text-sm text-muted-foreground">
-                  <p className="text-yellow-600 font-medium mb-1">⚠️ لا يمكن حساب الهامش</p>
-                  <p>أسعار الشراء غير مسجلة لـ {missingCostCount} صنف</p>
+                  <p className="text-yellow-600 font-medium mb-1">{t("inventoryOverview.margin_cannot_calc")}</p>
+                  <p>{t("inventoryOverview.margin_missing_prices").replace("{{count}}", String(missingCostCount))}</p>
                 </div>
               )}
             </CardContent>
@@ -637,7 +637,7 @@ export default function InventoryOverview() {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-3">
                 <RefreshCw className="w-4 h-4 text-orange-600" />
-                <span className="font-semibold text-sm">اكتمال بيانات الأسعار</span>
+                <span className="font-semibold text-sm">{t("inventoryOverview.price_completion_title")}</span>
               </div>
               <p className={`text-2xl font-bold mb-1 ${missingCostCount > 0 ? "text-orange-600" : "text-green-600"}`}>
                 {missingCostCount === 0
@@ -653,9 +653,9 @@ export default function InventoryOverview() {
               </div>
               <div className="text-xs text-muted-foreground">
                 {missingCostCount > 0 ? (
-                  <p>{missingCostCount} صنف بدون سعر شراء — يؤثر على حساب الأرباح</p>
+                  <p>{t("inventoryOverview.price_missing_count").replace("{{count}}", String(missingCostCount))}</p>
                 ) : (
-                  <p className="text-green-700 font-medium">جميع أسعار الشراء مسجلة ✅</p>
+                  <p className="text-green-700 font-medium">{t("inventoryOverview.price_all_recorded")}</p>
                 )}
               </div>
             </CardContent>
@@ -666,31 +666,31 @@ export default function InventoryOverview() {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Zap className="w-4 h-4 text-blue-600" />
-                <span className="font-semibold text-sm">ملخص سريع</span>
+                <span className="font-semibold text-sm">{t("inventoryOverview.quick_summary_title")}</span>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">المنتجات الطبيعية</span>
+                  <span className="text-muted-foreground">{t("inventoryOverview.summary_normal")}</span>
                   <Badge variant="outline" className="border-green-400 text-green-700 bg-green-50 text-xs">
-                    {totalRows - lowStockRows - zeroRows} صنف ✅
+                    {totalRows - lowStockRows - zeroRows} {t("inventoryOverview.summary_item")} ✅
                   </Badge>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">مخزون منخفض</span>
+                  <span className="text-muted-foreground">{t("inventoryOverview.summary_low_stock")}</span>
                   <Badge variant="outline" className="border-yellow-400 text-yellow-700 bg-yellow-50 text-xs">
-                    {lowStockRows} صنف ⚠️
+                    {lowStockRows} {t("inventoryOverview.summary_item")} ⚠️
                   </Badge>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">نفد المخزون</span>
+                  <span className="text-muted-foreground">{t("inventoryOverview.summary_out_of_stock")}</span>
                   <Badge variant="outline" className="border-red-400 text-red-700 bg-red-50 text-xs">
-                    {zeroRows} صنف 🔴
+                    {zeroRows} {t("inventoryOverview.summary_item")} 🔴
                   </Badge>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">عدد المواقع</span>
+                  <span className="text-muted-foreground">{t("inventoryOverview.summary_locations")}</span>
                   <Badge variant="outline" className="text-xs">
-                    {locationData.length} موقع
+                    {locationData.length} {t("inventoryOverview.summary_location")}
                   </Badge>
                 </div>
               </div>
@@ -742,27 +742,27 @@ export default function InventoryOverview() {
             <Select value={filterLocType} onValueChange={v => setFilterLocType(v as any)}>
               <SelectTrigger className="w-36 h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">كل المواقع</SelectItem>
-                <SelectItem value="branch">الفروع فقط</SelectItem>
-                <SelectItem value="warehouse">المستودع فقط</SelectItem>
+                <SelectItem value="all">{t("inventoryOverview.filter_all_locations")}</SelectItem>
+                <SelectItem value="branch">{t("inventoryOverview.filter_branches_only")}</SelectItem>
+                <SelectItem value="warehouse">{t("inventoryOverview.filter_warehouse_only")}</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filterType} onValueChange={setFilterType}>
               <SelectTrigger className="w-36 h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("inv_overview.all_types")}</SelectItem>
-                <SelectItem value="simple">بسيط</SelectItem>
-                <SelectItem value="variable">متعدد</SelectItem>
-                <SelectItem value="composite">مركب</SelectItem>
+                <SelectItem value="simple">{t("inventoryOverview.filter_type_simple")}</SelectItem>
+                <SelectItem value="variable">{t("inventoryOverview.filter_type_variable")}</SelectItem>
+                <SelectItem value="composite">{t("inventoryOverview.filter_type_composite")}</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filterStatus} onValueChange={setFilterStatus}>
               <SelectTrigger className="w-36 h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">كل الحالات</SelectItem>
-                <SelectItem value="ok">✅ متوفر</SelectItem>
-                <SelectItem value="low">⚠️ منخفض</SelectItem>
-                <SelectItem value="zero">🔴 نفاد</SelectItem>
+                <SelectItem value="all">{t("inventoryOverview.filter_all_statuses")}</SelectItem>
+                <SelectItem value="ok">{t("inventoryOverview.filter_available")}</SelectItem>
+                <SelectItem value="low">{t("inventoryOverview.filter_low")}</SelectItem>
+                <SelectItem value="zero">{t("inventoryOverview.filter_depleted")}</SelectItem>
               </SelectContent>
             </Select>
             {(filterBranch !== "all" || filterType !== "all" || filterStatus !== "all" || filterLocType !== "all" || stockSearch) && (
@@ -770,13 +770,13 @@ export default function InventoryOverview() {
                 className="text-xs text-muted-foreground hover:text-destructive underline"
                 onClick={() => { setFilterBranch("all"); setFilterType("all"); setFilterStatus("all"); setFilterLocType("all"); setStockSearch(""); }}
               >
-                مسح الفلاتر
+                {t("inventoryOverview.clear_filters")}
               </button>
             )}
           </div>
 
           <div className="text-xs text-muted-foreground px-1">
-            عرض <span className="font-semibold text-foreground">{filtered.length}</span> من {totalRows} صنف
+            {t("inventoryOverview.showing_count").replace("{{shown}}", String(filtered.length)).replace("{{total}}", String(totalRows))}
           </div>
 
           {/* Stock Table */}
@@ -787,11 +787,11 @@ export default function InventoryOverview() {
                   <TableHeader className="bg-muted/50 sticky top-0 z-10">
                     <TableRow>
                       <TableHead className="w-10 text-center">#</TableHead>
-                      <TableHead className="w-14">صورة</TableHead>
+                      <TableHead className="w-14">{t("inventoryOverview.col_image")}</TableHead>
                       <TableHead className="min-w-[160px]">
                         <SortBtn col="name" label={t("inv_overview.col_product")} />
                       </TableHead>
-                      <TableHead>الفئة</TableHead>
+                      <TableHead>{t("inventoryOverview.col_category")}</TableHead>
                       <TableHead>{t("inv_overview.col_variant")}</TableHead>
                       <TableHead>{t("inv_overview.col_size")}</TableHead>
                       <TableHead>{t("inv_overview.col_branch")}</TableHead>
@@ -800,9 +800,9 @@ export default function InventoryOverview() {
                       </TableHead>
                       <TableHead className="text-center">{t("inv_overview.col_reorder")}</TableHead>
                       <TableHead className="text-center">
-                        <SortBtn col="price" label="سعر البيع" />
+                        <SortBtn col="price" label={t("inventoryOverview.col_sell_price")} />
                       </TableHead>
-                      <TableHead className="text-center">آخر تكلفة</TableHead>
+                      <TableHead className="text-center">{t("inventoryOverview.col_last_cost")}</TableHead>
                       <TableHead>{t("inv_overview.col_status")}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -908,12 +908,12 @@ export default function InventoryOverview() {
                                   <div className="font-medium">{fmtOMR(row.last_purchase_price)}</div>
                                   {margin !== null && (
                                     <div className={`text-xs font-semibold ${margin >= 30 ? "text-green-600" : margin >= 10 ? "text-yellow-600" : "text-red-500"}`}>
-                                      {margin.toFixed(0)}% ربح
+                                      {margin.toFixed(0)}{t("inventoryOverview.profit_pct")}
                                     </div>
                                   )}
                                 </div>
                               ) : (
-                                <span className="text-orange-500 text-xs font-medium">⚠️ غير محدد</span>
+                                <span className="text-orange-500 text-xs font-medium">{t("inventoryOverview.cost_not_set")}</span>
                               )}
                             </TableCell>
 
@@ -921,7 +921,7 @@ export default function InventoryOverview() {
                             <TableCell>
                               {isZero ? (
                                 <Badge variant="destructive" className="text-xs gap-1">
-                                  🔴 نفاد
+                                  {t("inventoryOverview.status_depleted")}
                                 </Badge>
                               ) : isLow ? (
                                 <Badge variant="outline" className="text-xs gap-1 border-yellow-400 text-yellow-700 bg-yellow-50">
@@ -947,10 +947,10 @@ export default function InventoryOverview() {
           {filtered.length > 0 && (
             <div className="flex flex-wrap gap-4 items-center justify-between px-2 py-2 text-sm text-muted-foreground">
               <div className="flex gap-4">
-                <span>إجمالي الكمية المعروضة: <span className="font-bold text-foreground">
-                  {filtered.reduce((s, r) => s + (r.qty_on_hand || 0), 0)} وحدة
+                <span>{t("inventoryOverview.footer_total_qty")} <span className="font-bold text-foreground">
+                  {filtered.reduce((s, r) => s + (r.qty_on_hand || 0), 0)} {t("inventoryOverview.footer_unit")}
                 </span></span>
-                <span>القيمة الإجمالية: <span className="font-bold text-primary">
+                <span>{t("inventoryOverview.footer_total_value")} <span className="font-bold text-primary">
                   {fmtOMR(filtered.reduce((s, r) => s + parseFloat(r.price || "0") * (r.qty_on_hand || 0), 0))}
                 </span></span>
               </div>
@@ -977,7 +977,7 @@ export default function InventoryOverview() {
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   className="pe-9 h-9"
-                  placeholder="بحث بالاسم أو الباركود أو رقم الموديل..."
+                  placeholder={t("inventoryOverview.mov_search_placeholder")}
                   value={movSearch}
                   onChange={e => setMovSearch(e.target.value)}
                 />
@@ -1019,7 +1019,7 @@ export default function InventoryOverview() {
           </div>
 
           <div className="text-xs text-muted-foreground px-1">
-            <span className="font-semibold text-foreground">{filteredMovements.length}</span> حركة
+            <span className="font-semibold text-foreground">{filteredMovements.length}</span> {t("inventoryOverview.mov_count")}
           </div>
 
           <Card className="overflow-hidden">
