@@ -3,6 +3,7 @@ import { Users, UserCheck, Wallet, AlertCircle, Search, Eye, Pencil, X, CreditCa
 
 import { usePayroll }        from "@/hooks/usePayroll";
 import type { PayrollRow }   from "@/lib/payroll-types";
+import { useI18n }           from "@/lib/i18n";
 
 import { Button }            from "@/components/ui/button";
 import { Input }             from "@/components/ui/input";
@@ -18,12 +19,8 @@ import { EmployeeStatusBadge, PaymentStatusBadge } from "@/components/payroll/sh
 import { usePayrollToast }     from "@/components/payroll/shared/usePayrollToast";
 import { formatOMR }           from "@/components/payroll/shared/payrollUtils";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 const PINK = "#E91E63";
 function omr(n: number) { return formatOMR(n); }
-
-// ─── Mobile Card ──────────────────────────────────────────────────────────────
 
 interface MobileCardProps {
   row: PayrollRow;
@@ -62,11 +59,11 @@ function MobileEmployeeCard({ row, selected, onSelect, onView, onEdit }: MobileC
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-
 export default function EmployeesPage() {
   const { employees, payrollRows, bulkPayUnpaid } = usePayroll();
   const toast = usePayrollToast();
+  const { t } = useI18n();
+  const NS = "payroll:employees";
 
   const [search, setSearch]             = useState("");
   const [branchFilter, setBranchFilter] = useState("all");
@@ -109,7 +106,7 @@ export default function EmployeesPage() {
     const count = payrollRows.filter(
       (r) => ids.includes(r.employee.id) && r.paymentStatus !== "paid"
     ).length;
-    bulkPayUnpaid("bank_transfer", "المستخدم الحالي", ids);
+    bulkPayUnpaid("bank_transfer", t(`${NS}.currentUserLabel`), ids);
     toast.successBulkPay(count);
     clearSelection();
   }
@@ -118,84 +115,80 @@ export default function EmployeesPage() {
   function handleEdit(_id: number) {}
 
   return (
-    <div dir="rtl" className="font-sans min-h-screen bg-background">
+    <div className="font-sans min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
         <PageHeader
-          title="الموظفون"
-          subtitle="إدارة بيانات الموظفين والرواتب"
+          title={t(`${NS}.title`)}
+          subtitle={t(`${NS}.subtitle`)}
           actions={
             <Button className="gap-2 text-white font-semibold" style={{ backgroundColor: PINK }}>
-              <span className="text-lg leading-none">+</span>إضافة موظف
+              <span className="text-lg leading-none">+</span>{t(`${NS}.addEmployee`)}
             </Button>
           }
         />
 
-        {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="إجمالي الموظفين"       value={stats.total}                    color="pink"   icon={<Users className="h-4 w-4" />} />
-          <StatCard title="موظفون نشطون"           value={stats.active}                   color="green"  icon={<UserCheck className="h-4 w-4" />} />
-          <StatCard title="إجمالي الرواتب الشهرية" value={omr(stats.totalSalaries)}       color="blue"   icon={<Wallet className="h-4 w-4" />} />
-          <StatCard title="رواتب غير مدفوعة"       value={`${stats.unpaidCount} موظف`}   color="orange" icon={<AlertCircle className="h-4 w-4" />} />
+          <StatCard title={t(`${NS}.statTotal`)}          value={stats.total}                                           color="pink"   icon={<Users className="h-4 w-4" />} />
+          <StatCard title={t(`${NS}.statActive`)}         value={stats.active}                                          color="green"  icon={<UserCheck className="h-4 w-4" />} />
+          <StatCard title={t(`${NS}.statTotalSalaries`)}  value={omr(stats.totalSalaries)}                              color="blue"   icon={<Wallet className="h-4 w-4" />} />
+          <StatCard title={t(`${NS}.statUnpaid`)}         value={t(`${NS}.unpaidUnit`, { count: stats.unpaidCount })}   color="orange" icon={<AlertCircle className="h-4 w-4" />} />
         </div>
 
-        {/* Filters */}
         <Card className="shadow-sm">
           <CardContent className="p-4">
             <div className="flex flex-wrap gap-3">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <Input placeholder="البحث بالاسم..." value={search} onChange={(e) => setSearch(e.target.value)} className="pe-9 text-start" />
+                <Input placeholder={t(`${NS}.searchPlaceholder`)} value={search} onChange={(e) => setSearch(e.target.value)} className="pe-9 text-start" />
               </div>
               <Select value={branchFilter} onValueChange={setBranchFilter}>
-                <SelectTrigger className="w-[180px]"><SelectValue placeholder="الفرع" /></SelectTrigger>
+                <SelectTrigger className="w-[180px]"><SelectValue placeholder={t(`${NS}.branch`)} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">كل الفروع</SelectItem>
+                  <SelectItem value="all">{t(`${NS}.allBranches`)}</SelectItem>
                   {branches.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[150px]"><SelectValue placeholder="الحالة" /></SelectTrigger>
+                <SelectTrigger className="w-[150px]"><SelectValue placeholder={t(`${NS}.status`)} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">كل الحالات</SelectItem>
-                  <SelectItem value="active">نشط</SelectItem>
-                  <SelectItem value="suspended">موقف</SelectItem>
-                  <SelectItem value="inactive">منتهي</SelectItem>
+                  <SelectItem value="all">{t(`${NS}.allStatuses`)}</SelectItem>
+                  <SelectItem value="active">{t(`${NS}.statusActive`)}</SelectItem>
+                  <SelectItem value="suspended">{t(`${NS}.statusSuspended`)}</SelectItem>
+                  <SelectItem value="inactive">{t(`${NS}.statusInactive`)}</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={payFilter} onValueChange={setPayFilter}>
-                <SelectTrigger className="w-[160px]"><SelectValue placeholder="حالة الراتب" /></SelectTrigger>
+                <SelectTrigger className="w-[160px]"><SelectValue placeholder={t(`${NS}.payStatus`)} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">كل الحالات</SelectItem>
-                  <SelectItem value="paid">مدفوع</SelectItem>
-                  <SelectItem value="partial">جزئي</SelectItem>
-                  <SelectItem value="unpaid">غير مدفوع</SelectItem>
+                  <SelectItem value="all">{t(`${NS}.allStatuses`)}</SelectItem>
+                  <SelectItem value="paid">{t(`${NS}.payPaid`)}</SelectItem>
+                  <SelectItem value="partial">{t(`${NS}.payPartial`)}</SelectItem>
+                  <SelectItem value="unpaid">{t(`${NS}.payUnpaid`)}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </CardContent>
         </Card>
 
-        {/* Bulk bar */}
         {someSelected && (
           <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg text-white flex-wrap" style={{ backgroundColor: PINK }}>
-            <span className="font-medium text-sm">تم تحديد {selected.size} موظف</span>
+            <span className="font-medium text-sm">{t(`${NS}.selectedCount`, { count: selected.size })}</span>
             <div className="flex items-center gap-2">
               <Button size="sm" variant="secondary" className="gap-1.5 font-medium" onClick={handleBulkPay}>
-                <CreditCard className="h-4 w-4" />دفع الرواتب
+                <CreditCard className="h-4 w-4" />{t(`${NS}.payAll`)}
               </Button>
               <Button size="sm" variant="ghost" className="text-white hover:bg-white/20 gap-1.5" onClick={clearSelection}>
-                <X className="h-4 w-4" />إلغاء التحديد
+                <X className="h-4 w-4" />{t(`${NS}.clearSelection`)}
               </Button>
             </div>
           </div>
         )}
 
-        {/* Desktop table */}
         <Card className="shadow-sm hidden md:block">
           <CardHeader className="px-4 py-3 border-b">
             <CardTitle className="text-base font-semibold">
-              قائمة الموظفين
+              {t(`${NS}.listTitle`)}
               <span className="text-muted-foreground font-normal text-sm me-2">({filtered.length})</span>
             </CardTitle>
           </CardHeader>
@@ -205,20 +198,20 @@ export default function EmployeesPage() {
                 <TableHead className="w-10 text-start">
                   <Checkbox checked={allSelected} onCheckedChange={(v) => toggleAll(!!v)} />
                 </TableHead>
-                <TableHead className="text-start font-semibold">الاسم</TableHead>
-                <TableHead className="text-start font-semibold">الفرع</TableHead>
-                <TableHead className="text-start font-semibold">المنصب</TableHead>
-                <TableHead className="text-start font-semibold">الحالة</TableHead>
-                <TableHead className="text-start font-semibold">الراتب الشهري</TableHead>
-                <TableHead className="text-start font-semibold">حالة الراتب</TableHead>
-                <TableHead className="text-start font-semibold w-20">إجراءات</TableHead>
+                <TableHead className="text-start font-semibold">{t(`${NS}.thName`)}</TableHead>
+                <TableHead className="text-start font-semibold">{t(`${NS}.thBranch`)}</TableHead>
+                <TableHead className="text-start font-semibold">{t(`${NS}.thPosition`)}</TableHead>
+                <TableHead className="text-start font-semibold">{t(`${NS}.thStatus`)}</TableHead>
+                <TableHead className="text-start font-semibold">{t(`${NS}.thMonthlySalary`)}</TableHead>
+                <TableHead className="text-start font-semibold">{t(`${NS}.thPayStatus`)}</TableHead>
+                <TableHead className="text-start font-semibold w-20">{t(`${NS}.thActions`)}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8}>
-                    <EmptyState message="لا توجد نتائج مطابقة للبحث أو الفلتر المحدد" />
+                    <EmptyState message={t(`${NS}.emptyResults`)} />
                   </TableCell>
                 </TableRow>
               ) : (
@@ -248,18 +241,17 @@ export default function EmployeesPage() {
           </Table>
         </Card>
 
-        {/* Mobile cards */}
         <div className="md:hidden space-y-3">
           {filtered.length > 0 && (
             <div className="flex items-center gap-2 px-1">
               <Checkbox checked={allSelected} onCheckedChange={(v) => toggleAll(!!v)} id="select-all-mobile" />
               <label htmlFor="select-all-mobile" className="text-sm text-muted-foreground cursor-pointer">
-                تحديد الكل ({filtered.length})
+                {t(`${NS}.selectAll`, { count: filtered.length })}
               </label>
             </div>
           )}
           {filtered.length === 0
-            ? <EmptyState message="لا توجد نتائج مطابقة للبحث أو الفلتر المحدد" />
+            ? <EmptyState message={t(`${NS}.emptyResults`)} />
             : filtered.map((row) => (
                 <MobileEmployeeCard
                   key={row.employee.id} row={row}
@@ -272,12 +264,10 @@ export default function EmployeesPage() {
 
         {filtered.length > 0 && (
           <p className="text-xs text-muted-foreground pb-2">
-            عرض {filtered.length} من {employees.length} موظف &nbsp;·&nbsp;
-            الصافي = الأساسي + المستحقات + العمولات − الخصومات − السلف
+            {t(`${NS}.footerText`, { shown: filtered.length, total: employees.length })}
           </p>
         )}
       </div>
     </div>
   );
 }
-
