@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell, Check, CheckCheck, RotateCcw, X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
+import { useI18n } from "@/lib/i18n";
 
 interface Notification {
   id: number;
@@ -15,16 +16,6 @@ interface Notification {
   creator_name: string | null;
 }
 
-function fmtTimeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1)  return "الآن";
-  if (m < 60) return `منذ ${m} دقيقة`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `منذ ${h} ساعة`;
-  return `منذ ${Math.floor(h / 24)} يوم`;
-}
-
 const TYPE_ICON: Record<string, string> = {
   invoice_return: "↩️",
   low_stock: "⚠️",
@@ -34,12 +25,23 @@ export function NotificationBell() {
   const { data: authData } = useAuth();
   const user = authData?.user;
   const isOwner = user?.role === "owner" || user?.role === "admin";
+  const { t } = useI18n();
+  const NS = "common:notifications";
+
+  function fmtTimeAgo(iso: string) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1)  return t(`${NS}.now`);
+    if (m < 60) return t(`${NS}.minutes_ago`, { count: m });
+    const h = Math.floor(m / 60);
+    if (h < 24) return t(`${NS}.hours_ago`, { count: h });
+    return t(`${NS}.days_ago`, { count: Math.floor(h / 24) });
+  }
 
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
 
-  // عدد الإشعارات غير المقروءة — يُحدَّث كل 30 ثانية
   const { data: countData } = useQuery<{ count: number }>({
     queryKey: ["/api/notifications/count"],
     queryFn: () => fetch("/api/notifications/count", { credentials: "include" }).then(r => r.json()),
@@ -48,7 +50,6 @@ export function NotificationBell() {
   });
   const unread = countData?.count ?? 0;
 
-  // قائمة الإشعارات — تُجلب عند فتح القائمة
   const { data: notifications = [], isFetching } = useQuery<Notification[]>({
     queryKey: ["/api/notifications"],
     queryFn: () => fetch("/api/notifications?limit=20", { credentials: "include" }).then(r => r.json()),
@@ -72,7 +73,6 @@ export function NotificationBell() {
     },
   });
 
-  // إغلاق القائمة عند النقر خارجها
   useEffect(() => {
     function handle(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -86,7 +86,7 @@ export function NotificationBell() {
       <button
         onClick={() => setOpen(o => !o)}
         className="relative p-2 text-muted-foreground hover:bg-accent rounded-full transition-colors"
-        aria-label="الإشعارات"
+        aria-label={t(`${NS}.ariaLabel`)}
       >
         <Bell className="w-5 h-5" />
         {unread > 0 && (
@@ -98,22 +98,20 @@ export function NotificationBell() {
 
       {open && (
         <div
-          dir="rtl"
           className="absolute left-0 top-full mt-2 w-80 bg-popover border border-border rounded-xl shadow-xl z-50 overflow-hidden"
         >
-          {/* رأس القائمة */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <span className="font-semibold text-sm">الإشعارات</span>
+            <span className="font-semibold text-sm">{t(`${NS}.title`)}</span>
             <div className="flex items-center gap-2">
               {unread > 0 && (
                 <button
                   onClick={() => markAll.mutate()}
                   disabled={markAll.isPending}
                   className="text-xs text-primary hover:underline flex items-center gap-1"
-                  title="تحديد الكل كمقروء"
+                  title={t(`${NS}.markAllRead`)}
                 >
                   <CheckCheck className="w-3.5 h-3.5" />
-                  قراءة الكل
+                  {t(`${NS}.readAll`)}
                 </button>
               )}
               <button
@@ -122,7 +120,7 @@ export function NotificationBell() {
                   qc.invalidateQueries({ queryKey: ["/api/notifications/count"] });
                 }}
                 className="text-muted-foreground hover:text-foreground"
-                title="تحديث"
+                title={t(`${NS}.refresh`)}
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>
@@ -132,14 +130,13 @@ export function NotificationBell() {
             </div>
           </div>
 
-          {/* قائمة الإشعارات */}
           <div className="max-h-96 overflow-y-auto">
             {isFetching && notifications.length === 0 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">جاري التحميل…</div>
+              <div className="py-8 text-center text-sm text-muted-foreground">{t(`${NS}.loading`)}</div>
             ) : !isOwner ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">الإشعارات للمالك فقط</div>
+              <div className="py-8 text-center text-sm text-muted-foreground">{t(`${NS}.ownerOnly`)}</div>
             ) : notifications.length === 0 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">لا توجد إشعارات</div>
+              <div className="py-8 text-center text-sm text-muted-foreground">{t(`${NS}.empty`)}</div>
             ) : (
               notifications.map(n => (
                 <div
@@ -165,7 +162,7 @@ export function NotificationBell() {
                       onClick={() => markRead.mutate(n.id)}
                       disabled={markRead.isPending}
                       className="shrink-0 text-primary hover:text-primary/70 mt-0.5"
-                      title="تحديد كمقروء"
+                      title={t(`${NS}.markRead`)}
                     >
                       <Check className="w-4 h-4" />
                     </button>

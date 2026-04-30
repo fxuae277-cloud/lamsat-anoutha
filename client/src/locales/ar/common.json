@@ -1,4 +1,19 @@
 {
+  "notifications": {
+    "title": "الإشعارات",
+    "ariaLabel": "الإشعارات",
+    "markAllRead": "تحديد الكل كمقروء",
+    "readAll": "قراءة الكل",
+    "refresh": "تحديث",
+    "loading": "جاري التحميل…",
+    "ownerOnly": "الإشعارات للمالك فقط",
+    "empty": "لا توجد إشعارات",
+    "markRead": "تحديد كمقروء",
+    "now": "الآن",
+    "minutes_ago": "منذ {{count}} دقيقة",
+    "hours_ago": "منذ {{count}} ساعة",
+    "days_ago": "منذ {{count}} يوم"
+  },
   "common": {
     "error": "خطأ",
     "success": "تم بنجاح",

@@ -1,4 +1,19 @@
 {
+  "notifications": {
+    "title": "Notifications",
+    "ariaLabel": "Notifications",
+    "markAllRead": "Mark all as read",
+    "readAll": "Read all",
+    "refresh": "Refresh",
+    "loading": "Loading…",
+    "ownerOnly": "Notifications are for owner only",
+    "empty": "No notifications",
+    "markRead": "Mark as read",
+    "now": "Now",
+    "minutes_ago": "{{count}} minutes ago",
+    "hours_ago": "{{count}} hours ago",
+    "days_ago": "{{count}} days ago"
+  },
   "common": {
     "error": "Error",
     "success": "Success",
