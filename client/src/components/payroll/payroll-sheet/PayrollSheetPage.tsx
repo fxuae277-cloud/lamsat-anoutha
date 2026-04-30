@@ -11,6 +11,7 @@ import {
 
 import { usePayroll }                from "@/hooks/usePayroll";
 import type { PaymentMethod, PayrollRow } from "@/lib/payroll-types";
+import { useI18n }                   from "@/lib/i18n";
 
 import { Button }           from "@/components/ui/button";
 import { Input }            from "@/components/ui/input";
@@ -36,15 +37,9 @@ import { PaymentStatusBadge }  from "@/components/payroll/shared/PayrollBadge";
 import { usePayrollToast }     from "@/components/payroll/shared/usePayrollToast";
 import { MONTHS_AR, YEARS, formatOMR, METHOD_LABELS } from "@/components/payroll/shared/payrollUtils";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 const PINK = "#E91E63";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function omr(n: number) { return formatOMR(n); }
-
-// ─── Pay Dialog ───────────────────────────────────────────────────────────────
 
 interface PayDialogProps {
   row: PayrollRow | null;
@@ -56,6 +51,9 @@ interface PayDialogProps {
 function PayDialog({ row, month, year, onClose }: PayDialogProps) {
   const { addPayment } = usePayroll();
   const toast = usePayrollToast();
+  const { t } = useI18n();
+  const NS = "payroll:sheet";
+  const NS_EMP = "payroll:employees";
 
   const remaining = row ? Math.max(0, row.netSalary - row.amountPaid) : 0;
 
@@ -77,7 +75,7 @@ function PayDialog({ row, month, year, onClose }: PayDialogProps) {
   function handleSubmit() {
     const parsed = parseFloat(amount);
     if (!amount || isNaN(parsed) || parsed <= 0) {
-      setError("يرجى إدخال مبلغ صحيح أكبر من صفر");
+      setError(t(`${NS}.errorPositiveAmount`));
       return;
     }
     if (!row) return;
@@ -88,7 +86,7 @@ function PayDialog({ row, month, year, onClose }: PayDialogProps) {
       year,
       amount: parsed,
       method,
-      paidBy: "المستخدم الحالي",
+      paidBy: t(`${NS_EMP}.currentUserLabel`),
     });
     toast.successPayment(row.employee.name, omr(parsed));
     handleClose();
@@ -96,44 +94,41 @@ function PayDialog({ row, month, year, onClose }: PayDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="sm:max-w-[440px]" dir="rtl">
+      <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <CreditCard className="h-5 w-5" style={{ color: PINK }} />
-            تسجيل دفعة راتب
+            {t(`${NS}.registerPayment`)}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            ستُحدَّث حالة الراتب فوراً بعد التسجيل
+            {t(`${NS}.registerPaymentDesc`)}
           </DialogDescription>
         </DialogHeader>
 
         {row && (
           <div className="space-y-4 py-1">
-            {/* Employee (readonly) */}
             <div className="rounded-lg bg-muted/50 p-3 space-y-0.5">
               <p className="font-semibold text-sm">{row.employee.name}</p>
               <p className="text-xs text-muted-foreground">{row.employee.position}</p>
             </div>
 
-            {/* Net / Remaining (readonly) */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">صافي الراتب</label>
+                <label className="text-xs text-muted-foreground">{t(`${NS}.netSalary`)}</label>
                 <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium tabular-nums text-start">
                   {omr(row.netSalary)}
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">المبلغ المطلوب</label>
+                <label className="text-xs text-muted-foreground">{t(`${NS}.amountDue`)}</label>
                 <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium tabular-nums text-start">
                   {omr(remaining)}
                 </div>
               </div>
             </div>
 
-            {/* Amount (editable) */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">المبلغ المدفوع (ر.ع)</label>
+              <label className="text-sm font-medium">{t(`${NS}.amountPaidLabel`)}</label>
               <Input
                 type="number"
                 min="0.001"
@@ -144,9 +139,8 @@ function PayDialog({ row, month, year, onClose }: PayDialogProps) {
               />
             </div>
 
-            {/* Method */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">طريقة الدفع</label>
+              <label className="text-sm font-medium">{t(`${NS}.paymentMethod`)}</label>
               <Select value={method} onValueChange={(v) => setMethod(v as PaymentMethod)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -157,11 +151,10 @@ function PayDialog({ row, month, year, onClose }: PayDialogProps) {
               </Select>
             </div>
 
-            {/* Note */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">ملاحظة (اختياري)</label>
+              <label className="text-sm font-medium">{t(`${NS}.noteLabel`)}</label>
               <Textarea
-                placeholder="ملاحظات إضافية..."
+                placeholder={t(`${NS}.notePlaceholder`)}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 className="text-start resize-none"
@@ -184,16 +177,14 @@ function PayDialog({ row, month, year, onClose }: PayDialogProps) {
             style={{ backgroundColor: PINK }}
           >
             <CheckCircle2 className="h-4 w-4" />
-            تأكيد الدفع
+            {t(`${NS}.confirmPayment`)}
           </Button>
-          <Button variant="outline" onClick={handleClose}>إلغاء</Button>
+          <Button variant="outline" onClick={handleClose}>{t(`${NS}.cancel`)}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PayrollSheetPage() {
   const {
@@ -205,6 +196,9 @@ export default function PayrollSheetPage() {
     bulkPayUnpaid,
   } = usePayroll();
   const toast = usePayrollToast();
+  const { t } = useI18n();
+  const NS = "payroll:sheet";
+  const NS_EMP = "payroll:employees";
 
   const [payRow, setPayRow] = useState<PayrollRow | null>(null);
   const [payKey, setPayKey] = useState(0);
@@ -220,11 +214,10 @@ export default function PayrollSheetPage() {
     const count = payrollRows.filter(
       (r) => r.employee.status === "active" && r.paymentStatus !== "paid"
     ).length;
-    bulkPayUnpaid("bank_transfer", "المستخدم الحالي");
+    bulkPayUnpaid("bank_transfer", t(`${NS_EMP}.currentUserLabel`));
     toast.successBulkPay(count);
   }
 
-  // Summary totals (active employees only)
   const totals = useMemo(() => {
     const activeRows  = payrollRows.filter((r) => r.employee.status === "active");
     const base        = activeRows.reduce((s, r) => s + r.employee.baseSalary, 0);
@@ -236,7 +229,6 @@ export default function PayrollSheetPage() {
     return { base, bonuses, deductions, net, paid, paidPct };
   }, [payrollRows]);
 
-  // Footer totals (all rows in table)
   const footerTotals = useMemo(() => ({
     base:       payrollRows.reduce((s, r) => s + r.employee.baseSalary, 0),
     bonuses:    payrollRows.reduce((s, r) => s + r.totalBonus + r.totalOvertime, 0),
@@ -271,7 +263,7 @@ export default function PayrollSheetPage() {
 
       <Button variant="outline" className="gap-1.5" onClick={() => window.print()}>
         <Printer className="h-4 w-4" />
-        طباعة / PDF
+        {t(`${NS}.printPdf`)}
       </Button>
 
       <Button
@@ -281,7 +273,7 @@ export default function PayrollSheetPage() {
         onClick={handleBulkPay}
       >
         <CreditCard className="h-4 w-4" />
-        دفع الكل
+        {t(`${NS}.payAll`)}
         {unpaidCount > 0 && (
           <span className="bg-white/25 rounded-full px-1.5 py-0.5 text-xs font-bold">
             {unpaidCount}
@@ -293,7 +285,6 @@ export default function PayrollSheetPage() {
 
   return (
     <>
-      {/* ── Print styles ── */}
       <style>{`
         @media print {
           body * { visibility: hidden; }
@@ -304,43 +295,42 @@ export default function PayrollSheetPage() {
         }
       `}</style>
 
-      <div dir="rtl" className="font-sans min-h-screen bg-background">
+      <div className="font-sans min-h-screen bg-background">
         <div className="max-w-7xl mx-auto px-4 py-6 space-y-6" id="payroll-print-area">
 
           <PageHeader
-            title="كشف الرواتب"
+            title={t(`${NS}.title`)}
             subtitle={`${MONTHS_AR[selectedMonth - 1]} ${selectedYear}`}
             actions={monthYearActions}
           />
 
-          {/* ── Summary cards ── */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <StatCard
-              title="إجمالي الرواتب الأساسية"
+              title={t(`${NS}.statBase`)}
               value={omr(totals.base)}
               color="pink"
               icon={<Wallet className="h-4 w-4" />}
             />
             <StatCard
-              title="إجمالي المستحقات والعمولات"
+              title={t(`${NS}.statBonus`)}
               value={omr(totals.bonuses)}
               color="green"
               icon={<TrendingUp className="h-4 w-4" />}
             />
             <StatCard
-              title="إجمالي الخصومات والسلف"
+              title={t(`${NS}.statDeduction`)}
               value={omr(totals.deductions)}
               color="orange"
               icon={<TrendingDown className="h-4 w-4" />}
             />
             <StatCard
-              title="صافي الرواتب"
+              title={t(`${NS}.statNet`)}
               value={omr(totals.net)}
               color="blue"
               icon={<DollarSign className="h-4 w-4" />}
             />
             <StatCard
-              title="نسبة المدفوع"
+              title={t(`${NS}.statPaidPct`)}
               value={`${totals.paidPct}%`}
               color="purple"
               icon={<CheckCircle2 className="h-4 w-4" />}
@@ -348,22 +338,21 @@ export default function PayrollSheetPage() {
             />
           </div>
 
-          {/* ── Payroll table ── */}
           <Card className="shadow-sm">
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/40">
-                    <TableHead className="text-start font-semibold min-w-[160px]">الموظف</TableHead>
-                    <TableHead className="text-start font-semibold">الراتب الأساسي</TableHead>
-                    <TableHead className="text-start font-semibold">المستحقات</TableHead>
-                    <TableHead className="text-start font-semibold">الخصومات</TableHead>
+                    <TableHead className="text-start font-semibold min-w-[160px]">{t(`${NS}.thEmployee`)}</TableHead>
+                    <TableHead className="text-start font-semibold">{t(`${NS}.thBase`)}</TableHead>
+                    <TableHead className="text-start font-semibold">{t(`${NS}.thBonus`)}</TableHead>
+                    <TableHead className="text-start font-semibold">{t(`${NS}.thDeduction`)}</TableHead>
                     <TableHead className="text-start font-semibold" style={{ color: PINK }}>
-                      صافي الراتب
+                      {t(`${NS}.thNet`)}
                     </TableHead>
-                    <TableHead className="text-start font-semibold">حالة الدفع</TableHead>
-                    <TableHead className="text-start font-semibold">المبلغ المدفوع</TableHead>
-                    <TableHead className="text-start font-semibold w-20 no-print">إجراءات</TableHead>
+                    <TableHead className="text-start font-semibold">{t(`${NS}.thPayStatus`)}</TableHead>
+                    <TableHead className="text-start font-semibold">{t(`${NS}.thAmountPaid`)}</TableHead>
+                    <TableHead className="text-start font-semibold w-20 no-print">{t(`${NS}.thActions`)}</TableHead>
                   </TableRow>
                 </TableHeader>
 
@@ -371,7 +360,7 @@ export default function PayrollSheetPage() {
                   {payrollRows.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={8}>
-                        <EmptyState message="لا توجد بيانات لهذه الفترة" />
+                        <EmptyState message={t(`${NS}.empty`)} />
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -431,7 +420,7 @@ export default function PayrollSheetPage() {
                               onClick={() => openPay(row)}
                             >
                               <CreditCard className="h-3.5 w-3.5" />
-                              {isPaid ? "مدفوع" : "دفع"}
+                              {isPaid ? t(`${NS}.btnPaid`) : t(`${NS}.btnPay`)}
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -440,14 +429,13 @@ export default function PayrollSheetPage() {
                   )}
                 </TableBody>
 
-                {/* ── Footer totals ── */}
                 {payrollRows.length > 0 && (
                   <tfoot>
                     <tr className="border-t-2 bg-muted/50 font-bold text-sm">
                       <td className="px-4 py-3 text-start">
-                        الإجمالي
+                        {t(`${NS}.footerTotal`)}
                         <span className="text-xs font-normal text-muted-foreground me-1">
-                          ({payrollRows.length} موظف)
+                          {t(`${NS}.footerCount`, { count: payrollRows.length })}
                         </span>
                       </td>
                       <td className="px-4 py-3 tabular-nums">{omr(footerTotals.base)}</td>
@@ -461,7 +449,7 @@ export default function PayrollSheetPage() {
                         {omr(footerTotals.net)}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="text-xs text-muted-foreground">{totals.paidPct}% مدفوع</span>
+                        <span className="text-xs text-muted-foreground">{t(`${NS}.footerPaidPct`, { pct: totals.paidPct })}</span>
                       </td>
                       <td className="px-4 py-3 tabular-nums text-muted-foreground">
                         {omr(footerTotals.paid)}
@@ -474,15 +462,13 @@ export default function PayrollSheetPage() {
             </div>
           </Card>
 
-          {/* ── Footer note ── */}
           <p className="text-xs text-muted-foreground pb-2 no-print">
-            صافي الراتب = الراتب الأساسي + المستحقات + العمولات − الخصومات − السلف
+            {t(`${NS}.footerNote`)}
           </p>
 
         </div>
       </div>
 
-      {/* ── Pay Dialog ── */}
       <PayDialog
         key={payKey}
         row={payRow}
