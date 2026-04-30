@@ -262,7 +262,7 @@ function TransfersTab() {
         <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 items-end">
           <div className="space-y-2">
             <label className="text-sm font-medium flex items-center gap-1">
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">م</span>
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">{"م"}</span>
               {t("transfers.from_location")}
             </label>
             <Select value={fromLoc} onValueChange={(v) => { setFromLoc(v); setTransferQtys({}); if (v === toLoc) setToLoc(""); }}>
@@ -277,12 +277,12 @@ function TransfersTab() {
           <div className="flex items-center justify-center pb-1">
             <div className="flex flex-col items-center gap-1">
               <ArrowLeft className="w-6 h-6 text-primary rotate-180" />
-              <span className="text-[10px] text-muted-foreground">اتجاه</span>
+              <span className="text-[10px] text-muted-foreground">{t("transfers_page.direction_label")}</span>
             </div>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium flex items-center gap-1">
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold">و</span>
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold">{"و"}</span>
               {t("transfers.to_location")}
             </label>
             <Select value={toLoc} onValueChange={setToLoc}>
@@ -448,8 +448,8 @@ function TransfersTab() {
   const monthlyChartData = Object.entries(monthlyMap).map(([k,v]) => ({ name: MONTH_AR[k.slice(5)]||k.slice(5), تحويلات: v }));
 
   const statusPieData = [
-    { name: "مكتملة", value: completedAll, color: "#10b981" },
-    { name: "قيد التنفيذ", value: pendingAll, color: "#f59e0b" },
+    { name: t("transfers_page.status_completed"), value: completedAll, color: "#10b981" },
+    { name: t("transfers_page.status_in_progress"), value: pendingAll, color: "#f59e0b" },
   ].filter(d => d.value > 0);
 
   const locCounts: Record<string,number> = {};
@@ -481,9 +481,9 @@ function TransfersTab() {
         <div>
           <h3 className="text-xl font-bold flex items-center gap-2">
             <ArrowRightLeft className="w-5 h-5 text-primary" />
-            التحويلات بين المخازن
+            {t("transfers_page.header_title")}
           </h3>
-          <p className="text-sm text-muted-foreground mt-0.5">متابعة عمليات نقل المخزون بين المواقع</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("transfers_page.header_subtitle")}</p>
         </div>
         <Button onClick={() => setMode("create")} className="gap-2" data-testid="button-create-transfer">
           <Plus className="w-4 h-4" /> {t("transfers.create_transfer")}
@@ -493,10 +493,10 @@ function TransfersTab() {
       {/* ── KPI Cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: "إجمالي هذا الشهر", value: thisMonthTx.length, icon: BarChart3, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
-          { label: "مكتملة (الكل)", value: completedAll, icon: CheckCircle2, color: "text-green-600", bg: "bg-green-50", border: "border-green-100" },
-          { label: "قيد التنفيذ", value: pendingAll, icon: Clock, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" },
-          { label: "معدل الإنجاز", value: `${completionRate}%`, icon: TrendingUp, color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-100" },
+          { label: t("transfers_page.kpi_this_month"), value: thisMonthTx.length, icon: BarChart3, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
+          { label: t("transfers_page.kpi_completed_all"), value: completedAll, icon: CheckCircle2, color: "text-green-600", bg: "bg-green-50", border: "border-green-100" },
+          { label: t("transfers_page.kpi_pending"), value: pendingAll, icon: Clock, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" },
+          { label: t("transfers_page.kpi_completion_rate"), value: `${completionRate}%`, icon: TrendingUp, color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-100" },
         ].map((kpi, i) => (
           <Card key={i} className={`border ${kpi.border} shadow-sm hover:shadow-md transition-shadow`}>
             <CardContent className="p-4">
@@ -518,7 +518,7 @@ function TransfersTab() {
           {/* Monthly bar chart */}
           <Card className="shadow-sm">
             <CardHeader className="pb-2 pt-4 px-4">
-              <CardTitle className="text-sm font-semibold text-muted-foreground">التحويلات الشهرية (آخر 6 أشهر)</CardTitle>
+              <CardTitle className="text-sm font-semibold text-muted-foreground">{t("transfers_page.monthly_chart_title")}</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <ResponsiveContainer width="100%" height={160}>
@@ -536,7 +536,7 @@ function TransfersTab() {
           {/* Status donut */}
           <Card className="shadow-sm">
             <CardHeader className="pb-2 pt-4 px-4">
-              <CardTitle className="text-sm font-semibold text-muted-foreground">توزيع حالات التحويلات</CardTitle>
+              <CardTitle className="text-sm font-semibold text-muted-foreground">{t("transfers_page.status_dist_title")}</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <div className="flex items-center gap-4">
@@ -560,7 +560,7 @@ function TransfersTab() {
                   ))}
                   <div className="pt-2 border-t">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">الإجمالي</span>
+                      <span className="text-xs text-muted-foreground">{t("transfers_page.total_label")}</span>
                       <span className="font-bold text-sm">{(transfers as any[]).length}</span>
                     </div>
                   </div>
@@ -577,18 +577,18 @@ function TransfersTab() {
           {/* Active locations */}
           <Card className="shadow-sm">
             <CardHeader className="pb-2 pt-4 px-4">
-              <CardTitle className="text-sm font-semibold text-muted-foreground">أكثر المواقع نشاطاً</CardTitle>
+              <CardTitle className="text-sm font-semibold text-muted-foreground">{t("transfers_page.active_locations_title")}</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4 space-y-2">
               {activeLocations.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">لا توجد بيانات</p>
+                <p className="text-sm text-muted-foreground text-center py-4">{t("transfers_page.no_data")}</p>
               ) : activeLocations.map(([name, count], i) => (
                 <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-primary/60" />
                     <span className="text-sm font-medium">{name}</span>
                   </div>
-                  <Badge variant="outline" className="font-bold">{count} تحويل</Badge>
+                  <Badge variant="outline" className="font-bold">{count} {t("transfers_page.transfer_count")}</Badge>
                 </div>
               ))}
             </CardContent>
@@ -597,15 +597,15 @@ function TransfersTab() {
           {/* Quick stats */}
           <Card className="shadow-sm">
             <CardHeader className="pb-2 pt-4 px-4">
-              <CardTitle className="text-sm font-semibold text-muted-foreground">إحصائيات سريعة</CardTitle>
+              <CardTitle className="text-sm font-semibold text-muted-foreground">{t("transfers_page.quick_stats_title")}</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4 space-y-2">
               {[
-                { label: "إجمالي التحويلات (كل الوقت)", value: (transfers as any[]).length, color: "" },
-                { label: "تحويلات هذا الشهر", value: thisMonthTx.length, color: "text-blue-600" },
-                { label: "مكتملة هذا الشهر", value: thisMonthTx.filter((tx:any)=>tx.status==="approved").length, color: "text-green-600" },
-                { label: "معدل إنجاز الكل", value: `${completionRate}%`, color: "text-purple-600" },
-                { label: "عدد المواقع النشطة", value: Object.keys(locCounts).length, color: "text-amber-600" },
+                { label: t("transfers_page.stat_all_time"), value: (transfers as any[]).length, color: "" },
+                { label: t("transfers_page.stat_this_month"), value: thisMonthTx.length, color: "text-blue-600" },
+                { label: t("transfers_page.stat_completed_month"), value: thisMonthTx.filter((tx:any)=>tx.status==="approved").length, color: "text-green-600" },
+                { label: t("transfers_page.stat_completion_rate"), value: `${completionRate}%`, color: "text-purple-600" },
+                { label: t("transfers_page.stat_active_locations"), value: Object.keys(locCounts).length, color: "text-amber-600" },
               ].map((stat, i) => (
                 <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
                   <span className="text-sm text-muted-foreground">{stat.label}</span>
@@ -622,15 +622,15 @@ function TransfersTab() {
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b bg-muted/30">
           <h4 className="font-semibold text-sm flex items-center gap-2">
             <ArrowRightLeft className="w-4 h-4 text-muted-foreground" />
-            سجل التحويلات التفصيلي
+            {t("transfers_page.table_title")}
           </h4>
           <div className="flex flex-wrap gap-2 items-center">
             {/* Filter pills */}
             <div className="flex gap-1">
               {[
-                { key: "all", label: "الكل", count: (transfers as any[]).length },
-                { key: "approved", label: "مكتمل", count: completedAll },
-                { key: "pending", label: "قيد التنفيذ", count: pendingAll },
+                { key: "all", label: t("transfers_page.pill_all"), count: (transfers as any[]).length },
+                { key: "approved", label: t("transfers_page.pill_completed"), count: completedAll },
+                { key: "pending", label: t("transfers_page.pill_in_progress"), count: pendingAll },
               ].map(f => (
                 <button
                   key={f.key}
@@ -649,7 +649,7 @@ function TransfersTab() {
             <div className="relative">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
-                placeholder="بحث..."
+                placeholder={t("transfers_page.search_placeholder")}
                 className="pe-9 h-8 w-44 text-sm"
                 value={txSearch}
                 onChange={e => setTxSearch(e.target.value)}
@@ -697,15 +697,15 @@ function TransfersTab() {
                   <TableCell>
                     {tx.status === "approved" ? (
                       <Badge className="bg-green-50 text-green-700 border-green-200 text-xs gap-1">
-                        <CheckCircle2 className="w-3 h-3" /> مكتمل
+                        <CheckCircle2 className="w-3 h-3" /> {t("transfers_page.status_completed_badge")}
                       </Badge>
                     ) : tx.status === "cancelled" ? (
                       <Badge className="bg-red-50 text-red-700 border-red-200 text-xs gap-1">
-                        <XCircle className="w-3 h-3" /> ملغي
+                        <XCircle className="w-3 h-3" /> {t("transfers_page.status_cancelled_badge")}
                       </Badge>
                     ) : (
                       <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-xs gap-1">
-                        <Clock className="w-3 h-3" /> قيد التنفيذ
+                        <Clock className="w-3 h-3" /> {t("transfers_page.status_pending_badge")}
                       </Badge>
                     )}
                   </TableCell>
@@ -781,6 +781,7 @@ function TransfersTab() {
                   </tr>`).join("");
                 const win = window.open("", "_blank", "width=900,height=700");
                 if (!win) return;
+                // i18n-ignore-block-start — Arabic-only print receipt HTML template
                 win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8">
                   <title>تحويل #${selectedTransfer?.id}</title>
                   <style>
@@ -803,13 +804,14 @@ function TransfersTab() {
                   </table>
                   <br/><button onclick="window.print()">طباعة</button>
                   </body></html>`);
+                // i18n-ignore-block-end
                 win.document.close();
                 win.focus();
                 setTimeout(() => win.print(), 400);
               }}
             >
               <Printer className="w-4 h-4" />
-              طباعة
+              {t("transfers_page.print_btn")}
             </Button>
             <Button variant="outline" onClick={() => setSelectedTransfer(null)}>{t("common.close")}</Button>
           </DialogFooter>
@@ -880,10 +882,10 @@ function LedgerTab() {
         <div className="w-full md:w-44">
           <Select value={ledgerType} onValueChange={setLedgerType}>
             <SelectTrigger data-testid="select-ledger-type">
-              <SelectValue placeholder="كل الأنواع" />
+              <SelectValue placeholder={t("ledger_page.all_types_placeholder")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">كل الأنواع</SelectItem>
+              <SelectItem value="all">{t("ledger_page.all_types_placeholder")}</SelectItem>
               <SelectItem value="sale">{t("inv_ledger.sale")}</SelectItem>
               <SelectItem value="purchase_posted">{t("inv_ledger.purchase_posted")}</SelectItem>
               <SelectItem value="transfer_in">{t("inv_ledger.transfer_in")}</SelectItem>
@@ -917,9 +919,9 @@ function LedgerTab() {
               <TableHead>{t("products.variant_color")}</TableHead>
               <TableHead>{t("products.variant_size")}</TableHead>
               <TableHead>{t("inv_balances.location")}</TableHead>
-              <TableHead className="text-start">قبل</TableHead>
+              <TableHead className="text-start">{t("ledger_page.col_before")}</TableHead>
               <TableHead className="text-start">{t("inv_ledger.qty_change")}</TableHead>
-              <TableHead className="text-start">بعد</TableHead>
+              <TableHead className="text-start">{t("ledger_page.col_after")}</TableHead>
               <TableHead>{t("common.employee")}</TableHead>
               <TableHead>{t("inv_ledger.reference")}</TableHead>
             </TableRow>
@@ -965,6 +967,7 @@ function LedgerTab() {
 }
 
 function InventoryKPIs() {
+  const { t } = useI18n();
   const { data: products = [] } = useQuery<any[]>({
     queryKey: ["/api/products"],
     queryFn: getQueryFn({ on401: "throw" }),
@@ -985,34 +988,34 @@ function InventoryKPIs() {
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" dir="rtl">
       <Card className="border-none shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">إجمالي المنتجات</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">{t("inventory_page_kpis.total_products_title")}</CardTitle>
           <div className="p-2 bg-primary/10 rounded-full text-primary"><Layers className="w-4 h-4" /></div>
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{totalProducts}</div>
-          <p className="text-xs text-muted-foreground mt-1">منتج مسجل</p>
+          <p className="text-xs text-muted-foreground mt-1">{t("inventory_page_kpis.total_products_sub")}</p>
         </CardContent>
       </Card>
 
       <Card className="border-none shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">قيمة المخزون</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">{t("inventory_page_kpis.inventory_value_title")}</CardTitle>
           <div className="p-2 bg-emerald-50 rounded-full text-emerald-600"><TrendingUp className="w-4 h-4" /></div>
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{inventoryValue.toFixed(3)}</div>
-          <p className="text-xs text-muted-foreground mt-1">ريال عماني</p>
+          <p className="text-xs text-muted-foreground mt-1">{t("inventory_page_kpis.inventory_value_sub")}</p>
         </CardContent>
       </Card>
 
       <Card className="border-none shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">منخفض المخزون</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">{t("inventory_page_kpis.low_stock_title")}</CardTitle>
           <div className="p-2 bg-red-50 rounded-full text-red-500"><AlertTriangle className="w-4 h-4" /></div>
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold text-red-600">{lowStockCount}</div>
-          <p className="text-xs text-muted-foreground mt-1">منتج تحت الحد الأدنى</p>
+          <p className="text-xs text-muted-foreground mt-1">{t("inventory_page_kpis.low_stock_sub")}</p>
         </CardContent>
       </Card>
     </div>
