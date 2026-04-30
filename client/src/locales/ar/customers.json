@@ -137,7 +137,21 @@
     "a4_vat": "الضريبة (5%)",
     "a4_grand_total": "الإجمالي النهائي",
     "a4_thanks": "شكراً لتسوقكم معنا",
-    "a4_brand": "لمسة أنوثة - سلطنة عمان"
+    "a4_brand": "لمسة أنوثة - سلطنة عمان",
+    "save_failed": "فشل الحفظ",
+    "payment_reference_label": "الرقم المرجعي:",
+    "customer_label": "العميلة:",
+    "invoice_number_label": "رقم الفاتورة:",
+    "products_label": "المنتجات:",
+    "total_label": "الإجمالي:",
+    "payment_reference": "الرقم المرجعي",
+    "customer": "العميلة",
+    "enter_payment_reference": "أدخل الرقم المرجعي",
+    "no_payment_reference": "لا يوجد رقم مرجعي",
+    "edit_payment_reference": "تعديل الرقم المرجعي",
+    "search_placeholder_advanced": "بحث برقم الفاتورة أو اسم العميلة أو الهاتف أو الرقم المرجعي...",
+    "apply": "تطبيق",
+    "guest": "زائر"
   },
   "orders": {
     "title": "طلبات السوشيال ميديا",

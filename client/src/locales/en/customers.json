@@ -137,7 +137,21 @@
     "a4_vat": "VAT (5%)",
     "a4_grand_total": "Grand Total",
     "a4_thanks": "Thank you for shopping with us",
-    "a4_brand": "Lamsat Onotha - Oman"
+    "a4_brand": "Lamsat Onotha - Oman",
+    "save_failed": "Save Failed",
+    "payment_reference_label": "Payment Reference:",
+    "customer_label": "Customer:",
+    "invoice_number_label": "Invoice Number:",
+    "products_label": "Products:",
+    "total_label": "Total:",
+    "payment_reference": "Payment Reference",
+    "customer": "Customer",
+    "enter_payment_reference": "Enter payment reference",
+    "no_payment_reference": "No payment reference",
+    "edit_payment_reference": "Edit payment reference",
+    "search_placeholder_advanced": "Search by invoice number, customer name, phone, or reference...",
+    "apply": "Apply",
+    "guest": "Guest"
   },
   "orders": {
     "title": "Social Media Orders",
