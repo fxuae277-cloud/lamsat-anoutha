@@ -115,12 +115,12 @@ export default function Finance() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "تم الإيداع بنجاح" });
+      toast({ title: t("finance.deposit_success") });
       setDepositOpen(false); setTxAmount(""); setTxNote("");
       queryClient.invalidateQueries({ queryKey: ["/api/cash-ledger"] });
       queryClient.invalidateQueries({ queryKey: ["/api/cash-ledger/summary"] });
     },
-    onError: (err: any) => toast({ title: "خطأ", description: err.message, variant: "destructive" }),
+    onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
 
   const withdrawalMutation = useMutation({
@@ -129,17 +129,17 @@ export default function Finance() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "تم السحب بنجاح" });
+      toast({ title: t("finance.withdrawal_success") });
       setWithdrawalOpen(false); setTxAmount(""); setTxNote("");
       queryClient.invalidateQueries({ queryKey: ["/api/cash-ledger"] });
       queryClient.invalidateQueries({ queryKey: ["/api/cash-ledger/summary"] });
     },
-    onError: (err: any) => toast({ title: "خطأ", description: err.message, variant: "destructive" }),
+    onError: (err: any) => toast({ title: t("common.error"), description: err.message, variant: "destructive" }),
   });
 
   const branchName = (id: number) => {
     const b = branches.find(b => b.id === id);
-    if (!b) return `فرع ${id}`;
+    if (!b) return `${t("finance.branch_prefix")} ${id}`;
     return b.address ? `${b.name} - ${b.address}` : b.name;
   };
 
@@ -201,9 +201,9 @@ export default function Finance() {
       {/* Header */}
       <div className="text-center mb-4">
         <h1 className="text-2xl font-bold text-primary flex items-center justify-center gap-2">
-          <Calculator className="h-6 w-6" /> المحاسبة اليومية
+          <Calculator className="h-6 w-6" /> {t("finance.title")}
         </h1>
-        <p className="text-sm text-muted-foreground">كشف الصندوق — القيود والأرصدة</p>
+        <p className="text-sm text-muted-foreground">{t("finance.subtitle")}</p>
       </div>
 
       {/* Filters bar */}
@@ -215,10 +215,10 @@ export default function Finance() {
         {isAdmin && (
           <Select value={selectedBranch} onValueChange={setSelectedBranch}>
             <SelectTrigger className="w-52">
-              <SelectValue placeholder="كل الفروع" />
+              <SelectValue placeholder={t("finance.all_branches")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">كل الفروع</SelectItem>
+              <SelectItem value="all">{t("finance.all_branches")}</SelectItem>
               {branches.map(b => (
                 <SelectItem key={b.id} value={String(b.id)}>
                   {b.name}{b.address ? ` - ${b.address}` : ""}
@@ -228,54 +228,54 @@ export default function Finance() {
           </Select>
         )}
         <Button variant="outline" size="sm" onClick={() => setDepositOpen(true)}>
-          <ArrowDownCircle className="h-4 w-4 ms-1" /> إيداع
+          <ArrowDownCircle className="h-4 w-4 ms-1" /> {t("finance.deposit")}
         </Button>
         <Button variant="outline" size="sm" onClick={() => setWithdrawalOpen(true)}>
-          <ArrowUpCircle className="h-4 w-4 ms-1" /> سحب
+          <ArrowUpCircle className="h-4 w-4 ms-1" /> {t("finance.withdrawal")}
         </Button>
         <Button variant="outline" size="sm" onClick={printCashStatement}>
-          <Printer className="h-4 w-4 ms-1" /> طباعة
+          <Printer className="h-4 w-4 ms-1" /> {t("common.print")}
         </Button>
       </div>
 
       {/* KPI Cards */}
       {summary && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <KpiCard label="رصيد الافتتاح"    value={fmtOMR(summary.openingCash)}   icon={Wallet}      color="text-gray-700" />
-          <KpiCard label="مبيعات نقدية"     value={fmtOMR(summary.cashSales)}     icon={TrendingUp}  color="text-green-600" />
-          <KpiCard label="مصروفات نقدية"    value={fmtOMR(summary.cashExpenses)}  icon={TrendingDown} color="text-red-600" />
-          <KpiCard label="إيداعات"          value={fmtOMR(summary.deposits)}      icon={ArrowDownCircle} color="text-blue-600" />
-          <KpiCard label="سحوبات"           value={fmtOMR(summary.withdrawals)}   icon={ArrowUpCircle}   color="text-orange-600" />
-          <KpiCard label="صافي النقد المتوقع" value={fmtOMR(summary.netCash)}     icon={Calculator}  color="text-primary" border />
+          <KpiCard label={t("finance.opening_cash")}  value={fmtOMR(summary.openingCash)}   icon={Wallet}      color="text-gray-700" />
+          <KpiCard label={t("finance.cash_sales")}    value={fmtOMR(summary.cashSales)}     icon={TrendingUp}  color="text-green-600" />
+          <KpiCard label={t("finance.cash_expenses")} value={fmtOMR(summary.cashExpenses)}  icon={TrendingDown} color="text-red-600" />
+          <KpiCard label={t("finance.deposits")}      value={fmtOMR(summary.deposits)}      icon={ArrowDownCircle} color="text-blue-600" />
+          <KpiCard label={t("finance.withdrawals")}   value={fmtOMR(summary.withdrawals)}   icon={ArrowUpCircle}   color="text-orange-600" />
+          <KpiCard label={t("finance.net_cash")}      value={fmtOMR(summary.netCash)}       icon={Calculator}  color="text-primary" border />
         </div>
       )}
 
       <Tabs defaultValue="cash" className="w-full" dir="rtl">
         <TabsList className="w-full justify-center gap-1">
-          <TabsTrigger value="cash"   className="gap-1"><Banknote className="h-4 w-4" />دفتر النقدي</TabsTrigger>
-          <TabsTrigger value="bank"   className="gap-1"><Building2 className="h-4 w-4" />دفتر البنك</TabsTrigger>
-          <TabsTrigger value="shifts" className="gap-1"><Calculator className="h-4 w-4" />الورديات</TabsTrigger>
+          <TabsTrigger value="cash"   className="gap-1"><Banknote className="h-4 w-4" />{t("finance.tab_cash_ledger")}</TabsTrigger>
+          <TabsTrigger value="bank"   className="gap-1"><Building2 className="h-4 w-4" />{t("finance.tab_bank_ledger")}</TabsTrigger>
+          <TabsTrigger value="shifts" className="gap-1"><Calculator className="h-4 w-4" />{t("finance.tab_shift_diff")}</TabsTrigger>
         </TabsList>
 
         {/* ══ دفتر النقدي ══════════════════════════════════════════════════ */}
         <TabsContent value="cash" className="space-y-3">
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-pink-50">
             <div className="p-3 bg-muted/20 border-b flex justify-between items-center">
-              <span className="text-sm font-semibold">حركات الصندوق — {selectedDate}</span>
-              <span className="text-xs text-muted-foreground">{cashWithBalance.length} حركة</span>
+              <span className="text-sm font-semibold">{t("finance.cash_movements_header")} — {selectedDate}</span>
+              <span className="text-xs text-muted-foreground">{cashWithBalance.length} {t("finance.movements_count")}</span>
             </div>
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
                   <TableHead className="text-start w-10">#</TableHead>
-                  <TableHead className="text-start">الوقت</TableHead>
-                  {isAdmin && <TableHead className="text-start">الفرع</TableHead>}
-                  <TableHead className="text-start">النوع</TableHead>
-                  <TableHead className="text-start">وارد</TableHead>
-                  <TableHead className="text-start">صادر</TableHead>
-                  <TableHead className="text-start font-bold text-primary">الرصيد الجاري</TableHead>
-                  <TableHead className="text-start">الموظف</TableHead>
-                  <TableHead className="text-start">ملاحظة</TableHead>
+                  <TableHead className="text-start">{t("finance.table_time")}</TableHead>
+                  {isAdmin && <TableHead className="text-start">{t("finance.table_branch")}</TableHead>}
+                  <TableHead className="text-start">{t("finance.table_type")}</TableHead>
+                  <TableHead className="text-start">{t("finance.table_in")}</TableHead>
+                  <TableHead className="text-start">{t("finance.table_out")}</TableHead>
+                  <TableHead className="text-start font-bold text-primary">{t("finance.previous_balance")}</TableHead>
+                  <TableHead className="text-start">{t("common.employee")}</TableHead>
+                  <TableHead className="text-start">{t("finance.table_note")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -285,18 +285,18 @@ export default function Finance() {
                     <TableCell>—</TableCell>
                     <TableCell>00:00</TableCell>
                     {isAdmin && <TableCell>—</TableCell>}
-                    <TableCell><Badge className="text-xs bg-gray-100 text-gray-700">رصيد سابق</Badge></TableCell>
+                    <TableCell><Badge className="text-xs bg-gray-100 text-gray-700">{t("finance.previous_balance")}</Badge></TableCell>
                     <TableCell className="text-blue-600">{fmt(summary.openingCash)}</TableCell>
                     <TableCell>—</TableCell>
                     <TableCell className="font-bold text-primary">{fmt(summary.openingCash)}</TableCell>
                     <TableCell>—</TableCell>
-                    <TableCell className="text-muted-foreground">رصيد مرحل</TableCell>
+                    <TableCell className="text-muted-foreground">{t("finance.carried_balance")}</TableCell>
                   </TableRow>
                 )}
                 {cashWithBalance.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={isAdmin ? 9 : 8} className="text-center text-muted-foreground py-10">
-                      لا توجد حركات نقدية في هذا اليوم
+                      {t("finance.no_cash_entries")}
                     </TableCell>
                   </TableRow>
                 ) : cashWithBalance.map((entry: any, i) => (
@@ -336,15 +336,15 @@ export default function Finance() {
           {summary && (
             <Card className="bg-gradient-to-br from-pink-50 to-white rounded-2xl border-pink-100">
               <CardContent className="p-4">
-                <h4 className="font-bold text-sm mb-3 text-primary">ملخص اليوم</h4>
+                <h4 className="font-bold text-sm mb-3 text-primary">{t("finance.day_summary")}</h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
                   {[
-                    { label: "رصيد الافتتاح",    value: fmt(summary.openingCash),   color: "text-gray-700" },
-                    { label: "+ مبيعات نقدية",   value: fmt(summary.cashSales),     color: "text-green-600" },
-                    { label: "- مصروفات نقدية",  value: fmt(summary.cashExpenses),  color: "text-red-600" },
-                    { label: "+ إيداعات",         value: fmt(summary.deposits),      color: "text-blue-600" },
-                    { label: "- سحوبات",          value: fmt(summary.withdrawals),   color: "text-orange-600" },
-                    { label: "± فروق الورديات",   value: fmt(summary.shiftDifferences), color: "text-yellow-700" },
+                    { label: t("finance.summary_opening"),          value: fmt(summary.openingCash),   color: "text-gray-700" },
+                    { label: t("finance.summary_cash_sales"),        value: fmt(summary.cashSales),     color: "text-green-600" },
+                    { label: t("finance.summary_cash_expenses"),     value: fmt(summary.cashExpenses),  color: "text-red-600" },
+                    { label: t("finance.summary_deposits"),          value: fmt(summary.deposits),      color: "text-blue-600" },
+                    { label: t("finance.summary_withdrawals"),       value: fmt(summary.withdrawals),   color: "text-orange-600" },
+                    { label: t("finance.summary_shift_differences"), value: fmt(summary.shiftDifferences), color: "text-yellow-700" },
                   ].map(({ label, value, color }) => (
                     <div key={label} className="flex justify-between border-b border-pink-50 pb-1">
                       <span className="text-muted-foreground text-xs">{label}</span>
@@ -353,7 +353,7 @@ export default function Finance() {
                   ))}
                 </div>
                 <div className="mt-3 pt-2 border-t-2 border-primary/20 flex justify-between items-center">
-                  <span className="font-bold">= صافي النقد المتوقع</span>
+                  <span className="font-bold">{t("finance.summary_net_cash")}</span>
                   <span className="font-extrabold text-primary text-lg">{fmtOMR(summary.netCash)}</span>
                 </div>
               </CardContent>
@@ -365,27 +365,27 @@ export default function Finance() {
         <TabsContent value="bank" className="space-y-3">
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
             <Building2 className="h-7 w-7 text-amber-600 mx-auto mb-2" />
-            <p className="font-medium text-amber-800">دفتر البنك — للاطلاع فقط</p>
-            <p className="text-xs text-amber-600">تُسجَّل الحركات البنكية تلقائياً عند البيع بالبطاقة أو التحويل</p>
+            <p className="font-medium text-amber-800">{t("finance.bank_readonly_title")}</p>
+            <p className="text-xs text-amber-600">{t("finance.bank_readonly_desc")}</p>
           </div>
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-amber-50">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
                   <TableHead className="text-start">#</TableHead>
-                  <TableHead className="text-start">الوقت</TableHead>
-                  {isAdmin && <TableHead className="text-start">الفرع</TableHead>}
-                  <TableHead className="text-start">طريقة الدفع</TableHead>
-                  <TableHead className="text-start">وارد</TableHead>
-                  <TableHead className="text-start">صادر</TableHead>
-                  <TableHead className="text-start">ملاحظة</TableHead>
+                  <TableHead className="text-start">{t("finance.table_time")}</TableHead>
+                  {isAdmin && <TableHead className="text-start">{t("finance.table_branch")}</TableHead>}
+                  <TableHead className="text-start">{t("finance.table_method")}</TableHead>
+                  <TableHead className="text-start">{t("finance.table_in")}</TableHead>
+                  <TableHead className="text-start">{t("finance.table_out")}</TableHead>
+                  <TableHead className="text-start">{t("finance.table_note")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {bankEntries.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={isAdmin ? 7 : 6} className="text-center text-muted-foreground py-10">
-                      لا توجد حركات بنكية في هذا اليوم
+                      {t("finance.no_bank_entries")}
                     </TableCell>
                   </TableRow>
                 ) : bankEntries.map((entry, i) => (
@@ -397,7 +397,7 @@ export default function Finance() {
                     {isAdmin && <TableCell className="text-xs">{branchName(entry.branchId)}</TableCell>}
                     <TableCell>
                       <Badge className={`text-xs ${entry.method === "card" ? "bg-purple-100 text-purple-800" : "bg-indigo-100 text-indigo-800"}`}>
-                        {entry.method === "card" ? "بطاقة" : entry.method === "bank_transfer" ? "تحويل بنكي" : entry.method}
+                        {entry.method === "card" ? t("finance.card_label") : entry.method === "bank_transfer" ? t("finance.bank_transfer_label") : entry.method}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-green-600 font-medium">
@@ -417,13 +417,13 @@ export default function Finance() {
           {bankEntries.length > 0 && (
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-green-50 border border-green-100 rounded-xl p-3 text-center">
-                <p className="text-xs text-muted-foreground">إجمالي الوارد</p>
+                <p className="text-xs text-muted-foreground">{t("finance.total_incoming")}</p>
                 <p className="font-bold text-green-700">
                   {bankEntries.reduce((s, e) => s + parseFloat(e.amountIn || "0"), 0).toFixed(3)} ر.ع
                 </p>
               </div>
               <div className="bg-red-50 border border-red-100 rounded-xl p-3 text-center">
-                <p className="text-xs text-muted-foreground">إجمالي الصادر</p>
+                <p className="text-xs text-muted-foreground">{t("finance.total_outgoing")}</p>
                 <p className="font-bold text-red-700">
                   {bankEntries.reduce((s, e) => s + parseFloat(e.amountOut || "0"), 0).toFixed(3)} ر.ع
                 </p>
@@ -439,14 +439,14 @@ export default function Finance() {
               <Card className="border-green-200 rounded-2xl">
                 <CardContent className="p-4 text-center">
                   <Calculator className="h-6 w-6 text-green-600 mx-auto mb-2" />
-                  <p className="text-xs text-muted-foreground">الرصيد المتوقع</p>
+                  <p className="text-xs text-muted-foreground">{t("finance.expected_balance")}</p>
                   <p className="text-2xl font-bold text-green-700">{fmt(summary.expectedClosing)}</p>
                 </CardContent>
               </Card>
               <Card className="border-blue-200 rounded-2xl">
                 <CardContent className="p-4 text-center">
                   <Banknote className="h-6 w-6 text-blue-600 mx-auto mb-2" />
-                  <p className="text-xs text-muted-foreground">الرصيد الفعلي</p>
+                  <p className="text-xs text-muted-foreground">{t("finance.actual_balance")}</p>
                   <p className="text-2xl font-bold text-blue-700">{fmt(summary.actualClosing)}</p>
                 </CardContent>
               </Card>
@@ -455,7 +455,7 @@ export default function Finance() {
                   {Math.abs(parseFloat(String(summary.totalDifference || 0))) < 0.002
                     ? <TrendingUp className="h-6 w-6 text-green-600 mx-auto mb-2" />
                     : <AlertTriangle className="h-6 w-6 text-red-600 mx-auto mb-2" />}
-                  <p className="text-xs text-muted-foreground">فرق الوردية</p>
+                  <p className="text-xs text-muted-foreground">{t("finance.shift_diff_label")}</p>
                   <p className={`text-2xl font-bold ${Math.abs(parseFloat(String(summary.totalDifference || 0))) < 0.002 ? "text-green-700" : "text-red-700"}`}>
                     {fmt(summary.totalDifference)}
                   </p>
@@ -466,28 +466,28 @@ export default function Finance() {
 
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-pink-50">
             <div className="p-3 bg-muted/20 border-b">
-              <h3 className="font-semibold text-sm">الورديات المغلقة — {selectedDate}</h3>
+              <h3 className="font-semibold text-sm">{t("finance.closed_shifts_title")} {selectedDate}</h3>
             </div>
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
                   <TableHead className="text-start">#</TableHead>
-                  {isAdmin && <TableHead className="text-start">الفرع</TableHead>}
-                  <TableHead className="text-start">الكاشير</TableHead>
-                  <TableHead className="text-start">الجهاز</TableHead>
-                  <TableHead className="text-start">الافتتاح</TableHead>
-                  <TableHead className="text-start">المبيعات النقدية</TableHead>
-                  <TableHead className="text-start">المتوقع</TableHead>
-                  <TableHead className="text-start">الفعلي</TableHead>
-                  <TableHead className="text-start">الفرق</TableHead>
-                  <TableHead className="text-start">وقت الإغلاق</TableHead>
+                  {isAdmin && <TableHead className="text-start">{t("finance.table_branch")}</TableHead>}
+                  <TableHead className="text-start">{t("finance.table_cashier")}</TableHead>
+                  <TableHead className="text-start">{t("finance.table_terminal")}</TableHead>
+                  <TableHead className="text-start">{t("finance.table_opening")}</TableHead>
+                  <TableHead className="text-start">{t("finance.table_cash_sales")}</TableHead>
+                  <TableHead className="text-start">{t("finance.table_expected")}</TableHead>
+                  <TableHead className="text-start">{t("finance.table_actual")}</TableHead>
+                  <TableHead className="text-start">{t("finance.table_difference")}</TableHead>
+                  <TableHead className="text-start">{t("finance.table_close_time")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {closedShifts.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={isAdmin ? 10 : 9} className="text-center text-muted-foreground py-10">
-                      لا توجد ورديات مغلقة في هذا اليوم
+                      {t("finance.no_closed_shifts")}
                     </TableCell>
                   </TableRow>
                 ) : closedShifts.map((s, i) => {
@@ -524,25 +524,25 @@ export default function Finance() {
         <DialogContent dir="rtl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ArrowDownCircle className="h-5 w-5 text-blue-600" /> إيداع نقدي في الصندوق
+              <ArrowDownCircle className="h-5 w-5 text-blue-600" /> {t("finance.deposit_title")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="text-sm font-medium">المبلغ (ر.ع)</label>
+              <label className="text-sm font-medium">{t("finance.amount_label")}</label>
               <Input type="number" step="0.001" min="0.001" value={txAmount}
                 onChange={e => setTxAmount(e.target.value)} placeholder="0.000" className="mt-1" />
             </div>
             <div>
-              <label className="text-sm font-medium">سبب الإيداع</label>
+              <label className="text-sm font-medium">{t("finance.deposit_reason_label")}</label>
               <Input value={txNote} onChange={e => setTxNote(e.target.value)}
-                placeholder="مثال: إيداع بداية اليوم" className="mt-1" />
+                placeholder={t("finance.deposit_placeholder")} className="mt-1" />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDepositOpen(false)}>إلغاء</Button>
+            <Button variant="outline" onClick={() => setDepositOpen(false)}>{t("common.cancel")}</Button>
             <Button onClick={() => depositMutation.mutate()} disabled={depositMutation.isPending || !txAmount}>
-              تأكيد الإيداع
+              {t("finance.confirm_deposit")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -553,25 +553,25 @@ export default function Finance() {
         <DialogContent dir="rtl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ArrowUpCircle className="h-5 w-5 text-orange-600" /> سحب نقدي من الصندوق
+              <ArrowUpCircle className="h-5 w-5 text-orange-600" /> {t("finance.withdrawal_title")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="text-sm font-medium">المبلغ (ر.ع)</label>
+              <label className="text-sm font-medium">{t("finance.amount_label")}</label>
               <Input type="number" step="0.001" min="0.001" value={txAmount}
                 onChange={e => setTxAmount(e.target.value)} placeholder="0.000" className="mt-1" />
             </div>
             <div>
-              <label className="text-sm font-medium">سبب السحب</label>
+              <label className="text-sm font-medium">{t("finance.withdrawal_reason_label")}</label>
               <Input value={txNote} onChange={e => setTxNote(e.target.value)}
-                placeholder="مثال: إيداع في البنك" className="mt-1" />
+                placeholder={t("finance.withdrawal_placeholder")} className="mt-1" />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setWithdrawalOpen(false)}>إلغاء</Button>
+            <Button variant="outline" onClick={() => setWithdrawalOpen(false)}>{t("common.cancel")}</Button>
             <Button variant="destructive" onClick={() => withdrawalMutation.mutate()} disabled={withdrawalMutation.isPending || !txAmount}>
-              تأكيد السحب
+              {t("finance.confirm_withdrawal")}
             </Button>
           </DialogFooter>
         </DialogContent>
