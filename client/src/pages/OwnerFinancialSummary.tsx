@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { parseServerError } from "@/lib/queryClient";
+import { useI18n } from "@/lib/i18n";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 function fmtOMR(v: string | number | null | undefined) {
@@ -41,12 +42,12 @@ function branchLabel(name: string, address?: string | null) {
   return `${name} - ${city}`;
 }
 
-const TXN_TYPES: Record<string, { label: string; color: string; icon: any }> = {
-  BRANCH_CASH_TRANSFER_TO_OWNER: { label: "استلام نقدي من فرع",   color: "bg-green-100 text-green-800",  icon: ArrowDownToLine },
-  OWNER_DEPOSIT_TO_BANK:         { label: "إيداع بنكي",            color: "bg-blue-100 text-blue-800",    icon: Building2 },
-  OWNER_WITHDRAWAL:              { label: "سحب المالك",            color: "bg-red-100 text-red-800",      icon: ArrowUpFromLine },
-  MANUAL_ADJUSTMENT_IN:          { label: "تعديل يدوي (إضافة)",    color: "bg-purple-100 text-purple-800", icon: Plus },
-  MANUAL_ADJUSTMENT_OUT:         { label: "تعديل يدوي (خصم)",     color: "bg-orange-100 text-orange-800", icon: RefreshCw },
+const TXN_TYPES: Record<string, { color: string; icon: any }> = {
+  BRANCH_CASH_TRANSFER_TO_OWNER: { color: "bg-green-100 text-green-800",  icon: ArrowDownToLine },
+  OWNER_DEPOSIT_TO_BANK:         { color: "bg-blue-100 text-blue-800",    icon: Building2 },
+  OWNER_WITHDRAWAL:              { color: "bg-red-100 text-red-800",      icon: ArrowUpFromLine },
+  MANUAL_ADJUSTMENT_IN:          { color: "bg-purple-100 text-purple-800", icon: Plus },
+  MANUAL_ADJUSTMENT_OUT:         { color: "bg-orange-100 text-orange-800", icon: RefreshCw },
 };
 
 interface KpiProps { title: string; value: string; icon: any; color: string; sub?: string; }
@@ -70,6 +71,7 @@ function KpiCard({ title, value, icon: Icon, color, sub }: KpiProps) {
 // ─── main component ────────────────────────────────────────────────────────────
 export default function OwnerFinancialSummary() {
   const { toast } = useToast();
+  const { t } = useI18n();
   const qc = useQueryClient();
 
   // filters for transactions
@@ -469,29 +471,30 @@ export default function OwnerFinancialSummary() {
                       <TableRow><TableCell colSpan={10} className="text-center py-10 text-muted-foreground">جاري التحميل...</TableCell></TableRow>
                     ) : transactions.length === 0 ? (
                       <TableRow><TableCell colSpan={10} className="text-center py-10 text-muted-foreground">لا توجد معاملات مسجلة</TableCell></TableRow>
-                    ) : transactions.map((t: any) => {
-                      const meta = TXN_TYPES[t.type] ?? { label: t.type, color: "bg-gray-100 text-gray-800", icon: AlertTriangle };
+                    ) : transactions.map((tx: any) => {
+                      const meta = TXN_TYPES[tx.type] ?? { color: "bg-gray-100 text-gray-800", icon: AlertTriangle };
                       const Icon = meta.icon;
+                      const label = TXN_TYPES[tx.type] ? t(`finance:ownerTxnTypes.${tx.type}`) : tx.type;
                       return (
-                        <TableRow key={t.id}>
-                          <TableCell className="text-sm whitespace-nowrap">{t.date}</TableCell>
+                        <TableRow key={tx.id}>
+                          <TableCell className="text-sm whitespace-nowrap">{tx.date}</TableCell>
                           <TableCell>
                             <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full ${meta.color}`}>
-                              <Icon className="w-3 h-3" />{meta.label}
+                              <Icon className="w-3 h-3" />{label}
                             </span>
                           </TableCell>
-                          <TableCell className="text-sm">{t.branch_name ?? "—"}</TableCell>
+                          <TableCell className="text-sm">{tx.branch_name ?? "—"}</TableCell>
                           <TableCell className="text-sm">{
-                            t.payment_method === "cash" ? "نقدي" :
-                            t.payment_method === "card" ? "بطاقة" :
-                            t.payment_method === "bank_transfer" ? "تحويل بنكي" : t.payment_method
+                            tx.payment_method === "cash" ? "نقدي" :
+                            tx.payment_method === "card" ? "بطاقة" :
+                            tx.payment_method === "bank_transfer" ? "تحويل بنكي" : tx.payment_method
                           }</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{t.from_account ?? "—"}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{t.to_account ?? "—"}</TableCell>
-                          <TableCell className="text-center font-bold">{fmtOMR(t.amount)}</TableCell>
-                          <TableCell className="text-xs">{t.reference_no ?? "—"}</TableCell>
-                          <TableCell className="text-xs max-w-32 truncate">{t.note ?? "—"}</TableCell>
-                          <TableCell className="text-xs">{t.created_by_name ?? "—"}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{tx.from_account ?? "—"}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{tx.to_account ?? "—"}</TableCell>
+                          <TableCell className="text-center font-bold">{fmtOMR(tx.amount)}</TableCell>
+                          <TableCell className="text-xs">{tx.reference_no ?? "—"}</TableCell>
+                          <TableCell className="text-xs max-w-32 truncate">{tx.note ?? "—"}</TableCell>
+                          <TableCell className="text-xs">{tx.created_by_name ?? "—"}</TableCell>
                         </TableRow>
                       );
                     })}
@@ -520,8 +523,8 @@ export default function OwnerFinancialSummary() {
                 <Select value={form.type} onValueChange={v => setForm(f => ({ ...f, type: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Object.entries(TXN_TYPES).map(([k, v]) => (
-                      <SelectItem key={k} value={k}>{v.label}</SelectItem>
+                    {Object.keys(TXN_TYPES).map((k) => (
+                      <SelectItem key={k} value={k}>{t(`finance:ownerTxnTypes.${k}`)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

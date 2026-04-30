@@ -38,15 +38,6 @@ const TYPE_BADGE: Record<string, string> = {
   shift_difference: "bg-yellow-100 text-yellow-800",
   order:            "bg-green-100 text-green-800",
 };
-const TYPE_LABELS_AR: Record<string, string> = {
-  sale:             "مبيعات",
-  expense:          "مصروف",
-  deposit:          "إيداع",
-  withdrawal:       "سحب",
-  shift_difference: "فرق الوردية",
-  order:            "طلب",
-  order_payment:    "دفع طلب",
-};
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 function KpiCard({ label, value, icon: Icon, color, border = false }:
@@ -158,7 +149,7 @@ export default function Finance() {
       <tr>
         <td>${i + 1}</td>
         <td>${e.createdAt ? fmtTime(e.createdAt) : "-"}</td>
-        <td>${TYPE_LABELS_AR[e.type] || e.type}</td>
+        <td>${t(`finance:transactionTypes.${e.type}`)}</td>
         <td style="color:green">${parseFloat(e.amountIn || "0") > 0 ? fmt(e.amountIn) : "-"}</td>
         <td style="color:red">${parseFloat(e.amountOut || "0") > 0 ? fmt(e.amountOut) : "-"}</td>
         <td><b>${e.runningBalance}</b></td>
@@ -317,7 +308,7 @@ export default function Finance() {
                     {isAdmin && <TableCell className="text-xs">{branchName(entry.branchId)}</TableCell>}
                     <TableCell>
                       <Badge className={`text-xs ${TYPE_BADGE[entry.type] || "bg-gray-100 text-gray-800"}`}>
-                        {TYPE_LABELS_AR[entry.type] || entry.type}
+                        {t(`finance:transactionTypes.${entry.type}`)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-green-600 font-medium">

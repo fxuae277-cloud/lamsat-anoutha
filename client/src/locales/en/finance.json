@@ -1,4 +1,20 @@
 {
+  "transactionTypes": {
+    "sale": "Sale",
+    "expense": "Expense",
+    "deposit": "Deposit",
+    "withdrawal": "Withdrawal",
+    "shift_difference": "Shift Difference",
+    "order": "Order",
+    "order_payment": "Order Payment"
+  },
+  "ownerTxnTypes": {
+    "BRANCH_CASH_TRANSFER_TO_OWNER": "Branch Cash Transfer to Owner",
+    "OWNER_DEPOSIT_TO_BANK": "Bank Deposit",
+    "OWNER_WITHDRAWAL": "Owner Withdrawal",
+    "MANUAL_ADJUSTMENT_IN": "Manual Adjustment (In)",
+    "MANUAL_ADJUSTMENT_OUT": "Manual Adjustment (Out)"
+  },
   "finance": {
     "title": "Daily Accounting",
     "subtitle": "Cash and bank ledger and drawer differences",

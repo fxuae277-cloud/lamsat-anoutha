@@ -1,4 +1,20 @@
 {
+  "transactionTypes": {
+    "sale": "مبيعات",
+    "expense": "مصروف",
+    "deposit": "إيداع",
+    "withdrawal": "سحب",
+    "shift_difference": "فرق الوردية",
+    "order": "طلب",
+    "order_payment": "دفع طلب"
+  },
+  "ownerTxnTypes": {
+    "BRANCH_CASH_TRANSFER_TO_OWNER": "استلام نقدي من فرع",
+    "OWNER_DEPOSIT_TO_BANK": "إيداع بنكي",
+    "OWNER_WITHDRAWAL": "سحب المالك",
+    "MANUAL_ADJUSTMENT_IN": "تعديل يدوي (إضافة)",
+    "MANUAL_ADJUSTMENT_OUT": "تعديل يدوي (خصم)"
+  },
   "finance": {
     "title": "المحاسبة اليومية",
     "subtitle": "دفتر النقد والبنك وفرق الصندوق",
