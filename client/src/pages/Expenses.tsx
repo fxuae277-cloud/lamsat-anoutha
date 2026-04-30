@@ -25,26 +25,26 @@ export default function Expenses() {
   const isOwnerAdmin = user?.role === "owner" || user?.role === "admin";
 
   const EXPENSE_CATEGORIES = [
-    { value: "supplies",      label: "مستلزمات (تنظيف وتغليف وأكياس)" },
-    { value: "rent",          label: "إيجار (إيجار المتجر الشهري)" },
-    { value: "salary",        label: "رواتب (رواتب الموظفين)" },
-    { value: "transport",     label: "مواصلات (توصيل وبنزين)" },
-    { value: "maintenance",   label: "صيانة (مكيفات وإضاءة)" },
-    { value: "electricity",   label: "كهرباء ومياه (فواتير شهرية)" },
-    { value: "phone",         label: "اتصالات (إنترنت وهاتف)" },
-    { value: "marketing",     label: "تسويق (إعلانات وتصميم)" },
-    { value: "shipping",      label: "شحن (شحن بضائع)" },
-    { value: "taxes",         label: "ضرائب ورسوم (رسوم حكومية)" },
-    { value: "other",         label: "أخرى (مصروف غير مصنف)" },
+    { value: "supplies",    label: t("expenses.categories.supplies") },
+    { value: "rent",        label: t("expenses.categories.rent") },
+    { value: "salary",      label: t("expenses.categories.salary") },
+    { value: "transport",   label: t("expenses.categories.transport") },
+    { value: "maintenance", label: t("expenses.categories.maintenance") },
+    { value: "electricity", label: t("expenses.categories.electricity") },
+    { value: "phone",       label: t("expenses.categories.phone") },
+    { value: "marketing",   label: t("expenses.categories.marketing") },
+    { value: "shipping",    label: t("expenses.categories.shipping") },
+    { value: "taxes",       label: t("expenses.categories.taxes") },
+    { value: "other",       label: t("expenses.categories.other") },
   ];
 
-  const categoryLabelMap = Object.fromEntries(EXPENSE_CATEGORIES.map(c => [c.value, c.label.split(" (")[0]]));
-  const categoryLabelFull = Object.fromEntries(EXPENSE_CATEGORIES.map(c => [c.value, c.label]));
+  const categoryLabelMap = Object.fromEntries(EXPENSE_CATEGORIES.map(c => [c.value, c.label]));
+  const categoryLabelFull = categoryLabelMap;
 
   const SOURCE_LABELS: Record<string, string> = {
-    cash: "نقدي (من الصندوق)",
-    card: "بطاقة",
-    bank_transfer: "تحويل بنكي",
+    cash: t("expenses.source_labels.cash"),
+    card: t("expenses.source_labels.card"),
+    bank_transfer: t("expenses.source_labels.bank_transfer"),
   };
 
   const TYPE_LABELS: Record<string, string> = {
@@ -116,7 +116,7 @@ export default function Expenses() {
         const amount = parseFloat(newExpense.amount || "0");
         if (amount > cashBalance.balance) {
           throw new Error(
-            `رصيد الصندوق غير كافٍ — الرصيد الحالي: ${cashBalance.balance.toFixed(3)} ر.ع، المبلغ المطلوب: ${amount.toFixed(3)} ر.ع. يُقترح السحب من البنك أو تغيير طريقة الدفع.`
+            t("expenses.balance_insufficient_label") + " " + t("expenses.balance_current") + " " + cashBalance.balance.toFixed(3) + " " + t("common.omr")
           );
         }
       }
@@ -129,7 +129,7 @@ export default function Expenses() {
       });
     },
     onSuccess: () => {
-      toast({ title: "تم إضافة المصروف", description: "تم تسجيل المصروف وربطه بالفرع والشفت." });
+      toast({ title: t("expenses.expense_added"), description: t("expenses.expense_added_desc") });
       invalidateExpenses();
       queryClient.invalidateQueries({ queryKey: [cashBalanceQuery] });
       setAddOpen(false);
@@ -149,7 +149,7 @@ export default function Expenses() {
       });
     },
     onSuccess: () => {
-      toast({ title: "تم تحديث المصروف" });
+      toast({ title: t("expenses.expense_updated") });
       invalidateExpenses();
       setEditOpen(false);
       setEditingExpense(null);
@@ -162,7 +162,7 @@ export default function Expenses() {
       await apiRequest("DELETE", `/api/expenses/${id}`);
     },
     onSuccess: () => {
-      toast({ title: "تم حذف المصروف" });
+      toast({ title: t("expenses.expense_deleted") });
       invalidateExpenses();
       setDeleteConfirmId(null);
     },
@@ -242,14 +242,14 @@ export default function Expenses() {
         <div className="p-3 bg-primary/5 rounded-lg border border-primary/20 text-sm">
           <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
             <Building2 className="w-3.5 h-3.5" />
-            <span className="text-xs">الفرع</span>
+            <span className="text-xs">{t("expenses.branch_label")}</span>
           </div>
           <span className="font-bold text-sm">{userBranchName}</span>
         </div>
         <div className="p-3 bg-green-50 rounded-lg border border-green-200 text-sm">
           <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
             <UserCheck className="w-3.5 h-3.5" />
-            <span className="text-xs">الموظف</span>
+            <span className="text-xs">{t("expenses.employee_label")}</span>
           </div>
           <span className="font-bold text-sm">{user?.name || "—"}</span>
         </div>
@@ -257,16 +257,16 @@ export default function Expenses() {
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <label className="text-sm font-medium">التصنيف *</label>
+          <label className="text-sm font-medium">{t("expenses.category")} *</label>
           <Select value={values.category} onValueChange={v => setValues({ ...values, category: v })}>
-            <SelectTrigger><SelectValue placeholder="اختر التصنيف" /></SelectTrigger>
+            <SelectTrigger><SelectValue placeholder={t("expenses.select_category")} /></SelectTrigger>
             <SelectContent>
               {EXPENSE_CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium">المبلغ (ر.ع) *</label>
+          <label className="text-sm font-medium">{t("expenses.amount_omr")} *</label>
           <Input type="number" step="0.001" placeholder="0.000" value={values.amount}
             onChange={e => setValues({ ...values, amount: e.target.value })} />
         </div>
@@ -274,26 +274,26 @@ export default function Expenses() {
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <label className="text-sm font-medium">التاريخ</label>
+          <label className="text-sm font-medium">{t("expenses.date_label")}</label>
           <DateInput value={values.date}
             onChange={e => setValues({ ...values, date: e.target.value })} />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium">طريقة الدفع</label>
+          <label className="text-sm font-medium">{t("expenses.payment_method_label")}</label>
           <Select value={values.source} onValueChange={v => setValues({ ...values, source: v })}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="cash">💵 نقدي (يخصم من الصندوق)</SelectItem>
-              <SelectItem value="bank_transfer">🏦 تحويل بنكي (يخصم من البنك)</SelectItem>
-              <SelectItem value="card">💳 بطاقة</SelectItem>
+              <SelectItem value="cash">💵 {t("expenses.source_cash")}</SelectItem>
+              <SelectItem value="bank_transfer">🏦 {t("expenses.source_bank")}</SelectItem>
+              <SelectItem value="card">💳 {t("expenses.source_card")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm font-medium">الملاحظات</label>
-        <Input placeholder="وصف المصروف أو تفاصيل إضافية..." value={values.notes}
+        <label className="text-sm font-medium">{t("expenses.notes_label")}</label>
+        <Input placeholder={t("expenses.notes_placeholder2")} value={values.notes}
           onChange={e => setValues({ ...values, notes: e.target.value })} />
       </div>
 
@@ -301,19 +301,19 @@ export default function Expenses() {
       {values.source === "cash" && cashBalance && (
         parseFloat(values.amount || "0") > cashBalance.balance ? (
           <div className="bg-red-50 border border-red-300 rounded-lg p-3 text-xs text-red-800">
-            ⚠️ <strong>رصيد غير كافٍ!</strong> رصيد الصندوق الحالي: <strong>{cashBalance.balance.toFixed(3)} ر.ع</strong>
-            <br />المبلغ المطلوب: <strong>{parseFloat(values.amount || "0").toFixed(3)} ر.ع</strong>
-            <br />اقتراح: قم بسحب من البنك أو غيّر طريقة الدفع إلى "تحويل بنكي".
+            ⚠️ <strong>{t("expenses.balance_insufficient_label")}</strong> {t("expenses.balance_current")} <strong>{cashBalance.balance.toFixed(3)} {t("common.omr")}</strong>
+            <br />{t("expenses.balance_required")} <strong>{parseFloat(values.amount || "0").toFixed(3)} {t("common.omr")}</strong>
+            <br />{t("expenses.balance_suggestion")}
           </div>
         ) : (
           <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800">
-            ✅ رصيد الصندوق الحالي: <strong>{cashBalance.balance.toFixed(3)} ر.ع</strong> — كافٍ للصرف
+            ✅ {t("expenses.balance_ok_msg")}: <strong>{cashBalance.balance.toFixed(3)} {t("common.omr")}</strong> — {t("expenses.balance_sufficient")}
           </div>
         )
       )}
 
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
-        💡 المصروف النقدي يُخصم تلقائياً من الصندوق | المصروف بالتحويل يُخصم من الحساب البنكي
+        💡 {t("expenses.auto_deduct_note")}
       </div>
     </div>
   );
@@ -335,8 +335,8 @@ export default function Expenses() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-[520px]">
             <DialogHeader>
-              <DialogTitle>إضافة مصروف جديد</DialogTitle>
-              <DialogDescription>سيتم ربط المصروف تلقائياً بالشفت المفتوح حالياً إن وجد</DialogDescription>
+              <DialogTitle>{t("expenses.add_expense_dialog_title")}</DialogTitle>
+              <DialogDescription>{t("expenses.add_expense_dialog_desc")}</DialogDescription>
             </DialogHeader>
             {expenseFormContent(newExpense, setNewExpense)}
             <DialogFooter>
@@ -347,7 +347,7 @@ export default function Expenses() {
                 }
                 className="gap-2 bg-rose-600 hover:bg-rose-700 text-white"
                 data-testid="button-save-expense">
-                {createMutation.isPending ? "جارٍ الحفظ..." : <><Receipt className="w-4 h-4" />حفظ المصروف</>}
+                {createMutation.isPending ? t("expenses.saving_expense") : <><Receipt className="w-4 h-4" />{t("expenses.save_expense")}</>}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -370,28 +370,28 @@ export default function Expenses() {
                   <TrendingDown className="w-5 h-5 text-red-600" />
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">{summary.totalCount} عملية</p>
+              <p className="text-xs text-muted-foreground mt-2">{summary.totalCount} {t("expenses.operations_count")}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-muted-foreground">مصروفات نقدية</p>
+                  <p className="text-xs text-muted-foreground">{t("expenses.cash_expenses")}</p>
                   <p className="text-xl font-bold mt-1">{fmt(summary.cash?.total)} <span className="text-sm font-normal">ر.ع</span></p>
                 </div>
                 <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
                   <Banknote className="w-5 h-5 text-green-600" />
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">{summary.cash?.count || 0} عملية</p>
+              <p className="text-xs text-muted-foreground mt-2">{summary.cash?.count || 0} {t("expenses.operations_count")}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-muted-foreground">مصروفات التحويل</p>
+                  <p className="text-xs text-muted-foreground">{t("expenses.card_and_transfer")}</p>
                   <p className="text-xl font-bold mt-1">
                     {fmt(parseFloat(summary.card?.total || "0") + parseFloat(summary.bank?.total || "0"))} <span className="text-sm font-normal">ر.ع</span>
                   </p>
@@ -400,14 +400,14 @@ export default function Expenses() {
                   <CreditCard className="w-5 h-5 text-blue-600" />
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">{(summary.card?.count || 0) + (summary.bank?.count || 0)} عملية</p>
+              <p className="text-xs text-muted-foreground mt-2">{(summary.card?.count || 0) + (summary.bank?.count || 0)} {t("expenses.operations_count")}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-muted-foreground">أعلى تصنيف مصروف</p>
+                  <p className="text-xs text-muted-foreground">{t("expenses.top_category")}</p>
                   {summary.byCategory && summary.byCategory.length > 0 ? (
                     <>
                       <p className="text-sm font-bold mt-1">{categoryLabelMap[summary.byCategory[0].category] || summary.byCategory[0].category}</p>
@@ -446,7 +446,7 @@ export default function Expenses() {
               {/* Search */}
               <div className="relative w-52">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input placeholder="بحث..." className="pe-9 bg-background" value={search}
+                <Input placeholder={t("expenses.search_placeholder")} className="pe-9 bg-background" value={search}
                   onChange={e => setSearch(e.target.value)} data-testid="input-search-expenses" />
               </div>
               {/* Date range */}
@@ -462,10 +462,10 @@ export default function Expenses() {
               {isOwnerAdmin && (
                 <Select value={filterBranch} onValueChange={setFilterBranch}>
                   <SelectTrigger className="w-44 bg-background" data-testid="select-filter-branch">
-                    <SelectValue placeholder="كل الفروع" />
+                    <SelectValue placeholder={t("expenses.all_branches")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">كل الفروع</SelectItem>
+                    <SelectItem value="all">{t("expenses.all_branches")}</SelectItem>
                     {branchesList.map(b => <SelectItem key={b.id} value={b.id.toString()}>{b.name}{b.address ? " - " + b.address : ""}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -473,28 +473,28 @@ export default function Expenses() {
               {/* Category filter */}
               <Select value={filterCategory} onValueChange={setFilterCategory}>
                 <SelectTrigger className="w-44 bg-background">
-                  <Filter className="w-3.5 h-3.5 ms-1" /><SelectValue placeholder="كل التصنيفات" />
+                  <Filter className="w-3.5 h-3.5 ms-1" /><SelectValue placeholder={t("expenses.all_categories")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">كل التصنيفات</SelectItem>
-                  {EXPENSE_CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label.split(" (")[0]}</SelectItem>)}
+                  <SelectItem value="all">{t("expenses.all_categories")}</SelectItem>
+                  {EXPENSE_CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
                 </SelectContent>
               </Select>
               {/* Source filter */}
               <Select value={filterSource} onValueChange={setFilterSource}>
                 <SelectTrigger className="w-40 bg-background">
-                  <SelectValue placeholder="كل المصادر" />
+                  <SelectValue placeholder={t("expenses.all_sources")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">كل المصادر</SelectItem>
-                  <SelectItem value="cash">نقدي</SelectItem>
-                  <SelectItem value="bank_transfer">تحويل بنكي</SelectItem>
-                  <SelectItem value="card">بطاقة</SelectItem>
+                  <SelectItem value="all">{t("expenses.all_sources")}</SelectItem>
+                  <SelectItem value="cash">{t("expenses.source_labels.cash")}</SelectItem>
+                  <SelectItem value="bank_transfer">{t("expenses.source_labels.bank_transfer")}</SelectItem>
+                  <SelectItem value="card">{t("expenses.source_labels.card")}</SelectItem>
                 </SelectContent>
               </Select>
               {/* Clear filters */}
               <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1 text-muted-foreground hover:text-foreground">
-                <X className="w-3.5 h-3.5" />مسح الفلاتر
+                <X className="w-3.5 h-3.5" />{t("expenses.clear_filters")}
               </Button>
             </div>
 
@@ -502,15 +502,15 @@ export default function Expenses() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead className="w-[90px]">التاريخ</TableHead>
-                  <TableHead>الفرع</TableHead>
-                  <TableHead>الشفت</TableHead>
-                  <TableHead>الموظف</TableHead>
-                  <TableHead>التصنيف</TableHead>
-                  <TableHead>المصدر</TableHead>
-                  <TableHead>المبلغ</TableHead>
-                  <TableHead>الملاحظات</TableHead>
-                  <TableHead className="w-[130px] text-center">الإجراءات</TableHead>
+                  <TableHead className="w-[90px]">{t("expenses.table_date")}</TableHead>
+                  <TableHead>{t("expenses.table_branch")}</TableHead>
+                  <TableHead>{t("expenses.table_shift")}</TableHead>
+                  <TableHead>{t("expenses.table_employee")}</TableHead>
+                  <TableHead>{t("expenses.table_category")}</TableHead>
+                  <TableHead>{t("expenses.table_source")}</TableHead>
+                  <TableHead>{t("expenses.table_amount")}</TableHead>
+                  <TableHead>{t("expenses.table_notes")}</TableHead>
+                  <TableHead className="w-[130px] text-center">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -518,7 +518,7 @@ export default function Expenses() {
                   <TableRow>
                     <TableCell colSpan={9} className="text-center py-10 text-muted-foreground">
                       <Receipt className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                      <p>لا توجد مصروفات مطابقة للفلاتر المحددة</p>
+                      <p>{t("expenses.no_matching_expenses")}</p>
                     </TableCell>
                   </TableRow>
                 ) : filteredExpenses.map((exp: any) => (
@@ -544,7 +544,7 @@ export default function Expenses() {
                     </TableCell>
                     <TableCell>
                       <Badge variant={exp.source === "cash" ? "default" : "secondary"} className="text-xs">
-                        {exp.source === "cash" ? "نقدي" : exp.source === "bank_transfer" ? "تحويل" : "بطاقة"}
+                        {exp.source === "cash" ? t("expenses.source_cash_short") : exp.source === "bank_transfer" ? t("expenses.source_bank_short") : t("expenses.source_card_short")}
                       </Badge>
                     </TableCell>
                     <TableCell className="font-bold text-red-600">{parseFloat(exp.amount).toFixed(3)} <span className="text-xs font-normal text-muted-foreground">ر.ع</span></TableCell>
@@ -555,22 +555,22 @@ export default function Expenses() {
                       <div className="flex items-center justify-center gap-1">
                         {/* Edit */}
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600 hover:bg-blue-50"
-                          title="تعديل" onClick={() => openEdit(exp)}>
+                          title={t("common.edit")} onClick={() => openEdit(exp)}>
                           <Edit2 className="w-3.5 h-3.5" />
                         </Button>
                         {/* Print */}
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:bg-green-50"
-                          title="طباعة إيصال" onClick={() => printReceipt(exp)}>
+                          title={t("expenses.print_receipt_title")} onClick={() => printReceipt(exp)}>
                           <Printer className="w-3.5 h-3.5" />
                         </Button>
                         {/* Copy */}
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-amber-600 hover:bg-amber-50"
-                          title="نسخ (إنشاء مشابه)" onClick={() => copyExpense(exp)}>
+                          title={t("expenses.copy_expense_title")} onClick={() => copyExpense(exp)}>
                           <Copy className="w-3.5 h-3.5" />
                         </Button>
                         {/* Delete */}
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-red-600 hover:bg-red-50"
-                          title="حذف" onClick={() => setDeleteConfirmId(exp.id)}>
+                          title={t("common.delete")} onClick={() => setDeleteConfirmId(exp.id)}>
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </div>
@@ -582,9 +582,9 @@ export default function Expenses() {
 
             {filteredExpenses.length > 0 && (
               <div className="p-3 border-t bg-muted/30 flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{filteredExpenses.length} مصروف</span>
+                <span className="text-muted-foreground">{filteredExpenses.length} {t("expenses.expense_count_suffix")}</span>
                 <span className="font-bold text-red-600">
-                  الإجمالي: {filteredExpenses.reduce((s: number, e: any) => s + parseFloat(e.amount || "0"), 0).toFixed(3)} ر.ع
+                  {t("expenses.total_label_short")} {filteredExpenses.reduce((s: number, e: any) => s + parseFloat(e.amount || "0"), 0).toFixed(3)} {t("common.omr")}
                 </span>
               </div>
             )}
@@ -597,13 +597,13 @@ export default function Expenses() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead>التاريخ</TableHead>
-                  <TableHead>الفرع</TableHead>
-                  <TableHead>الشفت</TableHead>
-                  <TableHead>النوع</TableHead>
-                  <TableHead>وارد</TableHead>
-                  <TableHead>صادر</TableHead>
-                  <TableHead>الملاحظة</TableHead>
+                  <TableHead>{t("expenses.cl_table_date")}</TableHead>
+                  <TableHead>{t("expenses.cl_table_branch")}</TableHead>
+                  <TableHead>{t("expenses.cl_table_shift")}</TableHead>
+                  <TableHead>{t("expenses.cl_table_type")}</TableHead>
+                  <TableHead>{t("expenses.cl_table_in")}</TableHead>
+                  <TableHead>{t("expenses.cl_table_out")}</TableHead>
+                  <TableHead>{t("expenses.cl_table_notes")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -652,14 +652,14 @@ export default function Expenses() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead>التاريخ</TableHead>
-                  <TableHead>الفرع</TableHead>
-                  <TableHead>الشفت</TableHead>
-                  <TableHead>الطريقة</TableHead>
-                  <TableHead>وارد</TableHead>
-                  <TableHead>صادر</TableHead>
-                  <TableHead>المرجع</TableHead>
-                  <TableHead>الملاحظة</TableHead>
+                  <TableHead>{t("expenses.bl_table_date")}</TableHead>
+                  <TableHead>{t("expenses.bl_table_branch")}</TableHead>
+                  <TableHead>{t("expenses.bl_table_shift")}</TableHead>
+                  <TableHead>{t("expenses.bl_table_method")}</TableHead>
+                  <TableHead>{t("expenses.bl_table_in")}</TableHead>
+                  <TableHead>{t("expenses.bl_table_out")}</TableHead>
+                  <TableHead>{t("expenses.bl_table_ref")}</TableHead>
+                  <TableHead>{t("expenses.bl_table_notes")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -674,7 +674,7 @@ export default function Expenses() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary">
-                        {entry.method === "card" ? "بطاقة" : "تحويل بنكي"}
+                        {entry.method === "card" ? t("expenses.source_card_short") : t("expenses.source_labels.bank_transfer")}
                       </Badge>
                     </TableCell>
                     <TableCell className="font-medium text-green-600">
@@ -699,15 +699,15 @@ export default function Expenses() {
       <Dialog open={editOpen} onOpenChange={v => { setEditOpen(v); if (!v) setEditingExpense(null); }}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>تعديل المصروف #{editingExpense?.id}</DialogTitle>
-            <DialogDescription>تعديل بيانات المصروف</DialogDescription>
+            <DialogTitle>{t("expenses.edit_expense_title").replace("{{id}}", String(editingExpense?.id ?? ""))}</DialogTitle>
+            <DialogDescription>{t("expenses.edit_expense_desc")}</DialogDescription>
           </DialogHeader>
           {expenseFormContent(editExpense, setEditExpense)}
           <DialogFooter>
             <Button onClick={() => updateMutation.mutate()}
               disabled={updateMutation.isPending || !editExpense.category || !editExpense.amount}
               className="gap-2">
-              {updateMutation.isPending ? "جارٍ الحفظ..." : <><Edit2 className="w-4 h-4" />حفظ التعديلات</>}
+              {updateMutation.isPending ? t("expenses.saving_expense") : <><Edit2 className="w-4 h-4" />{t("expenses.save_changes")}</>}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -717,17 +717,17 @@ export default function Expenses() {
       <Dialog open={!!deleteConfirmId} onOpenChange={v => { if (!v) setDeleteConfirmId(null); }}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle className="text-red-600">تأكيد الحذف</DialogTitle>
+            <DialogTitle className="text-red-600">{t("expenses.delete_confirm_title")}</DialogTitle>
             <DialogDescription>
-              هل أنت متأكد من حذف المصروف #{deleteConfirmId}؟ لا يمكن التراجع عن هذا الإجراء.
+              {t("expenses.delete_confirm_desc").replace("{{id}}", String(deleteConfirmId ?? ""))}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>إلغاء</Button>
+            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>{t("common.cancel")}</Button>
             <Button variant="destructive" onClick={() => deleteConfirmId && deleteMutation.mutate(deleteConfirmId)}
               disabled={deleteMutation.isPending}>
               <Trash2 className="w-4 h-4 ms-1" />
-              {deleteMutation.isPending ? "جارٍ الحذف..." : "حذف نهائياً"}
+              {deleteMutation.isPending ? t("expenses.deleting") : t("expenses.delete_final")}
             </Button>
           </DialogFooter>
         </DialogContent>
