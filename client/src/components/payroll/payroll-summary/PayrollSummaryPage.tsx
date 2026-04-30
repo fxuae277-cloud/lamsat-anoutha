@@ -3,6 +3,7 @@ import { Search, Printer, Wallet, TrendingUp, CheckCircle2, AlertCircle } from "
 
 import { usePayroll }      from "@/hooks/usePayroll";
 import type { PayrollRow } from "@/lib/payroll-types";
+import { useI18n }         from "@/lib/i18n";
 
 import { Button }          from "@/components/ui/button";
 import { Input }           from "@/components/ui/input";
@@ -20,15 +21,11 @@ import { EmptyState }        from "@/components/payroll/shared/EmptyState";
 import { PaymentStatusBadge } from "@/components/payroll/shared/PayrollBadge";
 import { MONTHS_AR, YEARS, formatOMR } from "@/components/payroll/shared/payrollUtils";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function omr(n: number): string { return formatOMR(n); }
 
 function num(n: number): string {
   return n > 0 ? omr(n) : "—";
 }
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PayrollSummaryPage() {
   const {
@@ -38,6 +35,8 @@ export default function PayrollSummaryPage() {
     setSelectedMonth,
     setSelectedYear,
   } = usePayroll();
+  const { t } = useI18n();
+  const NS = "payroll:summary";
 
   const [search, setSearch] = useState("");
 
@@ -100,14 +99,13 @@ export default function PayrollSummaryPage() {
 
       <Button variant="outline" className="gap-1.5" onClick={() => window.print()}>
         <Printer className="h-4 w-4" />
-        طباعة
+        {t(`${NS}.print`)}
       </Button>
     </div>
   );
 
   return (
     <>
-      {/* ── Print styles ── */}
       <style>{`
         @media print {
           body * { visibility: hidden; }
@@ -118,72 +116,69 @@ export default function PayrollSummaryPage() {
         }
       `}</style>
 
-      <div dir="rtl" className="font-sans min-h-screen bg-background">
+      <div className="font-sans min-h-screen bg-background">
         <div className="max-w-7xl mx-auto px-4 py-6 space-y-6" id="summary-print-area">
 
           <PageHeader
-            title="ملخص الرواتب"
+            title={t(`${NS}.title`)}
             subtitle={`${MONTHS_AR[selectedMonth - 1]} ${selectedYear}`}
             actions={monthYearSelectors}
           />
 
-          {/* ── Summary cards ── */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
-              title="إجمالي الراتب الإجمالي"
+              title={t(`${NS}.statTotalGross`)}
               value={omr(totals.gross)}
               color="grey"
               icon={<Wallet className="h-4 w-4" />}
             />
             <StatCard
-              title="إجمالي الصافي"
+              title={t(`${NS}.statTotalNet`)}
               value={omr(totals.net)}
               color="green"
               icon={<TrendingUp className="h-4 w-4" />}
             />
             <StatCard
-              title="إجمالي المدفوع"
+              title={t(`${NS}.statTotalPaid`)}
               value={omr(totals.paid)}
               color="blue"
               icon={<CheckCircle2 className="h-4 w-4" />}
             />
             <StatCard
-              title="إجمالي المتبقي"
+              title={t(`${NS}.statTotalRemaining`)}
               value={omr(totals.remaining)}
               color={totals.remaining > 0 ? "red" : "grey"}
               icon={<AlertCircle className="h-4 w-4" />}
             />
           </div>
 
-          {/* ── Search ── */}
           <div className="relative max-w-sm no-print">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input
-              placeholder="البحث باسم الموظف..."
+              placeholder={t(`${NS}.searchPlaceholder`)}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pe-9 text-start"
             />
           </div>
 
-          {/* ── Table ── */}
           <Card className="shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/40">
-                    <TableHead className="text-start font-semibold min-w-[150px]">الموظف</TableHead>
-                    <TableHead className="text-start font-semibold min-w-[140px]">الفرع / الدور</TableHead>
-                    <TableHead className="text-start font-semibold">الراتب الأساسي</TableHead>
-                    <TableHead className="text-start font-semibold text-green-700">المستحقات</TableHead>
-                    <TableHead className="text-start font-semibold text-green-700">العمولات</TableHead>
-                    <TableHead className="text-start font-semibold text-orange-600">الخصومات</TableHead>
-                    <TableHead className="text-start font-semibold text-orange-600">السلف</TableHead>
-                    <TableHead className="text-start font-semibold text-green-700 min-w-[110px]">الصافي</TableHead>
-                    <TableHead className="text-start font-semibold text-blue-600">المدفوع</TableHead>
-                    <TableHead className="text-start font-semibold text-red-600 min-w-[100px]">المتبقي</TableHead>
-                    <TableHead className="text-start font-semibold">الحالة</TableHead>
-                    <TableHead className="text-start font-semibold w-16 no-print">طباعة</TableHead>
+                    <TableHead className="text-start font-semibold min-w-[150px]">{t(`${NS}.thEmployee`)}</TableHead>
+                    <TableHead className="text-start font-semibold min-w-[140px]">{t(`${NS}.thBranchRole`)}</TableHead>
+                    <TableHead className="text-start font-semibold">{t(`${NS}.thBaseSalary`)}</TableHead>
+                    <TableHead className="text-start font-semibold text-green-700">{t(`${NS}.thBonus`)}</TableHead>
+                    <TableHead className="text-start font-semibold text-green-700">{t(`${NS}.thOvertime`)}</TableHead>
+                    <TableHead className="text-start font-semibold text-orange-600">{t(`${NS}.thDeduction`)}</TableHead>
+                    <TableHead className="text-start font-semibold text-orange-600">{t(`${NS}.thAdvance`)}</TableHead>
+                    <TableHead className="text-start font-semibold text-green-700 min-w-[110px]">{t(`${NS}.thNet`)}</TableHead>
+                    <TableHead className="text-start font-semibold text-blue-600">{t(`${NS}.thPaid`)}</TableHead>
+                    <TableHead className="text-start font-semibold text-red-600 min-w-[100px]">{t(`${NS}.thRemaining`)}</TableHead>
+                    <TableHead className="text-start font-semibold">{t(`${NS}.thStatus`)}</TableHead>
+                    <TableHead className="text-start font-semibold w-16 no-print">{t(`${NS}.thPrint`)}</TableHead>
                   </TableRow>
                 </TableHeader>
 
@@ -191,7 +186,7 @@ export default function PayrollSummaryPage() {
                   {filtered.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={12}>
-                        <EmptyState message="لا توجد بيانات تطابق البحث" />
+                        <EmptyState message={t(`${NS}.emptyResults`)} />
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -265,7 +260,7 @@ export default function PayrollSummaryPage() {
                               variant="ghost"
                               className="h-7 w-7 text-muted-foreground hover:text-foreground"
                               onClick={() => window.print()}
-                              title={`طباعة - ${row.employee.name}`}
+                              title={t(`${NS}.printRowTitle`, { name: row.employee.name })}
                             >
                               <Printer className="h-3.5 w-3.5" />
                             </Button>
@@ -276,14 +271,13 @@ export default function PayrollSummaryPage() {
                   )}
                 </TableBody>
 
-                {/* ── Footer totals ── */}
                 {filtered.length > 0 && (
                   <tfoot>
                     <tr className="border-t-2 bg-muted/50 font-bold text-sm">
                       <td className="px-4 py-3 text-start" colSpan={2}>
-                        الإجمالي
+                        {t(`${NS}.footerTotal`)}
                         <span className="text-xs font-normal text-muted-foreground me-1">
-                          ({filtered.length} من {payrollRows.length} موظف)
+                          {t(`${NS}.footerCount`, { shown: filtered.length, total: payrollRows.length })}
                         </span>
                       </td>
                       <td className="px-4 py-3 tabular-nums">{omr(footer.base)}</td>
@@ -315,10 +309,8 @@ export default function PayrollSummaryPage() {
             </div>
           </Card>
 
-          {/* ── Footer note ── */}
           <p className="text-xs text-muted-foreground pb-2 no-print">
-            الصافي = الأساسي + المستحقات + العمولات − الخصومات − السلف &nbsp;·&nbsp;
-            المتبقي = الصافي − المدفوع
+            {t(`${NS}.footerNote`)}
           </p>
 
         </div>
