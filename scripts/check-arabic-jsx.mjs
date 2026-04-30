@@ -6,10 +6,13 @@
 //   node scripts/check-arabic-jsx.mjs              (warnings only)
 //   node scripts/check-arabic-jsx.mjs --strict     (exit 1 if any warning)
 //
-// Out of scope (matches RTL codemod exclusions):
-//   - pages/POS.tsx, pages/mobile/MobilePOS.tsx (Phase 3)
+// Out of scope:
+//   - pages/mobile/MobilePOS.tsx (Phase 3.x — not yet reached)
 //   - components/Invoice58.tsx, Invoice80.tsx (print templates)
 //   - lib/printer.ts (print service)
+//   - pages/POS.tsx is now IN SCOPE after Phase 3.2; remaining occurrences
+//     are CATEGORY_ICONS keys (DB-bound) and the audit-trail reason string,
+//     both intentionally not translated.
 //
 // This is a stand-in for an ESLint plugin until ESLint is wired into the
 // project; same diagnostic, just printed to stdout instead of the editor.
@@ -22,7 +25,6 @@ const root = path.resolve(__dirname, "..");
 const clientSrc = path.join(root, "client", "src");
 
 const EXCLUDE_FILES = new Set([
-  path.join(clientSrc, "pages", "POS.tsx"),
   path.join(clientSrc, "pages", "mobile", "MobilePOS.tsx"),
   path.join(clientSrc, "components", "Invoice58.tsx"),
   path.join(clientSrc, "components", "Invoice80.tsx"),
