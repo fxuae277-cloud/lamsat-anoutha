@@ -36,3 +36,7 @@ print-service-v2.3.0.zip
 # Playwright test output
 test-results/
 tests/screenshots/
+
+# Database backups (never commit)
+*.sql
+backup-pre-i18n-*
