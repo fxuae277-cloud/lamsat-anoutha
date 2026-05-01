@@ -70,6 +70,18 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  // ── Startup migration: add offline support columns to shifts ────────────────
+  try {
+    await pool.query(`
+      ALTER TABLE shifts
+        ADD COLUMN IF NOT EXISTS offline_id VARCHAR(50) UNIQUE,
+        ADD COLUMN IF NOT EXISTS source      VARCHAR(20) DEFAULT 'online';
+      CREATE INDEX IF NOT EXISTS idx_shifts_offline_id ON shifts(offline_id);
+    `);
+  } catch (err) {
+    console.warn("[migration] offline shift columns may already exist:", (err as Error).message);
+  }
+
   app.post("/api/auth/login", authLimiter, async (req, res) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: formatZodError(parsed.error, getLang(req)) });
@@ -3561,6 +3573,59 @@ export async function registerRoutes(
     const row = await storage.closeShift(shiftId, String(actualCash));
     if (!row) return res.status(404).json(errJson("SHIFT_NOT_FOUND", getLang(req)));
     res.json(row);
+  });
+
+  // ── POST /api/shifts/from-offline — sync a shift that was opened offline ────
+  app.post("/api/shifts/from-offline", requireAuth, requirePermission("shift.open"), async (req, res) => {
+    try {
+      const { offline_id, openingCash, startedAt, branchId } = req.body;
+      if (!offline_id || !openingCash || !startedAt || !branchId) {
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
+      }
+      const user = await storage.getUser(req.session.userId!);
+      if (!user || !user.terminalName) {
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
+      }
+      // Idempotency: return existing if already synced
+      const existing = await pool.query(
+        `SELECT id FROM shifts WHERE offline_id = $1 LIMIT 1`,
+        [offline_id]
+      );
+      if (existing.rows.length > 0) {
+        return res.json({ shiftId: existing.rows[0].id, synced: true, alreadyExisted: true });
+      }
+      const [created] = await db.insert(shifts).values({
+        branchId: Number(branchId),
+        cashierId: user.id,
+        terminalName: user.terminalName,
+        openingCash: String(openingCash),
+        startedAt: new Date(startedAt),
+        status: "open",
+        offlineId: offline_id,
+        source: "offline_sync",
+      }).returning();
+      res.status(201).json({ shiftId: created.id, synced: true });
+    } catch (err: any) {
+      console.error("[offline-shift-open]", err);
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+    }
+  });
+
+  // ── PATCH /api/shifts/:id/close-from-offline — close an offline-synced shift
+  app.patch("/api/shifts/:id/close-from-offline", requireAuth, requirePermission("shift.close"), async (req, res) => {
+    try {
+      const shiftId = Number(req.params.id);
+      const { actualCash } = req.body;
+      if (!shiftId || actualCash === undefined) {
+        return res.status(400).json(errJson("MISSING_FIELDS", getLang(req)));
+      }
+      const row = await storage.closeShift(shiftId, String(actualCash));
+      if (!row) return res.status(404).json(errJson("SHIFT_NOT_FOUND", getLang(req)));
+      res.json(row);
+    } catch (err: any) {
+      console.error("[offline-shift-close]", err);
+      res.status(500).json(errJson("INTERNAL_ERROR", getLang(req)));
+    }
   });
 
   app.get("/api/reports/shift", requireAuth, requirePermission("reports.view"), enforceBranchScope, async (req, res) => {
