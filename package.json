@@ -14,7 +14,12 @@
     "db:push": "drizzle-kit push",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "audit:integrity": "tsx audit/scripts/integrity-runner.ts",
+    "audit:accounting": "tsx audit/scripts/accounting-runner.ts",
+    "audit:inventory": "tsx audit/scripts/inventory-runner.ts",
+    "audit:all": "npm run audit:integrity && npm run audit:accounting && npm run audit:inventory",
+    "audit:sql": "psql $DATABASE_URL -f"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
