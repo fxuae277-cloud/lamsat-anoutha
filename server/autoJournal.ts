@@ -114,7 +114,8 @@ export async function journalForSale(sale: {
   const netSales = total - vat;
   if (total <= 0) return;
 
-  const cashOrBank = (sale.paymentMethod === "cash" || sale.paymentMethod === "card") ? ACCOUNT_CODES.CASH : ACCOUNT_CODES.BANK;
+  // card/bank_transfer/wallet/cheque → BANK clearing; only physical cash → CASH
+  const cashOrBank = sale.paymentMethod === "cash" ? ACCOUNT_CODES.CASH : ACCOUNT_CODES.BANK;
   const date = sale.createdAt ? new Date(sale.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
   const desc = `فاتورة بيع ${sale.invoiceNumber}`;
 
@@ -154,7 +155,7 @@ export async function journalForExpense(expense: {
   const amount = parseFloat(expense.amount || "0");
   if (amount <= 0) return;
 
-  const cashOrBank = (expense.source === "cash" || expense.source === "card") ? ACCOUNT_CODES.CASH : ACCOUNT_CODES.BANK;
+  const cashOrBank = expense.source === "cash" ? ACCOUNT_CODES.CASH : ACCOUNT_CODES.BANK;
   const desc = `مصروف: ${expense.category}${expense.notes ? " - " + expense.notes : ""}`;
 
   await createAutoJournal({
@@ -214,7 +215,7 @@ export async function journalForSaleReturn(ret: {
   const cogs = parseFloat(ret.cogsReturned || "0");
   if (refund <= 0) return;
 
-  const cashOrBank = (ret.refundMethod === "cash" || ret.refundMethod === "card") ? ACCOUNT_CODES.CASH : ACCOUNT_CODES.BANK;
+  const cashOrBank = ret.refundMethod === "cash" ? ACCOUNT_CODES.CASH : ACCOUNT_CODES.BANK;
   const date = ret.createdAt ? new Date(ret.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
   const desc = `مرتجع مبيعات - فاتورة ${ret.saleInvoiceNumber} - مرتجع #${ret.returnNumber}`;
 
@@ -248,7 +249,7 @@ export async function journalForSupplierPayment(payment: {
 }) {
   if (payment.amount <= 0) return;
 
-  const cashOrBank = (payment.method === "cash" || payment.method === "card") ? ACCOUNT_CODES.CASH : ACCOUNT_CODES.BANK;
+  const cashOrBank = payment.method === "cash" ? ACCOUNT_CODES.CASH : ACCOUNT_CODES.BANK;
   const date = new Date().toISOString().slice(0, 10);
   const desc = payment.note || `دفعة للمورد #${payment.supplierId}`;
 

@@ -1602,13 +1602,35 @@ export class DatabaseStorage implements IStorage {
       and(eq(cashLedger.shiftId, id), sql`${cashLedger.type} IN ('deposit','withdrawal')`)
     );
 
+    // cash refunds for this shift (sale_returns paid in cash)
+    const [cashRefundsRow] = await db.select({
+      total: sql<string>`coalesce(sum(amount_out::numeric),0)::text`,
+    }).from(cashLedger).where(
+      and(eq(cashLedger.shiftId, id), sql`${cashLedger.type} = 'sale_return'`)
+    );
+
+    // cash in/out from owner movements (owner_cash_in, owner_handover, bank_deposit, etc.)
+    const [ownerMovementsRow] = await db.select({
+      totalIn: sql<string>`coalesce(sum(amount_in::numeric),0)::text`,
+      totalOut: sql<string>`coalesce(sum(amount_out::numeric),0)::text`,
+    }).from(cashLedger).where(
+      and(eq(cashLedger.shiftId, id),
+        sql`${cashLedger.type} IN ('owner_cash_in','owner_transfer_in','adjustment_in','owner_handover','bank_deposit','adjustment_out')`)
+    );
+
     const totalCashIn = parseFloat(cashOrdersRow.total) + parseFloat(cashSalesRow.total);
     const totalCardIn = parseFloat(cardOrdersRow.total) + parseFloat(cardSalesRow.total);
     const totalBankIn = parseFloat(bankOrdersRow.total) + parseFloat(bankSalesRow.total);
     const depositsIn = parseFloat(cashDepositRow.totalIn);
     const withdrawalsOut = parseFloat(cashDepositRow.totalOut);
+    const cashRefunds = parseFloat(cashRefundsRow.total);
+    const ownerCashIn = parseFloat(ownerMovementsRow.totalIn);
+    const ownerCashOut = parseFloat(ownerMovementsRow.totalOut);
 
-    const expectedCash = openingCash + totalCashIn - parseFloat(cashExpenseRow.total) + depositsIn - withdrawalsOut;
+    const expectedCash = openingCash + totalCashIn - parseFloat(cashExpenseRow.total)
+      + depositsIn - withdrawalsOut
+      - cashRefunds
+      + ownerCashIn - ownerCashOut;
     const actual = parseFloat(actualCash);
     const diff = actual - expectedCash;
 

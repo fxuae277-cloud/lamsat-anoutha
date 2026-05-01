@@ -23,6 +23,13 @@ _لمسة أنوثة POS/ERP_
 | ISS-011 | COGS = 0 لمنتجات avg_cost = 0 | 1 | MEDIUM | موثّق — يتطلب data fix |
 | ISS-012 | supplier.total_purchases قد لا يُحدَّث عند إنشاء فاتورة شراء | 1 | MEDIUM | يتطلب كود مراجعة إضافية |
 
+## ✅ إصلاحات Phase 2 (Accounting)
+
+| # | الوصف | Phase | Severity | الحالة | الملف |
+|---|-------|-------|----------|--------|-------|
+| ISS-013 | **closeShift لا يطرح المرتجعات النقدية من expectedCash** | 2 | **HIGH** | ✅ مُصلَح | storage.ts:1598 |
+| ISS-014 | **card/wallet payments تُسجَّل في حساب CASH بدل BANK** | 2 | **HIGH** | ✅ مُصلَح | autoJournal.ts:117,158,218,252 |
+
 ## 📋 تفاصيل الإصلاحات
 
 ### ISS-006: products.stock_qty لا يُخفَّض عند البيع
