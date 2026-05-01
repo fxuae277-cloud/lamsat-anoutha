@@ -58,6 +58,8 @@ import PayrollSheetPage from "@/components/payroll/payroll-sheet/PayrollSheetPag
 
 import CashierReceiveTransfers from "@/pages/CashierReceiveTransfers";
 import MobileEmployeeHome from "@/pages/mobile/MobileEmployeeHome";
+import { OfflineBanner } from "@/components/OfflineBanner";
+import { InstallPWA } from "@/components/InstallPWA";
 import MobileOwnerHome from "@/pages/mobile/MobileOwnerHome";
 import MobilePOS from "@/pages/mobile/MobilePOS";
 import MobileShift from "@/pages/mobile/MobileShift";
@@ -355,6 +357,8 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <OfflineBanner />
+        <InstallPWA />
         <Toaster />
         <I18nProvider>
             <AuthenticatedRouter />

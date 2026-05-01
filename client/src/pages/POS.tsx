@@ -28,6 +28,7 @@ import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { useScannerSettings } from "@/hooks/useScannerSettings";
 import { beepSuccess, beepError } from "@/lib/scannerBeep";
 import type { Branch, Shift } from "@shared/schema";
+import { queueSale, syncPending, getPendingCount, refreshProductCache, refreshCustomerCache } from "@/lib/sync-engine";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface POSProduct {
@@ -927,6 +928,26 @@ export default function POS() {
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
 
+  // Auto-sync pending offline sales when connection is restored
+  useEffect(() => {
+    const handleOnline = async () => {
+      const count = await getPendingCount();
+      if (count === 0) return;
+      try {
+        const result = await syncPending();
+        if (result.synced > 0) {
+          toast({
+            title: `${result.synced} offline sale(s) synced`,
+            description: result.failed > 0 ? `${result.failed} failed — will retry` : undefined,
+          });
+          qc.invalidateQueries({ queryKey: ["/api/pos/products"] });
+        }
+      } catch {}
+    };
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, []);
+
   const toggleFullscreen = useCallback(async () => {
     try {
       if (!document.fullscreenElement) {
@@ -958,11 +979,17 @@ export default function POS() {
 
   const { data: products = [], isLoading: loadingProducts } = useQuery<POSProduct[]>({
     queryKey: ["/api/pos/products", search, activeCat],
-    queryFn: () => {
+    queryFn: async () => {
       const p = new URLSearchParams();
       if (search) p.set("search", search);
       if (activeCat !== "all") p.set("categoryId", String(activeCat));
-      return fetch(`/api/pos/products?${p}`, { credentials: "include" }).then(r => r.json()).then(d => Array.isArray(d) ? d : []);
+      if (!navigator.onLine) {
+        const { getCachedProducts } = await import("@/lib/sync-engine");
+        return getCachedProducts() as unknown as POSProduct[];
+      }
+      const data = await fetch(`/api/pos/products?${p}`, { credentials: "include" }).then(r => r.json()).then(d => Array.isArray(d) ? d : []);
+      if (!search && activeCat === "all") refreshProductCache(data);
+      return data;
     },
     placeholderData: prev => prev,
     staleTime: 10_000,
@@ -1155,6 +1182,32 @@ export default function POS() {
           size: i.size || null,
         })),
       };
+
+      // ── Offline-first: if no network, queue locally ──────────
+      if (!navigator.onLine) {
+        const localId = await queueSale(body);
+        const pendingCount = await getPendingCount();
+        toast({
+          title: "Sale saved offline",
+          description: `${pendingCount} sale(s) will sync when back online`,
+        });
+        return {
+          _offline: true,
+          invoiceNumber: `PEND-${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          total: body.total,
+          subtotal: body.subtotal,
+          discount: body.discount,
+          vat: body.vat,
+          amountPaid: body.amountPaid,
+          changeAmount: body.changeAmount,
+          paymentMethod: body.paymentMethod,
+          items: cart.map(i => ({ productName: i.productName, quantity: i.quantity, unitPrice: i.unitPrice, color: i.color })),
+          customerName: customer?.name ?? null,
+          customerPhone: customer?.phone ?? null,
+        };
+      }
+
       const res = await apiRequest("POST", "/api/sales", body);
       if (!res.ok) {
         const err = await res.json();
