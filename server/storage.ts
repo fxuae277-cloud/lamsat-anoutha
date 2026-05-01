@@ -1062,6 +1062,16 @@ export class DatabaseStorage implements IStorage {
         [cogsTotal.toFixed(3), grossProfit.toFixed(3), saleId]
       );
 
+      // sync products.stock_qty from location_inventory after sale deduction
+      const soldProductIds = [...new Set(data.items.map((i: any) => i.productId as number))];
+      for (const pid of soldProductIds) {
+        await client.query(`
+          UPDATE products SET stock_qty = (
+            SELECT COALESCE(SUM(qty_on_hand), 0) FROM location_inventory WHERE product_id = $1
+          ) WHERE id = $1
+        `, [pid]);
+      }
+
       const pm = data.paymentMethod || "cash";
       const amount = sale.total || "0";
 
@@ -3513,6 +3523,26 @@ export class DatabaseStorage implements IStorage {
         `UPDATE sale_returns SET cogs_returned = $1 WHERE id = $2`,
         [totalCogs.toFixed(3), returnId]
       );
+
+      // sync products.stock_qty — return adds back to stock
+      const productIds = [...new Set(items.map((i) => i.productId))];
+      for (const pid of productIds) {
+        await client.query(`
+          UPDATE products SET stock_qty = (
+            SELECT COALESCE(SUM(qty_on_hand), 0) FROM location_inventory WHERE product_id = $1
+          ) WHERE id = $1
+        `, [pid]);
+      }
+
+      // reverse customer aggregates (total_spent, invoice_count)
+      if (sale.customerId) {
+        await client.query(`
+          UPDATE customers
+          SET total_spent   = GREATEST(COALESCE(total_spent::numeric, 0) - $1::numeric, 0),
+              invoice_count = GREATEST(COALESCE(invoice_count, 0) - 1, 0)
+          WHERE id = $2
+        `, [data.refundAmount, sale.customerId]);
+      }
 
       await client.query("COMMIT");
 
