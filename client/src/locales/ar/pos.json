@@ -66,6 +66,10 @@
     "cart": "سلة المشتريات",
     "return": "إرجاع",
     "hold": "معلق",
+    "exitFullscreen": "خروج من ملء الشاشة",
+    "fullscreen": "ملء الشاشة",
+    "minimize": "تصغير",
+    "maximize": "ملء الشاشة",
     "close": "إغلاق"
   },
   "search": {

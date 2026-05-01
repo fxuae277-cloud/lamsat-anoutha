@@ -8,7 +8,7 @@ import {
   Banknote, LogOut, User as UserIcon, XCircle, Clock, Printer,
   ArrowRight, Receipt, ShoppingCart, MessageSquare, Pause, Play,
   Tag, Package, Percent, CreditCard, Wallet, RotateCcw, ChevronDown,
-  Phone, AlertTriangle, ZapOff, Loader2,
+  Phone, AlertTriangle, ZapOff, Loader2, Maximize2, Minimize2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { fmtOMR, fmtDateTime, fmtDate } from "@/lib/formatters";
 import { BarcodeScanButton } from "@/components/BarcodeScanButton";
-import { BarcodeIndicator, type BarcodeIndicatorState } from "@/components/BarcodeIndicator";
+import { type BarcodeIndicatorState } from "@/components/BarcodeIndicator";
 import { DevicePrintSettingsDialog } from "@/components/DevicePrintSettingsDialog";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { useScannerSettings } from "@/hooks/useScannerSettings";
@@ -913,7 +913,31 @@ export default function POS() {
   const [scannerState, setScannerState] = useState<BarcodeIndicatorState>("idle");
   const scannerStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { settings: scannerSettings } = useScannerSettings();
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  const fullscreenSupported =
+    typeof document !== "undefined" &&
+    typeof (document.documentElement as any).requestFullscreen === "function";
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (error) {
+      console.error("Fullscreen failed:", error);
+    }
+  }, []);
 
   const isOwner = user?.role === "owner" || user?.role === "admin";
   const branchId = user?.branchId || 1;
@@ -1435,12 +1459,17 @@ export default function POS() {
                   <span className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-white text-pink-600 text-[9px] font-bold flex items-center justify-center">{heldCount}</span>
                 )}
               </Button>
-              <BarcodeIndicator
-                state={scannerState}
-                lastScanned={lastScanned}
-                enabled={scannerSettings.enabled}
-                variant="onDark"
-              />
+              {fullscreenSupported && (
+                <Button size="sm" variant="ghost"
+                  className="h-7 text-xs gap-1 text-white hover:bg-white/20 px-2"
+                  onClick={toggleFullscreen}
+                  title={isFullscreen ? t("pos:header.exitFullscreen") : t("pos:header.fullscreen")}>
+                  {isFullscreen
+                    ? <><Minimize2 className="w-3.5 h-3.5" /> {t("pos:header.minimize")}</>
+                    : <><Maximize2 className="w-3.5 h-3.5" /> {t("pos:header.maximize")}</>
+                  }
+                </Button>
+              )}
               <DevicePrintSettingsDialog />
               <Button size="sm" variant="ghost"
                 className="h-7 text-xs gap-1 text-orange-200 hover:text-white hover:bg-white/20 px-2 border border-orange-300/40"

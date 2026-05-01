@@ -66,6 +66,10 @@
     "cart": "Shopping Cart",
     "return": "Return",
     "hold": "Held",
+    "exitFullscreen": "Exit Fullscreen",
+    "fullscreen": "Fullscreen",
+    "minimize": "Minimize",
+    "maximize": "Fullscreen",
     "close": "Close"
   },
   "search": {

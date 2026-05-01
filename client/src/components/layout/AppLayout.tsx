@@ -1,12 +1,10 @@
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { ReactNode } from "react";
 import { useLocation } from "wouter";
 import { Sidebar } from "./Sidebar";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/lib/i18n";
 import { NotificationBell } from "./NotificationBell";
-import { BarcodeIndicator, type BarcodeIndicatorState } from "@/components/BarcodeIndicator";
-import { useScannerSettings } from "@/hooks/useScannerSettings";
 
 // Routes that should fill the entire viewport without the standard
 // admin chrome (top search bar + page padding). Cashier/POS screens.
@@ -18,29 +16,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const isFullBleed = FULL_BLEED_ROUTES.some(
     (p) => location === p || location.startsWith(p + "/")
   );
-
-  // Scanner-state observer: react to "scanner-flash" custom events fired
-  // by pages that use the hook. Lets the header indicator blink in sync
-  // with scans happening anywhere in the app.
-  const { settings: scannerSettings } = useScannerSettings();
-  const [scannerState, setScannerState] = useState<BarcodeIndicatorState>("idle");
-  const [lastScanned, setLastScanned] = useState<string | null>(null);
-  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    const onFlash = (e: Event) => {
-      const detail = (e as CustomEvent<{ state: BarcodeIndicatorState; barcode?: string }>).detail;
-      if (!detail) return;
-      setScannerState(detail.state);
-      if (detail.barcode) setLastScanned(detail.barcode);
-      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
-      flashTimerRef.current = setTimeout(() => setScannerState("idle"), 600);
-    };
-    window.addEventListener("scanner-flash", onFlash as EventListener);
-    return () => {
-      window.removeEventListener("scanner-flash", onFlash as EventListener);
-      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
-    };
-  }, []);
 
   if (isFullBleed) {
     // Cashier mode: keep the navigation sidebar visible but drop the top
@@ -78,11 +53,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <BarcodeIndicator
-              state={scannerState}
-              lastScanned={lastScanned}
-              enabled={scannerSettings.enabled}
-            />
             <NotificationBell />
             <div className="text-sm font-medium text-muted-foreground">
               {headerDate}
