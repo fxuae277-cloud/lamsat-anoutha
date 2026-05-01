@@ -1,9 +1,10 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-05-01 (جلسة 53 — تنظيف 403 + i18n simplification + tsc safe fixes)_
+_آخر تحديث: 2026-05-01 (جلسة 54 — Phase 7: تسوية بيانات الإنتاج + v3.1.0-data-reconciled)_
 
 ---
 
 ## 🆕 Recent changes
+- **2026-05-01** — جلسة 54: Phase 7 — تسوية بيانات الإنتاج على Railway PostgreSQL. 6 إصلاحات (stock_qty، customer metrics، dual inventory docs، avg_cost، supplier totals). 241/241 اختبار. tagged v3.1.0-data-reconciled.
 - **2026-05-01** — جلسة 53: 403 fix على Invoices، إبقاء زر اللغة في Login فقط، tsc safe fixes
 - **2026-05-01** — جلسة 52: حذف زر ⛶ (Maximize/Minimize) من POS toolbar
 - **2026-04-28** — Updated barcode label size "كبير 2" to 58×39mm landscape (mm_w:58, mm_h:39) — single label per page, content area 50×33mm, no heart separators
