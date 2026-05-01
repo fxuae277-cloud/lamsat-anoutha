@@ -41,6 +41,7 @@ const SALE_DATA = {
   vat: "5",
   subtotal: "100",
   shiftId: null,
+  invoiceNumber: "INV-TEST",
 } as any;
 
 const SALE_ITEM = {
@@ -90,7 +91,6 @@ function makeHappyPathClient(opts: {
     .mockResolvedValueOnce({ rows: [{ qty_on_hand: String(availableQty) }] })     // balance row
     .mockResolvedValueOnce({ rows: [] })                             // UPDATE balance -qty
     .mockResolvedValueOnce({ rows: [] })                             // INSERT ledger sale_out
-    .mockResolvedValueOnce({ rows: [] })                             // INSERT location_inventory
     .mockResolvedValueOnce({ rows: [] })                             // SELECT unit_cost_final (none)
     .mockResolvedValueOnce({ rows: [{ avg_cost: avgCost }] })        // SELECT avg_cost
     .mockResolvedValueOnce({ rows: [] })                             // INSERT sale_items
@@ -103,6 +103,7 @@ function makeHappyPathClient(opts: {
 
   calls
     .mockResolvedValueOnce({ rows: [] })                             // UPDATE cogs_total/gross_profit
+    .mockResolvedValueOnce({ rows: [] })                             // UPDATE products.stock_qty (ISS-006)
     .mockResolvedValueOnce({ rows: [] })                             // INSERT cash/bank_ledger
     .mockResolvedValueOnce({ rows: [] });                            // COMMIT
 
@@ -165,7 +166,7 @@ describe("createSale — insufficient stock", () => {
       .mockResolvedValueOnce({ rows: [{ id: 1, invoice_number: "INV-F", total: "150", payment_method: "cash" }] }) // INSERT sales
       .mockResolvedValueOnce({ rows: [{ variant_id: 7 }] })           // variant
       .mockResolvedValueOnce({ rows: [] })                            // FOR UPDATE
-      .mockResolvedValueOnce({ rows: [{ total_available: "2" }] })    // only 2 available
+      .mockResolvedValueOnce({ rows: [{ total_available: "2", tracked_rows: "1" }] }) // only 2 available (tracked)
       .mockResolvedValueOnce({ rows: [{ name: "حقيبة جلد" }] })      // product name for error
       .mockResolvedValueOnce({ rows: [] });                           // ROLLBACK
     const client = { query: clientQuery, release: vi.fn() };
@@ -271,15 +272,16 @@ describe("createSale — payment ledger routing", () => {
       .mockResolvedValueOnce({ rows: [{ total_available: "10" }] })
       .mockResolvedValueOnce({ rows: [{ qty_on_hand: "10" }] })
       .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [{ avg_cost: "20" }] })
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] })  // UPDATE cogs
-      .mockResolvedValueOnce({ rows: [] })  // INSERT bank_ledger
-      .mockResolvedValueOnce({ rows: [] }); // COMMIT
+      .mockResolvedValueOnce({ rows: [] })                             // UPDATE balance
+      .mockResolvedValueOnce({ rows: [] })                             // INSERT ledger
+      .mockResolvedValueOnce({ rows: [] })                             // SELECT unit_cost_final
+      .mockResolvedValueOnce({ rows: [{ avg_cost: "20" }] })          // SELECT avg_cost
+      .mockResolvedValueOnce({ rows: [] })                             // INSERT sale_items
+      .mockResolvedValueOnce({ rows: [] })                             // INSERT inventory_transactions
+      .mockResolvedValueOnce({ rows: [] })                             // UPDATE cogs
+      .mockResolvedValueOnce({ rows: [] })                             // UPDATE products.stock_qty (ISS-006)
+      .mockResolvedValueOnce({ rows: [] })                             // INSERT bank_ledger
+      .mockResolvedValueOnce({ rows: [] });                            // COMMIT
     const client = { query: clientQuery, release: vi.fn() };
     mockPoolConnect.mockResolvedValue(client);
 
