@@ -460,6 +460,7 @@ export default function Invoices() {
       if (!res.ok) return [];
       return res.json();
     },
+    enabled: isOwnerOrAdmin,
   });
 
   let queryUrl = `/api/sales?from=${appliedFrom}&to=${appliedTo}`;
@@ -561,16 +562,18 @@ export default function Invoices() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1 min-w-[140px]">
-              <label className="text-xs font-medium text-gray-600">{t("common.employee")}</label>
-              <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                <SelectTrigger className="h-8 text-xs" data-testid="select-invoices-employee"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("common.all")}</SelectItem>
-                  {allUsers.map((u: any) => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            {isOwnerOrAdmin && (
+              <div className="space-y-1 min-w-[140px]">
+                <label className="text-xs font-medium text-gray-600">{t("common.employee")}</label>
+                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                  <SelectTrigger className="h-8 text-xs" data-testid="select-invoices-employee"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("common.all")}</SelectItem>
+                    {allUsers.map((u: any) => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {isOwnerOrAdmin && (
               <div className="space-y-1 min-w-[160px]">
                 <label className="text-xs font-medium text-gray-600">{t("common.branch")}</label>
