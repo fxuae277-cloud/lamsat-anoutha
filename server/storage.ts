@@ -2632,39 +2632,48 @@ export class DatabaseStorage implements IStorage {
   async getProfitByBranches(from: string, to: string) {
     const fromDate = new Date(from + "T00:00:00");
     const toDate = new Date(to + "T23:59:59.999");
-    const allBranches = await db.select().from(branches);
 
-    const results = [];
-    for (const branch of allBranches) {
-      const [ordSales] = await db.select({
+    // Single query per table grouped by branch — avoids N+1
+    const [allBranchRows, ordRows, posRows, expRows] = await Promise.all([
+      db.select().from(branches),
+      db.select({
+        branchId: orders.branchId,
         total: sql<string>`coalesce(sum(${orders.total}::numeric), 0)::text`,
         cogs: sql<string>`coalesce(sum(${orders.cogsTotal}::numeric), 0)::text`,
       }).from(orders).where(
-        and(eq(orders.status, "paid"), eq(orders.branchId, branch.id),
+        and(eq(orders.status, "paid"),
           sql`${orders.paidAt} >= ${fromDate}`, sql`${orders.paidAt} <= ${toDate}`)
-      );
-      const [posSales] = await db.select({
+      ).groupBy(orders.branchId),
+      db.select({
+        branchId: sales.branchId,
         total: sql<string>`coalesce(sum(${sales.total}::numeric), 0)::text`,
         cogs: sql<string>`coalesce(sum(${sales.cogsTotal}::numeric), 0)::text`,
       }).from(sales).where(
-        and(eq(sales.branchId, branch.id),
-          sql`${sales.createdAt} >= ${fromDate}`, sql`${sales.createdAt} <= ${toDate}`)
-      );
-      const [expRow] = await db.select({
+        and(sql`${sales.createdAt} >= ${fromDate}`, sql`${sales.createdAt} <= ${toDate}`)
+      ).groupBy(sales.branchId),
+      db.select({
+        branchId: expenses.branchId,
         total: sql<string>`coalesce(sum(${expenses.amount}::numeric), 0)::text`,
       }).from(expenses).where(
-        and(eq(expenses.branchId, branch.id),
-          sql`${expenses.date} >= ${from}`, sql`${expenses.date} <= ${to}`)
-      );
+        and(sql`${expenses.date} >= ${from}`, sql`${expenses.date} <= ${to}`)
+      ).groupBy(expenses.branchId),
+    ]);
 
-      const salesTotal = parseFloat(ordSales.total) + parseFloat(posSales.total);
-      const cogsTotal = parseFloat(ordSales.cogs) + parseFloat(posSales.cogs);
+    const ordMap = new Map(ordRows.map((r) => [r.branchId, r]));
+    const posMap = new Map(posRows.map((r) => [r.branchId, r]));
+    const expMap = new Map(expRows.map((r) => [r.branchId, r]));
+
+    return allBranchRows.map((branch) => {
+      const ord = ordMap.get(branch.id);
+      const pos = posMap.get(branch.id);
+      const exp = expMap.get(branch.id);
+      const salesTotal = parseFloat(ord?.total ?? "0") + parseFloat(pos?.total ?? "0");
+      const cogsTotal = parseFloat(ord?.cogs ?? "0") + parseFloat(pos?.cogs ?? "0");
       const grossProfit = salesTotal - cogsTotal;
-      const expensesTotal = parseFloat(expRow.total);
+      const expensesTotal = parseFloat(exp?.total ?? "0");
       const netProfit = grossProfit - expensesTotal;
       const margin = salesTotal > 0 ? ((netProfit / salesTotal) * 100) : 0;
-
-      results.push({
+      return {
         branchId: branch.id,
         branchName: branch.address ? `${branch.name} - ${branch.address}` : branch.name,
         salesTotal: salesTotal.toFixed(3),
@@ -2673,9 +2682,8 @@ export class DatabaseStorage implements IStorage {
         expensesTotal: expensesTotal.toFixed(3),
         netProfit: netProfit.toFixed(3),
         margin: margin.toFixed(1),
-      });
-    }
-    return results;
+      };
+    });
   }
 
   async getProfitByEmployees(from: string, to: string, branchId?: number) {
