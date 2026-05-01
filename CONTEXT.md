@@ -1,16 +1,52 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-05-01 (جلسة 52 — حذف زر ⛶ المعطّل من POS toolbar)_
+_آخر تحديث: 2026-05-01 (جلسة 53 — تنظيف 403 + i18n simplification + tsc safe fixes)_
 
 ---
 
 ## 🆕 Recent changes
-- **2026-05-01** — حذف زر ⛶ (Maximize/Minimize) من POS toolbar (انظر "Recent Fixes" أدناه)
+- **2026-05-01** — جلسة 53: 403 fix على Invoices، إبقاء زر اللغة في Login فقط، tsc safe fixes
+- **2026-05-01** — جلسة 52: حذف زر ⛶ (Maximize/Minimize) من POS toolbar
 - **2026-04-28** — Updated barcode label size "كبير 2" to 58×39mm landscape (mm_w:58, mm_h:39) — single label per page, content area 50×33mm, no heart separators
 - **2026-04-28** — Cashier can now access `/barcode-labels` (read-only access via existing `products.view` permission; settings remain owner-only)
 
 ---
 
 ## 🛠️ Recent Fixes
+
+### fix(api): معالجة 403 على /api/users + global rejection handler — جلسة 53
+- **التاريخ:** 2026-05-01
+- **السبب الجذري:** `Invoices.tsx` استدعى `GET /api/users` (محمي بـ `requireOwnerOrAdmin`) للكاشير — يُرفض بـ 403
+- **الحل (الحالة أ):**
+  - `client/src/pages/Invoices.tsx`: أُضيف `enabled: isOwnerOrAdmin` على query `/api/users` + لُفّ employee filter بنفس الشرط
+  - `client/src/main.tsx`: أُضيف `window.addEventListener("unhandledrejection", ...)` كـ safety net
+- **ملاحظة:** الـ endpoint GET `/api/users/:id` (المنفرد) لا يوجد أصلاً — التشخيص الأصلي كان قريباً من الحقيقة لكن الـ URL الفعلي `/api/users` بدون id
+
+### feat(transfers): التحقق من /api/cashier/incoming-transfers/:id/scan — جلسة 53
+- **النتيجة:** **لا تتطلب تنفيذاً** — الـ endpoint موجود ومسجَّل بالفعل
+- **الموقع:** `server/cashier-receive-routes.ts:200` (132 سطر، production-grade)
+- **التسجيل:** `server/routes.ts:7191` → `registerCashierReceiveRoutes(app)`
+- **الـ schema الفعلي:** `stock_transfers` / `stock_transfer_lines` / `received_qty` (وليس `incoming_transfers` / `scanned_qty`)
+- **أسباب 404 المحتملة:** transfer ID غير موجود، أو barcode غير في التحويل، أو owner بدون `?branchId=X`
+
+### refactor(i18n): إبقاء زر تبديل اللغة في صفحة Login فقط — جلسة 53
+- **التاريخ:** 2026-05-01
+- **الدافع:** تبسيط فترة التدريب — الكاشير لا يحتاج تبديل لغة بعد تسجيل الدخول
+- **الملفات:**
+  - `client/src/components/layout/AppLayout.tsx`: حذف زر التبديل من header + import `Languages` و`Button` و`setLang` (unused)
+  - `client/src/pages/Settings.tsx`: حذف Card "Preferences (Language)" + import `Globe` (unused)
+  - `client/src/pages/Login.tsx`: إضافة زر toggle (top-end، Languages icon)
+- **localStorage:** `lamsa_lang` (موجود في `i18n.tsx`) يحفظ الاختيار تلقائياً
+
+### chore(types): إصلاحات tsc الآمنة — جلسة 53
+- **النتيجة:** 237 → 233 (4 إصلاحات، 1.7%)
+- **المعالَج:**
+  - `Orders.tsx`: `[...new Set(...)]` → `Array.from(new Set(...))` (×2 — TS2802)
+  - `Purchases.tsx`: `title` prop على `<FileText>` → wrap في `<span>` (TS2322)
+  - `storage.ts`: إضافة `type SQL` لـ drizzle-orm imports (TS2304)
+- **المتروك (يحتاج مهمة منفصلة):**
+  - 56 خطأ في `shared/schema.ts` (drizzle-zod `.omit()` type inference)
+  - 173 خطأ cascade في `server/storage.ts` (الجداول تُستنتج كـ `never`)
+  - يتطلّب upgrade drizzle-orm/drizzle-zod أو refactor schema
 
 ### إصلاح: حذف زر ⛶ المعطّل من POS toolbar
 - **التاريخ:** 2026-05-01
