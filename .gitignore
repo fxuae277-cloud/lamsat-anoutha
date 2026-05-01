@@ -47,3 +47,8 @@ audit/reports/*.json
 audit/reports/*.csv
 audit/reports/*.xlsx
 audit/backups/
+
+# Phase 9 — Backup system (outside repo, but guard secrets)
+.encryption-key
+*.dump
+/lamsa-backups/
