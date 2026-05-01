@@ -122,9 +122,9 @@ async function main() {
   // معادلة 6: COGS الإجمالي
   await runEquation("EQ6 — COGS الإجمالي", `
     SELECT 'EQ6_system_cogs' AS equation,
-           CASE WHEN ABS(SUM(s.cogs_total::decimal) - SUM(ic.total_cogs)) < 1 THEN 0 ELSE 1 END AS discrepancies,
-           ROUND(ABS(SUM(s.cogs_total::decimal) - SUM(ic.total_cogs)), 3) AS "totalDiffOmr",
-           CASE WHEN ABS(SUM(s.cogs_total::decimal) - SUM(ic.total_cogs)) < 1 THEN 'PASS' ELSE 'FAIL' END AS status
+           CASE WHEN COALESCE(ABS(SUM(s.cogs_total::decimal) - SUM(ic.total_cogs)), 0) < 1 THEN 0 ELSE 1 END AS discrepancies,
+           ROUND(COALESCE(ABS(SUM(s.cogs_total::decimal) - SUM(ic.total_cogs)), 0), 3) AS "totalDiffOmr",
+           CASE WHEN COALESCE(ABS(SUM(s.cogs_total::decimal) - SUM(ic.total_cogs)), 0) < 1 THEN 'PASS' ELSE 'FAIL' END AS status
     FROM sales s
     JOIN (SELECT sale_id, SUM(line_cogs::decimal) AS total_cogs FROM sale_items GROUP BY sale_id) ic
       ON ic.sale_id = s.id
