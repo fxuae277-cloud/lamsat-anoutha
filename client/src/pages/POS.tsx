@@ -28,7 +28,15 @@ import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { useScannerSettings } from "@/hooks/useScannerSettings";
 import { beepSuccess, beepError } from "@/lib/scannerBeep";
 import type { Branch, Shift } from "@shared/schema";
-import { queueSale, syncPending, getPendingCount, refreshProductCache, refreshCustomerCache } from "@/lib/sync-engine";
+import {
+  queueSale, syncPending, getPendingCount,
+  refreshProductCache, refreshCustomerCache,
+  openOfflineShift, getActiveOfflineShift, closeOfflineShift,
+} from "@/lib/sync-engine";
+import { useNetworkStatus } from "@/hooks/useNetworkStatus";
+
+// Extend Shift with offline tracking fields (never sent to server)
+type POSShift = Shift & { _offlineId?: string };
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface POSProduct {
@@ -93,33 +101,96 @@ function useStockBadge() {
 const uid = () => Math.random().toString(36).slice(2);
 
 // ─── StartPOS ─────────────────────────────────────────────────────────────────
-function StartPOS({ branchName, terminalName, userName, onShiftOpened }: {
+function StartPOS({ branchName, terminalName, userName, userId, branchId, onShiftOpened }: {
   branchName: string; terminalName: string; userName: string;
-  onShiftOpened: (shift: Shift) => void;
+  userId: number; branchId: number;
+  onShiftOpened: (shift: POSShift) => void;
 }) {
   const { toast } = useToast();
   const { t } = useI18n();
   const NS = "pos:startShift";
   const [openingCash, setOpeningCash] = useState("");
   const [checking, setChecking] = useState(true);
+  const { isOnline } = useNetworkStatus();
 
   useEffect(() => {
     (async () => {
-      try {
-        const res = await fetch("/api/shifts/current", { credentials: "include" });
-        const data = await res.json();
-        if (data.shift) { onShiftOpened(data.shift); return; }
-      } catch {}
+      // Check server first (if online)
+      if (navigator.onLine) {
+        try {
+          const res = await fetch("/api/shifts/current", { credentials: "include" });
+          const data = await res.json();
+          if (data.shift) { onShiftOpened(data.shift); return; }
+        } catch {}
+      }
+      // Fallback: check IndexedDB for an open offline shift
+      const offlineShift = await getActiveOfflineShift(userId, branchId);
+      if (offlineShift) {
+        const fakeShift: POSShift = {
+          id: offlineShift.shiftId ?? -1,
+          _offlineId: offlineShift.id,
+          branchId: offlineShift.branchId,
+          cashierId: offlineShift.userId,
+          terminalName: offlineShift.deviceId,
+          openingCash: offlineShift.openingCash,
+          startedAt: new Date(offlineShift.startedAt),
+          endedAt: null,
+          totalSales: "0", totalCash: "0", totalBank: "0",
+          expectedCash: null, actualCash: null, difference: null,
+          status: "open",
+          offlineId: null, source: null,
+        };
+        onShiftOpened(fakeShift);
+        return;
+      }
       setChecking(false);
     })();
   }, []);
 
   const openShiftMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/shifts", { openingCash: openingCash || "0" });
-      return res.json();
+    mutationFn: async (): Promise<POSShift> => {
+      const cash = openingCash || "0";
+
+      // Try online first
+      if (navigator.onLine) {
+        try {
+          const res = await apiRequest("POST", "/api/shifts", { openingCash: cash });
+          return res.json();
+        } catch {
+          // Network error → fall through to offline
+        }
+      }
+
+      // Offline path: save to IndexedDB
+      const offlineShift = await openOfflineShift({
+        branchId,
+        userId,
+        deviceId: terminalName,
+        openingCash: cash,
+      });
+      toast({
+        title: isOnline ? t(`${NS}.openSuccess`) + " (offline fallback)" : "Shift opened offline",
+        description: "Will sync to server when connection is restored",
+      });
+      return {
+        id: -1,
+        _offlineId: offlineShift.id,
+        branchId: offlineShift.branchId,
+        cashierId: offlineShift.userId,
+        terminalName: offlineShift.deviceId,
+        openingCash: offlineShift.openingCash,
+        startedAt: new Date(offlineShift.startedAt),
+        endedAt: null,
+        totalSales: "0", totalCash: "0", totalBank: "0",
+        expectedCash: null, actualCash: null, difference: null,
+        status: "open",
+        offlineId: null, source: null,
+      };
     },
-    onSuccess: (shift: Shift) => { toast({ title: t(`${NS}.openSuccess`) }); onShiftOpened(shift); },
+    onSuccess: (shift: POSShift) => {
+      if (!shift._offlineId) toast({ title: t(`${NS}.openSuccess`) });
+      onShiftOpened(shift);
+    },
     onError: (e: Error) => toast({ title: t("pos:messages.error"), description: e.message, variant: "destructive" }),
   });
 
@@ -166,6 +237,12 @@ function StartPOS({ branchName, terminalName, userName, onShiftOpened }: {
               dir="ltr"
             />
           </div>
+          {!isOnline && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex items-start gap-2">
+              <ZapOff className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              <span>Offline mode — shift will be saved locally and synced when connection is restored.</span>
+            </div>
+          )}
           <Button
             className="w-full h-12 text-base bg-gradient-to-l from-pink-600 to-rose-500 hover:from-pink-700 hover:to-rose-600"
             onClick={() => openShiftMutation.mutate()}
@@ -661,7 +738,7 @@ function ReturnModal({ onClose }: { onClose: () => void }) {
 
 // ─── CloseShiftModal ─────────────────────────────────────────────────────────
 function CloseShiftModal({ shift, onClose, onClosed, canEditOpening }: {
-  shift: Shift;
+  shift: POSShift;
   onClose: () => void;
   onClosed: () => void;
   canEditOpening: boolean;
@@ -721,6 +798,23 @@ function CloseShiftModal({ shift, onClose, onClosed, canEditOpening }: {
   const closeMutation = useMutation({
     mutationFn: async () => {
       if (actualCash === "") throw new Error(t(`${NS}.actualCashRequired`));
+
+      // ── Offline shift: close in IndexedDB, queue for sync ────────────────
+      if (shift._offlineId) {
+        await closeOfflineShift(shift._offlineId, {
+          closingCash: actualCash,
+          expectedCash: String(expected.toFixed(3)),
+          notes: undefined,
+        });
+        return { _offline: true };
+      }
+
+      // ── Online shift but connection lost: block close ────────────────────
+      if (!navigator.onLine) {
+        throw new Error("No internet connection. Please reconnect to close the shift.");
+      }
+
+      // ── Normal online close ──────────────────────────────────────────────
       const r = await fetch(`/api/shifts/${shift.id}/close`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -731,8 +825,12 @@ function CloseShiftModal({ shift, onClose, onClosed, canEditOpening }: {
       if (!r.ok) throw new Error(data.message || t(`${NS}.closeFailed`));
       return data;
     },
-    onSuccess: () => {
-      toast({ title: t(`${NS}.closedSuccess`) });
+    onSuccess: (data) => {
+      if (data?._offline) {
+        toast({ title: "Shift closed offline", description: "Will sync when connection is restored." });
+      } else {
+        toast({ title: t(`${NS}.closedSuccess`) });
+      }
       onClosed();
     },
     onError: (e: Error) => toast({ title: t(`${NS}.errorGeneric`), description: e.message, variant: "destructive" }),
@@ -895,7 +993,7 @@ export default function POS() {
   const stockBadge = useStockBadge();
   const qc = useQueryClient();
 
-  const [shift, setShift]           = useState<Shift | null>(null);
+  const [shift, setShift]           = useState<POSShift | null>(null);
   const [cart, setCart]             = useState<CartItem[]>([]);
   const [search, setSearch]         = useState("");
   const [activeCat, setActiveCat]   = useState<number | "all">("all");
@@ -1185,7 +1283,15 @@ export default function POS() {
 
       // ── Offline-first: if no network, queue locally ──────────
       if (!navigator.onLine) {
-        const localId = await queueSale(body);
+        const queueBody = {
+          ...body,
+          // When shift is offline, include its localId for sync-time resolution
+          ...(shift._offlineId ? {
+            shiftId: 0,
+            _offlineShiftId: shift._offlineId,
+          } : {}),
+        };
+        const localId = await queueSale(queueBody);
         const pendingCount = await getPendingCount();
         toast({
           title: "Sale saved offline",
@@ -1283,6 +1389,8 @@ export default function POS() {
       branchName={branchName}
       terminalName={user.terminalName || "T1"}
       userName={user.name}
+      userId={user.id}
+      branchId={branchId}
       onShiftOpened={s => setShift(s)}
     />
   );

@@ -241,6 +241,8 @@ export const shifts = pgTable("shifts", {
   difference: decimal("difference", { precision: 12, scale: 3 }),
   terminalName: text("terminal_name").notNull().default("UNKNOWN"),
   status: text("status").default("open"),
+  offlineId: text("offline_id").unique(),
+  source: text("source").default("online"),
 });
 export const insertShiftSchema = createInsertSchema(shifts).omit({ id: true, startedAt: true });
 export type InsertShift = z.infer<typeof insertShiftSchema>;
