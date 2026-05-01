@@ -3253,6 +3253,10 @@ export async function registerRoutes(
       const sale = await storage.getSale(saleId);
       if (!sale) return res.status(404).json(errJson("PENDING_INVOICE_NOT_FOUND", getLang(req)));
 
+      if (sale.status === "cancelled") {
+        return res.status(400).json(errJson("INVALID_SALE_STATUS", getLang(req)));
+      }
+
       let refundAmount = 0;
       const returnItems = items.map((item: any) => {
         const lineTotal = parseFloat(item.unitPrice) * item.quantity;
@@ -3268,6 +3272,11 @@ export async function registerRoutes(
           lineCogs: "0",
         };
       });
+
+      // guard: refund cannot exceed original sale total
+      if (refundAmount > parseFloat(sale.total) + 0.01) {
+        return res.status(400).json({ message: "مبلغ المرتجع أكبر من قيمة الفاتورة الأصلية" });
+      }
 
       const retNumRes = await pool.query(`SELECT coalesce(max(id), 0) + 1 as next FROM sale_returns`);
       const returnNumber = `RET-${String(retNumRes.rows[0].next).padStart(5, "0")}`;
