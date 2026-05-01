@@ -30,6 +30,13 @@ _لمسة أنوثة POS/ERP_
 | ISS-013 | **closeShift لا يطرح المرتجعات النقدية من expectedCash** | 2 | **HIGH** | ✅ مُصلَح | storage.ts:1598 |
 | ISS-014 | **card/wallet payments تُسجَّل في حساب CASH بدل BANK** | 2 | **HIGH** | ✅ مُصلَح | autoJournal.ts:117,158,218,252 |
 
+## ✅ إصلاحات Phase 3 (Inventory)
+
+| # | الوصف | Phase | Severity | الحالة | الملف |
+|---|-------|-------|----------|--------|-------|
+| ISS-015 | **inventory adjustment لا يُحدّث products.stock_qty** | 3 | **CRITICAL** | ✅ مُصلَح | routes.ts:4811 |
+| ISS-016 | **approveStocktake لا يُحدّث products.stock_qty** | 3 | **CRITICAL** | ✅ مُصلَح | storage.ts:4729 |
+
 ## 📋 تفاصيل الإصلاحات
 
 ### ISS-006: products.stock_qty لا يُخفَّض عند البيع
