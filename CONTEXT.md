@@ -1,9 +1,10 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-05-01 (جلسة 54 — Phase 7: تسوية بيانات الإنتاج + v3.1.0-data-reconciled)_
+_آخر تحديث: 2026-05-01 (جلسة 55 — Phase 8: Production Reset + v4.0.0-clean-production)_
 
 ---
 
 ## 🆕 Recent changes
+- **2026-05-01** — جلسة 55: Phase 8 — Production Reset. كل البيانات التجريبية محذوفة. النظام نظيف وجاهز. 36+ جدول تشغيلي ممسوح، 12+ جدول إعدادات محفوظ. 241/241 اختبار. v4.0.0-clean-production.
 - **2026-05-01** — جلسة 54: Phase 7 — تسوية بيانات الإنتاج على Railway PostgreSQL. 6 إصلاحات (stock_qty، customer metrics، dual inventory docs، avg_cost، supplier totals). 241/241 اختبار. tagged v3.1.0-data-reconciled.
 - **2026-05-01** — جلسة 53: 403 fix على Invoices، إبقاء زر اللغة في Login فقط، tsc safe fixes
 - **2026-05-01** — جلسة 52: حذف زر ⛶ (Maximize/Minimize) من POS toolbar
