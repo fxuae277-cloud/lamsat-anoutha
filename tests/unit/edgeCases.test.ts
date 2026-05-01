@@ -179,9 +179,9 @@ describe("createOrder — null customerPhone is nullable", () => {
       ([sql]: [string]) => sql.includes("INSERT INTO orders")
     );
     expect(insertCall).toBeDefined();
-    // customerPhone is param $3 (0-indexed: params[2])
+    // customerPhone is param $4 (0-indexed: params[3])
     const params = insertCall![1] as unknown[];
-    expect(params[2]).toBeNull();
+    expect(params[3]).toBeNull();
   });
 });
 
@@ -229,13 +229,15 @@ describe("createSale — product with no variant", () => {
       .mockResolvedValueOnce({ rows: [{ id: 10 }] })                  // branch location
       .mockResolvedValueOnce({ rows: [{ id: 1, invoice_number: "INV-NV", total: "50", payment_method: "cash" }] }) // INSERT sales
       .mockResolvedValueOnce({ rows: [] })                            // variant lookup → no variant
-      // variantId is undefined → if(variantId) block skipped entirely
-      .mockResolvedValueOnce({ rows: [] })                            // INSERT location_inventory
+      // variantId is undefined → if(variantId) block skipped entirely, if(!variantId) runs:
+      .mockResolvedValueOnce({ rows: [] })                            // SELECT qty_on_hand FROM location_inventory
+      .mockResolvedValueOnce({ rows: [] })                            // INSERT location_inventory (ON CONFLICT)
       .mockResolvedValueOnce({ rows: [] })                            // SELECT unit_cost_final (no purchase cost)
       .mockResolvedValueOnce({ rows: [{ avg_cost: "0" }] })           // SELECT avg_cost
       .mockResolvedValueOnce({ rows: [] })                            // INSERT sale_items
       .mockResolvedValueOnce({ rows: [] })                            // INSERT inventory_transactions
       .mockResolvedValueOnce({ rows: [] })                            // UPDATE sales cogs/profit
+      .mockResolvedValueOnce({ rows: [] })                            // UPDATE products.stock_qty (ISS-006)
       .mockResolvedValueOnce({ rows: [] })                            // INSERT cash_ledger
       .mockResolvedValueOnce({ rows: [] });                           // COMMIT
 
@@ -243,7 +245,7 @@ describe("createSale — product with no variant", () => {
     mockPoolConnect.mockResolvedValue(client);
 
     await storage.createSale(
-      { branchId: 1, paymentMethod: "cash", total: "50", vat: "0" } as any,
+      { branchId: 1, paymentMethod: "cash", total: "50", vat: "0", invoiceNumber: "INV-NV" } as any,
       [{ productId: 5, quantity: 1, unitPrice: "50", total: "50" } as any]
     );
 
@@ -294,19 +296,19 @@ describe("createSale — availability check uses correct branchId", () => {
       .mockResolvedValueOnce({ rows: [{ qty_on_hand: "20" }] })        // balance row
       .mockResolvedValueOnce({ rows: [] })                             // UPDATE balance
       .mockResolvedValueOnce({ rows: [] })                             // ledger
-      .mockResolvedValueOnce({ rows: [] })                             // location_inventory
       .mockResolvedValueOnce({ rows: [] })                             // unit_cost_final (no purchase)
       .mockResolvedValueOnce({ rows: [{ avg_cost: "25" }] })           // avg_cost
       .mockResolvedValueOnce({ rows: [] })                             // sale_items
       .mockResolvedValueOnce({ rows: [] })                             // inventory_transactions
       .mockResolvedValueOnce({ rows: [] })                             // UPDATE cogs
+      .mockResolvedValueOnce({ rows: [] })                             // UPDATE products.stock_qty (ISS-006)
       .mockResolvedValueOnce({ rows: [] })                             // cash_ledger
       .mockResolvedValueOnce({ rows: [] });                            // COMMIT
     const client = { query: clientQuery, release: vi.fn() };
     mockPoolConnect.mockResolvedValue(client);
 
     await storage.createSale(
-      { branchId: 1, paymentMethod: "cash", total: "75", vat: "0" } as any,
+      { branchId: 1, paymentMethod: "cash", total: "75", vat: "0", invoiceNumber: "INV-B" } as any,
       [{ productId: 5, quantity: 3, unitPrice: "25", total: "75" } as any]
     );
 

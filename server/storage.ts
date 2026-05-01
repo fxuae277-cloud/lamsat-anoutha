@@ -1063,7 +1063,7 @@ export class DatabaseStorage implements IStorage {
       );
 
       // sync products.stock_qty from location_inventory after sale deduction
-      const soldProductIds = [...new Set(data.items.map((i: any) => i.productId as number))];
+      const soldProductIds = [...new Set(items.map((i: any) => i.productId as number))];
       for (const pid of soldProductIds) {
         await client.query(`
           UPDATE products SET stock_qty = (
