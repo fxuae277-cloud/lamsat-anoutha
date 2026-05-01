@@ -39,4 +39,11 @@ tests/screenshots/
 
 # Database backups (never commit)
 *.sql
+!audit/sql/*.sql
 backup-pre-i18n-*
+
+# Audit reports (generated — not committed)
+audit/reports/*.json
+audit/reports/*.csv
+audit/reports/*.xlsx
+audit/backups/
