@@ -513,7 +513,7 @@ export async function registerRoutes(
     if (!user) return res.status(404).json(errJson("USER_NOT_FOUND", getLang(req)));
     const valid = await bcrypt.compare(oldPassword, user.password);
     if (!valid) return res.status(401).json(errJson("WRONG_PASSWORD", getLang(req)));
-    const hashed = await bcrypt.hash(newPassword, 10);
+    const hashed = await bcrypt.hash(newPassword, 12);
     await storage.updateUser(user.id, { password: hashed });
     res.json(errJson("PASSWORD_CHANGED", getLang(req)));
   });
@@ -534,7 +534,7 @@ export async function registerRoutes(
       const pinUser = await storage.getUserByPin(pin);
       if (pinUser) return res.status(409).json(errJson("PIN_TAKEN", getLang(req)));
     }
-    const hashed = await bcrypt.hash(password, 10);
+    const hashed = await bcrypt.hash(password, 12);
     const { password: _, ...safeUser } = await storage.createUser({
       name,
       username,
@@ -595,7 +595,7 @@ export async function registerRoutes(
     }
     const targetUser = await storage.getUser(id);
     if (!targetUser) return res.status(404).json(errJson("USER_NOT_FOUND", getLang(req)));
-    const hashed = await bcrypt.hash(newPassword, 10);
+    const hashed = await bcrypt.hash(newPassword, 12);
     await storage.updateUser(id, { password: hashed });
     const actor = req.session?.user;
     await storage.addAuditLog({
@@ -1122,16 +1122,6 @@ export async function registerRoutes(
     }));
   });
 
-  app.get("/api/test-search", async (req, res) => {
-    try {
-      const q = req.query.q as string;
-      const result = await storage.searchProducts({ q, page: 1, limit: 10 });
-      res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
   app.get("/api/products/search", requireAuth, requirePermission("products.view"), async (req, res) => {
     try {
       const q = req.query.q as string;
@@ -1220,23 +1210,6 @@ export async function registerRoutes(
       lastSupplier: lp?.last_supplier ?? null,
     });
   });
-  app.get("/api/test-barcode/:code", async (req, res) => {
-    try {
-      const code = req.params.code;
-      const product = await storage.getProductByBarcode(code);
-      if (!product) return res.status(404).json({ message: "Product not found" });
-      res.json({
-        id: product.id,
-        name: product.name,
-        price: product.price,
-        stock: product.totalStock,
-        image: product.image
-      });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
   // Shared handler for barcode lookups. Two routes are registered below — keep
   // them in sync via this single function so behaviour never diverges.
   async function handleProductBarcodeLookup(req: any, res: any, source: "legacy" | "by-barcode") {
@@ -4306,7 +4279,7 @@ export async function registerRoutes(
   });
 
   // ── خدمة المرفق من قاعدة البيانات ──
-  app.get("/api/attachments/:id", async (req, res) => {
+  app.get("/api/attachments/:id", requireAuth, async (req, res) => {
     try {
       const attachId = Number(req.params.id);
       const row = await pool.query("SELECT filename, content_type, data FROM purchase_attachments WHERE id=$1", [attachId]);

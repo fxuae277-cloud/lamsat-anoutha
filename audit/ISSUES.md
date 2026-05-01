@@ -37,6 +37,17 @@ _لمسة أنوثة POS/ERP_
 | ISS-015 | **inventory adjustment لا يُحدّث products.stock_qty** | 3 | **CRITICAL** | ✅ مُصلَح | routes.ts:4811 |
 | ISS-016 | **approveStocktake لا يُحدّث products.stock_qty** | 3 | **CRITICAL** | ✅ مُصلَح | storage.ts:4729 |
 
+## ✅ إصلاحات Phase 5 (Security & Performance)
+
+| # | الوصف | Phase | Severity | الحالة | الملف |
+|---|-------|-------|----------|--------|-------|
+| ISS-017 | **SQL Injection في mobile-routes.ts** — branchId يُحقن مباشرة في SQL | 5 | **CRITICAL** | ✅ مُصلَح | mobile-routes.ts:67 |
+| ISS-018 | **/api/attachments/:id بدون مصادقة** — يسمح بالوصول غير المصرح | 5 | **HIGH** | ✅ مُصلَح | routes.ts:4309 |
+| ISS-019 | **test endpoints مكشوفة** — /api/test-search و /api/test-barcode | 5 | **HIGH** | ✅ مُصلَح | routes.ts:1125,1223 |
+| ISS-020 | **bcrypt rounds = 10** — أقل من الحد الموصى به (12) | 5 | **MEDIUM** | ✅ مُصلَح | routes.ts:516,537,598 |
+| ISS-021 | **N+1 queries في getProfitByBranches** | 5 | **HIGH** | ✅ مُصلَح | storage.ts:2632 |
+| ISS-022 | **Connection pool بدون max مُحدد** | 5 | **MEDIUM** | ✅ مُصلَح | db.ts:15 |
+
 ## 📋 تفاصيل الإصلاحات
 
 ### ISS-006: products.stock_qty لا يُخفَّض عند البيع
@@ -66,5 +77,21 @@ WHERE id = customerId
 **الحل:** أضفنا في routes.ts:
 1. فحص أن الفاتورة ليست ملغاة
 2. فحص أن refundAmount ≤ sale.total
+
+### ISS-017: SQL Injection في mobile-routes.ts
+**السبب:** `branchId` من `req.query` يُحقن مباشرة في SQL عبر template literals في 6 استعلامات.
+**الحل:** استخدام parameterized queries مع `$1` وتمرير `bParam = [branchId]`.
+
+### ISS-018 + ISS-019: نقاط نهاية غير محمية
+**الحل:** إضافة `requireAuth` لـ `/api/attachments/:id`؛ حذف `/api/test-search` و `/api/test-barcode`.
+
+### ISS-020: bcrypt rounds ضعيفة
+**الحل:** رفع من 10 إلى 12 في جميع استدعاءات `bcrypt.hash`.
+
+### ISS-021: N+1 في getProfitByBranches
+**الحل:** استبدال حلقة for بـ 4 استعلامات متوازية (Promise.all) مع GROUP BY برanchId، وربط النتائج في الذاكرة.
+
+### ISS-022: Connection pool غير مُهيأ
+**الحل:** إضافة `max: 20`, `idleTimeoutMillis: 30000`, `connectionTimeoutMillis: 5000`.
 
 _آخر تحديث: 2026-05-01_

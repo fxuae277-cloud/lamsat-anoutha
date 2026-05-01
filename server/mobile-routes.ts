@@ -64,28 +64,31 @@ export function registerMobileRoutes(app: Express) {
       else if (period === "30days") dateFilter = "AND s.created_at >= NOW() - INTERVAL '30 days'";
       else if (period === "month") dateFilter = "AND EXTRACT(MONTH FROM s.created_at) = EXTRACT(MONTH FROM NOW()) AND EXTRACT(YEAR FROM s.created_at) = EXTRACT(YEAR FROM NOW())";
 
-      const branchFilter = branchId ? `AND s.branch_id = ${branchId}` : "";
+      // Use parameterized query to prevent SQL injection
+      const bParam = branchId !== null ? [branchId] : [];
+      const bCond = branchId !== null ? `AND s.branch_id = $${bParam.length}` : "";
+      const bCondPlain = branchId !== null ? `AND branch_id = $${bParam.length}` : "";
 
       const salesQ = await pool.query(`
         SELECT COALESCE(SUM(s.total::numeric), 0) as total_sales,
                COALESCE(SUM(s.gross_profit::numeric), 0) as gross_profit,
                COUNT(*) as invoice_count,
                COALESCE(AVG(s.total::numeric), 0) as avg_invoice
-        FROM sales s WHERE 1=1 ${dateFilter} ${branchFilter}
-      `);
+        FROM sales s WHERE 1=1 ${dateFilter} ${bCond}
+      `, bParam);
       const { total_sales, gross_profit, invoice_count, avg_invoice } = salesQ.rows[0];
 
       const monthSalesQ = await pool.query(`
         SELECT COALESCE(SUM(total::numeric), 0) as month_sales FROM sales
         WHERE EXTRACT(MONTH FROM created_at) = EXTRACT(MONTH FROM NOW())
         AND EXTRACT(YEAR FROM created_at) = EXTRACT(YEAR FROM NOW())
-        ${branchId ? `AND branch_id = ${branchId}` : ""}
-      `);
+        ${bCondPlain}
+      `, bParam);
 
       const expensesQ = await pool.query(`
         SELECT COALESCE(SUM(amount::numeric), 0) as total_expenses FROM expenses
-        WHERE created_at::date = CURRENT_DATE ${branchId ? `AND branch_id = ${branchId}` : ""}
-      `);
+        WHERE created_at::date = CURRENT_DATE ${bCondPlain}
+      `, bParam);
 
       const openShiftsQ = await pool.query(`SELECT COUNT(*) as count FROM shifts WHERE status = 'open'`);
 
@@ -106,9 +109,9 @@ export function registerMobileRoutes(app: Express) {
         SELECT p.name, SUM(si.quantity) as qty, SUM(si.total::numeric) as total
         FROM sale_items si JOIN products p ON si.product_id = p.id
         JOIN sales s ON si.sale_id = s.id
-        WHERE s.created_at::date = CURRENT_DATE ${branchId ? `AND s.branch_id = ${branchId}` : ""}
+        WHERE s.created_at::date = CURRENT_DATE ${bCond}
         GROUP BY p.id, p.name ORDER BY total DESC LIMIT 5
-      `);
+      `, bParam);
 
       const branchPerfQ = await pool.query(`
         SELECT (b.name || CASE WHEN b.address IS NOT NULL AND b.address <> '' THEN ' - ' || b.address ELSE '' END) as branch_name, COALESCE(SUM(s.total::numeric), 0) as total
@@ -123,15 +126,15 @@ export function registerMobileRoutes(app: Express) {
 
       const cashQ = await pool.query(`
         SELECT COALESCE(SUM(CASE WHEN type='deposit' THEN amount::numeric ELSE -amount::numeric END), 0) as net
-        FROM cash_ledger WHERE created_at::date = CURRENT_DATE ${branchId ? `AND branch_id = ${branchId}` : ""}
-      `);
+        FROM cash_ledger WHERE created_at::date = CURRENT_DATE ${bCondPlain}
+      `, bParam);
 
       const timeseriesQ = await pool.query(`
         SELECT created_at::date as date, SUM(total::numeric) as sales
         FROM sales WHERE created_at >= NOW() - INTERVAL '7 days'
-        ${branchId ? `AND branch_id = ${branchId}` : ""}
+        ${bCond}
         GROUP BY created_at::date ORDER BY date
-      `);
+      `, bParam);
 
       res.json({
         kpi: {
