@@ -2572,7 +2572,9 @@ ${inv.shippingCost && parseFloat(inv.shippingCost) > 0 ? `<div style="font-size:
                       const oldUrl: string = (inv as any).attachmentUrl || "";
                       const oldIsValid = oldUrl && !oldUrl.startsWith("/uploads/");
                       if (hasNew) return (
-                        <FileText className="w-4 h-4 text-emerald-500 mx-auto cursor-pointer" title={t("purchases.view_attachments_btn")} onClick={() => setSelectedInvoice(inv.id)} />
+                        <span title={t("purchases.view_attachments_btn")} onClick={() => setSelectedInvoice(inv.id)}>
+                          <FileText className="w-4 h-4 text-emerald-500 mx-auto cursor-pointer" />
+                        </span>
                       );
                       if (oldIsValid) return (
                         <a href={oldUrl} target="_blank" rel="noreferrer" title={t("purchases.view_attachments_btn")}>

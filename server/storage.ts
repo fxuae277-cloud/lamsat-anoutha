@@ -1,5 +1,5 @@
 import { db, pool } from "./db";
-import { eq, desc, sql, and, lte, gte, ilike, or, isNull, asc } from "drizzle-orm";
+import { eq, desc, sql, and, lte, gte, ilike, or, isNull, asc, type SQL } from "drizzle-orm";
 import {
   branches, type InsertBranch, type Branch,
   cities, type InsertCity, type City,

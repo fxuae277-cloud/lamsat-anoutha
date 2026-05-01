@@ -275,9 +275,9 @@ function ProductTableRow({ item, idx, onUpdate, onRemove, t }: {
 
   const isPriceModified = linkedPrice !== null && Math.abs(n(priceStr.replace(/,/g, "")) - linkedPrice) > 0.0001;
 
-  const colors  = [...new Set(variants.map(v => v.color).filter(Boolean))] as string[];
+  const colors  = Array.from(new Set(variants.map(v => v.color).filter(Boolean))) as string[];
   const hasColors = colors.length > 0;
-  const sizes   = [...new Set(variants.filter(v => !item.color || v.color === item.color).map(v => v.size).filter(Boolean))] as string[];
+  const sizes   = Array.from(new Set(variants.filter(v => !item.color || v.color === item.color).map(v => v.size).filter(Boolean))) as string[];
   const hasSizes = sizes.length > 0;
 
   const selectedVariant = variants.find(v =>
