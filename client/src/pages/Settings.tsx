@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { Branch } from "@shared/schema";
 import {
   KeyRound, ShieldCheck, Eye, EyeOff, Lock, UserCircle,
-  Settings2, Save, X, Loader2, AlertTriangle, Globe,
+  Settings2, Save, X, Loader2, AlertTriangle,
   Banknote, Receipt, FileText, Printer, Database, Download, Percent,
   Plug, ScanLine, Volume2
 } from "lucide-react";
@@ -789,38 +789,6 @@ export default function Settings() {
                   {backupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                   {backupLoading ? t("settings.downloading") : t("settings.download_backup_btn")}
                 </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 7. Preferences (Language) */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Globe className="w-5 h-5" />
-                {t("settings.preferences")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🌐</span>
-                  <div>
-                    <Label className="text-base">{t("settings.system_language")}</Label>
-                    <p className="text-sm text-muted-foreground">
-                      {t("settings.choose_language")}
-                    </p>
-                  </div>
-                </div>
-                <Select value={pendingLang} onValueChange={(v) => setPendingLang(v as Lang)}>
-                  <SelectTrigger className="w-48" data-testid="select-language">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ar">{t("settings.language_ar")}</SelectItem>
-                    <SelectItem value="en">{t("settings.language_en")}</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </CardContent>
           </Card>

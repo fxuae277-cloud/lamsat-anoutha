@@ -3,11 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLogin } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { Lock, User, Eye, EyeOff } from "lucide-react";
+import { Lock, User, Eye, EyeOff, Languages } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 export default function Login() {
-  const { t } = useI18n();
+  const { t, lang, setLang } = useI18n();
   const loginMutation = useLogin();
   const { toast } = useToast();
   const [username, setUsername] = useState("");
@@ -29,7 +29,18 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-background flex items-center justify-center p-4 relative">
+      <Button
+        variant="outline"
+        size="sm"
+        className="absolute top-4 end-4 h-8 gap-1.5 px-3 text-xs font-semibold"
+        onClick={() => setLang(lang === "ar" ? "en" : "ar")}
+        title={lang === "ar" ? "Switch to English" : "التبديل للعربية"}
+        data-testid="button-lang-toggle"
+      >
+        <Languages className="h-3.5 w-3.5" />
+        {lang === "ar" ? "EN" : "عر"}
+      </Button>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="w-24 h-24 flex items-center justify-center mx-auto mb-4">

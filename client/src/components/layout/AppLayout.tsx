@@ -1,9 +1,8 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Sidebar } from "./Sidebar";
-import { Search, Languages } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { NotificationBell } from "./NotificationBell";
 import { BarcodeIndicator, type BarcodeIndicatorState } from "@/components/BarcodeIndicator";
@@ -14,7 +13,7 @@ import { useScannerSettings } from "@/hooks/useScannerSettings";
 const FULL_BLEED_ROUTES = ["/pos", "/shift"];
 
 export function AppLayout({ children }: { children: ReactNode }) {
-  const { t, lang, setLang } = useI18n();
+  const { t, lang } = useI18n();
   const [location] = useLocation();
   const isFullBleed = FULL_BLEED_ROUTES.some(
     (p) => location === p || location.startsWith(p + "/")
@@ -79,17 +78,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {/* Language toggle */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 px-3 text-xs font-semibold border-dashed hover:border-solid"
-              onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-              title={lang === "ar" ? "Switch to English" : "التبديل للعربية"}
-            >
-              <Languages className="h-3.5 w-3.5" />
-              {lang === "ar" ? "EN" : "عر"}
-            </Button>
             <BarcodeIndicator
               state={scannerState}
               lastScanned={lastScanned}
