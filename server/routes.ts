@@ -4808,6 +4808,13 @@ export async function registerRoutes(
         [locationId, productId, qtyAfter]
       );
 
+      // sync products.stock_qty from all locations after adjustment
+      await pool.query(`
+        UPDATE products SET stock_qty = (
+          SELECT COALESCE(SUM(qty_on_hand), 0) FROM location_inventory WHERE product_id = $1
+        ) WHERE id = $1
+      `, [productId]);
+
       const adj = await storage.createInventoryAdjustment({
         branchId: Number(branchId),
         locationId,

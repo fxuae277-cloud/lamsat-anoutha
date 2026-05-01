@@ -4739,6 +4739,13 @@ export class DatabaseStorage implements IStorage {
         createdBy: userId,
       });
 
+      // sync products.stock_qty from sum of all locations
+      await pool.query(`
+        UPDATE products SET stock_qty = (
+          SELECT COALESCE(SUM(qty_on_hand), 0) FROM location_inventory WHERE product_id = $1
+        ) WHERE id = $1
+      `, [item.product_id]);
+
       await db.insert(inventoryTransactions).values({
         date: todayStr,
         branchId: st.branchId,
