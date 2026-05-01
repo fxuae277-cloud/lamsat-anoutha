@@ -1,11 +1,30 @@
 # 🧠 CONTEXT — لمسة أنوثة POS/ERP
-_آخر تحديث: 2026-04-28 (جلسة 51 — حجم ملصق "كبير 2" 58×39 مم landscape)_
+_آخر تحديث: 2026-05-01 (جلسة 52 — حذف زر ⛶ المعطّل من POS toolbar)_
 
 ---
 
 ## 🆕 Recent changes
+- **2026-05-01** — حذف زر ⛶ (Maximize/Minimize) من POS toolbar (انظر "Recent Fixes" أدناه)
 - **2026-04-28** — Updated barcode label size "كبير 2" to 58×39mm landscape (mm_w:58, mm_h:39) — single label per page, content area 50×33mm, no heart separators
 - **2026-04-28** — Cashier can now access `/barcode-labels` (read-only access via existing `products.view` permission; settings remain owner-only)
+
+---
+
+## 🛠️ Recent Fixes
+
+### إصلاح: حذف زر ⛶ المعطّل من POS toolbar
+- **التاريخ:** 2026-05-01
+- **الملف الرئيسي:** `client/src/pages/POS.tsx`
+- **المحذوف:**
+  - استيراد `Maximize2, Minimize2` من `lucide-react`
+  - state: `isFullscreen`
+  - computed: `fullscreenSupported`
+  - `useEffect` لـ `fullscreenchange` listener
+  - `useCallback`: `toggleFullscreen` (`requestFullscreen` / `exitFullscreen`)
+  - زر `<Button>` في الـ toolbar
+- **مفاتيح الترجمة المحذوفة:** `pos:header.fullscreen`, `exitFullscreen`, `maximize`, `minimize` (ar + en)
+- **الـ toolbar النهائي:** إرجاع → معلّق → الطباعة → إغلاق
+- **ملاحظة:** زر ملء الشاشة الفعلي (الذي يعمل) منفصل ولم يُمَس
 
 ---
 
